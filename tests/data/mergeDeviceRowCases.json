@@ -1,0 +1,42 @@
+[
+    {
+        "name": "holds back a device whose next op differs, retrying it next round",
+        "rows": [
+            { "id": 2, "device": 0, "op": "Softmax", "durationNs": 10 },
+            { "id": 3, "device": 0, "op": "Matmul", "durationNs": 5 },
+            { "id": 4, "device": 1, "op": "Matmul", "durationNs": 9 }
+        ],
+        "groups": [[2], [3, 4]]
+    },
+    {
+        "name": "takes devices in ascending numeric order, whichever reaches the row first",
+        "rows": [
+            { "id": 2, "device": 10, "op": "AllGather", "durationNs": 5 },
+            { "id": 3, "device": 2, "op": "AllGather", "durationNs": 5 }
+        ],
+        "groups": [[3, 2]]
+    },
+    {
+        "name": "leaves the longer device's trailing rows in groups of their own",
+        "rows": [
+            { "id": 2, "device": 0, "op": "A", "durationNs": 1 },
+            { "id": 3, "device": 1, "op": "A", "durationNs": 2 },
+            { "id": 4, "device": 0, "op": "B", "durationNs": 1 },
+            { "id": 5, "device": 1, "op": "B", "durationNs": 2 },
+            { "id": 6, "device": 0, "op": "C", "durationNs": 1 }
+        ],
+        "groups": [[2, 3], [4, 5], [6]]
+    },
+    {
+        "name": "pairs repeated op names by position across three devices",
+        "rows": [
+            { "id": 2, "device": 0, "op": "A", "durationNs": 5 },
+            { "id": 3, "device": 1, "op": "A", "durationNs": 1 },
+            { "id": 4, "device": 2, "op": "A", "durationNs": 3 },
+            { "id": 5, "device": 0, "op": "A", "durationNs": 1 },
+            { "id": 6, "device": 1, "op": "A", "durationNs": 7 },
+            { "id": 7, "device": 2, "op": "A", "durationNs": 2 }
+        ],
+        "groups": [[2, 3, 4], [5, 6, 7]]
+    }
+]

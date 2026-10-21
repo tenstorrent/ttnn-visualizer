@@ -37,7 +37,7 @@ import { getRankedReportLabel } from '../../functions/reportRank';
 import { createDataIntegrityWarning, hasBeenNormalised } from '../../functions/validateReportFolder';
 import { useActivatingReport } from '../../hooks/useActivatingReport';
 import useRemoteConnection from '../../hooks/useRemote';
-import { useReportLinkBadgeIds } from '../../hooks/useReportLinkBadgeIds';
+import { useReportLinkBadgeRuns } from '../../hooks/useReportLinkBadgeRuns';
 import {
     activePerformanceReportAtom,
     activeProfilerReportAtom,
@@ -660,8 +660,8 @@ const RemoteSyncConfigurator = () => {
     const isDisabled = isFetching || isLoading || disableRemoteSync;
 
     const selectedRemoteHost = selectedConnection?.host ?? null;
-    const { linkedPerfIds, unlinkedPerfIds, linkedProfilerReportIds, unlinkedProfilerReportIds } =
-        useReportLinkBadgeIds({ remoteHost: selectedRemoteHost });
+    const { linkedPerfRuns, unlinkedPerfRuns, linkedProfilerReportRuns, unlinkedProfilerReportRuns } =
+        useReportLinkBadgeRuns({ remoteHost: selectedRemoteHost });
 
     // On mount (and when SERVER_MODE is off), seed dropdowns from on-disk synced copies
     // for the currently selected host so offline use works without clicking Fetch.
@@ -800,8 +800,8 @@ const RemoteSyncConfigurator = () => {
                     remoteFolder={isProfilerRemote ? selectedReportFolder : undefined}
                     remoteFolderList={reportFolderList}
                     disabled={isDisabled}
-                    linkedIds={linkedProfilerReportIds}
-                    unlinkedIds={unlinkedProfilerReportIds}
+                    linkedRuns={linkedProfilerReportRuns}
+                    unlinkedRuns={unlinkedProfilerReportRuns}
                     onSelectFolder={(folder) =>
                         selectAndActivateFolder(folder, {
                             setSelected: setSelectedReportFolder,
@@ -833,8 +833,8 @@ const RemoteSyncConfigurator = () => {
                     remoteFolder={isPerformanceRemote ? selectedPerformanceFolder : undefined}
                     remoteFolderList={remotePerformanceFolderList}
                     disabled={isDisabled}
-                    linkedIds={linkedPerfIds}
-                    unlinkedIds={unlinkedPerfIds}
+                    linkedRuns={linkedPerfRuns}
+                    unlinkedRuns={unlinkedPerfRuns}
                     onSelectFolder={(folder) =>
                         selectAndActivateFolder(folder, {
                             setSelected: setSelectedPerformanceFolder,

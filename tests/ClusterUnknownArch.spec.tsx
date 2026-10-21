@@ -74,7 +74,7 @@ const twoHostTopology = (arch: Record<number, string>): ClusterTopology =>
 const WORMHOLE = { 0: 'wormhole_b0', 1: 'wormhole_b0' };
 const BLACKHOLE = { 0: 'blackhole', 1: 'blackhole' };
 // Neither prefix-matches a baked descriptor, so it resolves to no design.
-const UNKNOWN_ARCH = { 0: 'quasar', 1: 'quasar' };
+const UNKNOWN_ARCH = { 0: 'horizon', 1: 'horizon' };
 
 let clusterArch: Record<number, string> = WORMHOLE;
 // Set by tests that need a shape the arch knob can't express (extra links, multi-host, no hosts).
@@ -217,7 +217,7 @@ describe('Cluster with an unrecognised arch', () => {
 
 describe('Cluster with a heterogeneous arch', () => {
     it('enriches each chip from its own arch entry', () => {
-        clusterArch = { 0: 'wormhole_b0', 1: 'quasar' };
+        clusterArch = { 0: 'wormhole_b0', 1: 'horizon' };
         render(<ClusterRenderer />);
 
         // Chip 0 resolves, chip 1 does not — one label, not a cluster-wide guess.
@@ -225,11 +225,26 @@ describe('Cluster with a heterogeneous arch', () => {
     });
 
     it('does not let an unresolved first chip suppress the rest', () => {
-        clusterArch = { 0: 'quasar', 1: 'wormhole_b0' };
+        clusterArch = { 0: 'horizon', 1: 'wormhole_b0' };
         render(<ClusterRenderer />);
 
         expect(portLabels().sort()).toEqual(['', '0-1-6-0']);
     });
+});
+
+// These resolve now, but list no Ethernet or PCIe tiles: the same output as an unknown arch. #1847 #2130
+describe('Cluster with a Quasar-family chip', () => {
+    it.each(['quasar', 'grendel'])(
+        'renders a %s chip like an unresolved one: no port labels or PCIe marker',
+        (arch) => {
+            clusterArch = { 0: arch, 1: 'wormhole_b0' };
+            render(<ClusterRenderer />);
+
+            expect(portLabels().sort()).toEqual(['', '0-1-6-0']);
+            // Chip 0 is the mmio chip, and neither descriptor has a PCIe tile to mark.
+            expect(document.querySelectorAll('.mmio')).toHaveLength(0);
+        },
+    );
 });
 
 // Distinct from an unrecognised arch: the arch resolves, but the descriptor reports a channel

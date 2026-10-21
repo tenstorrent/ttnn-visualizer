@@ -693,6 +693,21 @@ PERFORMANCE_REPORT_REQUIRED_FILES = frozenset({"profile_log_device.csv"})
 PERFORMANCE_OPS_PERF_PREFIX = "ops_perf_results"
 
 
+def newest_ops_perf_file(performance_path: Path) -> Optional[Path]:
+    """The ``ops_perf_results`` CSV a performance report is read from, or None.
+
+    A folder a later capture was written into can hold several; the newest by
+    ctime wins. Report loading and run fingerprinting both go through here so
+    they always describe the same file.
+    """
+    perf_files = list(
+        performance_path.glob(f"{PERFORMANCE_OPS_PERF_PREFIX}.csv")
+    ) + list(performance_path.glob(f"{PERFORMANCE_OPS_PERF_PREFIX}_*.csv"))
+    if not perf_files:
+        return None
+    return max(perf_files, key=os.path.getctime)
+
+
 def remote_host_report_path(
     remote_data_directory: Path,
     host: str,

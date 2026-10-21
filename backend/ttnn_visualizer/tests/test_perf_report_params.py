@@ -11,6 +11,7 @@ same request show them. The app's own client sends axios booleans, so nothing in
 notices; these tests are what a scripted caller has instead.
 """
 
+import orjson
 import pytest
 from ttnn_visualizer.csv_queries import OpsPerformanceReportQueries
 from ttnn_visualizer.extensions import db
@@ -56,14 +57,14 @@ def captured_report_kwargs(monkeypatch):
     """
     captured = {}
 
-    def _fake_generate_report(instance, **kwargs):
+    def _fake_generate_report_json(instance, **kwargs):
         captured.update(kwargs)
-        return {"report": []}
+        return orjson.dumps({"report": []})
 
     monkeypatch.setattr(
         OpsPerformanceReportQueries,
-        "generate_report",
-        staticmethod(_fake_generate_report),
+        "generate_report_json",
+        staticmethod(_fake_generate_report_json),
     )
 
     return captured
@@ -96,3 +97,27 @@ def test_an_omitted_param_keeps_the_view_default(
 
     assert response.status_code == 200
     assert captured_report_kwargs[param] is default
+
+
+def test_the_view_returns_the_generated_json_unchanged(
+    client, performance_instance, captured_report_kwargs
+):
+    response = client.get(
+        REPORT_ENDPOINT, query_string={"instanceId": performance_instance}
+    )
+
+    assert response.data == orjson.dumps({"report": []})
+    assert response.mimetype == "application/json"
+
+
+def test_the_view_never_asks_for_the_agent_only_columns(
+    client, performance_instance, captured_report_kwargs
+):
+    """Only the agent tools read them; the app's rows would roughly double (#2159)."""
+    response = client.get(
+        REPORT_ENDPOINT,
+        query_string={"instanceId": performance_instance, "detail_columns": "true"},
+    )
+
+    assert response.status_code == 200
+    assert "detail_columns" not in captured_report_kwargs

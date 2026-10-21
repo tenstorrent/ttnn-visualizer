@@ -99,7 +99,7 @@ Recorded after a report is loaded successfully.
   - `upload`: a report uploaded from the browser. Under `SERVER_MODE`, this also counts every reselection of one of the session's earlier uploads from the report list, so hosted `upload` counts are loads, not uploads.
   - `remote_sync`: a report synced from a remote host.
   - `local_tt_metal`: a report selected from the local installation's report folders. Without `TT_METAL_HOME`, uploads are saved into those same folders, so this includes reselecting an earlier upload on a local installation. Never recorded under `SERVER_MODE`.
-  - `demo`: a bundled demo report. That is any NPE demo, and, under `SERVER_MODE`, any profiler or performance report whose folder name starts with `demo`, in any case.
+  - `demo`: a bundled demo report. That is any NPE demo, and, under `SERVER_MODE`, any profiler or performance report in one of the folders unpacked from `demo-reports/`, such as `WH_DEMO_N300-LLAMA` or `BH_DEMO_bge_m3`. The exact folder names are listed in `DEMO_PROFILER_DIRECTORY_NAMES` and `DEMO_PERFORMANCE_DIRECTORY_NAMES` in `views.py`.
 
 Because reselected uploads count as `upload` when hosted but as `local_tt_metal` locally, do not compare upload share between hosted and local logs.
 
@@ -132,7 +132,7 @@ This is the intentionally revisable v1 definition of deliberate activity used fo
 
 Recorded by `ttnn-visualizer-mcp` when a registered tool reaches its handler, not by the SPA. It answers which tools are chosen and how often they refuse or fail (Q4 and Q5 in #1819). It does not fire on `initialize`, `ping`, `tools/list`, unknown tool names, or malformed `params`/`arguments`: only calls that get as far as a handler are counted.
 
-- `tool`: `load_report`, `top_ops`, `zone_timings`, `diff_reports`, `find_operations`, `operation_detail`, `memory_profile`, `tensor_flow`, `operation_provenance`.
+- `tool`: `load_report`, `top_ops`, `program_cache`, `zone_timings`, `diff_reports`, `find_operations`, `operation_detail`, `memory_profile`, `tensor_flow`, `operation_provenance`.
 - `outcome`: `ok`, `refused`, `error`.
 
 `refused` is a tool declining a well-formed call it cannot answer (unknown handle, argument out of range). `error` is an unexpected failure the server did not anticipate.
@@ -150,9 +150,9 @@ TT-NN Visualizer does not record:
 - raw counts that could identify a specific workload;
 - client-supplied free-form event details. Client detail fields use closed enums; server-generated version fields are validated before they are written.
 
-## Local Prometheus collection
+## Aggregate collection
 
-The TT-NN Visualizer backend never forwards raw events. A local-only `GET /api/metrics` endpoint can project the local log into cumulative Prometheus counters, and a separately running local Prometheus can scrape those counters and forward them with `remote_write`. Collection is disabled by default and is unavailable under `SERVER_MODE`. Either recording opt-out also disables the endpoint.
+The TT-NN Visualizer backend never forwards raw events. When a local install opts in, the launcher projects the local log into cumulative counters and pushes them to a configured endpoint as OTLP/HTTP JSON: once at launch, then every minute, then once when the server stops. Collection is disabled by default and is unavailable under `SERVER_MODE`. Either recording opt-out stops the next push without a restart; a launch under an opt-out starts no exporter at all, so lifting the opt-out mid-session takes effect at the next launch.
 
 The opt-in file is:
 
@@ -160,17 +160,25 @@ The opt-in file is:
 ~/.ttnn-visualizer/usage/collection.json
 ```
 
-It contains the explicit `enabled` flag, an optional Prometheus remote-write endpoint, an optional `remote_write_bearer_token` for that endpoint, and a random persistent `machine_id`. The ID is generated when collection is first enabled; it is not derived from a hostname, username, path, or IP address. Omitting the endpoint keeps collection local to the Docker Prometheus. Deleting the config disables collection and causes a new identity to be generated if collection is enabled again. A malformed config fails closed without preventing TT-NN Visualizer from starting.
+```json
+{
+  "enabled": true,
+  "remote_write_endpoint": "https://metrics.example/api/v1/otlp/v1/metrics",
+  "remote_write_auth_token": "<token>"
+}
+```
 
-The bearer token is sent as an `Authorization: Bearer` header on remote-write requests. It requires an endpoint and must not contain whitespace or control characters; a token that breaks either rule fails the whole config closed. The Prometheus config renderer writes it to `prometheus.remote-write.token` beside the generated config, which only references the file, and the Docker Compose file mounts it read-only. Both files are mode `0644` so the unprivileged Prometheus container can read them, which leaves the token readable by other users on the machine; `collection.json` stays `0600`. To render somewhere other than `docker/prometheus/`, set `PROMETHEUS_GENERATED_DIR` to that directory for Compose, and keep the default `prometheus.generated.yml` output name. Compose refuses to start without the token file, so rerender after upgrading. Without a token, remote-write requests are unauthenticated.
+It contains the explicit `enabled` flag, the metrics endpoint, which must accept OTLP/HTTP JSON rather than Prometheus remote-write despite the `remote_write_` key names, an optional `remote_write_auth_token` for that endpoint, and a random persistent `machine_id`. Nothing is collected without an endpoint. The ID is generated at the first launch with collection enabled; it is not derived from a hostname, username, path, or IP address. Deleting the config disables collection and causes a new identity to be generated if collection is enabled again. The exporter rereads the config before every push, so disabling or deleting it takes effect within a minute. Enabling collection or adding an endpoint takes effect at the next launch, because the exporter only starts at launch. A malformed config fails closed without preventing TT-NN Visualizer from starting. The token field was named `remote_write_bearer_token` before this release; a config still using that name fails closed with a warning naming the new field. If an earlier release's `pnpm prometheus:config` wrote a `prometheus.remote-write.token` file, delete it.
 
-The metrics projection exports one `_total` counter per event name with only that event's documented fields as labels. It honours compacted `count` values. It never exports timestamps, `run_id`, hosted session directory names, raw event rows, usernames, hostnames, paths, or unknown fields. Collector health metrics distinguish a missing log, malformed lines, and a read failure. Deleting the event log resets the projected counters; compaction preserves them.
+The endpoint must use HTTPS unless it is a loopback address, and must not contain whitespace, control characters, credentials, query parameters, or a fragment. A Prometheus remote-write path (`/api/v1/write`, `/api/v1/push`), as configs for earlier releases used, fails the config closed, since it cannot take OTLP. When the endpoint answers 4xx, the logged warning says it must accept OTLP/HTTP JSON. The token is sent as an `Authorization: Bearer` header; it requires an endpoint and must not contain whitespace or control characters, and a token that breaks either rule fails the whole config closed. `collection.json` is kept at mode `0600`. Pushes are sent with the system `curl`, which must be on `PATH`; it verifies TLS against the operating system's trust store, so an endpoint signed by an internal CA installed on the machine is trusted. The token and payload are passed to `curl` on standard input, never on its command line, and `curl` is run with `-q` so a user's `~/.curlrc` cannot change these options. Redirects are refused, so the token is never resent to another host, and URL globbing is off, so `{}` or `[]` in the endpoint cannot turn one push into several. A loopback endpoint bypasses any configured `http_proxy` or `ALL_PROXY`, so a token sent over plain HTTP never leaves the machine. Without a token, pushes are unauthenticated. A failed push is logged once until a later push succeeds; the counters are cumulative, so the next successful push carries everything missed.
 
-The endpoint is unauthenticated, like every local-only endpoint. `@local_only` disables it under `SERVER_MODE`; it does not restrict the source network address. With the default loopback binding, other processes on the machine can read the counts or inflate them by posting events. If a local install binds to a non-loopback address, including `0.0.0.0`, network clients that can reach the backend may do the same. Protect such bindings with an external access-control boundary. Treat per-machine counts as indicative rather than trustworthy.
+The projection exports one `_total` counter per event name with only that event's documented fields and `machine_id` as attributes, under the resource attribute `service.name="ttnn-visualizer"`. It honours compacted `count` values. It never exports timestamps of events, `run_id`, hosted session directory names, raw event rows, usernames, hostnames, paths, or unknown fields. The counters carry no start time, because they total a log that outlives any one launch; receivers treat each value as following the last, so a relaunch is not read as a counter reset. Collector health metrics distinguish a missing log, malformed lines, and a read failure. Deleting the event log resets the projected counters; compaction preserves them.
+
+The pushes come from the `ttnn-visualizer` launcher, not the gunicorn workers, so one exporter serves any number of workers. Under `--daemon` the launcher exits as soon as gunicorn detaches, so both of its pushes happen at launch; usage from a daemon session is only sent by the next launch with collection enabled. The final push on exit is limited to a few seconds, and is skipped if an earlier push is still in flight, so a slow endpoint cannot hold up shutdown. Any local process can append to the event log and so inflate the counts. Treat per-machine counts as indicative rather than trustworthy.
 
 ## Hosted collection
 
-The hosted app has no collection beyond the event log itself: Local Prometheus collection is unavailable under `SERVER_MODE`, and the application exports nothing from the session logs. Hosted retention and compaction are the deployment's responsibility; the application neither enumerates session logs at startup nor compacts them on a request path. Anything a deployment builds to read those logs must not export timestamps, `run_id`, hosted session directory names, per-event rows, or per-user series.
+The hosted app has no collection beyond the event log itself: aggregate collection is unavailable under `SERVER_MODE`, and the application exports nothing from the session logs. Hosted retention and compaction are the deployment's responsibility; the application neither enumerates session logs at startup nor compacts them on a request path. Anything a deployment builds to read those logs must not export timestamps, `run_id`, hosted session directory names, per-event rows, or per-user series.
 
 ## Documentation-site analytics
 

@@ -1,7 +1,7 @@
 [project]
 name = "ttnn_visualizer"
 authors = []
-version = "0.107.0"
+version = "0.108.0"
 description = "TT-NN Visualizer"
 readme = "README.md"
 license = "Apache-2.0"
@@ -65,7 +65,6 @@ build-backend = "setuptools.build_meta"
 ttnn-visualizer = "ttnn_visualizer.app:main"
 # Speaks newline-delimited JSON-RPC on stdio; point an MCP client at it. #1995
 ttnn-visualizer-mcp = "ttnn_visualizer.agent.server:main"
-ttnn-visualizer-prometheus-config = "ttnn_visualizer.usage_collection:main"
 
 [tool.black]
 line-length = 88
@@ -97,6 +96,11 @@ line_length = 88
 # used to pass `backend/ttnn_visualizer` explicitly, which silently skipped any
 # tests living outside the package — `scripts/tests` would never have run.
 testpaths = ["backend/ttnn_visualizer/tests", "scripts/tests"]
+# A figure tt-perf-report opened and nobody closed is a per-request memory leak
+# in the server (#2135), so the suite fails rather than warns when one builds up.
+filterwarnings = [
+    "error:More than .* figures have been opened:RuntimeWarning",
+]
 
 [tool.mypy]
 ignore_missing_imports = true

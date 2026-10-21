@@ -12,12 +12,16 @@ path. (The report's own SQLite file is read, to answer what a report can
 answer; that is the capture, not the app's session.) #1995
 """
 
+import csv
 import sqlite3
+from collections import OrderedDict
 from enum import Enum
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Tuple, TypeVar, cast
+from typing import Callable, Dict, Hashable, List, Optional, Tuple, TypeVar, cast
 
 from ttnn_visualizer.csv_queries import (
+    PROGRAM_CACHE_HIT_COLUMN,
+    PROGRAM_HASH_COLUMN,
     DeviceLogProfilerQueries,
     OpsPerformanceQueries,
 )
@@ -37,10 +41,40 @@ class CacheVariant(str, Enum):
 
     CANONICAL_REPORT = "canonical_report"
     OPERATION_LINK = "operation_link"
+    # Which signposts the performance CSV holds, read without generating a report.
+    SIGNPOSTS = "signposts"
+    # The performance CSV the handle's first read came from, so a later read can
+    # tell whether it is still reading the same capture.
+    SOURCE = "source"
+    # The detail fields no row of the whole report carries, read once per handle.
+    EMPTY_DETAIL_FIELDS = "empty_detail_fields"
+
+
+# Snapshots narrowed by a scope -- a signpost range -- kept at once, across every
+# handle. Each is a generated report of up to a whole report's rows, and an agent
+# walking per-layer signposts asks for many, so they are evicted least recently
+# used rather than pinned; an evicted range costs a full regeneration, since
+# nothing underneath keeps generated dicts. Two is one `diff_reports` pair, and
+# each one more holds another report's rows for the life of the process.
+# The detail columns add about 3% to each, since their repeated cells are interned.
+MAX_SCOPED_REPORTS = 2
 
 
 class UnknownHandleError(ValueError):
     """Raised when a tool is called with a handle that was never loaded."""
+
+
+class UnsharedSnapshot(Exception):
+    """Raised by a builder whose snapshot only the asking handle may keep.
+
+    A report generated with swallowed errors is one: kept under a `share_key`,
+    every later handle on that capture would read it, so loading the report again
+    would no longer regenerate it.
+    """
+
+    def __init__(self, snapshot: object):
+        super().__init__("snapshot kept by its handle alone")
+        self.snapshot = snapshot
 
 
 class ReportRegistry:
@@ -52,7 +86,10 @@ class ReportRegistry:
 
     def __init__(self) -> None:
         self._instances: Dict[str, Instance] = {}
-        self._reports: Dict[Tuple[str, CacheVariant], object] = {}
+        self._reports: Dict[Tuple[Hashable, CacheVariant], object] = {}
+        self._scoped_reports: (
+            "OrderedDict[Tuple[Hashable, CacheVariant, Hashable], object]"
+        ) = OrderedDict()
         self._next_id = 1
 
     def add(self, profiler_path: Optional[str], performance_path: Optional[str]) -> str:
@@ -79,31 +116,76 @@ class ReportRegistry:
         handle: str,
         build: Callable[[Instance], Cached],
         variant: CacheVariant = CacheVariant.CANONICAL_REPORT,
+        scope: Hashable = None,
+        share_key: Hashable = None,
     ) -> Cached:
-        """Keep one report snapshot per handle and variant.
+        """Keep one report snapshot per handle, variant and scope.
 
         `generate_report` re-parses the CSV, shells through tt-perf-report and
         writes three temp files; an agent asking four questions of one report
         should pay for that once. This cache pins one snapshot per handle for the
         registry's lifetime: a loaded handle keeps answering from it even if the
         source changes, and a fresh registry starts empty by construction. The
-        process-wide generation cache underneath only lets loading the same
-        unchanged file again skip regeneration; the MCP server runs in its own
-        process, so nothing here is shared with the HTTP app.
+        MCP server runs in its own process, so nothing here is shared with the
+        HTTP app.
 
         `variant` keeps what is derived from the report apart from the report
         itself: the operation link reads every captured graph, so it is resolved
         once per handle beside the snapshot it was matched against.
+
+        `scope` keeps a narrowed read of the same report -- a signpost range, see
+        `tools.SignpostRange` -- apart from the whole one. Unlike the unscoped
+        snapshots, scoped ones are not pinned: at most `MAX_SCOPED_REPORTS` are
+        kept, least recently used first out.
+
+        `share_key` keeps one snapshot for every handle that names the same key
+        rather than one per handle. Handles are never released, so an agent that
+        calls `load_report` again on an unchanged capture would otherwise pin
+        another whole copy of its report each time. A key never equals a handle:
+        handles are strings and the keys passed are not. A builder that raises
+        `UnsharedSnapshot` has its snapshot kept under the handle instead, and
+        that copy answers the handle before the shared one is asked.
         """
-        key = (handle, variant)
-        if key not in self._reports:
-            self._reports[key] = build(self.get(handle))
-        # Each variant has one builder, so the key fixes the type it stored.
-        return cast(Cached, self._reports[key])
+        owners = [handle] if share_key is None else [handle, share_key]
+        for owner in owners:
+            found, snapshot = self._lookup(owner, variant, scope)
+            if found:
+                # Each variant has one builder, so the key fixes the type it stored.
+                return cast(Cached, snapshot)
+
+        try:
+            snapshot, owner = build(self.get(handle)), owners[-1]
+        except UnsharedSnapshot as unshared:
+            snapshot, owner = unshared.snapshot, handle
+        self._store(owner, variant, scope, snapshot)
+        return cast(Cached, snapshot)
+
+    def _lookup(
+        self, owner: Hashable, variant: CacheVariant, scope: Hashable
+    ) -> Tuple[bool, object]:
+        if scope is None:
+            key = (owner, variant)
+            return key in self._reports, self._reports.get(key)
+        scoped_key = (owner, variant, scope)
+        if scoped_key not in self._scoped_reports:
+            return False, None
+        self._scoped_reports.move_to_end(scoped_key)
+        return True, self._scoped_reports[scoped_key]
+
+    def _store(
+        self, owner: Hashable, variant: CacheVariant, scope: Hashable, snapshot: object
+    ) -> None:
+        if scope is None:
+            self._reports[(owner, variant)] = snapshot
+            return
+        self._scoped_reports[(owner, variant, scope)] = snapshot
+        while len(self._scoped_reports) > MAX_SCOPED_REPORTS:
+            self._scoped_reports.popitem(last=False)
 
     def clear(self) -> None:
         self._instances.clear()
         self._reports.clear()
+        self._scoped_reports.clear()
         self._next_id = 1
 
 
@@ -181,6 +263,73 @@ def _readable_tables(profiler_path: Optional[str]) -> frozenset:
         connection.close()
 
 
+# Columns tt-perf-report requires before it can produce a report without exiting.
+TOP_OPS_REQUIRED_COLUMNS = frozenset({"OP CODE", "OP TYPE", "DEVICE ID"})
+
+
+def _csv_columns(path: Optional[Path]) -> frozenset:
+    """The CSV's header names, or nothing when it cannot be read."""
+    if path is None:
+        return frozenset()
+    try:
+        with path.open(newline="") as source:
+            return frozenset(next(csv.reader(source), []))
+    except (OSError, UnicodeDecodeError, csv.Error):
+        return frozenset()
+
+
+def _perf_csv_problem(path: Optional[Path]) -> Optional[str]:
+    """Why tt-perf-report cannot report on this CSV, or None when it can.
+
+    None too when there is no CSV, which `performance_csv` being null already says.
+    """
+    if path is None:
+        return None
+    try:
+        with path.open(newline="") as source:
+            header = next(csv.reader(source), [])
+            # Read to the end rather than stopping at the first row: `top_ops`
+            # decodes the whole file, so a bad byte anywhere has to be found here.
+            # Line by line, so a large capture is never held in memory.
+            has_data_row = False
+            for line in source:
+                has_data_row = has_data_row or bool(line.strip())
+    except OSError as error:
+        return f"unreadable: {error.strerror or error}"
+    except UnicodeDecodeError as error:
+        return f"not {error.encoding} text (byte {error.start} cannot be decoded)"
+    except csv.Error as error:
+        return f"malformed header: {error}"
+
+    if not any(cell.strip() for cell in header):
+        return "empty"
+    absent = TOP_OPS_REQUIRED_COLUMNS - set(header)
+    if absent:
+        return f"missing columns: {', '.join(sorted(absent))}"
+    if not has_data_row:
+        return "no data rows"
+    return None
+
+
+def _perf_csv(instance: Instance) -> Optional[Path]:
+    """The ops perf CSV the tools read, or None when the handle has none."""
+    # The selector the tools actually read through, not a second glob. Picking
+    # the lexicographically first file here while `get_local_ops_perf_file_path`
+    # picks the newest meant `load_report` could name one capture and `top_ops`
+    # analyse another in a directory holding two.
+    if not instance.performance_path:
+        return None
+    try:
+        return Path(OpsPerformanceQueries.get_local_ops_perf_file_path(instance))
+    except Exception:
+        return None
+
+
+def perf_csv_columns(instance: Instance) -> frozenset:
+    """The header of the ops perf CSV the tools read, or nothing without one."""
+    return _csv_columns(_perf_csv(instance))
+
+
 def _inventory(instance: Instance) -> Dict[str, object]:
     """What this report can actually answer.
 
@@ -194,19 +343,17 @@ def _inventory(instance: Instance) -> Dict[str, object]:
     def record(name: str, present: bool) -> None:
         (available if present else missing).append(name)
 
-    # The selector the tools actually read through, not a second glob. Picking
-    # the lexicographically first file here while `get_local_ops_perf_file_path`
-    # picks the newest meant `load_report` could name one capture and `top_ops`
-    # analyse another in a directory holding two.
-    perf_csv = None
-    if instance.performance_path:
-        try:
-            perf_csv = Path(
-                OpsPerformanceQueries.get_local_ops_perf_file_path(instance)
-            )
-        except Exception:
-            perf_csv = None
-    record("top_ops", perf_csv is not None)
+    perf_csv = _perf_csv(instance)
+    perf_columns = _csv_columns(perf_csv)
+    # Both tools run tt-perf-report, which needs its key columns and a data row.
+    perf_csv_problem = _perf_csv_problem(perf_csv)
+    perf_ready = perf_csv is not None and perf_csv_problem is None
+    record("top_ops", perf_ready)
+    # Older captures carry neither column, and every count would then be zero.
+    record(
+        "program_cache",
+        perf_ready and {PROGRAM_HASH_COLUMN, PROGRAM_CACHE_HIT_COLUMN} <= perf_columns,
+    )
 
     performance_path = instance.performance_path
     profiler_path = instance.profiler_path
@@ -230,6 +377,9 @@ def _inventory(instance: Instance) -> Dict[str, object]:
         "answerable": available,
         "unanswerable": missing,
         "performance_csv": perf_csv.name if perf_csv else None,
+        # Why `top_ops` and `program_cache` are unanswerable when a CSV is present,
+        # so an agent can tell an empty capture from a corrupt one.
+        "performance_csv_problem": perf_csv_problem,
         # Kept as a key, and now empty: the database questions have tools. What
         # stays unexposed is page-level (`buffer_pages`), which is millions of rows
         # on an ordinary capture and needs a different shape than a tool response.
@@ -274,4 +424,5 @@ __all__ = [
     "ReportRegistry",
     "UnknownHandleError",
     "load_report",
+    "perf_csv_columns",
 ]

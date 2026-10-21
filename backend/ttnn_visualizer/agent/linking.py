@@ -34,7 +34,7 @@ from enum import Enum
 from typing import Dict, List, NamedTuple, Optional, Sequence, Set, Tuple
 
 from tt_perf_report.perf_report import HOST_OP_MARKER
-from ttnn_visualizer.agent import operations, tools
+from ttnn_visualizer.agent import operations, perf_detail, tools
 from ttnn_visualizer.agent.bounds import MAX_LIMIT
 from ttnn_visualizer.agent.handles import CacheVariant, ReportRegistry
 from ttnn_visualizer.csv_queries import SIGNPOST_OP_TYPE
@@ -463,9 +463,9 @@ def _read_profiler_side(
 class _UncachedLink(Exception):
     """A link built from a read that failed and might not fail again.
 
-    Raised out of the cache so the next call retries, as the canonical report and the
-    generation cache under it already do -- a link cached from a passing failure
-    would contradict a `top_ops` that later read the same report fine.
+    Raised out of the cache so the next call retries, as a canonical report that
+    failed outright is -- a link cached from a passing failure would contradict a
+    `top_ops` that later read the same report fine.
     """
 
     def __init__(self, link: OperationLink):
@@ -625,15 +625,43 @@ TOP_OPS_LINK_NOTE = (
     "first_past_profiler_capture_id names the first row past the profiler capture."
 )
 
+# `operation_link.scope` on a ranged `top_ops`: the link's counts are the whole
+# report's, not the window's.
+WHOLE_REPORT_SCOPE = "whole_report"
+
+# What a signpost range does not narrow. The link is matched against the whole
+# report, because alignment is positional and a window would start it mid-run.
+RANGED_LINK_NOTE = (
+    "A signpost range narrows the ranked rows only: operation_id and every count "
+    "in operation_link are from the whole report, so a row's operation_id is the "
+    "one it has unranged, and matched_rows and unlinked_by_reason count rows "
+    "outside the window too."
+)
+
 
 def top_ops(
     registry: ReportRegistry,
     handle: str,
     by: str = "device_time",
     limit: Optional[int] = None,
+    start_signpost: Optional[str] = None,
+    end_signpost: Optional[str] = None,
+    include: Optional[List[str]] = None,
 ) -> Dict[str, object]:
-    """`tools.top_ops`, with each row's profiler operation id where one is known."""
-    result = tools.top_ops(registry, handle, by=by, limit=limit)
+    """`tools.top_ops`, with each row's profiler operation id where one is known.
+
+    Ids are CSV positions in a ranged report as in the whole one, so the
+    whole-report link answers a windowed row too.
+    """
+    result = tools.top_ops(
+        registry,
+        handle,
+        by=by,
+        limit=limit,
+        start_signpost=start_signpost,
+        end_signpost=end_signpost,
+        include=include,
+    )
     link = operation_link(registry, handle)
     ops = result.get("ops")
     for row in ops if isinstance(ops, list) else []:
@@ -642,6 +670,11 @@ def top_ops(
     # Only a handle with a profiler report has an operation_id worth explaining.
     if registry.get(handle).profiler_path:
         response["note"] = TOP_OPS_LINK_NOTE
+        # Read from the projection, which already names any range it read, so
+        # the note can never disagree with it.
+        if tools.is_ranged(result.get("projection")):
+            response["scope"] = WHOLE_REPORT_SCOPE
+            response["note"] = f"{TOP_OPS_LINK_NOTE} {RANGED_LINK_NOTE}"
     if link.status is LinkStatus.LINKED and link.unlinked is not None:
         response["unlinked_row_count"] = link.unlinked.total
         response["unlinked_by_reason"] = link.unlinked.by_reason
@@ -684,8 +717,10 @@ def operation_detail(
     handle: str,
     operation_id: int,
     rank: Optional[int] = None,
+    include: Optional[List[str]] = None,
 ) -> Dict[str, object]:
     """`operations.operation_detail`, with the performance rows it launched."""
+    groups = perf_detail.parse_include(include)
     result = operations.operation_detail(
         registry, handle, operation_id=operation_id, rank=rank
     )
@@ -704,20 +739,23 @@ def operation_detail(
         return result
     if link.status is LinkStatus.LINKED:
         rows = link.perf_rows_by_operation.get(int(operation_id), [])
+        empty = tools.empty_detail_fields(registry, handle, groups)
         result["perf_rows"] = [
             {
                 **tools.project_row(row),
                 "device_time_share_percent": _share_percent(
                     tools.countable_device_time(row), link.report_device_time_total
                 ),
+                **perf_detail.detail_fields(row, groups, empty),
             }
-            for row in rows[:MAX_LIMIT]
+            for row in rows[: tools.row_limit(MAX_LIMIT, groups)]
         ]
         result["perf_row_count"] = len(rows)
         # Stated because this response's other duration is host seconds, and the two
         # invite being compared.
         result["device_time_unit"] = DEVICE_TIME_UNIT
-        result["projection"] = dict(tools.CANONICAL_PROJECTION)
+        result["projection"] = tools.projection(None)
+        result.update(perf_detail.summary(groups, empty))
         if rows:
             result.update(_device_time_summary(rows, link.report_device_time_total))
             result["report_device_time_total"] = round(link.report_device_time_total, 3)
@@ -729,9 +767,37 @@ def operation_detail(
     return result
 
 
+PROGRAM_CACHE_LINK_NOTE = (
+    "first_repeat_miss_operation_id is the profiler database id of the operation that "
+    "launched the op code's first repeat miss, to pass to operation_provenance for its "
+    "call site. It is null when the reports did not link, or for a row with no "
+    "profiler operation."
+)
+
+
+def program_cache(
+    registry: ReportRegistry, handle: str, limit: Optional[int] = None
+) -> Dict[str, object]:
+    """`tools.program_cache`, with the operation behind each op code's first repeat miss."""
+    result = tools.program_cache(registry, handle, limit=limit)
+    link = operation_link(registry, handle)
+    entries = result.get("op_codes")
+    for entry in entries if isinstance(entries, list) else []:
+        miss = entry.get("first_repeat_miss_perf_id")
+        entry["first_repeat_miss_operation_id"] = (
+            None if miss is None else link.operation_by_perf_id.get(str(miss))
+        )
+    response = link.as_response()
+    if registry.get(handle).profiler_path:
+        response["note"] = PROGRAM_CACHE_LINK_NOTE
+    result["operation_link"] = response
+    return result
+
+
 __all__ = [
     "DEVICE_TIME_UNIT",
     "MAX_CAPTURED_GRAPH_CHARS",
+    "PROGRAM_CACHE_LINK_NOTE",
     "TOP_OPS_LINK_NOTE",
     "DeviceOperation",
     "LinkStatus",
@@ -747,6 +813,7 @@ __all__ = [
     "match_device_operations",
     "operation_detail",
     "operation_link",
+    "program_cache",
     "top_ops",
     "unlinked_rows",
 ]

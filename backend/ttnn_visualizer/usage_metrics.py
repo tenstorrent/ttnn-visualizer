@@ -2,19 +2,25 @@
 #
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-"""Prometheus projection of the bounded local usage event log."""
+"""Aggregate usage counters from the local event log, exported over OTLP."""
 
+import json
 import logging
 import os
+import re
+import subprocess
 import threading
+import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 from itertools import groupby
 from pathlib import Path
-from typing import DefaultDict, Dict, Iterable, Optional, Tuple
+from typing import Any, DefaultDict, Dict, Iterable, Optional, Tuple
+from urllib.parse import urlsplit
 
 from ttnn_visualizer.event_logging import (
     get_event_log_path,
+    is_recording_enabled,
     parse_known_event_fields,
     parse_logfmt_line,
 )
@@ -22,14 +28,24 @@ from ttnn_visualizer.usage_collection import (
     MACHINE_ID_LABEL,
     METRIC_PREFIX,
     UsageCollectionConfig,
+    is_loopback_host,
     load_usage_collection_config,
 )
 
 logger = logging.getLogger(__name__)
 
-PROMETHEUS_CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8"
-GAUGE_TYPE = "gauge"
-COUNTER_TYPE = "counter"
+OTLP_CONTENT_TYPE = "application/json"
+SERVICE_NAME = "ttnn-visualizer"
+SCOPE_NAME = "ttnn_visualizer.usage_metrics"
+EXPORT_INTERVAL_SECONDS = 60.0
+EXPORT_TIMEOUT_SECONDS = 10.0
+CONNECT_TIMEOUT_SECONDS = 3.0
+# Short, because the launcher waits on these before it exits.
+STOP_JOIN_TIMEOUT_SECONDS = 2.0
+FINAL_PUSH_TIMEOUT_SECONDS = 3.0
+CURL_COMMAND = "curl"
+# ``AGGREGATION_TEMPORALITY_CUMULATIVE`` in the OTLP metrics protocol.
+_CUMULATIVE_TEMPORALITY = 2
 _READ_CHUNK_BYTES = 64 * 1024
 MAX_EVENT_LOG_LINE_BYTES = 4 * 1024
 MetricLabels = Tuple[Tuple[str, str], ...]
@@ -54,15 +70,6 @@ class _MetricsState:
 
 _metrics_state = _MetricsState()
 _metrics_lock = threading.Lock()
-
-
-def _escape_label(value: str) -> str:
-    return value.replace("\\", "\\\\").replace("\n", "\\n").replace('"', '\\"')
-
-
-def _render_labels(labels: MetricLabels) -> str:
-    """Render labels already sorted by name, as every ``MetricLabels`` is."""
-    return ",".join(f'{name}="{_escape_label(value)}"' for name, value in labels)
 
 
 def _metric_name(suffix: str) -> str:
@@ -96,17 +103,11 @@ def _reset_metrics_state(path: Path, machine_id: str) -> _MetricsState:
 def _update_metrics(
     path: Path, machine_id: str
 ) -> Tuple[Dict[MetricKey, int], int, int, int]:
-    """Increment the cached aggregate from bytes appended since the previous scrape."""
-    # The first call after a worker starts reads the whole log while holding this lock;
-    # every later call reads only what was appended. That cold read is bounded by the
-    # log's size cap (`MAX_LOG_BYTES`) and took about 0.3 s at the cap against 0.1 ms
-    # warm. Under the default gevent worker a regular-file read does not yield, so it
-    # pauses the whole server for that long, once per worker start.
-    #
-    # Accepted: the endpoint is local-only and scraped every minute, and the counters
-    # are cumulative, so there is no history to skip. Priming at start-up would only
-    # move the pause, and slicing the read only helps if each slice yields to gevent.
-    # Revisit if the cap grows or a slower disk makes the pause visible.
+    """Increment the cached aggregate from bytes appended since the previous push."""
+    # The first call reads the whole log while holding this lock; every later call
+    # reads only what was appended. That cold read is bounded by the log's size cap
+    # (`MAX_LOG_BYTES`) and took about 0.3 s at the cap against 0.1 ms warm. It runs on
+    # the exporter's own thread in the launcher process, so it never pauses a request.
     with _metrics_lock:
         state = _metrics_state
         if state.path != path or state.machine_id != machine_id:
@@ -173,70 +174,282 @@ def _update_metrics(
         return dict(state.count_by_series), state.parse_errors, 1, 0
 
 
-def _render_health_metric(
-    name: str, help_text: str, value: int, metric_type: str = GAUGE_TYPE
-) -> list[str]:
-    return [
-        f"# HELP {name} {help_text}",
-        f"# TYPE {name} {metric_type}",
-        f"{name} {value}",
-    ]
+@dataclass(frozen=True)
+class UsageMetricsSnapshot:
+    count_by_series: Dict[MetricKey, int]
+    parse_errors: int
+    files_found: int
+    scan_errors: int
 
 
-def render_usage_metrics(
+def collect_usage_metrics(
     config: Optional[UsageCollectionConfig] = None,
     *,
     log_path: Optional[Path] = None,
-) -> str:
-    """Render current cumulative counters, or an empty exposition when disabled."""
+) -> Optional[UsageMetricsSnapshot]:
+    """Current cumulative counters, or ``None`` when collection is disabled."""
     resolved_config = config or load_usage_collection_config()
     if not resolved_config.enabled or resolved_config.machine_id is None:
-        return ""
+        return None
 
     path = log_path or get_event_log_path()
-    count_by_series, parse_errors, files_found, scan_errors = _update_metrics(
-        path, resolved_config.machine_id
-    )
+    return UsageMetricsSnapshot(*_update_metrics(path, resolved_config.machine_id))
 
-    output: list[str] = []
+
+def _attributes(labels: MetricLabels) -> list[Dict[str, Any]]:
+    return [{"key": name, "value": {"stringValue": value}} for name, value in labels]
+
+
+def _data_point(labels: MetricLabels, value: int, time_ns: int) -> Dict[str, Any]:
+    # 64-bit integers are strings in OTLP JSON, as in every proto3 JSON mapping.
+    #
+    # No ``startTimeUnixNano``: the totals run from the start of a log that outlives
+    # any launch, and that start is not recorded. A launch time would tell receivers
+    # the counter reset at every launch, so they would count the history again.
+    # Without one they take the start as unknown and treat each value as following
+    # the last they saw.
+    return {
+        "attributes": _attributes(labels),
+        "timeUnixNano": str(time_ns),
+        "asInt": str(value),
+    }
+
+
+def _counter(
+    name: str, description: str, data_points: list[Dict[str, Any]]
+) -> Dict[str, Any]:
+    return {
+        "name": name,
+        "description": description,
+        "sum": {
+            "aggregationTemporality": _CUMULATIVE_TEMPORALITY,
+            "isMonotonic": True,
+            "dataPoints": data_points,
+        },
+    }
+
+
+def _gauge(name: str, description: str, data_point: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "name": name,
+        "description": description,
+        "gauge": {"dataPoints": [data_point]},
+    }
+
+
+def build_otlp_payload(
+    snapshot: UsageMetricsSnapshot,
+    machine_id: str,
+    *,
+    time_ns: int,
+) -> Dict[str, Any]:
+    """An OTLP/HTTP JSON ``ExportMetricsServiceRequest`` for the snapshot.
+
+    Counter names keep their ``_total`` suffix: Prometheus' OTLP translation removes
+    and re-appends it, so the stored name is the same whether or not it adds suffixes.
+    """
+    metrics: list[Dict[str, Any]] = []
     for event_name, series in groupby(
-        sorted(count_by_series.items()), key=lambda item: item[0][0]
+        sorted(snapshot.count_by_series.items()), key=lambda item: item[0][0]
     ):
-        metric_name = _metric_name(f"{event_name}_total")
-        output.extend(
-            [
-                f"# HELP {metric_name} Cumulative {event_name} events in the local usage log.",
-                f"# TYPE {metric_name} {COUNTER_TYPE}",
-            ]
-        )
-        output.extend(
-            f"{metric_name}{{{_render_labels(labels)}}} {value}"
-            for (_event_name, labels), value in series
+        metrics.append(
+            _counter(
+                _metric_name(f"{event_name}_total"),
+                f"Cumulative {event_name} events in the local usage log.",
+                [
+                    _data_point(labels, value, time_ns)
+                    for (_event_name, labels), value in series
+                ],
+            )
         )
 
-    output.extend(
-        _render_health_metric(
-            _metric_name("usage_collector_files_found"),
-            "Whether the local usage event log exists.",
-            files_found,
-        )
+    identity: MetricLabels = ((MACHINE_ID_LABEL, machine_id),)
+    metrics.extend(
+        [
+            _gauge(
+                _metric_name("usage_collector_files_found"),
+                "Whether the local usage event log exists.",
+                _data_point(identity, snapshot.files_found, time_ns),
+            ),
+            _counter(
+                _metric_name("usage_collector_parse_errors_total"),
+                "Cumulative malformed or unsupported lines in the local usage event log.",
+                [_data_point(identity, snapshot.parse_errors, time_ns)],
+            ),
+            _gauge(
+                _metric_name("usage_collector_scan_errors"),
+                "Whether reading the local usage event log failed.",
+                _data_point(identity, snapshot.scan_errors, time_ns),
+            ),
+        ]
     )
-    output.extend(
-        # A counter, unlike its two siblings: `parse_errors` accumulates across scrapes
-        # for the life of the process, so declaring it a gauge would leave `increase()`
-        # unusable and make `rate()` extrapolate a reset it was never told about.
-        _render_health_metric(
-            _metric_name("usage_collector_parse_errors_total"),
-            "Cumulative malformed or unsupported lines in the local usage event log.",
-            parse_errors,
-            COUNTER_TYPE,
+    return {
+        "resourceMetrics": [
+            {
+                "resource": {
+                    "attributes": _attributes((("service.name", SERVICE_NAME),))
+                },
+                "scopeMetrics": [{"scope": {"name": SCOPE_NAME}, "metrics": metrics}],
+            }
+        ]
+    }
+
+
+def _quote_curl_config(value: str) -> str:
+    # curl's config is line-based, so a line break would end the option and start
+    # another. The config validators already refuse these; this is the backstop.
+    if any(character in value for character in "\r\n"):
+        raise ValueError("curl config values must not contain line breaks")
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
+def _post_with_curl(
+    endpoint: str, body: str, auth_token: Optional[str], timeout_seconds: float
+) -> None:
+    """POST through the system ``curl``, which trusts the OS certificate store.
+
+    Every option, including the token and the body, goes in a config read from stdin,
+    so neither appears in the process list. ``-q`` must come first: it stops curl
+    reading ``~/.curlrc``, where ``location-trusted`` or ``insecure`` would undo the
+    options below. Redirects are refused, so the token is never resent to another
+    host, and anything but a 2xx is an error.
+    """
+    options = {
+        "url": endpoint,
+        "request": "POST",
+        "header": f"Content-Type: {OTLP_CONTENT_TYPE}",
+        "data-binary": body,
+        "output": os.devnull,
+        "write-out": "%{http_code}",
+        "connect-timeout": str(min(CONNECT_TIMEOUT_SECONDS, timeout_seconds)),
+        "max-time": str(timeout_seconds),
+        "max-redirs": "0",
+        "proto": "=http,https",
+    }
+    # curl applies ``http_proxy`` and ``ALL_PROXY`` to loopback hosts too, and the
+    # only plain-HTTP endpoints allowed are loopback ones, so without this the token
+    # would cross the proxy in clear. Remote endpoints still use a configured proxy.
+    if is_loopback_host(urlsplit(endpoint).hostname):
+        options["noproxy"] = "*"
+    lines = [f"{name} = {_quote_curl_config(value)}" for name, value in options.items()]
+    if auth_token:
+        lines.append(
+            f"header = {_quote_curl_config(f'Authorization: Bearer {auth_token}')}"
         )
-    )
-    output.extend(
-        _render_health_metric(
-            _metric_name("usage_collector_scan_errors"),
-            "Whether reading the local usage event log failed.",
-            scan_errors,
+    # ``globoff`` so ``{}`` and ``[]`` in the endpoint are sent literally rather than
+    # expanded into several authenticated requests.
+    lines.extend(["globoff", "silent", "show-error"])
+
+    try:
+        result = subprocess.run(
+            [CURL_COMMAND, "-q", "--config", "-"],
+            input="\n".join(lines) + "\n",
+            capture_output=True,
+            text=True,
+            # Beyond curl's own ``max-time``, so curl reports the timeout itself.
+            timeout=timeout_seconds + 5,
+            check=False,
         )
+    except subprocess.TimeoutExpired as error:
+        raise TimeoutError("curl did not finish") from error
+    if result.returncode != 0:
+        # Only the first line: under ``show-error`` that is curl's one-line reason, and
+        # nothing later can carry request headers into the log.
+        reason = next(iter(result.stderr.strip().splitlines()), "")
+        raise OSError(f"curl exited with {result.returncode}: {reason}")
+    # Exact, so codes from more than one transfer run together cannot pass as a 2xx.
+    status = result.stdout.strip()
+    if not re.fullmatch(r"2\d\d", status):
+        hint = (
+            "; the endpoint must accept OTLP/HTTP JSON metrics"
+            if status.startswith("4")
+            else ""
+        )
+        raise OSError(f"endpoint answered HTTP {status}{hint}")
+
+
+def push_usage_metrics(
+    *,
+    log_path: Optional[Path] = None,
+    timeout_seconds: float = EXPORT_TIMEOUT_SECONDS,
+) -> bool:
+    """Send the current counters to the configured endpoint.
+
+    Returns whether anything was sent. Rereads the opt-outs and the config on every
+    call, so switching either off stops the next push without a restart. Raises
+    ``OSError`` when the request fails, including on a non-2xx response or when
+    ``curl`` is not installed.
+    """
+    if not is_recording_enabled():
+        return False
+    config = load_usage_collection_config()
+    # ``can_export`` decides; the locals only narrow the types for mypy.
+    endpoint, machine_id = config.remote_write_endpoint, config.machine_id
+    if not config.can_export or endpoint is None or machine_id is None:
+        return False
+    snapshot = collect_usage_metrics(config, log_path=log_path)
+    if snapshot is None:
+        return False
+
+    payload = build_otlp_payload(
+        snapshot,
+        machine_id,
+        time_ns=time.time_ns(),
     )
-    return "\n".join(output) + "\n"
+    _post_with_curl(
+        endpoint,
+        json.dumps(payload),
+        config.remote_write_auth_token,
+        timeout_seconds,
+    )
+    return True
+
+
+class UsageMetricsExporter:
+    """Pushes the counters once at start, then every interval, then once on stop.
+
+    Runs in the launcher process rather than in gunicorn, so one exporter serves
+    however many workers there are. The launcher stops it when gunicorn returns, so
+    under ``--daemon``, where gunicorn detaches at once, both pushes happen at launch
+    and a daemon session's usage is only sent by the next launch.
+    """
+
+    def __init__(self, interval_seconds: float = EXPORT_INTERVAL_SECONDS) -> None:
+        self._interval_seconds = interval_seconds
+        self._stopping = threading.Event()
+        self._failing = False
+        self._thread = threading.Thread(
+            target=self._run, name="usage-metrics-exporter", daemon=True
+        )
+
+    def start(self) -> "UsageMetricsExporter":
+        self._thread.start()
+        return self
+
+    def stop(self) -> None:
+        """Make the final push, bounded so a slow endpoint cannot hold up exit."""
+        self._stopping.set()
+        self._thread.join(timeout=STOP_JOIN_TIMEOUT_SECONDS)
+        # A push still in flight carries the counters already, and a second alongside
+        # it would only race it, so the final push is skipped rather than overlapped.
+        if self._thread.is_alive():
+            return
+        # Final push, so a session shorter than one interval is still counted.
+        self._push(timeout_seconds=FINAL_PUSH_TIMEOUT_SECONDS)
+
+    def _run(self) -> None:
+        self._push()
+        while not self._stopping.wait(self._interval_seconds):
+            self._push()
+
+    def _push(self, timeout_seconds: float = EXPORT_TIMEOUT_SECONDS) -> None:
+        try:
+            push_usage_metrics(timeout_seconds=timeout_seconds)
+        except (OSError, ValueError) as error:
+            # Logged once per run of failures rather than every interval.
+            if not self._failing:
+                logger.warning("Unable to export usage metrics: %s", error)
+            self._failing = True
+        else:
+            self._failing = False

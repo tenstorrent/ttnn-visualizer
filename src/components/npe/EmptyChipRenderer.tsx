@@ -14,6 +14,7 @@ interface EmptyChipRendererProps {
     dram?: number[][];
     eth?: number[][];
     pcie?: number[][];
+    dispatch?: number[][];
     // Narrow on purpose: clicking bare backdrop can only clear a selection. A wider
     // handler would tempt callers into passing the per-scrub-unstable
     // `showActiveTransfers`, which would silently void the memo below.
@@ -24,13 +25,23 @@ interface EmptyChipRendererProps {
     renderChipId: boolean;
 }
 
-const NODE_TYPE_CLASS: Record<string, string> = {
-    c: 'node-type-label node-type-c',
-    d: 'node-type-label node-type-d',
-    e: 'node-type-label node-type-e',
-    p: 'node-type-label node-type-p',
+// Values are the `node-type-*` class suffixes in NPEComponent.scss.
+enum NodeKind {
+    TENSIX = 'c',
+    DRAM = 'd',
+    ETH = 'e',
+    PCIE = 'p',
+    DISPATCH = 'dispatch',
+}
+
+// Upper case for the programmable cores (Tensix, dispatch engines), lower case for endpoints.
+const NODE_KIND_LABEL: Record<NodeKind, string> = {
+    [NodeKind.TENSIX]: 'T',
+    [NodeKind.DRAM]: 'd',
+    [NodeKind.ETH]: 'e',
+    [NodeKind.PCIE]: 'p',
+    [NodeKind.DISPATCH]: 'D',
 };
-const NODE_TYPE_LABEL: Record<string, string> = { c: 'T', d: 'd', e: 'e', p: 'p' };
 
 // This backdrop is static across timesteps, so it's memoized to skip re-rendering
 // its width×height cells on every scrub — the dominant data-independent cost of
@@ -45,37 +56,38 @@ export const EmptyChipRenderer = memo(
         dram,
         eth,
         pcie,
+        dispatch,
         onEmptyCellClick,
         selectedZoneAddress,
         isAnnotatingCores,
         TENSIX_SIZE,
         renderChipId = true,
     }: EmptyChipRendererProps) => {
-        // Flatten the four node-type location lists into one `${y}-${x}` lookup so a
-        // cell resolves in O(1) instead of scanning all four arrays per cell.
+        // Flatten the node-type location lists into one `${y}-${x}` lookup so a
+        // cell resolves in O(1) instead of scanning every array per cell.
         const nodeTypeByCoord = useMemo(() => {
-            const byCoord = new Map<string, string>();
-            // First match wins, matching the original cores → dram → eth → pcie
-            // lookup chain. A plain `set` would make it last-wins and silently
-            // relabel any coordinate that appeared in two arch lists.
-            const add = (locations: number[][] | undefined, kind: string) =>
+            const byCoord = new Map<string, NodeKind>();
+            // First match wins, in the order added below: a plain `set` would silently
+            // relabel a coordinate that appears in two arch lists.
+            const add = (locations: number[][] | undefined, kind: NodeKind) =>
                 locations?.forEach((loc) => {
                     const key = `${loc[0]}-${loc[1]}`;
                     if (!byCoord.has(key)) {
                         byCoord.set(key, kind);
                     }
                 });
-            add(cores, 'c');
-            add(dram, 'd');
-            add(eth, 'e');
-            add(pcie, 'p');
+            add(cores, NodeKind.TENSIX);
+            add(dram, NodeKind.DRAM);
+            add(eth, NodeKind.ETH);
+            add(pcie, NodeKind.PCIE);
+            add(dispatch, NodeKind.DISPATCH);
             return byCoord;
-        }, [cores, dram, eth, pcie]);
+        }, [cores, dram, eth, pcie, dispatch]);
 
         const getNodeType = (location: number[]): JSX.Element => {
             const kind = nodeTypeByCoord.get(`${location[0]}-${location[1]}`);
             return kind ? (
-                <div className={NODE_TYPE_CLASS[kind]}>{NODE_TYPE_LABEL[kind]}</div>
+                <div className={`node-type-label node-type-${kind}`}>{NODE_KIND_LABEL[kind]}</div>
             ) : (
                 <div className='node-type-label' />
             );

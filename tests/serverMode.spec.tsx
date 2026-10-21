@@ -31,11 +31,13 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
     usePerformanceRange: () => null,
     useInstance: () => ({ data: mockInstance }),
     useOpToPerfIdFiltered: () => [],
+    useOpToPerfIdForPerfTable: () => [],
     useL1PressureByOperation: () => ({ status: 'unavailable', data: null }),
     useOperationsList: () => ({ data: [] }),
     useReportFolderList: () => ({ data: mockProfilerFolderList }),
     useGetNPEManifest: () => ({ data: null }),
     useReportMetadata: () => ({ data: undefined, error: undefined }),
+    useActiveReportFingerprints: () => ({ data: undefined, isPending: true }),
 }));
 
 vi.mock('../src/functions/getServerConfig.ts', () => ({

@@ -65,6 +65,11 @@ export interface AllocationFailureDetail {
 
 /** An allocation failure as the performance view lists it, joined to the linked perf report. */
 export interface AllocationFailureListing extends AllocationFailureDetail {
-    /** Perf rows of this operation's earlier device operations, which did run. Usually zero. */
+    /** This operation's earlier device operations, which did run. Usually zero. */
+    ranDeviceOperationCount: number;
+    /**
+     * Perf rows of those device operations: one each with devices merged, one per device
+     * per operation with them unmerged (#2084).
+     */
     linkedRowCount: number;
 }

@@ -16,28 +16,24 @@ interface LateDeallocationControlProps {
     countSummary: string;
     checked: boolean;
     onChange: () => void;
-    disabled?: boolean;
 }
 
 /**
  * The "Mark late tensor deallocations" switch with its finding count beside it
  * (#963, #1862). The count shows whether or not the overlay is on, so the
  * switch advertises whether it is worth flipping.
+ *
+ * The switch is global, so it is never disabled and always shows its real
+ * state: a view with nothing to mark would otherwise read "off" while the
+ * switch is on everywhere else (#2071). A zero count says "nothing here".
  */
-function LateDeallocationControl({
-    count,
-    countSummary,
-    checked,
-    onChange,
-    disabled = false,
-}: LateDeallocationControlProps) {
+function LateDeallocationControl({ count, countSummary, checked, onChange }: LateDeallocationControlProps) {
     return (
         <div className='late-dealloc-control'>
             <GlobalSwitch
                 label='Mark late tensor deallocations'
                 checked={checked}
                 onChange={onChange}
-                disabled={disabled}
             />
             <Tooltip
                 content={countSummary}

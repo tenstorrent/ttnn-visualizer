@@ -18,8 +18,8 @@ import logging
 import sys
 from typing import Callable, Dict, List, Optional, TextIO
 
-from ttnn_visualizer.agent import app_links, linking, operations, tools
-from ttnn_visualizer.agent.bounds import MAX_LIMIT
+from ttnn_visualizer.agent import app_links, linking, operations, perf_detail, tools
+from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_LIMIT
 from ttnn_visualizer.agent.handles import (
     ReportRegistry,
     UnknownHandleError,
@@ -65,10 +65,48 @@ _RANK_SCHEMA = {
         "per rank, so reading every rank at once collides them."
     ),
 }
+# The bounds `tt-perf-report --start-signpost/--end-signpost` take; see
+# `tools.SignpostRange`. #2122
+_SIGNPOST_SCHEMAS = {
+    "start_signpost": {
+        "type": "string",
+        "maxLength": tools.MAX_SIGNPOST_NAME_LENGTH,
+        "description": (
+            "Read only the rows after this signpost: its earliest occurrence by "
+            "host start time, as tt-perf-report --start-signpost reads it."
+        ),
+    },
+    "end_signpost": {
+        "type": "string",
+        "maxLength": tools.MAX_SIGNPOST_NAME_LENGTH,
+        "description": (
+            "Read only the rows before this signpost: its earliest occurrence, or "
+            "its second when it also names the start."
+        ),
+    },
+}
 _ADDITIVE_METRIC_SCHEMA = {
     "type": "string",
     "enum": sorted(tools.ADDITIVE_METRICS),
     "description": "Which metric to compare. Summable metrics only.",
+}
+_INCLUDE_SCHEMA = {
+    "type": "array",
+    "items": {
+        "type": "string",
+        "enum": [group.value for group in perf_detail.DetailGroup],
+    },
+    "description": (
+        "Field groups to add to each row, for asking why an op took its time: "
+        "config (fidelity, dtypes, input memory, block sizes), utilisation (DRAM and "
+        "FLOPs against peak, the perf model's ideal times), noc (NoC, DRAM and "
+        "Ethernet utilisation, NPE congestion), riscs (per-RISC kernel time, compute "
+        "CB waits), cores (available cores, launch skew, per-core spread), dispatch "
+        "(op-to-op gap, dispatch waits, trace ids), cache (program hash, cache hit), "
+        "kernels (kernel sources and hashes), advice (tt-perf-report's advice). "
+        f"With include, rows are capped at {MAX_DETAILED_LIMIT}, and a field no row "
+        "of the report carries is left out of them and named in empty_in_report."
+    ),
 }
 
 
@@ -108,9 +146,29 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
         },
         McpToolName.TOP_OPS: {
             "description": (
-                "The costliest operations by one metric. Reads the report unfiltered "
-                "-- host ops included, no signpost range -- and returns the projection "
-                "it used alongside the rows. Each row's id numbers the performance "
+                "The costliest operations by one metric. Reads the whole report "
+                "unless given a signpost range -- host ops included either way -- and "
+                "returns the projection it used alongside the rows. A range is read "
+                "as tt-perf-report reads it: the two bounding signposts are left out, "
+                "Total % is recomputed over the window, and the window's first "
+                "operation has no op-to-op gap, since none precedes it inside the "
+                "window -- so ranking by op_to_op_gap leaves it out, and the gap "
+                "total excludes the gap leading into the window. A ranged projection adds start_signpost, end_signpost, "
+                "boundary_signposts_included (false) and signpost_range_ignored. A "
+                "range that names no window is refused -- a signpost name the report "
+                "lacks, one name for both bounds when it occurs only once, or an end "
+                "before the start -- and the refusal lists the names the report "
+                "holds; a report with no signposts at all is read whole, with "
+                "signpost_range_ignored true. "
+                "A range narrows the ranked rows only: operation_id and the counts in "
+                "operation_link stay the whole report's, and operation_link says so "
+                "with scope: whole_report. The first ranged call on a handle that "
+                "also holds a profiler report, or that passes include, generates two "
+                "reports, the window and the whole report the link and "
+                "empty_in_report read; later calls reuse both. A read that needs the "
+                "CSV again after it was rewritten or "
+                "superseded is refused: call load_report again for a fresh handle. "
+                "Each row's id numbers the performance "
                 "CSV. When the handle also holds a profiler report, each row's "
                 "operation_id is the profiler database id for one rank, and "
                 "operation_link says whether the reports linked, at which rank, "
@@ -121,7 +179,10 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "flops_only means DRAM and bound are never derived, and full with a "
                 "null bound means the trace lacked the inputs the model needs. Each "
                 "row also carries op_category: Other is time no category explains, "
-                "and later tt-perf-report releases can add categories."
+                "and later tt-perf-report releases can add categories. include adds "
+                "field groups to each row for asking why an op is slow; the "
+                "response's detail_note says where they come from and how to read a "
+                "null among them."
             ),
             "schema": {
                 "type": "object",
@@ -129,11 +190,35 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                     "handle": {"type": "string"},
                     "by": _METRIC_SCHEMA,
                     "limit": _LIMIT_SCHEMA,
+                    **_SIGNPOST_SCHEMAS,
+                    "include": _INCLUDE_SCHEMA,
                 },
                 "required": ["handle"],
             },
             "handler": lambda arguments: app_links.with_linked_rows_link_template(
                 registry, linking.top_ops(registry, **arguments)
+            ),
+        },
+        McpToolName.PROGRAM_CACHE: {
+            "description": (
+                "Whether programs were built again rather than reused, per raw op "
+                "code, most repeat misses first: calls, distinct programs, repeat "
+                "calls, and how many of those hit or missed the program cache. The "
+                "response's note says how a call is counted. Reads the whole report, "
+                "with no signpost range. When the handle also holds a profiler "
+                "report, each op code's first repeat miss carries the operation_id "
+                "to pass to operation_provenance, and the first call on such a "
+                "handle reads every captured graph to find it, which can take "
+                "seconds on a large capture; later calls, top_ops and "
+                "operation_detail reuse the link."
+            ),
+            "schema": {
+                "type": "object",
+                "properties": {"handle": {"type": "string"}, "limit": _LIMIT_SCHEMA},
+                "required": ["handle"],
+            },
+            "handler": lambda arguments: app_links.with_linked_rows_link_template(
+                registry, linking.program_cache(registry, **arguments)
             ),
         },
         McpToolName.ZONE_TIMINGS: {
@@ -155,7 +240,13 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "Grouped by op code rather than joined on op id, so a change that "
                 "adds or reorders ops does not report every later op as changed. "
                 "Accepts additive metrics only (device_time, op_to_op_gap, "
-                "total_percent); rank by a rate or a core count with top_ops."
+                "total_percent); rank by a rate or a core count with top_ops. A "
+                "signpost range (start_signpost, end_signpost) applies to both "
+                "reports, read as top_ops reads it, and the projection adds the same "
+                "fields top_ops's does; signpost_range_ignored is true only when "
+                "neither report holds signposts. A range is refused when only one "
+                "report holds signposts, since a window against a whole report "
+                "shows every row outside it as a change."
             ),
             "schema": {
                 "type": "object",
@@ -164,6 +255,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                     "handle_b": {"type": "string", "description": "After the change."},
                     "by": _ADDITIVE_METRIC_SCHEMA,
                     "limit": _LIMIT_SCHEMA,
+                    **_SIGNPOST_SCHEMAS,
                 },
                 "required": ["handle_a", "handle_b"],
             },
@@ -221,7 +313,8 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "device time. The first call on such a handle "
                 "generates the performance report and reads every captured graph, "
                 "which can take seconds on a large capture; later calls, and "
-                "top_ops, reuse both."
+                "top_ops, reuse both. include adds top_ops's field groups to each "
+                "perf_rows entry."
             ),
             "schema": {
                 "type": "object",
@@ -229,6 +322,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                     "handle": {"type": "string"},
                     "operation_id": {"type": "integer"},
                     "rank": _RANK_SCHEMA,
+                    "include": _INCLUDE_SCHEMA,
                 },
                 "required": ["handle", "operation_id"],
             },

@@ -8,6 +8,7 @@ import {
     MAX_REPORT_LINKS,
     ReportLinkMatchResult,
     ReportLinkRole,
+    ReportLinkRunsById,
     ReportPairLinkStatus,
 } from '../src/definitions/ReportLinks';
 import { ReportLink } from '../src/model/ReportLinks';
@@ -15,17 +16,23 @@ import {
     createReportLinkAccess,
     getFolderReportId,
     getReportId,
+    isSameRun,
     isSettledLinkMatch,
-    linkedPerformanceIds,
-    linkedProfilerIds,
+    linkedPerformanceRuns,
+    linkedProfilerRuns,
     removeReportLinksFor,
-    unlinkedPerformanceIds,
-    unlinkedProfilerIds,
+    unlinkedPerformanceRuns,
+    unlinkedProfilerRuns,
     upsertReportLink,
 } from '../src/functions/reportLinks';
 import { FolderLinkState } from '../src/definitions/FolderLinkStatus';
 import { getFolderLinkState, shouldShowFolderLinkStatus } from '../src/functions/folderLinkStatus';
-import { createReportLink } from './helpers/reportLinkFixtures';
+import { createReportLink, runsWithoutFingerprints } from './helpers/reportLinkFixtures';
+
+const RUN_A = 'v1:run-a';
+const RUN_B = 'v1:run-b';
+
+const idsOf = (runsById: ReportLinkRunsById): Set<string> => new Set(runsById.keys());
 
 const link = (
     profilerId: string,
@@ -114,23 +121,59 @@ describe('createReportLinkAccess', () => {
     });
 });
 
+describe('isSameRun', () => {
+    it.each([
+        [RUN_A, RUN_A, true],
+        [RUN_A, RUN_B, false],
+        [undefined, RUN_A, true],
+        [RUN_A, null, true],
+        [RUN_A, undefined, true],
+        [undefined, null, true],
+    ])('stored %s against current %s is %s', (stored, current, expected) => {
+        expect(isSameRun(stored, current)).toBe(expected);
+    });
+});
+
 describe('getFolderLinkState', () => {
+    const none = runsWithoutFingerprints();
+
     it('returns linked, unlinked, or unknown', () => {
-        expect(getFolderLinkState('a', new Set(['a']), new Set())).toBe(FolderLinkState.LINKED);
-        expect(getFolderLinkState('b', new Set(), new Set(['b']))).toBe(FolderLinkState.UNLINKED);
-        expect(getFolderLinkState('c', new Set(['a']), new Set(['b']))).toBe(FolderLinkState.UNKNOWN);
+        expect(getFolderLinkState('a', null, runsWithoutFingerprints('a'), none)).toBe(FolderLinkState.LINKED);
+        expect(getFolderLinkState('b', null, none, runsWithoutFingerprints('b'))).toBe(FolderLinkState.UNLINKED);
+        expect(getFolderLinkState('c', null, runsWithoutFingerprints('a'), runsWithoutFingerprints('b'))).toBe(
+            FolderLinkState.UNKNOWN,
+        );
     });
 
     it('treats linked as winning over unlinked for the same id', () => {
-        expect(getFolderLinkState('a', new Set(['a']), new Set(['a']))).toBe(FolderLinkState.LINKED);
+        expect(getFolderLinkState('a', null, runsWithoutFingerprints('a'), runsWithoutFingerprints('a'))).toBe(
+            FolderLinkState.LINKED,
+        );
+    });
+
+    it('ignores a link recorded against another run in the same folder', () => {
+        const linkedRuns = new Map([['a', RUN_A]]);
+
+        expect(getFolderLinkState('a', RUN_A, linkedRuns, none)).toBe(FolderLinkState.LINKED);
+        expect(getFolderLinkState('a', RUN_B, linkedRuns, none)).toBe(FolderLinkState.UNKNOWN);
+    });
+
+    it('still badges a folder whose current run is unknown', () => {
+        expect(getFolderLinkState('a', null, new Map([['a', RUN_A]]), none)).toBe(FolderLinkState.LINKED);
+    });
+
+    it('falls back to unlinked when only the unlinked verdict is for the current run', () => {
+        expect(getFolderLinkState('a', RUN_B, new Map([['a', RUN_A]]), new Map([['a', RUN_B]]))).toBe(
+            FolderLinkState.UNLINKED,
+        );
     });
 });
 
 describe('shouldShowFolderLinkStatus', () => {
-    it('hides badges when both sets are empty or null', () => {
-        expect(shouldShowFolderLinkStatus(new Set(), new Set())).toBe(false);
+    it('hides badges when both maps are empty or null', () => {
+        expect(shouldShowFolderLinkStatus(runsWithoutFingerprints(), runsWithoutFingerprints())).toBe(false);
         expect(shouldShowFolderLinkStatus(null, null)).toBe(false);
-        expect(shouldShowFolderLinkStatus(new Set(['a']), new Set())).toBe(true);
+        expect(shouldShowFolderLinkStatus(runsWithoutFingerprints('a'), runsWithoutFingerprints())).toBe(true);
     });
 });
 
@@ -158,6 +201,32 @@ describe('reportLinks', () => {
             expect(upsertReportLink(links, link('mem-a', 'perf-a', { profilerHost: 'h1', recordedAt: 99 }))).toBe(
                 links,
             );
+        });
+
+        it.each([
+            ['profiler', { profilerRun: RUN_B }],
+            ['performance', { performanceRun: RUN_B }],
+        ])('replaces the last pair when a new %s run is compared', (_side, nextRuns) => {
+            const links = [createReportLink('mem-a', 'perf-a', { profilerRun: RUN_A, performanceRun: RUN_A })];
+            const next = createReportLink('mem-a', 'perf-a', {
+                profilerRun: RUN_A,
+                performanceRun: RUN_A,
+                ...nextRuns,
+                status: ReportPairLinkStatus.UNLINKED,
+                recordedAt: 2,
+            });
+
+            expect(upsertReportLink(links, next)).toEqual([next]);
+        });
+
+        it('replaces the last pair when only a run changes', () => {
+            const links = [createReportLink('mem-a', 'perf-a', { performanceRun: RUN_A })];
+            const next = createReportLink('mem-a', 'perf-a', { performanceRun: RUN_B, recordedAt: 2 });
+
+            const result = upsertReportLink(links, next);
+
+            expect(result).not.toBe(links);
+            expect(result).toEqual([next]);
         });
 
         it('treats a missing host and a null host as the same access', () => {
@@ -281,6 +350,52 @@ describe('reportLinks', () => {
         });
     });
 
+    describe('run-aware lookups', () => {
+        const runLink = (profilerRun?: string, performanceRun?: string, performanceId = 'perf-a') =>
+            createReportLink('mem-a', performanceId, { profilerRun, performanceRun });
+
+        it('drops links recorded against another run of the active folder', () => {
+            const links = [runLink(RUN_A, RUN_A, 'perf-old'), runLink(RUN_B, RUN_A, 'perf-new')];
+
+            expect(idsOf(linkedPerformanceRuns(links, 'mem-a', { activeRun: RUN_B }))).toEqual(new Set(['perf-new']));
+        });
+
+        it('keeps every link while the active run is unknown', () => {
+            const links = [runLink(RUN_A, RUN_A, 'perf-old'), runLink(RUN_B, RUN_A, 'perf-new')];
+
+            expect(idsOf(linkedPerformanceRuns(links, 'mem-a', { activeRun: null }))).toEqual(
+                new Set(['perf-old', 'perf-new']),
+            );
+        });
+
+        it('keeps a link stored before runs were recorded', () => {
+            expect(idsOf(linkedPerformanceRuns([runLink()], 'mem-a', { activeRun: RUN_A }))).toEqual(
+                new Set(['perf-a']),
+            );
+        });
+
+        it('maps each counterpart to the run its link recorded', () => {
+            const links = [
+                createReportLink('mem-a', 'perf-a', { performanceRun: RUN_A }),
+                createReportLink('mem-a', 'perf-b', { profilerRun: RUN_A }),
+            ];
+
+            expect(linkedPerformanceRuns(links, 'mem-a')).toEqual(
+                new Map([
+                    ['perf-a', RUN_A],
+                    ['perf-b', undefined],
+                ]),
+            );
+        });
+
+        it('checks the active performance run for profiler counterparts', () => {
+            const links = [createReportLink('mem-a', 'perf-a', { performanceRun: RUN_A, profilerRun: RUN_B })];
+
+            expect(linkedProfilerRuns(links, 'perf-a', { activeRun: RUN_A })).toEqual(new Map([['mem-a', RUN_B]]));
+            expect(linkedProfilerRuns(links, 'perf-a', { activeRun: RUN_B }).size).toBe(0);
+        });
+    });
+
     describe('linked / unlinked id lookups', () => {
         const links = [
             link('mem-a', 'perf-a'),
@@ -289,11 +404,11 @@ describe('reportLinks', () => {
         ];
 
         it('returns linked performance counterparts', () => {
-            expect(linkedPerformanceIds(links, 'mem-a')).toEqual(new Set(['perf-a']));
+            expect(idsOf(linkedPerformanceRuns(links, 'mem-a'))).toEqual(new Set(['perf-a']));
         });
 
         it('returns unlinked performance counterparts', () => {
-            expect(unlinkedPerformanceIds(links, 'mem-a')).toEqual(new Set(['perf-b']));
+            expect(idsOf(unlinkedPerformanceRuns(links, 'mem-a'))).toEqual(new Set(['perf-b']));
         });
 
         it('matches across local/remote — location is not part of the key', () => {
@@ -302,7 +417,7 @@ describe('reportLinks', () => {
                     performanceHost: 'h1',
                 }),
             ];
-            expect(linkedPerformanceIds(mixed, 'mem-a')).toEqual(new Set(['perf-a']));
+            expect(idsOf(linkedPerformanceRuns(mixed, 'mem-a'))).toEqual(new Set(['perf-a']));
         });
 
         it('scopes out counterparts recorded only on another remote host', () => {
@@ -312,14 +427,14 @@ describe('reportLinks', () => {
                 link('mem-a', 'perf-h2', { performanceHost: 'host-2' }),
             ];
 
-            expect(linkedPerformanceIds(withHosts, 'mem-a', { remoteHost: 'host-1' })).toEqual(
+            expect(idsOf(linkedPerformanceRuns(withHosts, 'mem-a', { remoteHost: 'host-1' }))).toEqual(
                 new Set(['perf-local', 'perf-h1']),
             );
         });
 
         it('returns linked profiler counterparts', () => {
-            expect(linkedProfilerIds(links, 'perf-c')).toEqual(new Set(['mem-b']));
-            expect(unlinkedProfilerIds(links, 'perf-b')).toEqual(new Set(['mem-a']));
+            expect(idsOf(linkedProfilerRuns(links, 'perf-c'))).toEqual(new Set(['mem-b']));
+            expect(idsOf(unlinkedProfilerRuns(links, 'perf-b'))).toEqual(new Set(['mem-a']));
         });
 
         it('scopes profiler counterparts by their own access host', () => {
@@ -329,7 +444,7 @@ describe('reportLinks', () => {
                 link('mem-h2', 'perf-a', { profilerHost: 'host-2', performanceHost: 'host-1' }),
             ];
 
-            expect(linkedProfilerIds(withHosts, 'perf-a', { remoteHost: 'host-1' })).toEqual(
+            expect(idsOf(linkedProfilerRuns(withHosts, 'perf-a', { remoteHost: 'host-1' }))).toEqual(
                 new Set(['mem-local', 'mem-h1']),
             );
         });

@@ -35,10 +35,13 @@ import getServerConfig from '../functions/getServerConfig';
 import { PerfTableRow } from '../model/PerfTable';
 import { DeviceOperationMapping, DeviceOperationOrderCandidates } from '../model/DeviceOperationMapping';
 import { matchDeviceOperationOrdersToPerf } from '../functions/deviceOperationMatching';
+import { getSiblingOpIds, groupDeviceRowsLikeMerge } from '../functions/deviceRowGroups';
+import { getOpIdByPerfId } from '../functions/enrichPerfRowData';
 import memoiseLatest from '../functions/memoiseLatest';
 import {
     PerformanceReportParams,
     getLinkedPerformanceReportParams,
+    getLinkedUnmergedPerformanceReportParams,
     getPerformanceComparisonReportQueryKey,
     getPerformanceReportQueryKey,
 } from '../functions/performanceReportQueryKey';
@@ -66,7 +69,9 @@ import {
 } from '../store/app';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 import { getChipDesign } from '../functions/getChipDesign';
-import { parseSocDescriptorOverride } from '../functions/socDescriptorOverride';
+import { stringToArchitecture } from '../functions/stringToArchitecture';
+import { parseReportedGrid, parseSocDescriptorOverride } from '../functions/socDescriptorOverride';
+import { formatGridSize } from '../functions/formatting';
 import { NPEData, NPEManifestEntry, NpeSummary, NpeWindow } from '../model/NPEModel';
 import { GraphBundle } from '../model/MLIRJsonModel';
 import { ChipDesign, ClusterModel, ClusterTopology, MeshData, MeshDescriptorResponse } from '../model/ClusterModel';
@@ -80,6 +85,9 @@ import npeManifestSchema from '../schemas/npe-manifest.schema.json';
 import { getErroredReportFolderLabel, normaliseReportFolder } from '../functions/validateReportFolder';
 import { Signpost } from '../model/Signpost';
 import { TensorsByOperationByAddress } from '../model/BufferSummary';
+import { ActiveReportFingerprints, ActiveReportRuns } from '../model/ReportLinks';
+import { getFolderReportId, getReportId } from '../functions/reportLinks';
+import { ReportLinkRole } from '../definitions/ReportLinks';
 import { L1_DEFAULT_MEMORY_SIZE } from '../definitions/L1MemorySize';
 import {
     NPE_QUERY_KEY,
@@ -967,9 +975,11 @@ export const useGetDeviceOperationListPerfByOpId = (): Map<number, DeviceOperati
  *
  * The perf ids come from the link-pinned report (`useLinkedPerformanceReport`),
  * not from the rows the performance tab is displaying. A row id survives host-op
- * and signpost filtering, so consumers can still join against those views; ids
- * do not survive `mergeDevices: false`, where an operation's per-device rows
- * each carry their own id and only the merged representative joins.
+ * and signpost filtering, so consumers can still join against those views. Only
+ * merged rows' ids appear: with `mergeDevices: false` an operation's per-device
+ * rows each carry their own id, and only the one the merge kept is here. Join
+ * the performance table through `useOpToPerfIdForPerfTable`, which carries the
+ * op onto the rest.
  */
 export const useOpToPerfIdFiltered = () => getOpToPerfIds(useGetDeviceOperationListPerf());
 
@@ -1029,6 +1039,67 @@ export const useReportMetadata = () => {
         retry: false,
         staleTime: Infinity,
     });
+};
+
+const REPORT_FINGERPRINTS_QUERY_KEY = 'fetch-report-fingerprints';
+
+/**
+ * The run one side's active folder holds. The instance answers for whichever reports
+ * are active when it handles the request, which can already be a later pick, so an
+ * answer about another folder is thrown away rather than cached under this one.
+ */
+const fetchActiveReportRun = async (role: ReportLinkRole, reportId: string | null): Promise<string | null> => {
+    const { data } = await axiosInstance.get<ActiveReportRuns>(Endpoints.REPORT_FINGERPRINTS);
+    const { folder, run } = data[role];
+
+    if (getReportId(folder) !== reportId) {
+        throw new Error(`Active ${role} report changed while its run was read`);
+    }
+
+    return run;
+};
+
+/**
+ * One side's run, keyed like that side's report data: by its own path alone. A key
+ * spanning both paths would refetch the unchanged side whenever the other is picked,
+ * and a local pick does not clear the cache, so the unchanged side's verdict data
+ * would stay on the old run while this moved to the newer one.
+ */
+const useActiveReportFingerprint = (role: ReportLinkRole, report: ReportFolder | null) => {
+    const reportId = getFolderReportId(report);
+
+    return useQuery<string | null, AxiosError>({
+        queryKey: [REPORT_FINGERPRINTS_QUERY_KEY, role, report?.path, reportId],
+        queryFn: () => fetchActiveReportRun(role, reportId),
+        enabled: report !== null,
+        retry: false,
+        staleTime: Infinity,
+    });
+};
+
+/**
+ * Which runs the active reports hold, so a recorded link names the run it was compared
+ * against (#2069). `isPending` covers only the sides with an active report.
+ */
+export const useActiveReportFingerprints = () => {
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+    const profiler = useActiveReportFingerprint(ReportLinkRole.PROFILER, activeProfilerReport);
+    const performance = useActiveReportFingerprint(ReportLinkRole.PERFORMANCE, activePerformanceReport);
+
+    const profilerRun = profiler.data ?? null;
+    const performanceRun = performance.data ?? null;
+    const data = useMemo<ActiveReportFingerprints>(
+        () => ({ profiler: profilerRun, performance: performanceRun }),
+        [profilerRun, performanceRun],
+    );
+
+    return {
+        data,
+        isPending:
+            (activeProfilerReport !== null && profiler.isPending) ||
+            (activePerformanceReport !== null && performance.isPending),
+    };
 };
 
 export const useBufferChunks = (operationId: number, address?: number | string, bufferType?: BufferType) => {
@@ -1247,6 +1318,9 @@ const useViewPerformanceReportParams = (): PerformanceReportParams => {
 // scope for a stable identity; the query key is hashed structurally, so this is for
 // readers rather than for React Query.
 const LINKED_PERFORMANCE_REPORT_PARAMS: PerformanceReportParams = Object.freeze(getLinkedPerformanceReportParams());
+const LINKED_UNMERGED_PERFORMANCE_REPORT_PARAMS: PerformanceReportParams = Object.freeze(
+    getLinkedUnmergedPerformanceReportParams(),
+);
 
 const usePerformanceReportQuery = (name: string | null, params: PerformanceReportParams) => {
     const location = useAtomValue(performanceReportLocationAtom);
@@ -1287,6 +1361,43 @@ export const useLinkedPerformanceReport = () => {
     const name = useAtomValue(activePerformanceReportFolderNameAtom);
 
     return usePerformanceReportQuery(name, LINKED_PERFORMANCE_REPORT_PARAMS);
+};
+
+/**
+ * @description `useOpToPerfIdFiltered` extended onto unmerged rows, for joining
+ * the performance table. With devices unmerged, every per-device row of a linked
+ * operation gets an entry, not only the one the merge kept (#2084). With devices
+ * merged, or until the unmerged report arrives, this is `useOpToPerfIdFiltered`
+ * unchanged. No unmerged report is requested while merged, or while no operation
+ * is linked.
+ */
+export const useOpToPerfIdForPerfTable = () => {
+    const name = useAtomValue(activePerformanceReportFolderNameAtom);
+    const mergeDevices = useAtomValue(mergeDevicesAtom);
+    const opIdsMap = useOpToPerfIdFiltered();
+    // With no linked operations there is nothing to extend, so a performance-only
+    // session never fetches the whole-run unmerged report.
+    const { data: unmerged } = usePerformanceReportQuery(
+        mergeDevices || opIdsMap.length === 0 ? null : name,
+        LINKED_UNMERGED_PERFORMANCE_REPORT_PARAMS,
+    );
+    // Re-merging disables the query by nulling `name`, which moves it to a key that never
+    // held data, so `unmerged` is already empty then.
+    const unmergedRows = unmerged?.report;
+
+    return useMemo(() => {
+        if (!unmergedRows?.length) {
+            return opIdsMap;
+        }
+
+        const siblingOpIdByPerfId = getSiblingOpIds(groupDeviceRowsLikeMerge(unmergedRows), getOpIdByPerfId(opIdsMap));
+
+        if (siblingOpIdByPerfId.size === 0) {
+            return opIdsMap;
+        }
+
+        return [...opIdsMap, ...[...siblingOpIdByPerfId].map(([perfId, opId]) => ({ opId, perfId }))];
+    }, [opIdsMap, unmergedRows]);
 };
 
 interface ComparisonReportResult {
@@ -1368,8 +1479,12 @@ export const useInstance = () => {
 
 export interface ResolvedArchitecture {
     design: ChipDesign | null;
+    /** The extent to draw: the design's, else the report's own grid when it states a drawable one. */
+    grid: ChipDesign['grid'] | null;
     /** Populated only when a report supplied a descriptor that failed validation. */
     overrideProblems: string[] | null;
+    /** Populated when the baked descriptor was withheld because the report's grid differs from it. */
+    gridMismatch: { baked: ChipDesign['grid']; reported: ChipDesign['grid'] } | null;
 }
 
 /**
@@ -1379,11 +1494,40 @@ export interface ResolvedArchitecture {
  * topology instead of toasting "Unsupported". A malformed one does *not* silently
  * fall back: it is reported, because a descriptor that was offered and rejected is
  * a different problem from one that was never there. See #1776.
+ *
+ * `reportedGrid` is the grid the report says it was captured on. The baked descriptor
+ * is withheld when it differs, since one arch name can cover several grids (#1847).
  */
-export const useArchitecture = (arch: DeviceArchitecture, socDescriptor?: unknown): ResolvedArchitecture => {
+export const useArchitecture = (
+    arch: DeviceArchitecture,
+    socDescriptor?: unknown,
+    reportedGrid?: Partial<ChipDesign['grid']>,
+): ResolvedArchitecture => {
     const override = useMemo(() => parseSocDescriptorOverride(socDescriptor, arch), [socDescriptor, arch]);
-    const baked = getChipDesign(arch);
-    const design = override.status === 'valid' ? override.design : baked;
+    // Normalised, so `QUASAR` or `Wormhole_B0` from a producer still finds its descriptor.
+    const baked = getChipDesign(stringToArchitecture(arch));
+    const reportedXSize = reportedGrid?.x_size;
+    const reportedYSize = reportedGrid?.y_size;
+    const reported = useMemo(() => parseReportedGrid(reportedXSize, reportedYSize), [reportedXSize, reportedYSize]);
+
+    // Quasar's 2x3 and qsr.s1 models also report `quasar`, and must not be drawn on Quasar-32.
+    const gridMismatch = useMemo(() => {
+        if (override.status === 'valid' || baked === null || reported === null) {
+            return null;
+        }
+        if (baked.grid.x_size === reported.x_size && baked.grid.y_size === reported.y_size) {
+            return null;
+        }
+        return { baked: baked.grid, reported };
+    }, [override.status, baked, reported]);
+
+    let design: ChipDesign | null = baked;
+    if (override.status === 'valid') {
+        design = override.design;
+    } else if (gridMismatch) {
+        design = null;
+    }
+    const grid = design?.grid ?? reported;
     const overrideProblems = override.status === 'invalid' ? override.problems : null;
 
     // Reported from an effect rather than the hook body, which runs on every render:
@@ -1391,19 +1535,27 @@ export const useArchitecture = (arch: DeviceArchitecture, socDescriptor?: unknow
     // inline warn emits a line per frame for the length of the run. #1772
     useEffect(() => {
         if (overrideProblems) {
-            // eslint-disable-next-line no-console
+            // eslint-disable-next-line no-console -- the full problem list, which the toast truncates, is for whoever debugs the report.
             console.error(`Unusable SoC descriptor in report: ${overrideProblems.join('; ')}`);
+            return;
+        }
+        if (gridMismatch) {
+            // eslint-disable-next-line no-console -- the toast closes after a few seconds; this keeps the two sizes findable.
+            console.error(
+                `Baked ${arch} SoC descriptor is ${formatGridSize(gridMismatch.baked)}, ` +
+                    `but the report's grid is ${formatGridSize(gridMismatch.reported)}`,
+            );
             return;
         }
         if (design === null) {
             // Still worth surfacing: unlike Cluster, these callers have no degraded mode and
             // silently lose every core-type overlay when the arch doesn't resolve.
-            // eslint-disable-next-line no-console
+            // eslint-disable-next-line no-console -- see above.
             console.error(`Unsupported arch: ${arch}`);
         }
-    }, [arch, design, overrideProblems]);
+    }, [arch, design, overrideProblems, gridMismatch]);
 
-    return { design, overrideProblems };
+    return { design, grid, overrideProblems, gridMismatch };
 };
 
 export const useGetTensorSizesById = (tensorIdList: number[]): { id: number; size: number }[] => {
@@ -1422,45 +1574,34 @@ export const useGetTensorSizesById = (tensorIdList: number[]): { id: number; siz
         })
         .filter((item) => item !== null) as { id: number; size: number }[];
 };
-export const useNodeType = (arch: DeviceArchitecture, socDescriptor?: unknown) => {
-    const { design: architecture, overrideProblems } = useArchitecture(arch, socDescriptor);
-    const cores = useMemo(() => {
-        return architecture?.functional_workers?.map((loc) => {
-            return loc
-                .split('-')
-                .reverse()
-                .map((l) => parseInt(l, 10));
-        });
-    }, [architecture]);
+// Descriptor "x-y" coordinates as the [y, x] pairs the grid renderer looks cells up by.
+const toGridLocations = (locations: string[] | undefined) =>
+    locations?.map((loc) =>
+        loc
+            .split('-')
+            .reverse()
+            .map((l) => parseInt(l, 10)),
+    );
 
-    const dram = useMemo(() => {
-        return architecture?.dram?.flat().map((loc) => {
-            return loc
-                .split('-')
-                .reverse()
-                .map((l) => parseInt(l, 10));
-        });
-    }, [architecture]);
+export const useNodeType = (
+    arch: DeviceArchitecture,
+    socDescriptor?: unknown,
+    reportedGrid?: Partial<ChipDesign['grid']>,
+) => {
+    const {
+        design: architecture,
+        grid,
+        overrideProblems,
+        gridMismatch,
+    } = useArchitecture(arch, socDescriptor, reportedGrid);
 
-    const eth = useMemo(() => {
-        return architecture?.eth?.flat().map((loc) => {
-            return loc
-                .split('-')
-                .reverse()
-                .map((l) => parseInt(l, 10));
-        });
-    }, [architecture]);
+    const cores = useMemo(() => toGridLocations(architecture?.functional_workers), [architecture]);
+    const dram = useMemo(() => toGridLocations(architecture?.dram?.flat()), [architecture]);
+    const eth = useMemo(() => toGridLocations(architecture?.eth?.flat()), [architecture]);
+    const pcie = useMemo(() => toGridLocations(architecture?.pcie), [architecture]);
+    const dispatch = useMemo(() => toGridLocations(architecture?.dispatch), [architecture]);
 
-    const pcie = useMemo(() => {
-        return architecture?.pcie?.map((loc) => {
-            return loc
-                .split('-')
-                .reverse()
-                .map((l) => parseInt(l, 10));
-        });
-    }, [architecture]);
-
-    return { architecture, cores, dram, eth, pcie, overrideProblems };
+    return { architecture, grid, cores, dram, eth, pcie, dispatch, overrideProblems, gridMismatch };
 };
 
 export const PROFILER_FOLDER_QUERY_KEY = 'fetch-profiler-folder-list';

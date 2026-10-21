@@ -21,8 +21,15 @@ from typing import Dict, List, Optional
 from unittest.mock import patch
 
 import pytest
-from ttnn_visualizer.agent import app_links, linking, server, tools
-from ttnn_visualizer.agent.bounds import MAX_LIMIT
+from ttnn_visualizer.agent import (
+    app_links,
+    linking,
+    operations,
+    perf_detail,
+    server,
+    tools,
+)
+from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_LIMIT
 from ttnn_visualizer.agent.handles import CacheVariant, ReportRegistry, load_report
 from ttnn_visualizer.agent.linking import (
     DeviceOperation,
@@ -31,6 +38,8 @@ from ttnn_visualizer.agent.linking import (
     NodeOrder,
     UnlinkedReason,
 )
+from ttnn_visualizer.csv_queries import ResolvedSignposts
+from ttnn_visualizer.tests.smoke_capture import SMOKE_CAPTURE_DIR
 from ttnn_visualizer.tests.test_device_log_columns import (
     MODERN_HEADER,
     write_device_log,
@@ -432,7 +441,7 @@ class TestLinkViewEndToEnd:
     `hide_host_ops` and drops nothing but host ops.
     """
 
-    SMOKE_CAPTURE = Path("scripts/fixtures/smoke-performance-report")
+    SMOKE_CAPTURE = SMOKE_CAPTURE_DIR
 
     def _capture_with_a_host_op(self, tmp_path) -> Path:
         source = self.SMOKE_CAPTURE / "ops_perf_results.csv"
@@ -653,7 +662,10 @@ _CANONICAL_ROWS = [
 
 def _report_for(rows):
     def generate(instance, **overrides):
-        return {"report": rows, "stacked_report": [], "signposts": []}
+        # A ranged read is the rows after the leading signpost, ids unchanged, as
+        # tt-perf-report numbers a window by CSV position.
+        window = rows[2:] if overrides.get("start_signpost") else rows
+        return {"report": window, "stacked_report": [], "signposts": []}
 
     return generate
 
@@ -690,6 +702,14 @@ def linked(tmp_path):
         )
         patches.append(patcher)
         generate = patcher.start()
+        # The CSV is never written here, so the signpost check reads this instead.
+        signposts = patch.object(
+            tools,
+            "_resolve_signposts",
+            return_value=ResolvedSignposts({"signpost-start": [0]}, True),
+        )
+        patches.append(signposts)
+        signposts.start()
         return registry, handle, generate
 
     yield _linked
@@ -726,6 +746,91 @@ class TestTopOpsLink:
         linking.operation_detail(registry, handle, operation_id=2)
 
         generate.assert_called_once()
+
+    def test_a_ranged_row_keeps_the_operation_id_it_has_unranged(self, linked):
+        """The link is matched against the whole report; a window only narrows
+        the ranked rows (#2122).
+
+        Ranged first, on a fresh registry: asked the other way round the whole
+        report's link is already cached, and a link built from the window would
+        pass unnoticed.
+        """
+        registry, handle, _ = linked()
+
+        ranged = linking.top_ops(registry, handle, start_signpost="signpost-start")
+        whole = linking.top_ops(registry, handle)
+
+        whole_ids = {row["id"]: row["operation_id"] for row in whole["ops"]}
+        ranged_ids = {row["id"]: row["operation_id"] for row in ranged["ops"]}
+        assert ranged_ids == {"4": None, "5": 3}
+        assert all(whole_ids[row_id] == ranged_ids[row_id] for row_id in ranged_ids)
+        # Both matched rows, though only one is in the window.
+        assert ranged["operation_link"]["matched_rows"] == 2
+
+    def test_a_ranged_link_says_its_counts_are_the_whole_reports(self, linked):
+        registry, handle, _ = linked()
+
+        whole = linking.top_ops(registry, handle)["operation_link"]
+        ranged = linking.top_ops(registry, handle, start_signpost="signpost-start")[
+            "operation_link"
+        ]
+
+        assert "scope" not in whole
+        assert ranged["scope"] == linking.WHOLE_REPORT_SCOPE
+        assert linking.RANGED_LINK_NOTE in ranged["note"]
+        assert ranged["matched_rows"] == whole["matched_rows"]
+        assert ranged["unlinked_by_reason"] == whole["unlinked_by_reason"]
+
+    def test_an_end_only_range_reaches_the_generator_and_scopes_the_link(self, linked):
+        """`linking.top_ops` is what the server calls, so an end bound it dropped
+        would read to the end of the report while the projection echoed none."""
+        registry, handle, generate = linked()
+
+        result = linking.top_ops(registry, handle, end_signpost="signpost-start")
+
+        ranged = [
+            call.kwargs
+            for call in generate.call_args_list
+            if call.kwargs.get("end_signpost")
+        ]
+        assert ranged == [{"start_signpost": None, "end_signpost": "signpost-start"}]
+        assert result["projection"]["end_signpost"] == "signpost-start"
+        assert result["operation_link"]["scope"] == linking.WHOLE_REPORT_SCOPE
+
+    def test_a_ranged_call_generates_the_window_and_the_whole_once_each(self, linked):
+        """What the top_ops description promises about cost on a linked handle."""
+        registry, handle, generate = linked()
+
+        linking.top_ops(registry, handle, start_signpost="signpost-start")
+        linking.top_ops(registry, handle, start_signpost="signpost-start")
+
+        assert generate.call_count == 2
+        assert {
+            bool(call.kwargs.get("start_signpost")) for call in generate.call_args_list
+        } == {True, False}
+
+    def test_an_ignored_range_on_a_linked_handle_is_still_whole_report_scoped(
+        self, linked
+    ):
+        """No signposts, so the read is whole -- and the link's counts are the
+        whole report's either way, which is all the scope says."""
+        registry, handle, _ = linked()
+
+        with patch.object(
+            tools, "_resolve_signposts", return_value=ResolvedSignposts({}, True)
+        ):
+            result = linking.top_ops(registry, handle, start_signpost="anything")
+
+        assert result["projection"]["signpost_range_ignored"] is True
+        assert result["operation_link"]["scope"] == linking.WHOLE_REPORT_SCOPE
+
+    def test_a_ranged_call_on_a_performance_only_handle_has_no_link_scope(self, linked):
+        """No profiler report, no operation_id to explain, so no scope either."""
+        registry, handle, _ = linked(profiler=False)
+
+        result = linking.top_ops(registry, handle, start_signpost="signpost-start")
+
+        assert "scope" not in result["operation_link"]
 
     def test_the_canonical_projection_still_keeps_host_ops(self, linked):
         registry, handle, _ = linked()
@@ -1453,3 +1558,178 @@ class TestLinkBounds:
 
         assert "<tmp>/tmpabc123.csv" in reason
         assert f"/var{directory}/x" in reason
+
+
+# Two operations launching one program: its second call is a repeat.
+_SHARED_PROGRAM_GRAPHS = {
+    1: _graph("ttnn.matmul", "MatmulDeviceOperation"),
+    2: _graph("ttnn.matmul", "MatmulDeviceOperation"),
+}
+_SHARED_PROGRAM_ROWS = [
+    {**_perf_row("MatmulDeviceOperation", 2), "hash": "p", "cache_hit": False},
+    {**_perf_row("MatmulDeviceOperation", 3), "hash": "p", "cache_hit": False},
+]
+
+
+class TestPerfDetailLink:
+    def test_operation_detail_adds_the_included_groups_to_its_rows(self, linked):
+        rows = [
+            *_CANONICAL_ROWS[:3],
+            {**_CANONICAL_ROWS[3], "raw_math_fidelity": "HiFi2"},
+        ]
+        registry, handle, _ = linked(rows=rows)
+
+        result = linking.operation_detail(
+            registry, handle, operation_id=3, include=["config"]
+        )
+
+        assert result["perf_rows"][0]["math_fidelity"] == "HiFi2"
+        assert result["included"] == ["config"]
+        assert "math_fidelity" not in result["empty_in_report"]
+
+    def test_operation_detail_caps_detailed_rows_lower(self, linked):
+        count = MAX_LIMIT + 5
+        rows = [_perf_row("Matmul", index) for index in range(count)]
+        graph = _graph("ttnn.matmul", *(["Matmul"] * count), nested=False)
+        registry, handle, _ = linked(graphs={2: graph}, rows=rows)
+
+        result = linking.operation_detail(
+            registry, handle, operation_id=2, include=["cache"]
+        )
+
+        assert len(result["perf_rows"]) == MAX_DETAILED_LIMIT
+        assert result["perf_row_count"] == count
+
+    def test_operation_detail_refuses_an_unknown_group_before_reading(self, linked):
+        """Before the database too: one operation's lookup can take seconds (#2013)."""
+        registry, handle, generate = linked()
+
+        with patch.object(operations, "operation_detail") as read_operation:
+            with pytest.raises(ValueError, match="unknown include group"):
+                linking.operation_detail(
+                    registry, handle, operation_id=3, include=["x"]
+                )
+
+        read_operation.assert_not_called()
+        generate.assert_not_called()
+
+    def test_a_first_repeat_miss_carries_the_operation_that_launched_it(self, linked):
+        registry, handle, _ = linked(
+            graphs=_SHARED_PROGRAM_GRAPHS, rows=_SHARED_PROGRAM_ROWS
+        )
+
+        result = linking.program_cache(registry, handle)
+
+        entry = result["op_codes"][0]
+        assert entry["first_repeat_miss_perf_id"] == "3"
+        assert entry["first_repeat_miss_operation_id"] == 2
+        assert result["operation_link"]["status"] == LinkStatus.LINKED.value
+        assert result["operation_link"]["note"] == linking.PROGRAM_CACHE_LINK_NOTE
+
+    def test_without_a_profiler_report_the_id_is_null_and_unexplained(self, linked):
+        registry, handle, _ = linked(profiler=False, rows=_SHARED_PROGRAM_ROWS)
+
+        result = linking.program_cache(registry, handle)
+
+        assert result["op_codes"][0]["first_repeat_miss_operation_id"] is None
+        assert "note" not in result["operation_link"]
+
+    def test_a_profiler_that_does_not_link_keeps_the_note_and_names_no_operation(
+        self, linked
+    ):
+        graphs = {
+            operation_id: _graph("ttnn.matmul", "SomethingElse")
+            for operation_id in _SHARED_PROGRAM_GRAPHS
+        }
+        registry, handle, _ = linked(graphs=graphs, rows=_SHARED_PROGRAM_ROWS)
+
+        result = linking.program_cache(registry, handle)
+
+        assert result["operation_link"]["status"] == LinkStatus.UNLINKED.value
+        assert result["operation_link"]["note"] == linking.PROGRAM_CACHE_LINK_NOTE
+        assert result["op_codes"][0]["first_repeat_miss_perf_id"] == "3"
+        assert all(
+            entry["first_repeat_miss_operation_id"] is None
+            for entry in result["op_codes"]
+        )
+
+    def test_a_repeat_miss_past_the_profiler_capture_names_no_operation(self, linked):
+        rows = [
+            {**_perf_row("MatmulDeviceOperation", 2), "hash": "p", "cache_hit": False},
+            {**_perf_row("MatmulDeviceOperation", 3), "hash": "q", "cache_hit": False},
+            {**_perf_row("MatmulDeviceOperation", 4), "hash": "p", "cache_hit": False},
+        ]
+        registry, handle, _ = linked(graphs=_SHARED_PROGRAM_GRAPHS, rows=rows)
+
+        result = linking.program_cache(registry, handle)
+
+        (entry,) = result["op_codes"]
+        assert entry["first_repeat_miss_perf_id"] == "4"
+        assert entry["first_repeat_miss_operation_id"] is None
+        assert result["operation_link"]["status"] == LinkStatus.LINKED.value
+
+    @pytest.mark.parametrize("unlinked", ["profiler_only", "unlinked", "other_rank"])
+    def test_operation_detail_without_linked_rows_adds_no_detail(
+        self, linked, tmp_path, unlinked
+    ):
+        """No perf_rows, so nothing to describe and no report to read for it."""
+        rank = None
+        if unlinked == "profiler_only":
+            registry, handle, _ = linked(performance=False)
+        elif unlinked == "unlinked":
+            registry, handle, _ = linked(
+                graphs={**_GRAPHS, 3: _graph("ttnn.add", "SomethingElse")}
+            )
+        else:
+            path = _write_ranked_profiler(tmp_path / "ranked", _GRAPHS)
+            registry, handle, _ = linked(profiler_path=path)
+            rank = 1
+
+        with patch.object(
+            perf_detail, "empty_fields", wraps=perf_detail.empty_fields
+        ) as empty_fields:
+            result = linking.operation_detail(
+                registry, handle, operation_id=2, rank=rank, include=["config"]
+            )
+            with pytest.raises(ValueError, match="unknown include group"):
+                linking.operation_detail(
+                    registry, handle, operation_id=2, rank=rank, include=["x"]
+                )
+
+        assert result["operation_link"]["status"] != LinkStatus.LINKED.value
+        assert not {"perf_rows", "included", "empty_in_report", "detail_note"} & set(
+            result
+        )
+        empty_fields.assert_not_called()
+
+    def test_operation_detail_with_no_rows_on_a_linked_pair_still_names_the_groups(
+        self, linked
+    ):
+        """It reads the report's empty fields too, as a call with rows would."""
+        registry, handle, _ = linked()
+
+        with patch.object(
+            perf_detail, "empty_fields", wraps=perf_detail.empty_fields
+        ) as empty_fields:
+            result = linking.operation_detail(
+                registry, handle, operation_id=1, include=["config"]
+            )
+
+        assert result["perf_rows"] == []
+        assert result["included"] == ["config"]
+        assert "output_subblock_h" in result["empty_in_report"]
+        empty_fields.assert_called_once()
+
+    def test_operation_detail_and_top_ops_read_the_empty_fields_once(self, linked):
+        registry, handle, _ = linked()
+
+        with patch.object(
+            perf_detail, "empty_fields", wraps=perf_detail.empty_fields
+        ) as empty_fields:
+            detail = linking.operation_detail(
+                registry, handle, operation_id=3, include=["config"]
+            )
+            ranked = linking.top_ops(registry, handle, include=["config"])
+
+        empty_fields.assert_called_once()
+        assert detail["empty_in_report"] == ranked["empty_in_report"]

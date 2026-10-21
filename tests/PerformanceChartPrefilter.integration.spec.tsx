@@ -36,6 +36,7 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
     useGetNPEManifest: vi.fn(),
     useL1PressureByOperation: vi.fn(),
     useOpToPerfIdFiltered: vi.fn(),
+    useOpToPerfIdForPerfTable: vi.fn(() => []),
     useOperationsList: vi.fn(),
     usePerfFolderList: vi.fn(),
     usePerfMeta: vi.fn(),

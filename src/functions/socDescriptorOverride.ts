@@ -9,9 +9,9 @@ import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
  * Outcome of reading a report-supplied SoC descriptor.
  *
  * Three states rather than `ChipDesign | null`, because absent and malformed
- * need different answers: absent falls back to the baked lookup, malformed must
- * say so. Collapsing them is how an unusable override would render as an empty
- * grid — the failure #1776 is about.
+ * need different answers: absent falls back to the baked lookup (when the report's
+ * grid matches it), malformed must say so. Collapsing them is how an unusable
+ * override would render as an empty grid — the failure #1776 is about.
  */
 export type SocDescriptorOverride =
     | { status: 'absent' }
@@ -96,6 +96,16 @@ const gridProblems = (grid: unknown): string[] => {
     return cells > MAX_GRID_CELLS ? [`\`grid\` asks for ${cells} cells, above the ${MAX_GRID_CELLS} limit`] : [];
 };
 
+/** A grid a report states for itself, such as NPE's `num_cols` / `num_rows`, or null unless it is drawable. */
+export const parseReportedGrid = (xSize: unknown, ySize: unknown): ChipDesign['grid'] | null =>
+    gridProblems({ x_size: xSize, y_size: ySize }).length === 0
+        ? { x_size: xSize as number, y_size: ySize as number }
+        : null;
+
+// One rule for every optional node list: only an absent list defaults to empty. A present
+// null is malformed, as the schema declares arrays; tt-npe omits a list rather than writing null.
+const optionalList = (value: unknown): unknown => (value === undefined ? [] : value);
+
 /** The extent to bounds-check against, or null when `grid` is unusable. */
 const gridExtent = (grid: unknown): GridExtent | null => {
     if (!isRecord(grid) || gridProblems(grid).length > 0) {
@@ -109,9 +119,9 @@ const gridExtent = (grid: unknown): GridExtent | null => {
  * device can render without a baked entry for its arch.
  *
  * NPE lands NoC transfers on real node coordinates, so it needs the full grid
- * and there is no report-side substitute. The Quasar-IP family (Grendel and
- * licensee parts) has descriptors rolled by the customer that cannot be bundled,
- * which is what this override exists for. See #1776.
+ * and there is no report-side substitute. Grendel traces rely on it until a report
+ * can select the baked Grendel descriptor (#2130), and licensee parts in the
+ * Quasar-IP family roll their own descriptors, which cannot be bundled. See #1776.
  *
  * Empty `dram` / `eth` / `pcie` are accepted: a tensix-only emulation descriptor
  * legitimately has none, so their absence is a shape to render rather than an
@@ -134,15 +144,16 @@ export const parseSocDescriptorOverride = (raw: unknown, reportedArch?: string):
         // `dram` is nested one level deeper than the rest: a bank per channel.
         // Optional on the same terms as `eth` / `pcie`, so `grid` and
         // `functional_workers` are the only two a producer must write.
-        ...(Array.isArray(raw.dram ?? [])
-            ? ((raw.dram ?? []) as unknown[]).flatMap((channel, index) =>
+        ...(Array.isArray(optionalList(raw.dram))
+            ? (optionalList(raw.dram) as unknown[]).flatMap((channel, index) =>
                   coordinateProblems(`dram[${index}]`, channel, extent),
               )
             : ['`dram` must be an array of channels']),
-        ...coordinateProblems('eth', raw.eth ?? [], extent),
-        ...coordinateProblems('pcie', raw.pcie ?? [], extent),
-        ...coordinateProblems('arc', raw.arc ?? [], extent),
-        ...coordinateProblems('router_only', raw.router_only ?? [], extent),
+        ...coordinateProblems('eth', optionalList(raw.eth), extent),
+        ...coordinateProblems('pcie', optionalList(raw.pcie), extent),
+        ...coordinateProblems('arc', optionalList(raw.arc), extent),
+        ...coordinateProblems('router_only', optionalList(raw.router_only), extent),
+        ...coordinateProblems('dispatch', optionalList(raw.dispatch), extent),
     ];
 
     if (Array.isArray(raw.functional_workers) && raw.functional_workers.length === 0) {
@@ -166,11 +177,12 @@ export const parseSocDescriptorOverride = (raw: unknown, reportedArch?: string):
         design: {
             ...raw,
             arch_name: (raw.arch_name ?? reportedArch ?? 'unknown') as DeviceArchitecture,
-            arc: raw.arc ?? [],
-            dram: raw.dram ?? [],
-            eth: raw.eth ?? [],
-            pcie: raw.pcie ?? [],
-            router_only: raw.router_only ?? [],
+            arc: optionalList(raw.arc),
+            dram: optionalList(raw.dram),
+            eth: optionalList(raw.eth),
+            pcie: optionalList(raw.pcie),
+            router_only: optionalList(raw.router_only),
+            dispatch: optionalList(raw.dispatch),
         } as ChipDesign,
     };
 };

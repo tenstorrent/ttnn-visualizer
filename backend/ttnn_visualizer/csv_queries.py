@@ -6,9 +6,11 @@ import csv
 import json
 import logging
 import os
+import sys
 import tempfile
 import traceback
 from collections import defaultdict
+from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import lru_cache
 from io import StringIO
@@ -19,11 +21,15 @@ from typing import (
     List,
     Literal,
     Optional,
+    Set,
     Tuple,
     Union,
     overload,
 )
 
+import matplotlib
+import matplotlib.pyplot as plt
+import orjson
 import pandas as pd
 import zstd
 from tt_perf_report import perf_report
@@ -33,8 +39,46 @@ from ttnn_visualizer.exceptions import (
     PerformanceReportNotLoadedException,
 )
 from ttnn_visualizer.models import Instance
+from ttnn_visualizer.utils import newest_ops_perf_file
 
 logger = logging.getLogger(__name__)
+
+# The server only ever draws figures to files, and the default can resolve to an
+# interactive GUI backend (macosx), which has no business in a web worker. Forced,
+# so a user's MPLBACKEND can't change it.
+matplotlib.use("Agg")
+
+
+def _close_figures_opened_since(open_before: Set[int]) -> None:
+    """Close the figures tt-perf-report opened and never closed (#2135).
+
+    pyplot keeps every figure alive until it is closed. Closing only the new ones,
+    rather than `plt.close("all")`, leaves figures that already existed alone. The
+    figure registry is process-global, so a threaded worker could still see another
+    request's figure here; the default gevent worker doesn't yield mid-generation.
+    """
+    for figure_number in set(plt.get_fignums()) - open_before:
+        plt.close(figure_number)
+
+
+@contextmanager
+def _stacked_report_plot_skipped():
+    """Stop tt-perf-report drawing the stacked-report PNG, which nothing reads.
+
+    A closed figure still holds its canvas and renderer in a reference cycle, so its
+    buffer (hundreds of MB on a large capture) lives until the cyclic GC runs; not
+    drawing at all also saves most of the generation time. tt-perf-report has no
+    option for this, so it clears the module's `HAS_MATPLOTLIB`, which only
+    `plot_stacked_report` reads (1.4.0); the stacked CSV is written before the plot.
+    The tests pin the flag, in case an upstream rename silently brings the plot back.
+    """
+    has_matplotlib = perf_report.HAS_MATPLOTLIB
+    perf_report.HAS_MATPLOTLIB = False
+    try:
+        yield
+    finally:
+        perf_report.HAS_MATPLOTLIB = has_matplotlib
+
 
 # Cell values after NaN sanitization; matches LocalCSVQueryRunner.execute_query.
 CSVCell = Optional[Union[str, float, int]]
@@ -62,6 +106,10 @@ _OP_TYPE_COLUMN = "OP TYPE"
 _OP_CODE_COLUMN = "OP CODE"
 _HOST_START_COLUMN = "HOST START TS"
 
+# A row's program and whether the program cache held it. Older captures lack both.
+PROGRAM_HASH_COLUMN = "PROGRAM HASH"
+PROGRAM_CACHE_HIT_COLUMN = "PROGRAM CACHE HIT"
+
 # Signpost names a refusal lists. A capture can emit one per layer or iteration;
 # the list is there to show a typo its neighbours, not to inventory the report.
 MAX_LISTED_SIGNPOSTS = 20
@@ -80,11 +128,11 @@ CSV_CHUNK_SIZE = 50_000
 # than kept, so the total reports what it could pair and says what it dropped.
 MAX_OPEN_ZONE_STARTS = 200_000
 
-# Generated reports kept per process. The cache is shared by every user, instance
+# Serialised reports kept per process. The cache is shared by every user, instance
 # and comparison report the worker serves, so four entries only cover one session's
 # toggle-back path (a linked report, the current view and two recent filter shapes)
 # when little else is being served. The bound is on count, not bytes: a 20k-row
-# report holds about 54 MB, so a worker can keep roughly 220 MB alive for its
+# report is about 22 MB of JSON, so a worker can keep roughly 90 MB alive for its
 # lifetime. Each `group_by` value is its own entry with a full copy of the rows.
 MAX_CACHED_PERFORMANCE_REPORTS = 4
 
@@ -108,6 +156,7 @@ class _PerformanceReportOptions:
     tracing_mode: bool
     group_by: Optional[str]
     no_stacked_report: bool
+    detail_columns: bool
 
 
 class LocalCSVQueryRunner:
@@ -730,19 +779,11 @@ class OpsPerformanceQueries:
             raise PerformanceReportNotLoadedException()
         performance_path = Path(instance.performance_path)
 
-        # Find the latest file with the correct prefix
-        perf_files = list(
-            performance_path.glob(f"{OpsPerformanceQueries.PERF_RESULTS_PREFIX}.csv")
-        ) + list(
-            performance_path.glob(f"{OpsPerformanceQueries.PERF_RESULTS_PREFIX}_*.csv")
-        )
-        if not perf_files:
+        latest_file = newest_ops_perf_file(performance_path)
+        if latest_file is None:
             raise FileNotFoundError(
                 f"No performance results file found at {performance_path}"
             )
-
-        # Use the latest file
-        latest_file = max(perf_files, key=os.path.getctime)
         return str(latest_file)
 
     @staticmethod
@@ -815,6 +856,14 @@ class OpsPerformanceQueries:
             ]
         except Exception as e:
             raise RuntimeError(f"Error accessing directory: {e}")
+
+
+def _intern_detail_cells(row: Dict) -> None:
+    """Share one copy of each repeated cell: kernel paths repeat across a run's rows."""
+    for key in OpsPerformanceReportQueries.DETAIL_COLUMNS:
+        value = row.get(key)
+        if isinstance(value, str):
+            row[key] = sys.intern(value)
 
 
 class OpsPerformanceReportQueries:
@@ -891,6 +940,33 @@ class OpsPerformanceReportQueries:
         "metal_trace_replay_session_id": "METAL TRACE REPLAY SESSION ID",
     }
 
+    # Raw columns the app does not show, copied only when `detail_columns` asks, so the
+    # app's rows keep their size (#2159). The agent tools read them (#2153).
+    DETAIL_COLUMNS = {
+        "raw_math_fidelity": "MATH FIDELITY",
+        "device_kernel_duration_per_core_min": "DEVICE KERNEL DURATION PER CORE MIN [ns]",
+        "device_kernel_duration_per_core_max": "DEVICE KERNEL DURATION PER CORE MAX [ns]",
+        "device_kernel_duration_per_core_avg": "DEVICE KERNEL DURATION PER CORE AVG [ns]",
+        "device_kernel_first_to_last_start": "DEVICE KERNEL FIRST TO LAST START [ns]",
+        "device_compute_cb_wait_front": "DEVICE COMPUTE CB WAIT FRONT [ns]",
+        "device_compute_cb_reserve_back": "DEVICE COMPUTE CB RESERVE BACK [ns]",
+        "dispatch_total_cq_cmd_op_time": "DISPATCH TOTAL CQ CMD OP TIME [ns]",
+        "dispatch_go_send_wait_time": "DISPATCH GO SEND WAIT TIME [ns]",
+        "compute_kernel_source": "COMPUTE KERNEL SOURCE",
+        "compute_kernel_hash": "COMPUTE KERNEL HASH",
+        "data_movement_kernel_source": "DATA MOVEMENT KERNEL SOURCE",
+        "data_movement_kernel_hash": "DATA MOVEMENT KERNEL HASH",
+        "pm_compute_ns": "PM COMPUTE [ns]",
+        "pm_bandwidth_ns": "PM BANDWIDTH [ns]",
+        "pm_fpu_util": "PM FPU UTIL (%)",
+        "noc_util": "NOC UTIL (%)",
+        "multicast_noc_util": "MULTICAST NOC UTIL (%)",
+        "dram_bw_util": "DRAM BW UTIL (%)",
+        "dram_bw_util_per_ctrl": "DRAM BW UTIL PER CTRL (%)",
+        "eth_bw_util": "ETH BW UTIL (%)",
+        "npe_cong_impact": "NPE CONG IMPACT (%)",
+    }
+
     DEFAULT_START_SIGNPOST = None
     DEFAULT_END_SIGNPOST = None
     DEFAULT_IGNORE_SIGNPOSTS = True
@@ -903,6 +979,7 @@ class OpsPerformanceReportQueries:
     DEFAULT_RAW_OP_CODES = True
     DEFAULT_NO_HOST_OPS = False
     DEFAULT_NO_STACKED_REPORT = False
+    DEFAULT_DETAIL_COLUMNS = False
     DEFAULT_NO_STACK_BY_IN0 = True
     DEFAULT_MERGE_DEVICES = True
     DEFAULT_STACKED_CSV_FILE = None  # Stacked report CSV output file
@@ -981,10 +1058,10 @@ class OpsPerformanceReportQueries:
     @staticmethod
     def set_hash_from_results(processed_row, idx, ops_perf_results):
         if 0 <= idx < len(ops_perf_results):
-            hash_value = ops_perf_results[idx].get("PROGRAM HASH")
+            hash_value = ops_perf_results[idx].get(PROGRAM_HASH_COLUMN)
             processed_row["hash"] = hash_value if hash_value else None
 
-            cache_hit_value = ops_perf_results[idx].get("PROGRAM CACHE HIT")
+            cache_hit_value = ops_perf_results[idx].get(PROGRAM_CACHE_HIT_COLUMN)
             if cache_hit_value == "True":
                 processed_row["cache_hit"] = True
             elif cache_hit_value == "False":
@@ -997,25 +1074,61 @@ class OpsPerformanceReportQueries:
 
         return processed_row
 
-    @classmethod
-    def generate_report(cls, instance, **kwargs):
-        """Build the performance report, reusing a cached one when nothing changed.
+    @staticmethod
+    def report_source(instance) -> "_PerformanceReportSource":
+        """The CSV a report would be generated from now, and its identity on disk.
 
-        A cache hit hands every caller the same dict and row dicts, across users,
-        so treat the result as read-only: copy before sorting or annotating it.
+        The newest `ops_perf_results` file, so a capture written later is a
+        different source, and so is the same file rewritten in place.
         """
         source_path = Path(
             OpsPerformanceQueries.get_local_ops_perf_file_path(instance)
         ).resolve()
         source_stat = source_path.stat()
-        source = _PerformanceReportSource(
+        return _PerformanceReportSource(
             path=str(source_path),
             modified_ns=source_stat.st_mtime_ns,
             changed_ns=source_stat.st_ctime_ns,
             inode=source_stat.st_ino,
             size=source_stat.st_size,
         )
-        options = _PerformanceReportOptions(
+
+    @classmethod
+    def generate_report(cls, instance, **kwargs) -> Dict:
+        """Build the performance report afresh; the caller owns the dicts it gets.
+
+        Never cached: holding dicts costs over twice the memory of their JSON. A
+        caller that only serialises the report should use `generate_report_json`.
+        """
+        try:
+            return cls.generate_report_strict(instance, **kwargs)
+        except DegradedPerformanceReport as degraded:
+            return degraded.report
+
+    @classmethod
+    def generate_report_strict(cls, instance, **kwargs) -> Dict:
+        """`generate_report`, but a report built with swallowed errors is raised.
+
+        `DegradedPerformanceReport` carries it, so a caller that keeps reports
+        beyond one request can keep a partial one apart from a healthy one.
+        """
+        source = cls.report_source(instance)
+        return _generate_performance_report(source, cls._report_options(**kwargs))
+
+    @classmethod
+    def generate_report_json(cls, instance, **kwargs) -> bytes:
+        """The performance report as JSON, reusing a cached one when nothing changed."""
+        source = cls.report_source(instance)
+        try:
+            return _cached_generate_performance_report_json(
+                source, cls._report_options(**kwargs)
+            )
+        except DegradedPerformanceReport as degraded:
+            return orjson.dumps(degraded.report)
+
+    @classmethod
+    def _report_options(cls, **kwargs) -> _PerformanceReportOptions:
+        return _PerformanceReportOptions(
             start_signpost=kwargs.get("start_signpost", cls.DEFAULT_START_SIGNPOST),
             end_signpost=kwargs.get("end_signpost", cls.DEFAULT_END_SIGNPOST),
             print_signposts=kwargs.get("print_signposts", cls.DEFAULT_PRINT_SIGNPOSTS),
@@ -1026,11 +1139,8 @@ class OpsPerformanceReportQueries:
             no_stacked_report=kwargs.get(
                 "no_stacked_report", cls.DEFAULT_NO_STACKED_REPORT
             ),
+            detail_columns=kwargs.get("detail_columns", cls.DEFAULT_DETAIL_COLUMNS),
         )
-        try:
-            return _cached_generate_performance_report(source, options)
-        except _DegradedPerformanceReport as degraded:
-            return degraded.report
 
     @classmethod
     def _generate_report_uncached(
@@ -1050,14 +1160,7 @@ class OpsPerformanceReportQueries:
         # Resolved before generating, so a range tt-perf-report would answer from
         # other rows is refused without running it, and the `signposts` list below
         # offers only ranges this accepts.
-        try:
-            resolved_signposts = resolve_signposts(csv_file, options.tracing_mode)
-        # `EmptyDataError` and `ParserError` are both `ValueError`s: a ragged or
-        # truncated capture is the caller's data, answered as such rather than a 500.
-        except ValueError as error:
-            raise DataFormatError(
-                f"could not read the report's signposts: {error}"
-            ) from error
+        resolved_signposts = read_signposts(csv_file, options.tracing_mode)
         check_signpost_range(
             resolved_signposts, options.start_signpost, options.end_signpost
         )
@@ -1096,34 +1199,38 @@ class OpsPerformanceReportQueries:
             else:
                 ignore_signposts = cls.DEFAULT_IGNORE_SIGNPOSTS
 
+            open_figures = set(plt.get_fignums())
             try:
-                perf_report.generate_perf_report(
-                    [csv_file],
-                    start_signpost,
-                    end_signpost,
-                    ignore_signposts,
-                    print_signposts,
-                    cls.DEFAULT_MIN_PERCENTAGE,
-                    cls.DEFAULT_ID_RANGE,
-                    cls.DEFAULT_ARCH,
-                    csv_output_file.name,
-                    cls.DEFAULT_NO_ADVICE,
-                    tracing_mode,
-                    cls.DEFAULT_RAW_OP_CODES,
-                    no_host_ops,
-                    cls.DEFAULT_NO_SUMMARY,
-                    group_by,
-                    cls.DEFAULT_CLASSIC_COLORS,
-                    csv_summary_file.name,
-                    no_stacked_report,
-                    cls.DEFAULT_NO_STACK_BY_IN0,
-                    cls.DEFAULT_STACKED_CSV_FILE,
-                    not merge_devices,
-                )
+                with _stacked_report_plot_skipped():
+                    perf_report.generate_perf_report(
+                        [csv_file],
+                        start_signpost,
+                        end_signpost,
+                        ignore_signposts,
+                        print_signposts,
+                        cls.DEFAULT_MIN_PERCENTAGE,
+                        cls.DEFAULT_ID_RANGE,
+                        cls.DEFAULT_ARCH,
+                        csv_output_file.name,
+                        cls.DEFAULT_NO_ADVICE,
+                        tracing_mode,
+                        cls.DEFAULT_RAW_OP_CODES,
+                        no_host_ops,
+                        cls.DEFAULT_NO_SUMMARY,
+                        group_by,
+                        cls.DEFAULT_CLASSIC_COLORS,
+                        csv_summary_file.name,
+                        no_stacked_report,
+                        cls.DEFAULT_NO_STACK_BY_IN0,
+                        cls.DEFAULT_STACKED_CSV_FILE,
+                        not merge_devices,
+                    )
             except Exception as e:
                 logger.error(f"Error loading report: {e}")
                 logger.error(f"Full traceback:\n{traceback.format_exc()}")
                 raise DataFormatError(e)
+            finally:
+                _close_figures_opened_since(open_figures)
 
             try:
                 ops_perf_results, signposts = cls.extract_signposts(
@@ -1157,6 +1264,11 @@ class OpsPerformanceReportQueries:
                                     header
                                 )
                                 id_index = column_indexes.get("id")
+                                passthrough_columns = (
+                                    {**cls.PASSTHROUGH_COLUMNS, **cls.DETAIL_COLUMNS}
+                                    if options.detail_columns
+                                    else cls.PASSTHROUGH_COLUMNS
+                                )
                                 for row in reader:
                                     try:
                                         if id_index is None or id_index >= len(row):
@@ -1184,13 +1296,15 @@ class OpsPerformanceReportQueries:
                                         for (
                                             key,
                                             value,
-                                        ) in cls.PASSTHROUGH_COLUMNS.items():
+                                        ) in passthrough_columns.items():
                                             if 0 <= idx < len(ops_perf_results):
                                                 processed_row[key] = ops_perf_results[
                                                     idx
                                                 ].get(value)
                                             else:
                                                 processed_row[key] = None
+                                        if options.detail_columns:
+                                            _intern_detail_cells(processed_row)
 
                                         # Get the op type from the raw file for this row as it is not returned from tt-perf-report
                                         cls.set_op_type_from_results(
@@ -1276,7 +1390,7 @@ class OpsPerformanceReportQueries:
                 ),
             }
             if degraded:
-                raise _DegradedPerformanceReport(result)
+                raise DegradedPerformanceReport(result)
             return result
 
         finally:
@@ -1345,6 +1459,22 @@ def resolve_signposts(
             positions_by_name[str(name)].append(int(position))
 
     return ResolvedSignposts(dict(positions_by_name), sorted_by_host_time)
+
+
+def read_signposts(csv_file: IO[str], tracing_mode: bool = False) -> ResolvedSignposts:
+    """`resolve_signposts`, with an unreadable capture answered as the caller's data.
+
+    `EmptyDataError` and `ParserError` are both `ValueError`s: a ragged or
+    truncated capture is the caller's data, answered as such rather than a 500.
+    Shared by the report route and the agent tools, so a bad capture reads the
+    same through either.
+    """
+    try:
+        return resolve_signposts(csv_file, tracing_mode)
+    except ValueError as error:
+        raise DataFormatError(
+            f"could not read the report's signposts: {error}"
+        ) from error
 
 
 def signpost_range_ignored(
@@ -1423,21 +1553,33 @@ def check_signpost_range(
         )
 
 
-class _DegradedPerformanceReport(Exception):
-    """Carries a partial report past `lru_cache`, which only skips raised results."""
+class DegradedPerformanceReport(Exception):
+    """A report generated with swallowed errors, raised so no cache keeps it.
+
+    `lru_cache` only skips raised results, so the partial report rides on the
+    exception; the agent's registry likewise keeps it per handle, not shared.
+    """
 
     def __init__(self, report: Dict):
         super().__init__("performance report generated with swallowed errors")
         self.report = report
 
 
-@lru_cache(maxsize=MAX_CACHED_PERFORMANCE_REPORTS)
-def _cached_generate_performance_report(
+def _generate_performance_report(
     source: _PerformanceReportSource, options: _PerformanceReportOptions
-):
+) -> Dict:
     raw_csv = Path(source.path).read_text()
     return OpsPerformanceReportQueries._generate_report_uncached(raw_csv, options)
 
 
+@lru_cache(maxsize=MAX_CACHED_PERFORMANCE_REPORTS)
+def _cached_generate_performance_report_json(
+    source: _PerformanceReportSource, options: _PerformanceReportOptions
+) -> bytes:
+    # Bytes rather than the dicts: under half the memory, a hit skips
+    # serialisation, and callers sharing an entry cannot modify it.
+    return orjson.dumps(_generate_performance_report(source, options))
+
+
 def clear_performance_report_cache() -> None:
-    _cached_generate_performance_report.cache_clear()
+    _cached_generate_performance_report_json.cache_clear()

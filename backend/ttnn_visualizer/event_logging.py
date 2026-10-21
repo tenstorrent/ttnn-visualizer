@@ -7,8 +7,8 @@
 Local installs append to one fixed file under the user's home directory. Hosted
 installs append to a separate file per anonymous Flask session under ``/data/usage``.
 The identifier stays in the path rather than entering event data. The application
-backend never forwards raw events. Local opt-in collection exposes only aggregate
-metrics derived from the local log for Prometheus to scrape independently.
+backend never forwards raw events. Local opt-in collection pushes only aggregate
+counters derived from the local log to a configured OTLP endpoint.
 
 Properties this file's consumers depend on, stated here because they are not
 obvious from the code that reads it:

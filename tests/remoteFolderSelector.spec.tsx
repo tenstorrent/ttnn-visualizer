@@ -53,6 +53,8 @@ import {
 import { SshConfigHostsQueryResult, noSshConfigResult } from './helpers/sshConfigFixtures';
 import testForPortal from './helpers/testForPortal';
 import { TestProviders } from './helpers/TestProviders';
+import { runsWithoutFingerprints } from './helpers/reportLinkFixtures';
+import { ReportLinkRunsById } from '../src/definitions/ReportLinks';
 import { ReportKind, ReportLoadFailureReason, ReportSource } from '../src/definitions/EventLogEvent';
 import { RemoteFolderType } from '../src/definitions/Reports';
 
@@ -1651,8 +1653,8 @@ interface RenderRemoteFolderSelectorOptions {
     folderList?: RemoteFolder[];
     onSelectFolder?: (folder: RemoteFolder) => void;
     type?: RemoteFolderType;
-    linkedIds?: Set<string>;
-    unlinkedIds?: Set<string>;
+    linkedRuns?: ReportLinkRunsById;
+    unlinkedRuns?: ReportLinkRunsById;
 }
 
 const renderPerformanceSelector = async ({
@@ -1660,8 +1662,8 @@ const renderPerformanceSelector = async ({
     folderList = multihostFolders,
     onSelectFolder = () => undefined,
     type = ReportKind.PERFORMANCE,
-    linkedIds,
-    unlinkedIds,
+    linkedRuns,
+    unlinkedRuns,
 }: RenderRemoteFolderSelectorOptions) => {
     setupConnection(connectionList);
 
@@ -1671,8 +1673,8 @@ const renderPerformanceSelector = async ({
                 remoteFolderList={folderList}
                 onSelectFolder={onSelectFolder}
                 type={type}
-                linkedIds={linkedIds}
-                unlinkedIds={unlinkedIds}
+                linkedRuns={linkedRuns}
+                unlinkedRuns={unlinkedRuns}
             />
         </TestProviders>,
     );
@@ -1688,8 +1690,8 @@ const expectSuppliedOrder = async (type: RemoteFolderType) => {
         connectionList: multihostConnection,
         folderList: folders,
         type,
-        linkedIds: new Set([folders[1].syncedName!]),
-        unlinkedIds: new Set([folders[0].syncedName!]),
+        linkedRuns: runsWithoutFingerprints(folders[1].syncedName!),
+        unlinkedRuns: runsWithoutFingerprints(folders[0].syncedName!),
     });
 
     const options = screen.getAllByRole('menuitem');

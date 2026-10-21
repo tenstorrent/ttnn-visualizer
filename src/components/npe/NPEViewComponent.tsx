@@ -7,7 +7,18 @@ import 'highlight.js/styles/a11y-dark.css';
 import 'styles/components/NPEComponent.scss';
 import 'styles/components/NPEZoneFilterComponent.scss';
 import { Dispatch, SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, ButtonGroup, ButtonVariant, Classes, Intent, Size, Slider, Switch } from '@blueprintjs/core';
+import {
+    Button,
+    ButtonGroup,
+    ButtonVariant,
+    Classes,
+    Intent,
+    Size,
+    Slider,
+    Switch,
+    Tag,
+    Tooltip,
+} from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import { Fragment } from 'react/jsx-runtime';
@@ -47,8 +58,16 @@ import { altCongestionColorsAtom } from '../../store/app';
 import GlobalSwitch from '../GlobalSwitch';
 import NPEZoneFilterComponent from './NPEZoneFilterComponent';
 import createToastNotification from '../../functions/createToastNotification';
+import { formatGridSize } from '../../functions/formatting';
 import { ToastType } from '../../definitions/ToastType';
 import { TEST_IDS } from '../../definitions/TestIds';
+import {
+    NO_ETHERNET_OR_PCIE_EXPLANATION,
+    NO_ETHERNET_OR_PCIE_TAG,
+    SOC_DESCRIPTOR_GRID_MISMATCH_TITLE,
+    SOC_DESCRIPTOR_UNUSABLE_TITLE,
+    UNSUPPORTED_ARCHITECTURE_TITLE,
+} from '../../definitions/NPEData';
 
 interface NPEViewProps {
     npeData: NPEData;
@@ -302,12 +321,15 @@ const NPEView = ({
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
-    const { architecture, cores, dram, eth, pcie, overrideProblems } = useNodeType(
+    const { architecture, grid, cores, dram, eth, pcie, dispatch, overrideProblems, gridMismatch } = useNodeType(
         npeData.common_info.arch as DeviceArchitecture,
         npeData.soc_descriptor,
+        { x_size: npeData.common_info.num_cols, y_size: npeData.common_info.num_rows },
     );
-    const width = architecture?.grid?.x_size || 10;
-    const height = architecture?.grid?.y_size || 12;
+    const width = grid?.x_size || 10;
+    const height = grid?.y_size || 12;
+    // An emulation descriptor such as Quasar-32 has no Ethernet or PCIe tiles; say so rather than look incomplete.
+    const hasNoEthernetOrPcie = architecture !== null && !eth?.length && !pcie?.length;
 
     useEffect(() => {
         // A descriptor that was supplied and rejected is its own failure, distinct from
@@ -316,16 +338,26 @@ const NPEView = ({
         // ERROR rather than a WARNING because the report asked to be rendered a
         // specific way and could not be.
         if (overrideProblems) {
-            createToastNotification('Unusable SoC descriptor in report', overrideProblems.join('; '), ToastType.ERROR);
+            createToastNotification(SOC_DESCRIPTOR_UNUSABLE_TITLE, overrideProblems.join('; '), ToastType.ERROR);
+            return;
+        }
+        if (gridMismatch) {
+            createToastNotification(
+                SOC_DESCRIPTOR_GRID_MISMATCH_TITLE,
+                `This report's grid is ${formatGridSize(gridMismatch.reported)}, but the built-in ` +
+                    `${npeData.common_info.arch} descriptor is ${formatGridSize(gridMismatch.baked)}, so its cores ` +
+                    'are not labelled. Include the SoC descriptor in the report to label them.',
+                ToastType.WARNING,
+            );
             return;
         }
         // `architecture === null` rather than probing a field: `arch_name` is declared required
         // on `ChipDesign` and only read as absent because the unresolved case used to return an
         // empty stand-in. Now the same predicate holds here as everywhere else. #1772
         if (architecture === null) {
-            createToastNotification(`Unsupported architecture`, npeData.common_info.arch, ToastType.WARNING);
+            createToastNotification(UNSUPPORTED_ARCHITECTURE_TITLE, npeData.common_info.arch, ToastType.WARNING);
         }
-    }, [architecture, npeData.common_info.arch, overrideProblems]);
+    }, [architecture, npeData.common_info.arch, overrideProblems, gridMismatch]);
 
     useEffect(() => {
         resetRouteColors();
@@ -542,6 +574,17 @@ const NPEView = ({
                             checked={isAnnotatingCores}
                             onChange={() => setIsAnnotatingCores(!isAnnotatingCores)}
                         />
+                        {isAnnotatingCores && hasNoEthernetOrPcie && (
+                            <Tooltip content={NO_ETHERNET_OR_PCIE_EXPLANATION}>
+                                {/* The tooltip is hover-only, so screen readers get the same text as a description. */}
+                                <Tag
+                                    minimal
+                                    aria-description={NO_ETHERNET_OR_PCIE_EXPLANATION}
+                                >
+                                    {NO_ETHERNET_OR_PCIE_TAG}
+                                </Tag>
+                            </Tooltip>
+                        )}
                         <ButtonGroup
                             variant={ButtonVariant.OUTLINED}
                             size={Size.SMALL}
@@ -745,6 +788,7 @@ const NPEView = ({
                                     dram={dram}
                                     eth={eth}
                                     pcie={pcie}
+                                    dispatch={dispatch}
                                     onEmptyCellClick={handleClearSelection}
                                     selectedZoneAddress={selectedZoneAddress}
                                     isAnnotatingCores={isAnnotatingCores}

@@ -9,6 +9,7 @@ import { IconNames } from '@blueprintjs/icons';
 import { useInstance } from '../../hooks/useAPI';
 import 'styles/components/FolderPicker.scss';
 import { getFolderLinkState, shouldShowFolderLinkStatus } from '../../functions/folderLinkStatus';
+import { ReportLinkRunsById } from '../../definitions/ReportLinks';
 import { ReportFolder } from '../../definitions/Reports';
 import getServerConfig from '../../functions/getServerConfig';
 import isDirectReportMode from '../../functions/isDirectReportMode';
@@ -37,10 +38,10 @@ interface LocalFolderPickerProps {
     disabled?: boolean;
     /** When true, shows a spinner on the trigger button and blocks interaction. */
     loading?: boolean;
-    /** Canonical ids previously observed to link with the active counterpart. */
-    linkedIds?: Set<string> | null;
-    /** Canonical ids previously observed to fail linking with the active counterpart. */
-    unlinkedIds?: Set<string> | null;
+    /** Canonical ids previously observed to link with the active counterpart, with their runs. */
+    linkedRuns?: ReportLinkRunsById | null;
+    /** Canonical ids previously observed to fail linking with the active counterpart, with their runs. */
+    unlinkedRuns?: ReportLinkRunsById | null;
 }
 
 const LocalFolderPicker = ({
@@ -53,8 +54,8 @@ const LocalFolderPicker = ({
     showReportName,
     disabled = false,
     loading = false,
-    linkedIds,
-    unlinkedIds,
+    linkedRuns,
+    unlinkedRuns,
 }: LocalFolderPickerProps) => {
     const { data: instance } = useInstance();
 
@@ -74,7 +75,7 @@ const LocalFolderPicker = ({
     // mid-load, since the alert outlives the popover. canDeleteReports covers SERVER_MODE and
     // direct-report mode.
     const isDeleteDisabled = loading;
-    const showLinkStatus = shouldShowFolderLinkStatus(linkedIds, unlinkedIds);
+    const showLinkStatus = shouldShowFolderLinkStatus(linkedRuns, unlinkedRuns);
 
     const renderItem: ItemRenderer<ReportFolder> = (folder, { handleClick, handleFocus, modifiers, query }) => {
         if (!modifiers.matchesPredicate) {
@@ -115,7 +116,14 @@ const LocalFolderPicker = ({
                     icon={folder.path === activePath ? IconNames.SAVED : IconNames.DOCUMENT}
                     labelElement={
                         showLinkStatus ? (
-                            <FolderLinkStatusIcon linkState={getFolderLinkState(folderId, linkedIds, unlinkedIds)} />
+                            <FolderLinkStatusIcon
+                                linkState={getFolderLinkState(
+                                    folderId,
+                                    folder.runFingerprint,
+                                    linkedRuns,
+                                    unlinkedRuns,
+                                )}
+                            />
                         ) : undefined
                     }
                 />

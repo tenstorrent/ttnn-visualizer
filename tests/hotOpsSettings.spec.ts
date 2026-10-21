@@ -9,7 +9,7 @@ import { parseHotOpsEnabled, parseHotOpsSettings } from '../src/functions/hotOps
 
 describe('parseHotOpsSettings', () => {
     it('keeps a stored shape it recognises', () => {
-        const stored = { limit: 25, sort: HotOpsSort.OPERATION_ID, hideUnlinked: false };
+        const stored = { limit: 25, sort: HotOpsSort.OPERATION_ID, hideUnlinked: false, markOnGraph: true };
 
         expect(parseHotOpsSettings(stored)).toEqual(stored);
     });
@@ -23,6 +23,10 @@ describe('parseHotOpsSettings', () => {
             ...DEFAULT_HOT_OPS_SETTINGS,
             hideUnlinked: false,
         });
+    });
+
+    it('reads a marking flag it does not recognise as off', () => {
+        expect(parseHotOpsSettings({ ...DEFAULT_HOT_OPS_SETTINGS, markOnGraph: 'yes' }).markOnGraph).toBe(false);
     });
 
     it('fills in fields a shape from another build does not have', () => {

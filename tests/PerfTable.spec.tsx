@@ -57,6 +57,7 @@ interface RenderTableOptions {
     activeReportComparisonIndex?: number | null;
     hiddenColumns?: ColumnKeys[];
     hiliteHighDispatch?: boolean;
+    hasL1PressureData?: boolean;
 }
 
 function renderTable(rows: TypedPerfTableRow[], options: RenderTableOptions = {}) {
@@ -65,6 +66,7 @@ function renderTable(rows: TypedPerfTableRow[], options: RenderTableOptions = {}
         activeReportComparisonIndex = null,
         hiddenColumns = [],
         hiliteHighDispatch = false,
+        hasL1PressureData = false,
     } = options;
 
     return render(
@@ -78,6 +80,7 @@ function renderTable(rows: TypedPerfTableRow[], options: RenderTableOptions = {}
                 reportFolderName='unit-test'
                 maxCores={DEFAULT_MAX_CORES}
                 activeReportComparisonIndex={activeReportComparisonIndex}
+                hasL1PressureData={hasL1PressureData}
             />
         </TestProviders>,
     );
@@ -91,6 +94,43 @@ beforeEach(() => {
     (useOpToPerfIdFiltered as Mock).mockReturnValue([]);
     (useOperationsList as Mock).mockReturnValue({ data: [] });
     (usePerfMeta as Mock).mockReturnValue({ data: null, isLoading: false });
+});
+
+// #2084: with devices unmerged, each device's row of a linked op carries the same `op`.
+describe('PerfTable per-device rows of one operation', () => {
+    const l1Pressure = {
+        l1_fullness_percent: 87.5,
+        l1_free_segments: 3,
+        l1_largest_free: 1024,
+        l1_largest_free_percent: 12.5,
+    };
+    const deviceRows = [
+        baseRow({ id: 1, raw_op_code: 'Matmul', op: 11, device: 0, ...l1Pressure }),
+        baseRow({ id: 2, raw_op_code: 'Matmul', op: 11, device: 1, ...l1Pressure }),
+    ];
+
+    it('enables the tensor-drawer trigger on every device’s row', () => {
+        (useOpToPerfIdFiltered as Mock).mockReturnValue([{ opId: 11, perfId: '1' }]);
+        renderTable(deviceRows);
+
+        const triggers = screen.getAllByTestId(TEST_IDS.PERF_TENSOR_DRAWER_OPEN_BUTTON);
+
+        expect(triggers).toHaveLength(2);
+        triggers.forEach((trigger) => expect(trigger).toBeEnabled());
+    });
+
+    // L1 pressure is one snapshot per TTNN op, so it shows once per op as it does merged.
+    it('shows the op’s L1 pressure once, on its first row', () => {
+        (useOpToPerfIdFiltered as Mock).mockReturnValue([{ opId: 11, perfId: '1' }]);
+        renderTable(deviceRows, { hasL1PressureData: true });
+
+        const [firstRow, secondRow] = screen
+            .getAllByTestId(TEST_IDS.PERF_TENSOR_DRAWER_OPEN_BUTTON)
+            .map((trigger) => trigger.closest('tr')!);
+
+        expect(within(firstRow).getByText('87.5%')).toBeInTheDocument();
+        expect(within(secondRow).queryByText('87.5%')).toBeNull();
+    });
 });
 
 describe('PerfTable tensor-drawer trigger column', () => {

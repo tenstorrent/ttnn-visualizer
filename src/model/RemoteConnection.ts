@@ -25,6 +25,9 @@ export interface RemoteFolder {
     // decided by the server, which is the side that writes the folder.
     syncedName?: string;
     rank?: number | null;
+    // Which run the local synced copy holds, null until synced. Always sent, so a
+    // fresh listing replaces a cached value in mergeRemoteFolders.
+    runFingerprint?: string | null;
 }
 
 export interface SyncRemoteFolder {
