@@ -23,6 +23,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Callable, Dict, List, Optional, Tuple
 
+import pytest
 from ttnn_visualizer.agent import allocation_failures, dram_fallbacks, l1_peak
 from ttnn_visualizer.agent.scope_outcomes import failed_device_operation_names
 from ttnn_visualizer.models import Buffer, BufferType
@@ -184,6 +185,13 @@ def _curated_graphs() -> List[List[Dict]]:
         [_scope(start, "Matmul"), _scope(end, "Matmul", aborted="true")],
         [_scope(start, "Matmul"), _scope(start, "Conv2d"), _scope(end, "Matmul")],
         [_scope(end, "Matmul"), _scope(start, "Conv2d")],
+        # Nodes with null params, no name or no type.
+        [
+            {"node_type": start, "params": None},
+            {"node_type": start, "params": {}},
+            {"params": {"name": "Matmul"}},
+            {"node_type": end, "params": None},
+        ],
     ]
 
 
@@ -657,7 +665,28 @@ def _l1_peak_cases(rng: random.Random) -> List[Dict]:
             {},
             64,
             None,
-        )
+        ),
+        # Every memory node with null params, which the replay skips.
+        _l1_peak_case(
+            [
+                {
+                    "id": 1,
+                    "device_operations": [
+                        {"node_type": node_type, "params": None}
+                        for node_type in (
+                            "buffer_allocate",
+                            "buffer_deallocate",
+                            "circular_buffer_allocate",
+                            "circular_buffer_deallocate_all",
+                        )
+                    ],
+                }
+            ],
+            {},
+            {},
+            64,
+            None,
+        ),
     ]
     for _ in range(30):
         operations: List[Dict] = [
@@ -883,6 +912,22 @@ def test_the_tool_s_replay_differs_only_in_the_residents_it_keeps():
         assert (trimmed.peak and trimmed.peak.operation_id) == (
             full.peak and full.peak.operation_id
         )
+
+
+def test_a_node_that_is_not_an_object_is_skipped():
+    """The app's functions throw on one, so the golden cannot hold it."""
+    nodes = [1, "Matmul", None, [], {"node_type": "function_start"}]
+
+    result = l1_peak.build_l1_peak([(1, partial(list, nodes))], {}, {})
+
+    assert failed_device_operation_names(nodes) == []
+    assert result.peak is None
+
+
+@pytest.mark.parametrize("nodes", [{"node_type": "function_start"}, "Matmul", None, 7])
+def test_a_graph_that_is_not_a_list_names_no_failure(nodes):
+    """The app's replay throws on one, so the golden cannot hold it."""
+    assert failed_device_operation_names(nodes) == []
 
 
 def test_the_ts_spec_reads_this_golden():

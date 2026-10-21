@@ -332,6 +332,24 @@ class TestErrors:
         assert error["failed_device_operations"] == []
         assert "allocation_failure" not in error
 
+    def test_a_second_error_on_one_operation_is_unattached(self, tmp_path):
+        """As `select_errors_by_operation` attaches them: an operation shows one error,
+        the first, and only that one reads the operation's graph."""
+        registry, handle = _report(
+            tmp_path,
+            operations=[(1, "ttnn.add")],
+            errors=[
+                (1, "ttnn.add", "TT_THROW", "first"),
+                (1, "ttnn.add", "TT_THROW", "second"),
+            ],
+            graphs=[(1, [_start("Add")])],
+        )
+
+        listed = failures.errors(registry, handle)["errors"]
+
+        assert [error["attached"] for error in listed] == [True, False]
+        assert [error["failed_device_operations"] for error in listed] == [["Add"], []]
+
     def test_a_long_message_is_cut_and_says_how_long_it_was(self, tmp_path):
         message = "x" * (failures.MAX_ERROR_TEXT_CHARS + 5)
         registry, handle = _report(
@@ -593,6 +611,42 @@ class TestL1Peak:
         assert (result["usable"], result["peak"]) == (False, None)
         assert "top_operations" not in result
         assert "4000 bytes per bank" in result["reason"]
+
+    def test_a_replay_past_any_finite_size_is_withheld(self, tmp_path):
+        """A device with no banks divides a node's size by zero, as JavaScript would."""
+        node = {
+            "node_type": "buffer_allocate",
+            "params": {"address": "100", "type": "L1", "size": "64", "num_cores": "0"},
+        }
+        registry, handle = _report(
+            tmp_path,
+            operations=[(1, "ttnn.add")],
+            graphs=[(1, [node])],
+            devices=[(0, 3000, 0)],
+        )
+
+        result = failures.l1_peak(registry, handle)
+
+        assert (result["usable"], result["peak"]) == (False, None)
+        assert "past any finite size" in result["reason"]
+
+    def test_a_limit_keeps_the_largest_compositions(self, tmp_path):
+        registry, handle = _report(
+            tmp_path,
+            operations=[(operation_id, "ttnn.add") for operation_id in (1, 2, 3)],
+            graphs=[
+                (1, [_circular_buffer(5000, 100)]),
+                (2, [_circular_buffer(5000, 300)]),
+                (3, [_circular_buffer(5000, 200)]),
+            ],
+        )
+
+        top = failures.l1_peak(registry, handle, limit=2)["top_operations"]
+
+        assert [(entry["operation_id"], entry["total_bytes"]) for entry in top] == [
+            (2, 300),
+            (3, 200),
+        ]
 
     def test_a_report_with_no_l1_activity_says_so(self, tmp_path):
         registry, handle = _report(
@@ -891,6 +945,24 @@ class TestHowTheDatabaseIsRead:
         assert "dram_fallbacks" in loaded["unanswerable"]
         assert "errors" in loaded["answerable"]
 
+    @pytest.mark.parametrize("graph", [{"node_type": "function_start"}, "Add", None, 7])
+    def test_a_captured_graph_that_is_not_a_list_is_read_as_empty(
+        self, tmp_path, graph
+    ):
+        """The app's functions would throw on one, so the golden cannot hold it."""
+        registry, handle = _report(
+            tmp_path,
+            operations=[(1, "ttnn.add")],
+            errors=[(1, "ttnn.add", "TT_THROW", "boom")],
+            graphs=[(1, graph)],
+        )
+
+        error = failures.errors(registry, handle)["errors"][0]
+        result = failures.l1_peak(registry, handle)
+
+        assert error["failed_device_operations"] == []
+        assert (result["usable"], result["peak"]) == (True, None)
+
     def test_a_captured_graph_past_the_bound_is_not_read(self, tmp_path):
         """Each tool loads every graph it matches at once, so each asks the size first."""
         registry, handle = _report(
@@ -926,10 +998,14 @@ class TestHowTheDatabaseIsRead:
             bounds, "MAX_CAPTURED_GRAPH_CHARS", len(json.dumps(rank_zero))
         ):
             result = failures.errors(registry, handle, rank=0)
-            with pytest.raises(bounds.GraphTooLargeError):
+            peak = failures.l1_peak(registry, handle, rank=0)
+            with pytest.raises(bounds.GraphTooLargeError, match="an error lookup"):
                 failures.errors(registry, handle, rank=1)
+            with pytest.raises(bounds.GraphTooLargeError, match="the replay"):
+                failures.l1_peak(registry, handle, rank=1)
 
         assert result["errors"][0]["failed_device_operations"] == ["Conv2d"]
+        assert peak["rank"] == 0
 
 
 class TestOperationDetail:
@@ -950,7 +1026,7 @@ class TestOperationDetail:
         assert retried["dram_fallback"]["signal"] == "retry_after_failure"
         assert "error" not in retried
 
-    def test_a_retry_at_the_window_s_edge_is_found_without_reading_the_whole_report(
+    def test_a_retry_at_the_window_s_edge_is_found_and_one_past_it_is_not(
         self, tmp_path
     ):
         registry, handle = _report(
@@ -1017,6 +1093,43 @@ class TestOperationDetail:
             failures.dram_fallbacks(registry, handle)
 
         read.assert_called_once()
+
+    def test_the_fallbacks_are_read_once_per_rank(self, tmp_path):
+        """Each rank's retry follows its own failure, so a cache shared across ranks
+        would answer one rank with the other's."""
+
+        def retried_after(failed: int) -> Dict[str, Sequence[Tuple]]:
+            return {
+                "operations": [
+                    (1, "ttnn.conv2d" if failed == 1 else "ttnn.add", 1.0),
+                    (2, "ttnn.conv2d" if failed == 2 else "ttnn.add", 1.0),
+                    (3, "ttnn.conv2d", 1.0),
+                ],
+                "errors": [(failed, "ttnn.conv2d", "TT_THROW", _OUT_OF_MEMORY, "", "")],
+                "tensors": [_tensor_row(20, 5000, 0)],
+                "output_tensors": [(3, 0, 20)],
+            }
+
+        registry, handle = _ranked_report(
+            tmp_path, {0: retried_after(1), 1: retried_after(2)}
+        )
+
+        with patch.object(
+            failures, "report_dram_fallbacks", wraps=failures.report_dram_fallbacks
+        ) as read:
+            details = [
+                linking.operation_detail(registry, handle, operation_id=3, rank=rank)
+                for rank in (0, 1, 0)
+            ]
+
+        assert read.call_count == 2
+        assert [
+            detail["dram_fallback"]["failed_operation_id"] for detail in details
+        ] == [
+            1,
+            2,
+            1,
+        ]
 
     def test_its_error_is_withheld_where_the_errors_rows_span_ranks(self, tmp_path):
         """With `rank` on `operations` and not on `errors`, the rank-0 fallback would
