@@ -16,7 +16,6 @@ import { makeMemoryConfigArgument, makeOperation, makeTensor } from './helpers/o
 vi.mock('../src/hooks/useAPI', () => ({
     useOperationsList: vi.fn(),
     useOpToPerfIdFiltered: vi.fn(),
-    useOpToPerfIdForPerfTable: vi.fn(),
 }));
 
 const LINKED: OpIdsMap = [

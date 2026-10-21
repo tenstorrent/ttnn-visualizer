@@ -91,7 +91,7 @@ export default function Performance() {
     const perfTableOpIdsMap = useOpToPerfIdForPerfTable();
     const l1Pressure = useL1PressureByOperation();
     const l1PressureMap = l1Pressure.data;
-    const { listings: allocationFailureListings, allocationFailureByOpId } = useAllocationFailures();
+    const { listings: allocationFailureListings, allocationFailureByOpId } = useAllocationFailures(perfTableOpIdsMap);
     const dramFallbackByOpId = useDramFallbacks(allocationFailureByOpId);
     const { data: deviceMeta } = usePerfMeta(activeReportFolderName);
     // Combined to `(MetaData | null)[]` so comparison enrichment memos on stable data, not per-render query objects.

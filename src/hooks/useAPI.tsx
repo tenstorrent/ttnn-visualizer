@@ -1381,8 +1381,9 @@ export const useOpToPerfIdForPerfTable = () => {
         mergeDevices || opIdsMap.length === 0 ? null : name,
         LINKED_UNMERGED_PERFORMANCE_REPORT_PARAMS,
     );
-    // A disabled query still serves its cached data, so re-merging must drop it here too.
-    const unmergedRows = mergeDevices ? null : unmerged?.report;
+    // Re-merging disables the query by nulling `name`, which moves it to a key that never
+    // held data, so `unmerged` is already empty then.
+    const unmergedRows = unmerged?.report;
 
     return useMemo(() => {
         if (!unmergedRows?.length) {

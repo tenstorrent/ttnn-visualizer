@@ -11,7 +11,7 @@
 
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useIsFetching } from '@tanstack/react-query';
 import { Provider, createStore, useAtomValue } from 'jotai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -490,7 +490,7 @@ describe('report matching under a filtered performance tab', () => {
             mockRun(FAILED_SHAPES.aborted, ['Matmul', 'Softmax']);
 
             const { result } = renderWithView(
-                () => useAllocationFailures(),
+                () => useAllocationFailures(useOpToPerfIdForPerfTable()),
                 [[activeProfilerReportAtom, ACTIVE_REPORT]],
             );
 
@@ -509,7 +509,7 @@ describe('report matching under a filtered performance tab', () => {
 
             const { result } = renderWithView(
                 () => ({
-                    failures: useAllocationFailures(),
+                    failures: useAllocationFailures(useOpToPerfIdForPerfTable()),
                     match: useGetDeviceOperationListPerf(),
                     operations: useOperationsList().data,
                     report: useLinkedPerformanceReport().data,
@@ -629,6 +629,35 @@ describe('report matching under a filtered performance tab', () => {
         await waitFor(() => {
             expect(result.current[1]).toHaveLength(DEVICE_OP_NAMES.length);
             expect(getReportRequests().some((params) => !params.merge_devices)).toBe(true);
+        });
+
+        expect(result.current[0]).toBe(result.current[1]);
+    });
+
+    // A single-device run has no siblings, so consumers memoised on the lookup keep their result.
+    it('hands back the merged lookup itself when the unmerged rows have no siblings', async () => {
+        const serveReports = vi.mocked(axiosInstance.get).getMockImplementation()!;
+
+        vi.mocked(axiosInstance.get).mockImplementation((url: string, config?: unknown) =>
+            url.includes(Endpoints.PERFORMANCE_RESULTS_REPORT) &&
+            !(config as { params: RequestParams }).params.merge_devices
+                ? Promise.resolve({ data: { report: [...mergedRows], stacked_report: [], signposts: [] } })
+                : serveReports(url, config as Parameters<typeof serveReports>[1]),
+        );
+
+        const { result } = renderWithView(
+            () => [useOpToPerfIdForPerfTable(), useOpToPerfIdFiltered(), useIsFetching()] as const,
+            [
+                [activeProfilerReportAtom, ACTIVE_REPORT],
+                [mergeDevicesAtom, false],
+            ],
+        );
+
+        // Settled, so the unmerged rows have reached the hook rather than being still in flight.
+        await waitFor(() => {
+            expect(result.current[1]).toHaveLength(DEVICE_OP_NAMES.length);
+            expect(getReportRequests().some((params) => !params.merge_devices)).toBe(true);
+            expect(result.current[2]).toBe(0);
         });
 
         expect(result.current[0]).toBe(result.current[1]);
