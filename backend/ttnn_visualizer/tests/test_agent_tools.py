@@ -232,6 +232,26 @@ class TestReportInventory:
         assert loaded["answerable"] == []
         assert "find_operations" in loaded["unanswerable"]
 
+    @pytest.mark.parametrize(
+        "raw_bytes",
+        [
+            b"",
+            b"\xff\xfe\x00\x00invalid-utf8\n",
+        ],
+    )
+    def test_an_empty_or_non_utf8_perf_csv_is_not_answerable_for_top_ops(
+        self, tmp_path, raw_bytes
+    ):
+        """#2170: `top_ops` must not be advertised as answerable when
+        `ops_perf_results*.csv` is empty or fails UTF-8/CSV header decoding."""
+        (tmp_path / "ops_perf_results_broken.csv").write_bytes(raw_bytes)
+
+        loaded = load_report(ReportRegistry(), performance_path=str(tmp_path))
+
+        assert "top_ops" not in loaded["answerable"]
+        assert "top_ops" in loaded["unanswerable"]
+        assert "program_cache" in loaded["unanswerable"]
+
     def test_a_missing_directory_is_refused_with_the_path(self, tmp_path):
         with pytest.raises(ValueError, match="performance_path is not a directory"):
             load_report(ReportRegistry(), performance_path=str(tmp_path / "absent"))

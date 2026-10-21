@@ -306,12 +306,12 @@ def _inventory(instance: Instance) -> Dict[str, object]:
         (available if present else missing).append(name)
 
     perf_csv = _perf_csv(instance)
-    record("top_ops", perf_csv is not None)
+    perf_columns = _csv_columns(perf_csv) if perf_csv is not None else frozenset()
+    record("top_ops", bool(perf_columns))
     # Older captures carry neither column, and every count would then be zero.
     record(
         "program_cache",
-        perf_csv is not None
-        and {PROGRAM_HASH_COLUMN, PROGRAM_CACHE_HIT_COLUMN} <= _csv_columns(perf_csv),
+        {PROGRAM_HASH_COLUMN, PROGRAM_CACHE_HIT_COLUMN} <= perf_columns,
     )
 
     performance_path = instance.performance_path
