@@ -154,7 +154,9 @@ class TestReportInventory:
         operation questions have no input.
         """
         write_device_log(tmp_path, MODERN_HEADER, [])
-        (tmp_path / "ops_perf_results_x.csv").write_text("ID\n", encoding="utf-8")
+        write_ops_perf(tmp_path, smoke_rows()).rename(
+            tmp_path / "ops_perf_results_x.csv"
+        )
 
         loaded = load_report(ReportRegistry(), performance_path=str(tmp_path))
 
@@ -232,25 +234,23 @@ class TestReportInventory:
         assert loaded["answerable"] == []
         assert "find_operations" in loaded["unanswerable"]
 
-    @pytest.mark.parametrize(
-        "raw_bytes",
-        [
-            b"",
-            b"\xff\xfe\x00\x00invalid-utf8\n",
-        ],
-    )
-    def test_an_empty_or_non_utf8_perf_csv_is_not_answerable_for_top_ops(
-        self, tmp_path, raw_bytes
-    ):
-        """#2170: `top_ops` must not be advertised as answerable when
-        `ops_perf_results*.csv` is empty or fails UTF-8/CSV header decoding."""
-        (tmp_path / "ops_perf_results_broken.csv").write_bytes(raw_bytes)
+    def test_a_broken_newest_perf_csv_is_named_but_not_answerable(self, tmp_path):
+        """#2170: When the newest `ops_perf_results*.csv` is unreadable or empty,
+        the inventory judges the file `top_ops` actually selects rather than an
+        older readable capture in the same directory."""
+        older = write_ops_perf(tmp_path, smoke_rows()).rename(
+            tmp_path / "ops_perf_results_old.csv"
+        )
+        newer = tmp_path / "ops_perf_results_new.csv"
+        newer.write_bytes(b"")
+        os.utime(older, (1000, 1000))
+        os.utime(newer, (2000, 2000))
 
         loaded = load_report(ReportRegistry(), performance_path=str(tmp_path))
 
+        assert loaded["performance_csv"] == "ops_perf_results_new.csv"
         assert "top_ops" not in loaded["answerable"]
         assert "top_ops" in loaded["unanswerable"]
-        assert "program_cache" in loaded["unanswerable"]
 
     def test_a_missing_directory_is_refused_with_the_path(self, tmp_path):
         with pytest.raises(ValueError, match="performance_path is not a directory"):

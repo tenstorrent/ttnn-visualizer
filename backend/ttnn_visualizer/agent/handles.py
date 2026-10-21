@@ -263,13 +263,29 @@ def _readable_tables(profiler_path: Optional[str]) -> frozenset:
         connection.close()
 
 
-def _csv_columns(path: Path) -> frozenset:
+# Columns tt-perf-report requires before it can produce a report without exiting.
+TOP_OPS_REQUIRED_COLUMNS = frozenset({"OP CODE", "OP TYPE", "DEVICE ID"})
+
+
+def _csv_columns(path: Optional[Path]) -> frozenset:
     """The CSV's header names, or nothing when it cannot be read."""
+    if path is None:
+        return frozenset()
     try:
         with path.open(newline="") as source:
             return frozenset(next(csv.reader(source), []))
     except (OSError, UnicodeDecodeError, csv.Error):
         return frozenset()
+
+
+def _has_perf_data_row(path: Optional[Path]) -> bool:
+    """Whether the CSV decodes cleanly and has at least one row after the header."""
+    if path is None:
+        return False
+    try:
+        return len(path.read_text().strip().split("\n")) >= 2
+    except (OSError, UnicodeDecodeError):
+        return False
 
 
 def _perf_csv(instance: Instance) -> Optional[Path]:
@@ -288,8 +304,7 @@ def _perf_csv(instance: Instance) -> Optional[Path]:
 
 def perf_csv_columns(instance: Instance) -> frozenset:
     """The header of the ops perf CSV the tools read, or nothing without one."""
-    perf_csv = _perf_csv(instance)
-    return frozenset() if perf_csv is None else _csv_columns(perf_csv)
+    return _csv_columns(_perf_csv(instance))
 
 
 def _inventory(instance: Instance) -> Dict[str, object]:
@@ -306,12 +321,17 @@ def _inventory(instance: Instance) -> Dict[str, object]:
         (available if present else missing).append(name)
 
     perf_csv = _perf_csv(instance)
-    perf_columns = _csv_columns(perf_csv) if perf_csv is not None else frozenset()
-    record("top_ops", bool(perf_columns))
+    perf_columns = _csv_columns(perf_csv)
+    # Both tools run tt-perf-report, which needs its key columns and a data row.
+    perf_ready = TOP_OPS_REQUIRED_COLUMNS <= perf_columns and _has_perf_data_row(
+        perf_csv
+    )
+    record("top_ops", perf_ready)
     # Older captures carry neither column, and every count would then be zero.
     record(
         "program_cache",
-        {PROGRAM_HASH_COLUMN, PROGRAM_CACHE_HIT_COLUMN} <= perf_columns,
+        perf_ready
+        and {PROGRAM_HASH_COLUMN, PROGRAM_CACHE_HIT_COLUMN} <= perf_columns,
     )
 
     performance_path = instance.performance_path

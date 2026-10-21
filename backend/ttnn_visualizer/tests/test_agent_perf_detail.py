@@ -845,17 +845,44 @@ class TestProgramCacheInventory:
     def test_it_is_answerable_only_with_both_program_columns(
         self, tmp_path, columns, answerable
     ):
-        header = ",".join(["OP CODE", *columns])
-        (tmp_path / "ops_perf_results.csv").write_text(f"{header}\n", encoding="utf-8")
+        write_ops_perf(
+            tmp_path,
+            [{**row, **{col: "1" for col in columns}} for row in smoke_rows()],
+        )
 
         loaded = load_report(ReportRegistry(), performance_path=str(tmp_path))
 
+        assert "top_ops" in loaded["answerable"]
         assert ("program_cache" in loaded["answerable"]) is answerable
 
     @pytest.mark.parametrize(
         "content",
-        [b"", _NOT_UTF_8],
-        ids=["empty", "not-utf-8"],
+        [
+            b"",
+            b" \n",
+            b",\n",
+            _NOT_UTF_8,
+            f"OP CODE,OP TYPE,DEVICE ID,{PROGRAM_HASH_COLUMN},{PROGRAM_CACHE_HIT_COLUMN}\n".encode(
+                "utf-8"
+            ),
+            f"OP CODE,OP TYPE,GLOBAL CALL COUNT,{PROGRAM_HASH_COLUMN},{PROGRAM_CACHE_HIT_COLUMN}\nMatmul,tt_dnn_device,1,a,True\n".encode(
+                "utf-8"
+            ),
+            (
+                f"OP CODE,OP TYPE,DEVICE ID,{PROGRAM_HASH_COLUMN},{PROGRAM_CACHE_HIT_COLUMN}\n"
+                + ("Matmul,tt_dnn_device,0,a,True\n" * 400)
+            ).encode("utf-8")
+            + b"Matmul \xb5s,tt_dnn_device,0,a,True\n",
+        ],
+        ids=[
+            "empty",
+            "whitespace-only",
+            "comma-only",
+            "not-utf-8",
+            "header-only",
+            "missing-device-id",
+            "non-utf-8-past-8k",
+        ],
     )
     def test_a_header_that_cannot_be_read_leaves_it_unanswerable(
         self, tmp_path, content
@@ -864,6 +891,7 @@ class TestProgramCacheInventory:
 
         loaded = load_report(ReportRegistry(), performance_path=str(tmp_path))
 
+        assert "top_ops" not in loaded["answerable"]
         assert "program_cache" not in loaded["answerable"]
 
     @pytest.mark.parametrize(
