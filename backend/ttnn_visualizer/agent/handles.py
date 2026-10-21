@@ -48,6 +48,8 @@ class CacheVariant(str, Enum):
     SOURCE = "source"
     # The detail fields no row of the whole report carries, read once per handle.
     EMPTY_DETAIL_FIELDS = "empty_detail_fields"
+    # Likely DRAM fallbacks by rank, which every `operation_detail` call reads.
+    DRAM_FALLBACKS = "dram_fallbacks"
 
 
 # Snapshots narrowed by a scope -- a signpost range -- kept at once, across every
@@ -225,6 +227,28 @@ TOOL_TABLES: Dict[str, frozenset] = {
     # where `query_stack_traces` now guards like its neighbours rather than letting
     # SQLite's `no such table` reach the agent. #2021
     "operation_provenance": frozenset({"operations", "operation_arguments"}),
+    # The errors table is optional: a report that predates it is answered with a caveat.
+    "errors": frozenset({"operations"}),
+    "dram_fallbacks": frozenset(
+        {
+            "operations",
+            "operation_arguments",
+            "tensors",
+            "input_tensors",
+            "output_tensors",
+        }
+    ),
+    "l1_peak": frozenset(
+        {
+            "operations",
+            "captured_graph",
+            "buffers",
+            "devices",
+            "tensors",
+            "input_tensors",
+            "output_tensors",
+        }
+    ),
 }
 
 

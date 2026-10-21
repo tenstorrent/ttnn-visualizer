@@ -18,7 +18,14 @@ import logging
 import sys
 from typing import Callable, Dict, List, Optional, TextIO
 
-from ttnn_visualizer.agent import app_links, linking, operations, perf_detail, tools
+from ttnn_visualizer.agent import (
+    app_links,
+    failures,
+    linking,
+    operations,
+    perf_detail,
+    tools,
+)
 from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_LIMIT
 from ttnn_visualizer.agent.handles import (
     ReportRegistry,
@@ -314,7 +321,10 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "generates the performance report and reads every captured graph, "
                 "which can take seconds on a large capture; later calls, and "
                 "top_ops, reuse both. include adds top_ops's field groups to each "
-                "perf_rows entry."
+                "perf_rows entry. When the operation recorded an error, error carries "
+                "it as the errors tool does, and dram_fallback says when it likely "
+                "fell back to DRAM; the first call reads every operation's tensors to "
+                "find those, and later calls reuse them."
             ),
             "schema": {
                 "type": "object",
@@ -337,9 +347,9 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "within each type, with that type's largest footprint and the "
                 "device's L1 geometry. A floor, not the peak: the buffers table "
                 "records tensor allocations only, so circular buffers and tensors "
-                "allocated and freed inside one operation are absent -- do not use "
-                "it to answer "
-                "an out-of-memory question. Sizes are bytes per bank and are never "
+                "allocated and freed inside one operation are absent -- for an "
+                "out-of-memory question read errors and l1_peak instead. Sizes are "
+                "bytes per bank and are never "
                 "added across memory types, whose bank counts differ. Comparable to "
                 "l1_bank_size; a device-wide total cannot be derived from the "
                 "response, and the report carries no DRAM capacity."
@@ -417,6 +427,80 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
             "handler": lambda arguments: app_links.with_operation_link_template(
                 registry,
                 operations.tensor_flow(registry, **arguments),
+            ),
+        },
+        McpToolName.ERRORS: {
+            "description": (
+                "What went wrong in the run: the errors the report recorded, in order. "
+                "An incomplete_operation error is an operation that started and never "
+                "completed, which is where the run most likely crashed. Each error "
+                "names its operation, the device operations whose launch did not "
+                "complete, and, for one of tt-metal's allocation failures, the "
+                "failure's figures and a diagnosis of why it did not fit: not enough "
+                "free space, fragmented, larger than an empty bank, circular buffers "
+                "past the end of L1 or overlapping an L1 buffer. Start here for a "
+                "crash or an out-of-memory question, then read l1_peak."
+            ),
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "handle": {"type": "string"},
+                    "limit": _LIMIT_SCHEMA,
+                    "rank": _RANK_SCHEMA,
+                },
+                "required": ["handle"],
+            },
+            "handler": lambda arguments: app_links.with_operation_link_template(
+                registry,
+                failures.errors(registry, **arguments),
+            ),
+        },
+        McpToolName.DRAM_FALLBACKS: {
+            "description": (
+                "Operations that likely fell back from L1 to DRAM, in operation "
+                "order. Inferred, since tt-metal records no fallback: either the "
+                "operation's memory config arguments asked for L1 and its outputs "
+                "landed in DRAM, or it ran just after a same-named operation failed "
+                "to allocate L1. Reads every operation's arguments and tensors."
+            ),
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "handle": {"type": "string"},
+                    "limit": _LIMIT_SCHEMA,
+                    "rank": _RANK_SCHEMA,
+                },
+                "required": ["handle"],
+            },
+            "handler": lambda arguments: app_links.with_operation_link_template(
+                registry,
+                failures.dram_fallbacks(registry, **arguments),
+            ),
+        },
+        McpToolName.L1_PEAK: {
+            "description": (
+                "The run's L1 peak in bytes per bank and what it is made of: circular "
+                "buffers, tensors allocated and freed inside the operation, tensors "
+                "that persist, and stale tensors still allocated after their last "
+                "consumer -- the only part freeing earlier would help. Names the "
+                "operation holding it, its largest residents, and the operations "
+                "closest to it, one per distinct composition. This is the figure for "
+                "an out-of-memory question; memory_profile is a floor. Replays every "
+                "captured graph, which can take seconds on a large capture. Withheld, "
+                "with the reason, when the replay exceeds the device's L1."
+            ),
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "handle": {"type": "string"},
+                    "limit": _LIMIT_SCHEMA,
+                    "rank": _RANK_SCHEMA,
+                },
+                "required": ["handle"],
+            },
+            "handler": lambda arguments: app_links.with_operation_link_template(
+                registry,
+                failures.l1_peak(registry, **arguments),
             ),
         },
     }

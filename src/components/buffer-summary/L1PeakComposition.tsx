@@ -47,6 +47,7 @@ function L1PeakComposition() {
     );
 
     const topOperations = useMemo(() => {
+        // Mirrored as `_top_operations` in `backend/ttnn_visualizer/agent/failures.py`.
         // resnet50 runs the same layer stack three times, so an undeduped ranking spends all
         // ten rows on one loop body — operations 130 and 229 are byte-identical. Keep the first
         // occurrence of each distinct composition and note how many it stands for.

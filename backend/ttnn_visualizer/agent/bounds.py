@@ -18,6 +18,11 @@ MAX_LIMIT = 100
 MAX_DETAILED_LIMIT = 25
 
 
+# The captured graph a tool will read in one go. The largest real total across 85 local
+# captures is 55.6 MB, so this refuses a pathological file, never a real one.
+MAX_CAPTURED_GRAPH_CHARS = 1 << 30
+
+
 def bounded(limit: Optional[int], maximum: int = MAX_LIMIT) -> int:
     """Clamp a caller's limit into [1, maximum], defaulting when unset.
 
@@ -34,4 +39,10 @@ def bounded(limit: Optional[int], maximum: int = MAX_LIMIT) -> int:
     return max(1, min(requested, maximum))
 
 
-__all__ = ["DEFAULT_LIMIT", "MAX_DETAILED_LIMIT", "MAX_LIMIT", "bounded"]
+__all__ = [
+    "DEFAULT_LIMIT",
+    "MAX_CAPTURED_GRAPH_CHARS",
+    "MAX_DETAILED_LIMIT",
+    "MAX_LIMIT",
+    "bounded",
+]

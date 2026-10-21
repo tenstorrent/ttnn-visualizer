@@ -907,6 +907,17 @@ def tensor_flow(
     return result
 
 
+def rank_caveat(scope: RankScope) -> Optional[str]:
+    """The caveat every database tool's answer carries on a multi-host report."""
+    if scope.multi_host and scope.rank is not None:
+        return (
+            f"This is a multi-host report read at rank {scope.rank} only. "
+            "Operation ids restart per rank, so figures here describe that rank "
+            "rather than the job."
+        )
+    return None
+
+
 def _caveats(scope: RankScope, devices: Optional[Set[int]] = None) -> Dict[str, str]:
     """The caveats a response needs, composed from what it actually returned.
 
@@ -916,13 +927,7 @@ def _caveats(scope: RankScope, devices: Optional[Set[int]] = None) -> Dict[str, 
     came from rather than stated unconditionally -- a caveat that is always
     present is one an agent learns to skip.
     """
-    caveats: List[str] = []
-    if scope.multi_host and scope.rank is not None:
-        caveats.append(
-            f"This is a multi-host report read at rank {scope.rank} only. "
-            "Operation ids restart per rank, so figures here describe that rank "
-            "rather than the job."
-        )
+    caveats: List[str] = [caveat] if (caveat := rank_caveat(scope)) else []
     devices = devices or set()
     if len(devices) > 1:
         caveats.append(
@@ -947,6 +952,7 @@ __all__ = [
     "operation_detail",
     "operation_provenance",
     "profiler_db",
+    "rank_caveat",
     "rank_scope",
     "scoped",
     "tensor_flow",

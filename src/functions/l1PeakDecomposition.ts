@@ -252,6 +252,7 @@ function measure(
  * Circular buffers and intra-op intermediates are a large share of peak L1 across the
  * local report corpus and appear nowhere in the post-op `buffers` table, so a
  * decomposition built from that table alone describes a minority of the peak. #2025
+ * Mirrored as `build_l1_peak` in `backend/ttnn_visualizer/agent/l1_peak.py`.
  */
 export function buildL1PeakDecomposition({
     operations,
