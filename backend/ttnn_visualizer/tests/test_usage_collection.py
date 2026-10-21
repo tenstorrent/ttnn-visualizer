@@ -77,9 +77,7 @@ def _exported_series(config=None, *, log_path=None) -> str:
     if snapshot is None:
         return ""
     assert resolved.machine_id is not None
-    return _flatten(
-        build_otlp_payload(snapshot, resolved.machine_id, start_time_ns=1, time_ns=2)
-    )
+    return _flatten(build_otlp_payload(snapshot, resolved.machine_id, time_ns=2))
 
 
 def _health_value(metrics: str, suffix: str) -> int:
@@ -864,7 +862,6 @@ def test_payload_matches_the_privacy_reviewed_golden_output(tmp_path):
                 {"key": key, "value": {"stringValue": label}}
                 for key, label in labels.items()
             ],
-            "startTimeUnixNano": "1000",
             "timeUnixNano": "2000",
             "asInt": str(value),
         }
@@ -887,9 +884,7 @@ def test_payload_matches_the_privacy_reviewed_golden_output(tmp_path):
             "gauge": {"dataPoints": [point(value, machine_id=machine_id)]},
         }
 
-    assert build_otlp_payload(
-        snapshot, machine_id, start_time_ns=1000, time_ns=2000
-    ) == {
+    assert build_otlp_payload(snapshot, machine_id, time_ns=2000) == {
         "resourceMetrics": [
             {
                 "resource": {
@@ -1038,7 +1033,7 @@ def test_push_sends_the_counters_with_the_auth_token(
     )
     record_event(EventLogEvent.VIEW_OPENED, view=EventLogView.OPERATIONS)
 
-    assert push_usage_metrics(start_time_ns=1) is True
+    assert push_usage_metrics() is True
 
     ((path, headers, body),) = otlp_server.requests
     assert path == "/v1/metrics"
@@ -1058,7 +1053,7 @@ def test_push_without_a_token_is_unauthenticated(
 ):
     _opt_in(usage_collection_config_path, remote_write_endpoint=otlp_server.endpoint)
 
-    assert push_usage_metrics(start_time_ns=1) is True
+    assert push_usage_metrics() is True
 
     ((_path, headers, _body),) = otlp_server.requests
     assert "Authorization" not in headers
@@ -1073,7 +1068,7 @@ def test_push_keeps_the_token_and_body_off_the_command_line(
         remote_write_auth_token="secret-token",
     )
 
-    assert push_usage_metrics(start_time_ns=1) is True
+    assert push_usage_metrics() is True
 
     ((command, kwargs),) = curl_calls
     # ``-q`` first, or curl reads ``~/.curlrc`` before anything else.
@@ -1101,7 +1096,7 @@ def test_push_needs_a_valid_endpoint(
 ):
     _opt_in(usage_collection_config_path, **values)
 
-    assert push_usage_metrics(start_time_ns=1) is False
+    assert push_usage_metrics() is False
     assert curl_calls == []
 
 
@@ -1112,7 +1107,7 @@ def test_push_waits_for_a_prepared_identity(
         usage_collection_config_path, enabled=True, remote_write_endpoint=_ENDPOINT
     )
 
-    assert push_usage_metrics(start_time_ns=1) is False
+    assert push_usage_metrics() is False
     assert curl_calls == []
 
 
@@ -1124,7 +1119,7 @@ def test_push_stops_once_the_config_is_disabled(
         usage_collection_config_path, enabled=False, remote_write_endpoint=_ENDPOINT
     )
 
-    assert push_usage_metrics(start_time_ns=1) is False
+    assert push_usage_metrics() is False
     assert curl_calls == []
 
 
@@ -1136,7 +1131,7 @@ def test_push_stops_at_the_recording_opt_out(
     record_event(EventLogEvent.VIEW_OPENED, view=EventLogView.OPERATIONS)
     _enable_recording_opt_out(opt_out, monkeypatch)
 
-    assert push_usage_metrics(start_time_ns=1) is False
+    assert push_usage_metrics() is False
     assert curl_calls == []
 
 
@@ -1161,11 +1156,80 @@ def test_push_raises_on_a_response_other_than_success(
         )
 
         with pytest.raises(OSError, match=f"HTTP {status}"):
-            push_usage_metrics(start_time_ns=1)
+            push_usage_metrics()
     finally:
         server.close()
 
     assert [path for path, _headers, _body in server.requests] == ["/v1/metrics"]
+
+
+@_requires_curl
+def test_push_sends_braces_and_brackets_in_the_endpoint_literally(
+    event_log_directory, usage_collection_config_path, otlp_server
+):
+    # Without ``globoff`` curl would expand these into two requests, each carrying
+    # the token.
+    _opt_in(
+        usage_collection_config_path,
+        remote_write_endpoint=otlp_server.endpoint + "/{a,b}[1-2]",
+        remote_write_auth_token="secret-token",
+    )
+
+    assert push_usage_metrics() is True
+
+    assert [path for path, _headers, _body in otlp_server.requests] == [
+        "/v1/metrics/{a,b}[1-2]"
+    ]
+
+
+@pytest.mark.parametrize("status", ["200400", "2000", "20", ""])
+def test_push_needs_exactly_one_success_status(
+    event_log_directory, usage_collection_config_path, monkeypatch, status
+):
+    _opt_in(usage_collection_config_path, remote_write_endpoint=_ENDPOINT)
+    monkeypatch.setattr(
+        usage_metrics.subprocess,
+        "run",
+        lambda command, **_kwargs: subprocess.CompletedProcess(
+            command, 0, stdout=status, stderr=""
+        ),
+    )
+
+    with pytest.raises(OSError, match="endpoint answered HTTP"):
+        push_usage_metrics()
+
+
+@_requires_curl
+def test_relaunching_continues_the_totals_without_a_start_time(
+    event_log_directory, usage_collection_config_path, otlp_server
+):
+    """A second launch's total must read as following the first, not as a reset."""
+    _opt_in(usage_collection_config_path, remote_write_endpoint=otlp_server.endpoint)
+    record_event(EventLogEvent.VIEW_OPENED, view=EventLogView.OPERATIONS)
+
+    first = UsageMetricsExporter(interval_seconds=3600)
+    first._push()
+    # A fresh launcher process starts with no cached aggregate.
+    usage_metrics._metrics_state = usage_metrics._MetricsState()
+    record_event(EventLogEvent.VIEW_OPENED, view=EventLogView.OPERATIONS)
+    second = UsageMetricsExporter(interval_seconds=3600)
+    second._push()
+
+    def _view_points(body):
+        metrics = json.loads(body)["resourceMetrics"][0]["scopeMetrics"][0]["metrics"]
+        (metric,) = [
+            metric
+            for metric in metrics
+            if metric["name"] == "ttnn_visualizer_view_opened_total"
+        ]
+        return metric["sum"]["dataPoints"]
+
+    (first_point,), (second_point,) = [
+        _view_points(body) for _path, _headers, body in otlp_server.requests
+    ]
+    assert (first_point["asInt"], second_point["asInt"]) == ("1", "2")
+    assert "startTimeUnixNano" not in first_point
+    assert "startTimeUnixNano" not in second_point
 
 
 @_requires_curl
@@ -1178,7 +1242,7 @@ def test_push_sends_a_token_with_quotes_and_backslashes_verbatim(
         remote_write_auth_token='a"b\\c',
     )
 
-    assert push_usage_metrics(start_time_ns=1) is True
+    assert push_usage_metrics() is True
 
     ((_path, headers, _body),) = otlp_server.requests
     assert headers["Authorization"] == 'Bearer a"b\\c'
@@ -1198,7 +1262,7 @@ def test_push_ignores_the_users_curlrc(
     monkeypatch.setenv("CURL_HOME", str(curl_home))
     _opt_in(usage_collection_config_path, remote_write_endpoint=otlp_server.endpoint)
 
-    assert push_usage_metrics(start_time_ns=1) is True
+    assert push_usage_metrics() is True
 
     ((_path, headers, _body),) = otlp_server.requests
     assert "X-From-Curlrc" not in headers
@@ -1209,7 +1273,7 @@ def test_push_uses_the_requested_timeout(
 ):
     _opt_in(usage_collection_config_path, remote_write_endpoint=_ENDPOINT)
 
-    assert push_usage_metrics(start_time_ns=1, timeout_seconds=2.5) is True
+    assert push_usage_metrics(timeout_seconds=2.5) is True
 
     ((_command, kwargs),) = curl_calls
     options = _curl_options(kwargs["input"])
@@ -1228,7 +1292,7 @@ def test_push_raises_when_curl_times_out(
     monkeypatch.setattr(usage_metrics.subprocess, "run", _time_out)
 
     with pytest.raises(TimeoutError):
-        push_usage_metrics(start_time_ns=1)
+        push_usage_metrics()
 
 
 def test_push_reports_only_curls_first_error_line(
@@ -1251,7 +1315,7 @@ def test_push_reports_only_curls_first_error_line(
     )
 
     with pytest.raises(OSError, match=r"curl exited with 7: curl: \(7\)") as error_info:
-        push_usage_metrics(start_time_ns=1)
+        push_usage_metrics()
 
     assert "secret-token" not in str(error_info.value)
 
@@ -1269,7 +1333,7 @@ def test_push_raises_when_curl_is_missing(
     monkeypatch.setattr(usage_metrics, "CURL_COMMAND", "ttnn-visualizer-no-such-curl")
 
     with pytest.raises(OSError):
-        push_usage_metrics(start_time_ns=1)
+        push_usage_metrics()
 
 
 def test_exporter_pushes_at_start_and_stop(monkeypatch):
@@ -1277,28 +1341,24 @@ def test_exporter_pushes_at_start_and_stop(monkeypatch):
     monkeypatch.setattr(
         usage_metrics,
         "push_usage_metrics",
-        lambda *, start_time_ns, timeout_seconds: pushes.append(
-            (start_time_ns, timeout_seconds)
-        )
-        or True,
+        lambda *, timeout_seconds: pushes.append(timeout_seconds) or True,
     )
 
     exporter = UsageMetricsExporter(interval_seconds=3600).start()
     exporter.stop()
 
-    assert [timeout for _start, timeout in pushes] == [
+    assert pushes == [
         usage_metrics.EXPORT_TIMEOUT_SECONDS,
         usage_metrics.FINAL_PUSH_TIMEOUT_SECONDS,
     ]
-    assert pushes[0][0] == pushes[1][0]
 
 
 def test_exporter_pushes_every_interval(monkeypatch):
     pushes = []
     third_push = threading.Event()
 
-    def _push(*, start_time_ns, timeout_seconds):
-        pushes.append(start_time_ns)
+    def _push(*, timeout_seconds):
+        pushes.append(timeout_seconds)
         if len(pushes) == 3:
             third_push.set()
         return True
@@ -1310,7 +1370,6 @@ def test_exporter_pushes_every_interval(monkeypatch):
     exporter.stop()
 
     assert len(pushes) >= 4
-    assert len(set(pushes)) == 1
 
 
 def test_exporter_stop_skips_the_final_push_while_one_is_in_flight(monkeypatch):
@@ -1318,7 +1377,7 @@ def test_exporter_stop_skips_the_final_push_while_one_is_in_flight(monkeypatch):
     in_flight = threading.Event()
     pushes = []
 
-    def _push(*, start_time_ns, timeout_seconds):
+    def _push(*, timeout_seconds):
         pushes.append(timeout_seconds)
         in_flight.set()
         release.wait(timeout=10)
@@ -1338,7 +1397,7 @@ def test_exporter_stop_skips_the_final_push_while_one_is_in_flight(monkeypatch):
 def test_exporter_logs_a_run_of_failures_once(monkeypatch, caplog):
     outcomes = [OSError("down"), OSError("still down"), True, OSError("down again")]
 
-    def _push(*, start_time_ns, timeout_seconds):
+    def _push(*, timeout_seconds):
         outcome = outcomes.pop(0)
         if isinstance(outcome, Exception):
             raise outcome

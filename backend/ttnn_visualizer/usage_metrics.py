@@ -7,6 +7,7 @@
 import json
 import logging
 import os
+import re
 import subprocess
 import threading
 import time
@@ -197,13 +198,16 @@ def _attributes(labels: MetricLabels) -> list[Dict[str, Any]]:
     return [{"key": name, "value": {"stringValue": value}} for name, value in labels]
 
 
-def _data_point(
-    labels: MetricLabels, value: int, start_time_ns: int, time_ns: int
-) -> Dict[str, Any]:
+def _data_point(labels: MetricLabels, value: int, time_ns: int) -> Dict[str, Any]:
     # 64-bit integers are strings in OTLP JSON, as in every proto3 JSON mapping.
+    #
+    # No ``startTimeUnixNano``: the totals run from the start of a log that outlives
+    # any launch, and that start is not recorded. A launch time would tell receivers
+    # the counter reset at every launch, so they would count the history again.
+    # Without one they take the start as unknown and treat each value as following
+    # the last they saw.
     return {
         "attributes": _attributes(labels),
-        "startTimeUnixNano": str(start_time_ns),
         "timeUnixNano": str(time_ns),
         "asInt": str(value),
     }
@@ -235,7 +239,6 @@ def build_otlp_payload(
     snapshot: UsageMetricsSnapshot,
     machine_id: str,
     *,
-    start_time_ns: int,
     time_ns: int,
 ) -> Dict[str, Any]:
     """An OTLP/HTTP JSON ``ExportMetricsServiceRequest`` for the snapshot.
@@ -252,7 +255,7 @@ def build_otlp_payload(
                 _metric_name(f"{event_name}_total"),
                 f"Cumulative {event_name} events in the local usage log.",
                 [
-                    _data_point(labels, value, start_time_ns, time_ns)
+                    _data_point(labels, value, time_ns)
                     for (_event_name, labels), value in series
                 ],
             )
@@ -264,17 +267,17 @@ def build_otlp_payload(
             _gauge(
                 _metric_name("usage_collector_files_found"),
                 "Whether the local usage event log exists.",
-                _data_point(identity, snapshot.files_found, start_time_ns, time_ns),
+                _data_point(identity, snapshot.files_found, time_ns),
             ),
             _counter(
                 _metric_name("usage_collector_parse_errors_total"),
                 "Cumulative malformed or unsupported lines in the local usage event log.",
-                [_data_point(identity, snapshot.parse_errors, start_time_ns, time_ns)],
+                [_data_point(identity, snapshot.parse_errors, time_ns)],
             ),
             _gauge(
                 _metric_name("usage_collector_scan_errors"),
                 "Whether reading the local usage event log failed.",
-                _data_point(identity, snapshot.scan_errors, start_time_ns, time_ns),
+                _data_point(identity, snapshot.scan_errors, time_ns),
             ),
         ]
     )
@@ -327,7 +330,9 @@ def _post_with_curl(
         lines.append(
             f"header = {_quote_curl_config(f'Authorization: Bearer {auth_token}')}"
         )
-    lines.extend(["silent", "show-error"])
+    # ``globoff`` so ``{}`` and ``[]`` in the endpoint are sent literally rather than
+    # expanded into several authenticated requests.
+    lines.extend(["globoff", "silent", "show-error"])
 
     try:
         result = subprocess.run(
@@ -346,14 +351,14 @@ def _post_with_curl(
         # nothing later can carry request headers into the log.
         reason = next(iter(result.stderr.strip().splitlines()), "")
         raise OSError(f"curl exited with {result.returncode}: {reason}")
+    # Exact, so codes from more than one transfer run together cannot pass as a 2xx.
     status = result.stdout.strip()
-    if not status.startswith("2"):
+    if not re.fullmatch(r"2\d\d", status):
         raise OSError(f"endpoint answered HTTP {status}")
 
 
 def push_usage_metrics(
     *,
-    start_time_ns: int,
     log_path: Optional[Path] = None,
     timeout_seconds: float = EXPORT_TIMEOUT_SECONDS,
 ) -> bool:
@@ -378,7 +383,6 @@ def push_usage_metrics(
     payload = build_otlp_payload(
         snapshot,
         machine_id,
-        start_time_ns=start_time_ns,
         time_ns=time.time_ns(),
     )
     _post_with_curl(
@@ -401,7 +405,6 @@ class UsageMetricsExporter:
 
     def __init__(self, interval_seconds: float = EXPORT_INTERVAL_SECONDS) -> None:
         self._interval_seconds = interval_seconds
-        self._start_time_ns = time.time_ns()
         self._stopping = threading.Event()
         self._failing = False
         self._thread = threading.Thread(
@@ -430,9 +433,7 @@ class UsageMetricsExporter:
 
     def _push(self, timeout_seconds: float = EXPORT_TIMEOUT_SECONDS) -> None:
         try:
-            push_usage_metrics(
-                start_time_ns=self._start_time_ns, timeout_seconds=timeout_seconds
-            )
+            push_usage_metrics(timeout_seconds=timeout_seconds)
         except (OSError, ValueError) as error:
             # Logged once per run of failures rather than every interval.
             if not self._failing:
