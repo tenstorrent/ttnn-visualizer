@@ -18,7 +18,7 @@ import re
 from collections import defaultdict
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Dict, Iterator, List, NamedTuple, Optional, Set, Tuple
+from typing import Callable, Dict, Iterator, List, NamedTuple, Optional, Set, Tuple
 
 from ttnn_visualizer.agent.bounds import MAX_LIMIT, bounded
 from ttnn_visualizer.agent.handles import (
@@ -26,7 +26,7 @@ from ttnn_visualizer.agent.handles import (
     ReportRegistry,
     read_only_connection,
 )
-from ttnn_visualizer.models import Buffer, BufferType, Instance
+from ttnn_visualizer.models import Buffer, BufferType, Instance, Operation
 from ttnn_visualizer.queries import DatabaseQueries
 
 # Every allocation figure derived from `buffers` is in these units, and the
@@ -534,11 +534,19 @@ def find_operations(
     return result
 
 
+# Fields a caller adds to an operation's detail, read on the detail's connection, and
+# the caveat for any it withheld.
+DetailFields = Callable[
+    [DatabaseQueries, RankScope, Operation], Tuple[Dict[str, object], Optional[str]]
+]
+
+
 def operation_detail(
     registry: ReportRegistry,
     handle: str,
     operation_id: int,
     rank: Optional[int] = None,
+    detail_fields: Optional[DetailFields] = None,
 ) -> Dict[str, object]:
     """One operation: its tensors, and what it had allocated at that point."""
     instance = registry.get(handle)
@@ -609,6 +617,9 @@ def operation_detail(
             if wanted_ids
             else {}
         )
+        added, withheld = (
+            detail_fields(queries, scope, operation) if detail_fields else ({}, None)
+        )
 
     def described(tensor_id: int, index: int) -> Dict[str, object]:
         tensor = tensors.get(tensor_id)
@@ -643,7 +654,7 @@ def operation_detail(
     # An operation's arity is small, so this cap is a guard against a malformed
     # report rather than a slice an agent should expect to hit -- which is why
     # the untruncated counts are returned beside the lists.
-    return {
+    result: Dict[str, object] = {
         "handle": handle,
         "operation_id": operation.operation_id,
         "name": operation.name,
@@ -666,6 +677,10 @@ def operation_detail(
         **scope.as_response(),
         **_caveats(scope, {buffer.device_id for buffer in buffers}),
     }
+    result.update(added)
+    if withheld:
+        result["caveat"] = joined_caveat(result.get("caveat"), withheld)
+    return result
 
 
 def memory_profile(
@@ -910,6 +925,17 @@ def tensor_flow(
     return result
 
 
+def rank_caveat(scope: RankScope) -> Optional[str]:
+    """The caveat every database tool's answer carries on a multi-host report."""
+    if scope.multi_host and scope.rank is not None:
+        return (
+            f"This is a multi-host report read at rank {scope.rank} only. "
+            "Operation ids restart per rank, so figures here describe that rank "
+            "rather than the job."
+        )
+    return None
+
+
 def _caveats(scope: RankScope, devices: Optional[Set[int]] = None) -> Dict[str, str]:
     """The caveats a response needs, composed from what it actually returned.
 
@@ -919,37 +945,40 @@ def _caveats(scope: RankScope, devices: Optional[Set[int]] = None) -> Dict[str, 
     came from rather than stated unconditionally -- a caveat that is always
     present is one an agent learns to skip.
     """
-    caveats: List[str] = []
-    if scope.multi_host and scope.rank is not None:
-        caveats.append(
-            f"This is a multi-host report read at rank {scope.rank} only. "
-            "Operation ids restart per rank, so figures here describe that rank "
-            "rather than the job."
-        )
     devices = devices or set()
-    if len(devices) > 1:
-        caveats.append(
-            f"These buffers span {len(devices)} devices "
-            f"({', '.join(str(device) for device in sorted(devices))}), and the "
-            "totals add them together. A per-device figure needs the devices "
-            "separated first."
-        )
+    if len(devices) <= 1:
+        return caveat_field(scope)
+    return caveat_field(
+        scope,
+        f"These buffers span {len(devices)} devices "
+        f"({', '.join(str(device) for device in sorted(devices))}), and the "
+        "totals add them together. A per-device figure needs the devices "
+        "separated first.",
+    )
+
+
+def caveat_field(scope: RankScope, *extra: str) -> Dict[str, str]:
+    """The response's one `caveat`: the rank's, then `extra`; nothing when neither."""
+    caveats = [caveat for caveat in (rank_caveat(scope), *extra) if caveat]
     return {"caveat": " ".join(caveats)} if caveats else {}
 
 
 __all__ = [
     "BUFFER_SIZE_UNIT",
     "BUFFER_TYPE_NAMES",
+    "DetailFields",
     "MAX_ARGUMENT_VALUE_CHARS",
     "RankScope",
     "TENSOR_SIZE_UNIT",
     "ProfilerDatabaseMissingError",
+    "caveat_field",
     "find_operations",
     "joined_caveat",
     "memory_profile",
     "operation_detail",
     "operation_provenance",
     "profiler_db",
+    "rank_caveat",
     "rank_scope",
     "scoped",
     "tensor_flow",

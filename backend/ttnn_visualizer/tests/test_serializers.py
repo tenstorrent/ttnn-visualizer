@@ -22,6 +22,7 @@ from ttnn_visualizer.models import (
     Tensor,
 )
 from ttnn_visualizer.serializers import (
+    rank_or_zero,
     select_error_for_operation,
     select_errors_by_operation,
     serialize_buffer_chunks,
@@ -769,6 +770,48 @@ class TestSerializers(unittest.TestCase):
         ]
 
         self.assertEqual(result, expected)
+
+
+def _dram_tensor(tensor_id, rank=0):
+    return Tensor(
+        tensor_id,
+        "shape",
+        "dtype",
+        "layout",
+        "MemoryConfig(memory_layout=TensorMemoryLayout::INTERLEAVED,buffer_type=BufferType::DRAM,shard_spec=std::nullopt)",
+        0,
+        1000,
+        BufferType.DRAM,
+        [],
+        rank=rank,
+    )
+
+
+class TestRankOrZero(unittest.TestCase):
+    def test_the_exact_rank_wins_over_rank_zero(self):
+        self.assertEqual(rank_or_zero({(1, 0): "zero", (1, 2): "two"}, 1, 2), "two")
+
+    def test_rank_zero_stands_in_for_a_missing_rank(self):
+        self.assertEqual(rank_or_zero({(1, 0): "zero"}, 1, 2), "zero")
+
+    def test_neither_is_none(self):
+        self.assertIsNone(rank_or_zero({(2, 0): "other"}, 1, 2))
+
+    def test_a_rank_row_reads_rank_zero_tensors_and_links(self):
+        """Tables written before the rank column hold rank 0 for every rank."""
+        inputs, _ = serialize_inputs_outputs(
+            [InputTensor(1, 0, 7, rank=1)],
+            [],
+            [ProducersConsumers(7, [1], [2])],
+            {(7, 0): _dram_tensor(7)},
+        )
+        tensors = serialize_tensors(
+            [_dram_tensor(7, rank=1)], [ProducersConsumers(7, [1], [2])], [], []
+        )
+
+        self.assertEqual([entry["id"] for entry in inputs[1]], [7])
+        self.assertEqual(inputs[1][0]["consumers"], [2])
+        self.assertEqual(tensors[0]["consumers"], [2])
 
 
 def _error_record(operation_id, operation_name, message="boom", rank=0):

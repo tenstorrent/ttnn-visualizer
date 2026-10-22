@@ -2,6 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
+// Mirrored in `backend/ttnn_visualizer/agent/allocation_failures.py`.
+
 /** The allocation failures tt-metal raises, named after the check that raises each. */
 export enum AllocationFailureKind {
     // `tt_metal/impl/allocator/bank_manager.cpp`

@@ -132,7 +132,7 @@ This is the intentionally revisable v1 definition of deliberate activity used fo
 
 Recorded by `ttnn-visualizer-mcp` when a registered tool reaches its handler, not by the SPA. It answers which tools are chosen and how often they refuse or fail (Q4 and Q5 in #1819). It does not fire on `initialize`, `ping`, `tools/list`, unknown tool names, or malformed `params`/`arguments`: only calls that get as far as a handler are counted.
 
-- `tool`: `load_report`, `top_ops`, `op_breakdown`, `program_cache`, `zone_timings`, `diff_reports`, `find_operations`, `operation_detail`, `memory_profile`, `tensor_flow`, `operation_provenance`.
+- `tool`: `load_report`, `top_ops`, `op_breakdown`, `program_cache`, `zone_timings`, `diff_reports`, `find_operations`, `operation_detail`, `memory_profile`, `tensor_flow`, `operation_provenance`, `errors`, `dram_fallbacks`, `l1_peak`.
 - `outcome`: `ok`, `refused`, `error`.
 
 `refused` is a tool declining a well-formed call it cannot answer (unknown handle, argument out of range). `error` is an unexpected failure the server did not anticipate.

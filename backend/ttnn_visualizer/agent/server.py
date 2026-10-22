@@ -19,7 +19,14 @@ import math
 import sys
 from typing import Callable, Dict, List, Optional, TextIO
 
-from ttnn_visualizer.agent import app_links, linking, operations, perf_detail, tools
+from ttnn_visualizer.agent import (
+    app_links,
+    failures,
+    linking,
+    operations,
+    perf_detail,
+    tools,
+)
 from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_LIMIT
 from ttnn_visualizer.agent.handles import (
     ReportRegistry,
@@ -59,8 +66,9 @@ INSTRUCTIONS = (
     "them the report can answer, its signposts, architecture and device count.\n"
     "- Two id spaces overlap. A performance row's id (a top_ops or perf_rows row's "
     "id, or any *_perf_id) numbers rows of the performance CSV. operation_id is the "
-    "profiler database's: find_operations, memory_profile and tensor_flow return it, "
-    "operation_detail and operation_provenance take it. One passed as the other "
+    "profiler database's: find_operations, memory_profile, tensor_flow, errors, "
+    "dram_fallbacks and l1_peak return it, operation_detail and "
+    "operation_provenance take it. One passed as the other "
     "answers about a different operation; pass a top_ops row's operation_id on.\n"
     "- Device time and op-to-op gap are microseconds; an operation's duration is "
     "host seconds. Allocations are bytes per bank, never added across buffer types; "
@@ -99,6 +107,15 @@ _RANK_SCHEMA = {
         "Host rank to read, on a multi-host report. Defaults to 0; ids restart "
         "per rank, so reading every rank at once collides them."
     ),
+}
+_HANDLE_LIMIT_RANK_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "handle": {"type": "string"},
+        "limit": _LIMIT_SCHEMA,
+        "rank": _RANK_SCHEMA,
+    },
+    "required": ["handle"],
 }
 # The bounds `tt-perf-report --start-signpost/--end-signpost` take; see
 # `tools.SignpostRange`. #2122
@@ -380,7 +397,11 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "total_percent, which also counts op-to-op gaps. At the top level, "
                 "device_time, device_time_share_percent and slowest_perf_id cover "
                 "all of the operation's rows, and are absent when none has a device "
-                "time. include adds top_ops's field groups to each perf_rows entry."
+                "time. include adds top_ops's field groups to each perf_rows entry. "
+                "When the operation recorded an error, error carries it as the errors "
+                "tool does, and dram_fallback says when it likely fell back to DRAM; "
+                "the first call reads every operation's tensors to find those, and "
+                "later calls reuse them."
             ),
             "schema": {
                 "type": "object",
@@ -404,9 +425,9 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "within each type, with that type's largest footprint and the "
                 "device's L1 geometry. A floor, not the peak: the buffers table "
                 "records tensor allocations only, so circular buffers and tensors "
-                "allocated and freed inside one operation are absent -- do not use "
-                "it to answer "
-                "an out-of-memory question. Sizes are bytes per bank and are never "
+                "allocated and freed inside one operation are absent -- for an "
+                "out-of-memory question read errors and l1_peak instead. Sizes are "
+                "bytes per bank and are never "
                 "added across memory types, whose bank counts differ. Comparable to "
                 "l1_bank_size; a device-wide total cannot be derived from the "
                 "response, and the report carries no DRAM capacity."
@@ -481,6 +502,62 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
             "handler": lambda arguments: app_links.with_operation_link_template(
                 registry,
                 operations.tensor_flow(registry, **arguments),
+            ),
+        },
+        McpToolName.ERRORS: {
+            "title": "Recorded errors",
+            "description": (
+                "What went wrong in the run: the errors the report recorded, in order. "
+                "An incomplete_operation error is an operation that started and never "
+                "completed, which is where the run most likely crashed. Each error "
+                "names its operation, the device operations whose launch did not "
+                "complete, and, for one of tt-metal's allocation failures, the "
+                "failure's figures and a diagnosis of why it did not fit: not enough "
+                "free space, fragmented, larger than an empty bank, circular buffers "
+                "past the end of L1 or overlapping an L1 buffer. Start here for a "
+                "crash or an out-of-memory question, then read l1_peak."
+            ),
+            "schema": _HANDLE_LIMIT_RANK_SCHEMA,
+            "handler": lambda arguments: app_links.with_operation_link_template(
+                registry,
+                failures.errors(registry, **arguments),
+            ),
+        },
+        McpToolName.DRAM_FALLBACKS: {
+            "title": "Likely DRAM fallbacks",
+            "description": (
+                "Operations that likely fell back from L1 to DRAM, in operation "
+                "order. Inferred, since tt-metal records no fallback: either the "
+                "operation's memory config arguments asked for L1 and its outputs "
+                "landed in DRAM, or it ran just after a same-named operation failed "
+                "to allocate L1. Reads every operation's arguments and tensors."
+            ),
+            "schema": _HANDLE_LIMIT_RANK_SCHEMA,
+            "handler": lambda arguments: app_links.with_operation_link_template(
+                registry,
+                failures.dram_fallbacks(registry, **arguments),
+            ),
+        },
+        McpToolName.L1_PEAK: {
+            "title": "L1 peak breakdown",
+            "description": (
+                "The run's L1 peak in bytes per bank and what it is made of: circular "
+                "buffers, tensors allocated and freed inside the operation, tensors "
+                "that persist, and stale tensors still allocated after their last "
+                "consumer -- the only part freeing earlier would help. Names the "
+                "operation holding it, its largest residents, and the operations "
+                "closest to it, one per distinct composition, each with up to "
+                f"{failures.MAX_REPEAT_OPERATION_IDS} of the operations that repeat it "
+                "and a count of them all. This is the figure for "
+                "an out-of-memory question; memory_profile is a floor. The first call "
+                "on a handle replays every captured graph, which can take seconds on "
+                "a large capture; later calls, at any limit, reuse it. Withheld, "
+                "with the reason, when the replay exceeds the device's L1."
+            ),
+            "schema": _HANDLE_LIMIT_RANK_SCHEMA,
+            "handler": lambda arguments: app_links.with_operation_link_template(
+                registry,
+                failures.l1_peak(registry, **arguments),
             ),
         },
     }
