@@ -942,15 +942,21 @@ def _caveats(scope: RankScope, devices: Optional[Set[int]] = None) -> Dict[str, 
     came from rather than stated unconditionally -- a caveat that is always
     present is one an agent learns to skip.
     """
-    caveats: List[str] = [caveat] if (caveat := rank_caveat(scope)) else []
     devices = devices or set()
-    if len(devices) > 1:
-        caveats.append(
-            f"These buffers span {len(devices)} devices "
-            f"({', '.join(str(device) for device in sorted(devices))}), and the "
-            "totals add them together. A per-device figure needs the devices "
-            "separated first."
-        )
+    if len(devices) <= 1:
+        return caveat_field(scope)
+    return caveat_field(
+        scope,
+        f"These buffers span {len(devices)} devices "
+        f"({', '.join(str(device) for device in sorted(devices))}), and the "
+        "totals add them together. A per-device figure needs the devices "
+        "separated first.",
+    )
+
+
+def caveat_field(scope: RankScope, *extra: str) -> Dict[str, str]:
+    """The response's one `caveat`: the rank's, then `extra`; nothing when neither."""
+    caveats = [caveat for caveat in (rank_caveat(scope), *extra) if caveat]
     return {"caveat": " ".join(caveats)} if caveats else {}
 
 
@@ -962,6 +968,7 @@ __all__ = [
     "RankScope",
     "TENSOR_SIZE_UNIT",
     "ProfilerDatabaseMissingError",
+    "caveat_field",
     "find_operations",
     "joined_caveat",
     "memory_profile",

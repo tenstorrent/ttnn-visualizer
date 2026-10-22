@@ -2,11 +2,13 @@
 #
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-"""The result caps the tool surface enforces.
+"""The bounds the tool surface enforces: result caps, and how much captured graph a
+tool reads at once.
 
-Shared rather than declared per module: `server` quotes these numbers to an agent
-in every limit schema, so a second copy would eventually promise one cap and
-enforce another. #2012
+Shared rather than declared per module: `server` quotes the caps to an agent in every
+limit schema, so a second copy would eventually promise one cap and enforce another.
+#2012 The graph guard is shared because the link and the failure tools read the same
+column.
 """
 
 from typing import TYPE_CHECKING, Any, Dict, Optional

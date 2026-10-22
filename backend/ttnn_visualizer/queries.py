@@ -716,8 +716,12 @@ class DatabaseQueries:
             yield BufferChunk(*row)
 
     def query_tensors(
-        self, filters: Optional[Dict[str, Any]] = None
+        self,
+        filters: Optional[Dict[str, Any]] = None,
+        size_from_buffers: bool = True,
     ) -> Generator[Tensor, None, None]:
+        """`size_from_buffers=False` leaves `size` None where `tensors` has no column
+        for it, skipping the input, output and `buffers` joins that find one."""
         tensor_columns = self._get_table_columns("tensors")
         size_on_tensors = "size" in tensor_columns
         rank_on_tensors = "rank" in tensor_columns
@@ -757,8 +761,10 @@ class DatabaseQueries:
             select_parts.append("t.rank")
         if size_on_tensors:
             select_parts.append("t.size")
-        else:
+        elif size_from_buffers:
             select_parts.append("b.max_size_per_bank AS size")
+        else:
+            select_parts.append("NULL AS size")
 
         if device_tensors_exists:
             select_parts.append(
@@ -798,7 +804,7 @@ class DatabaseQueries:
         if rank_on_tensors:
             group_by += ", t.rank"
 
-        if size_on_tensors:
+        if size_on_tensors or not size_from_buffers:
             join_lines = []
             if device_tensors_exists:
                 join_lines.append(f"LEFT JOIN device_tensors dt ON {dt_join}")

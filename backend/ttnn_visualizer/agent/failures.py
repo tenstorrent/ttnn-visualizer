@@ -35,8 +35,8 @@ from ttnn_visualizer.agent.operations import (
     BUFFER_SIZE_UNIT,
     RankScope,
     UnattributableRankError,
+    caveat_field,
     profiler_db,
-    rank_caveat,
     rank_scope,
     refuse_unattributable,
     scoped,
@@ -72,7 +72,6 @@ MAX_PEAK_CONTRIBUTORS = 20
 MAX_REPEAT_OPERATION_IDS = 20
 # The tables behind each answer's figures, so its rank refusal covers every one.
 # `query_tensors` joins `device_tensors` by id alone where it has no `rank`.
-_ERROR_TABLES = ("errors", "captured_graph")
 _FALLBACK_TABLES = (
     "operation_arguments",
     "tensors",
@@ -80,6 +79,15 @@ _FALLBACK_TABLES = (
     "input_tensors",
     "output_tensors",
     "errors",
+)
+# Not `device_tensors`: the replay reads a tensor's own address, never its devices'.
+_L1_PEAK_TABLES = (
+    "captured_graph",
+    "buffers",
+    "tensors",
+    "input_tensors",
+    "output_tensors",
+    "devices",
 )
 
 ERRORS_NOTE = (
@@ -152,27 +160,23 @@ def _operations(queries: DatabaseQueries, scope: RankScope) -> List[Operation]:
 def _graphs(
     queries: DatabaseQueries,
     scope: RankScope,
+    reader: str,
     operation_ids: Optional[List[int]] = None,
 ) -> Dict[Tuple[int, int], str]:
-    """Raw captured graphs, as `serialize_operations` keys them; a later row wins."""
+    """Raw captured graphs, as `serialize_operations` keys them; a later row wins.
+
+    Refused past `MAX_CAPTURED_GRAPH_CHARS`, measured with the filters the read uses.
+    """
     filters = (
         scoped(queries, "captured_graph", scope)
         if operation_ids is None
         else scoped(queries, "captured_graph", scope, operation_id=operation_ids)
     )
+    ensure_graph_readable(queries, filters, reader)
     return {
         (graph.operation_id, graph.rank): graph.captured_graph
         for graph in queries.query_device_operations(filters)
     }
-
-
-def _graphs_checked(
-    queries: DatabaseQueries, scope: RankScope, operation_ids: List[int]
-) -> Dict[Tuple[int, int], str]:
-    """`_graphs` for these operations, refused past `MAX_CAPTURED_GRAPH_CHARS`."""
-    filters = scoped(queries, "captured_graph", scope, operation_id=operation_ids)
-    ensure_graph_readable(queries, filters, "an error lookup")
-    return _graphs(queries, scope, operation_ids)
 
 
 def _graph_for(
@@ -235,9 +239,7 @@ def errors(
     with profiler_db(instance) as queries:
         scope = rank_scope(queries, rank)
         has_errors_table = queries.has_table("errors")
-        # Without an errors row no graph is read, so there is nothing to misattribute.
-        if has_errors_table:
-            refuse_unattributable(queries, scope, *_ERROR_TABLES)
+        refuse_unattributable(queries, scope, "errors")
         records = _error_records(queries, scope)
         operations = (
             list(
@@ -262,7 +264,11 @@ def errors(
                 if id(error) in operation_by_error
             }
         )
-        graphs = _graphs_checked(queries, scope, shown_ids) if shown_ids else {}
+        graphs: Dict[Tuple[int, int], str] = {}
+        # Only a listed error reads a graph, so only then must the graph's rank be known.
+        if shown_ids:
+            refuse_unattributable(queries, scope, "captured_graph")
+            graphs = _graphs(queries, scope, "an error lookup", shown_ids)
 
     listed = []
     for error in shown:
@@ -279,6 +285,14 @@ def errors(
             }
         )
 
+    predates = (
+        []
+        if has_errors_table
+        else [
+            "This report predates the errors table, so it cannot say whether the run "
+            "recorded an error."
+        ]
+    )
     response: Dict[str, object] = {
         "handle": handle,
         "error_count": len(records),
@@ -286,15 +300,8 @@ def errors(
         "errors": listed,
         "note": ERRORS_NOTE,
         **scope.as_response(),
+        **caveat_field(scope, *predates),
     }
-    caveats: List[str] = [caveat] if (caveat := rank_caveat(scope)) else []
-    if not has_errors_table:
-        caveats.append(
-            "This report predates the errors table, so it cannot say whether the run "
-            "recorded an error."
-        )
-    if caveats:
-        response["caveat"] = " ".join(caveats)
     return response
 
 
@@ -333,9 +340,12 @@ def _report_operations(
     output_rows = list(
         queries.query_output_tensors(scoped(queries, "output_tensors", scope))
     )
+    # Neither port reads `size`, and the joins that find one are most of this read's cost.
     tensors = {
         (tensor.tensor_id, tensor.rank): tensor
-        for tensor in queries.query_tensors(scoped(queries, "tensors", scope))
+        for tensor in queries.query_tensors(
+            scoped(queries, "tensors", scope), size_from_buffers=False
+        )
     }
     consumers_by_tensor_id: Dict[int, List[int]] = {}
     links = (
@@ -446,10 +456,8 @@ def dram_fallbacks(
         "fallbacks": listed,
         "note": DRAM_FALLBACKS_NOTE,
         **scope.as_response(),
+        **caveat_field(scope),
     }
-    caveats: List[str] = [caveat] if (caveat := rank_caveat(scope)) else []
-    if caveats:
-        response["caveat"] = " ".join(caveats)
     return response
 
 
@@ -531,9 +539,7 @@ def report_l1_peak(queries: DatabaseQueries, scope: RankScope) -> L1PeakReport:
     # As `fetchDevices`: the first id keeps its place, and a later row of it wins.
     devices = list({entry.device_id: entry for entry in devices}.values())
     device = devices[0]
-    ensure_graph_readable(
-        queries, scoped(queries, "captured_graph", scope), "the replay"
-    )
+    graphs = _graphs(queries, scope, "the replay")
     report = _report_operations(queries, scope, with_consumers=True)
     names = {operation.operation_id: operation.name for operation in report.operations}
     # Every row of a tensor attaches the same one, with the same consumers, so one per
@@ -565,7 +571,6 @@ def report_l1_peak(queries: DatabaseQueries, scope: RankScope) -> L1PeakReport:
             scoped(queries, "buffers", scope, buffer_type=buffer_type.value)
         ):
             snapshot.setdefault(buffer.operation_id, []).append(buffer)
-    graphs = _graphs(queries, scope)
     result = peak_replay.build_l1_peak(
         [
             (operation.operation_id, partial(_graph_for, graphs, operation))
@@ -597,16 +602,7 @@ def l1_peak(
     instance = registry.get(handle)
     with profiler_db(instance) as queries:
         scope = rank_scope(queries, rank)
-        refuse_unattributable(
-            queries,
-            scope,
-            "captured_graph",
-            "buffers",
-            "tensors",
-            "input_tensors",
-            "output_tensors",
-            "devices",
-        )
+        refuse_unattributable(queries, scope, *_L1_PEAK_TABLES)
         # Cached once only the peak keeps its residents: every operation's would pin
         # about 100 MB on the largest local capture.
         report = _cached_per_rank(
@@ -614,7 +610,7 @@ def l1_peak(
         )
 
     result, lifetimes = report.result, report.lifetimes
-    caveats: List[str] = [caveat] if (caveat := rank_caveat(scope)) else []
+    caveats: List[str] = []
     if result.peak is not None and report.device_count > 1:
         caveats.append(
             f"This report covers {report.device_count} devices. The replay cannot "
@@ -672,8 +668,7 @@ def l1_peak(
         response["top_operations"] = _top_operations(
             result.by_operation_id, report.names, count
         )
-    if caveats:
-        response["caveat"] = " ".join(caveats)
+    response.update(caveat_field(scope, *caveats))
     return response
 
 
@@ -729,14 +724,16 @@ def operation_failure_fields(
     """
     fields: Dict[str, object] = {}
     withheld: List[str] = []
-    if queries.has_table("errors") and _attributable(
-        queries, scope, _ERROR_TABLES, withheld, "error"
-    ):
+    if _attributable(queries, scope, ("errors",), withheld, "error"):
         error = select_error_for_operation(
             _error_records(queries, scope, operation.operation_id), operation
         )
-        if error is not None:
-            graphs = _graphs_checked(queries, scope, [operation.operation_id])
+        if error is not None and _attributable(
+            queries, scope, ("captured_graph",), withheld, "error"
+        ):
+            graphs = _graphs(
+                queries, scope, "an error lookup", [operation.operation_id]
+            )
             fields["error"] = _error_entry(error, _graph_for(graphs, operation))
     if all(
         queries.has_table(table) for table in TOOL_TABLES[McpToolName.DRAM_FALLBACKS]

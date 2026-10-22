@@ -1171,6 +1171,46 @@ class TestOperationDetail:
         assert "predates the errors table" in listed["caveat"]
         assert "withheld" not in (detail.get("caveat") or "")
 
+    def test_an_empty_errors_table_needs_no_graph_rank_either(self, tmp_path):
+        registry, handle = _ranked_report(
+            tmp_path,
+            {rank: {"operations": [(1, "ttnn.add", 1.0)]} for rank in (0, 1)},
+            unranked=["captured_graph"],
+        )
+
+        listed = failures.errors(registry, handle, rank=1)
+        detail = linking.operation_detail(registry, handle, operation_id=1, rank=1)
+
+        assert listed["errors"] == []
+        assert "withheld" not in (detail.get("caveat") or "")
+
+    def test_a_listed_error_needs_its_graph_rank(self, tmp_path):
+        """With `rank` on `errors` but not on `captured_graph`, the error's failed
+        device operations could come from another rank's graph."""
+        registry, handle = _ranked_report(
+            tmp_path,
+            {
+                0: {
+                    "operations": [(1, "ttnn.conv2d", 1.0)],
+                    "errors": [(1, "ttnn.conv2d", "TT_THROW", _OUT_OF_MEMORY, "", "")],
+                    "captured_graph": [(1, json.dumps([_start("Conv2d")]))],
+                },
+                1: {
+                    "operations": [(1, "ttnn.conv2d", 1.0)],
+                    "errors": [(1, "ttnn.conv2d", "TT_THROW", _OUT_OF_MEMORY, "", "")],
+                },
+            },
+            unranked=["captured_graph"],
+        )
+
+        with pytest.raises(ValueError, match="cannot be attributed to rank 1"):
+            failures.errors(registry, handle, rank=1)
+        detail = linking.operation_detail(registry, handle, operation_id=1, rank=1)
+
+        assert "error" not in detail
+        assert "error is withheld" in detail["caveat"]
+        assert "dram_fallback is withheld" not in detail["caveat"]
+
     def test_it_carries_the_error_as_the_errors_tool_lists_it(self, tmp_path):
         registry, handle = _report(
             tmp_path,
