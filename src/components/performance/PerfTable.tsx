@@ -457,7 +457,8 @@ const PerformanceTable = ({
                                     <td
                                         key={header.key}
                                         className={classNames({
-                                            'pre-wrap': header.key === ColumnKeys.OpCode,
+                                            'pre-wrap':
+                                                header.key === ColumnKeys.OpCode || header.key === ColumnKeys.CacheHit,
                                         })}
                                         colSpan={header.footerSpan ?? undefined}
                                     >
@@ -503,12 +504,30 @@ const PerformanceTable = ({
     );
 };
 
+// Mirrors `program_cache` in `backend/ttnn_visualizer/agent/tools.py`: repeat calls with no
+// recorded cache result are excluded from the hit percentage denominator. #2169
+const getCacheHitSummary = (cacheHits: number, recorded: number, unrecorded: number): string => {
+    if (recorded === 0 && unrecorded > 0) {
+        return `No cache results recorded\n(${unrecorded} unrecorded)`;
+    }
+
+    const cacheHitPercent = recorded > 0 ? (cacheHits / recorded) * 100 : 0;
+    const baseSummary = `${formatPercentage(cacheHitPercent)} expected cache hits`;
+
+    if (unrecorded > 0) {
+        return `${baseSummary}\n(${unrecorded} unrecorded excluded)`;
+    }
+
+    return baseSummary;
+};
+
 const computeFooterTotals = (data: TypedPerfTableRow[], hideHostOps: boolean): Partial<Record<ColumnKeys, string>> => {
     const rows = data ?? [];
     let deviceTimeSum = 0;
     let opToOpGapSum = 0;
     let hostOpsCount = 0;
-    let nonUniqueOpsCount = 0;
+    let recordedRepeatOpsCount = 0;
+    let unrecordedRepeatOpsCount = 0;
     let cacheHits = 0;
 
     for (const row of rows) {
@@ -519,17 +538,20 @@ const computeFooterTotals = (data: TypedPerfTableRow[], hideHostOps: boolean): P
             hostOpsCount++;
         }
 
-        if (!row.isFirstHashOccurrence) {
-            nonUniqueOpsCount++;
+        if (!row.isFirstHashOccurrence && row.hash) {
+            if (row.cache_hit == null) {
+                unrecordedRepeatOpsCount++;
+            } else {
+                recordedRepeatOpsCount++;
 
-            if (row.cache_hit) {
-                cacheHits++;
+                if (row.cache_hit) {
+                    cacheHits++;
+                }
             }
         }
     }
 
     const deviceOpsCount = rows.length - hostOpsCount;
-    const cacheHitPercent = nonUniqueOpsCount > 0 ? (cacheHits / nonUniqueOpsCount) * 100 : 0;
 
     return {
         [ColumnKeys.TotalPercent]: '100%',
@@ -538,7 +560,7 @@ const computeFooterTotals = (data: TypedPerfTableRow[], hideHostOps: boolean): P
             ? `${deviceOpsCount} device ops`
             : `${rows.length} ops\n(${deviceOpsCount} device ops + ${hostOpsCount} host ops)`,
         [ColumnKeys.OpToOpGap]: `${formatSize(opToOpGapSum, 2)} µs`,
-        [ColumnKeys.CacheHit]: `${formatPercentage(cacheHitPercent).toString()} expected cache hits`,
+        [ColumnKeys.CacheHit]: getCacheHitSummary(cacheHits, recordedRepeatOpsCount, unrecordedRepeatOpsCount),
     };
 };
 

@@ -564,7 +564,6 @@ def program_cache(
                 if recorded
                 else "there is no hit percentage."
             )
-            + " The performance view counts them as misses instead."
         )
     if recorded and repeat_misses == recorded:
         caveats.append(

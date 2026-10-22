@@ -885,3 +885,50 @@ describe('PerfTable high dispatch highlight', () => {
         expect(screen.queryByRole('columnheader', { name: /Slow/ })).toBeNull();
     });
 });
+
+
+describe('PerfTable expected cache hits footer (#2169)', () => {
+    it('excludes unrecorded repeat calls from the hit percentage and reports the excluded count', () => {
+        const rows = enrichRowData(
+            [
+                makeRawPerfRow({ id: '1', op_code: 'Matmul', raw_op_code: 'Matmul', hash: 'h1', cache_hit: 'False' }),
+                makeRawPerfRow({ id: '2', op_code: 'Matmul', raw_op_code: 'Matmul', hash: 'h1', cache_hit: 'True' }),
+                makeRawPerfRow({ id: '3', op_code: 'Matmul', raw_op_code: 'Matmul', hash: 'h1', cache_hit: 'False' }),
+                makeRawPerfRow({ id: '4', op_code: 'Matmul', raw_op_code: 'Matmul', hash: 'h1', cache_hit: '' }),
+                makeRawPerfRow({ id: '5', op_code: 'Matmul', raw_op_code: 'Matmul', hash: 'h1', cache_hit: '' }),
+            ],
+            [],
+            null,
+        );
+
+        renderTable(rows);
+
+        const footer = screen.getByRole('table').querySelector('tfoot')!;
+        expect(footer).toHaveTextContent(/50% expected cache hits\s*\(2 unrecorded excluded\)/);
+    });
+
+    it('reports when all repeat calls have no recorded cache results and ignores hashless placeholders', () => {
+        const rows = enrichRowData(
+            [
+                makeRawPerfRow({ id: '1', op_code: 'Matmul', raw_op_code: 'Matmul', hash: 'h1', cache_hit: 'False' }),
+                makeRawPerfRow({ id: '2', op_code: 'Matmul', raw_op_code: 'Matmul', hash: 'h1', cache_hit: '' }),
+                makeRawPerfRow({ id: '3', op_code: 'Matmul', raw_op_code: 'Matmul', hash: 'h1', cache_hit: '' }),
+                makeRawPerfRow({ id: '4', op_code: 'Matmul', raw_op_code: 'Matmul', hash: 'h1', cache_hit: '' }),
+            ],
+            [],
+            null,
+        );
+        const placeholder = baseRow({
+            id: 99,
+            raw_op_code: 'Reshape MISSING',
+            hash: null,
+            cache_hit: null,
+            isFirstHashOccurrence: false,
+        });
+
+        renderTable([...rows, placeholder]);
+
+        const footer = screen.getByRole('table').querySelector('tfoot')!;
+        expect(footer).toHaveTextContent(/No cache results recorded\s*\(3 unrecorded\)/);
+    });
+});
