@@ -10,6 +10,18 @@ The current link status is indicated in the UI when both a memory and performanc
 **Failed link**
 <img width="876" height="684" alt="Reports cannot be linked" src="https://github.com/user-attachments/assets/c2925a7f-6d42-40ae-b5d0-1191f93aefc1" />
 
+## Finding linked reports in the report pickers
+
+The report pickers list reports newest first, and nothing in the pickers reorders them:
+
+- Local reports are ordered by when their folder was last modified. Uploading a report counts as a modification.
+- Remote reports are ordered by when they were last modified on the remote machine.
+- When only the locally synced copies of remote reports can be listed, they are ordered by when they were synced.
+
+While a report of the other kind is active, each row carries a link badge: linked, failed to link, or not yet known. A graph report picker shows its badges against the active performance report, and a performance report picker shows them against the active graph report.
+
+To list only the reports linked to the active one, press the link button in the picker's filter box. It works together with the text filter, and it appears only while the picker is showing badges.
+
 ## Allocation failures in the performance view
 
 When the linked memory report records allocation failures, the performance table lists them in a callout above it. See [Allocation failures](allocation-failures.md), under "In the performance view".

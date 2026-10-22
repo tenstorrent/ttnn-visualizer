@@ -4,11 +4,15 @@
 
 import { useState } from 'react';
 import { Button, ButtonVariant, MenuItem, Position, Tooltip } from '@blueprintjs/core';
-import { ItemRenderer, Select } from '@blueprintjs/select';
+import { ItemPredicate, ItemRenderer, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
 import { useInstance } from '../../hooks/useAPI';
 import 'styles/components/FolderPicker.scss';
-import { getFolderLinkState, shouldShowFolderLinkStatus } from '../../functions/folderLinkStatus';
+import {
+    getFolderLinkState,
+    matchesLinkedOnlyFilter,
+    shouldShowFolderLinkStatus,
+} from '../../functions/folderLinkStatus';
 import { ReportLinkRunsById } from '../../definitions/ReportLinks';
 import { ReportFolder } from '../../definitions/Reports';
 import getServerConfig from '../../functions/getServerConfig';
@@ -20,12 +24,14 @@ import { TEST_IDS } from '../../definitions/TestIds';
 import ConfirmDeleteAlert from '../ConfirmDeleteAlert';
 import HighlightedText from '../HighlightedText';
 import FolderLinkStatusIcon from './FolderLinkStatusIcon';
+import FolderPickerFilterActions, { NO_LINKED_RESULTS_TEXT } from './FolderPickerFilterActions';
 import SelectRowActions from './SelectRowActions';
 
 interface LocalFolderPickerProps {
     /**
      * `null` while the folder list query is still loading — the component renders disabled.
-     * Folders render in the supplied order; link-status badges do not reorder them.
+     * Folders render in the supplied order (newest first from the backend); link-status badges do
+     * not reorder them, and the linked-only toggle only hides rows.
      */
     items: ReportFolder[] | null;
     value: string | null;
@@ -60,6 +66,8 @@ const LocalFolderPicker = ({
     const { data: instance } = useInstance();
 
     const [folderToDelete, setFolderToDelete] = useState<ReportFolder | null>(null);
+    const [filterQuery, setFilterQuery] = useState('');
+    const [isLinkedOnly, setIsLinkedOnly] = useState(false);
 
     const isDisabled = disabled || loading || !items || items.length === 0 || !instance;
     const activePath = value;
@@ -76,6 +84,17 @@ const LocalFolderPicker = ({
     // direct-report mode.
     const isDeleteDisabled = loading;
     const showLinkStatus = shouldShowFolderLinkStatus(linkedRuns, unlinkedRuns);
+    // Without badges there is nothing to filter on, so a toggle left on must not hide rows.
+    const isLinkedOnlyActive = showLinkStatus && isLinkedOnly;
+
+    // Rebuilt every render on purpose: QueryList refilters when the predicate's identity changes,
+    // which is how a toggle or a new link verdict reaches the list.
+    const itemPredicate: ItemPredicate<ReportFolder> = (query, folder) =>
+        (!query || folder.path.toLowerCase().includes(query.toLowerCase())) &&
+        matchesLinkedOnlyFilter(
+            isLinkedOnlyActive,
+            getFolderLinkState(getFolderReportId(folder), folder.runFingerprint, linkedRuns, unlinkedRuns),
+        );
 
     const renderItem: ItemRenderer<ReportFolder> = (folder, { handleClick, handleFocus, modifiers, query }) => {
         if (!modifiers.matchesPredicate) {
@@ -145,12 +164,25 @@ const LocalFolderPicker = ({
             <Select<ReportFolder>
                 className='folder-picker'
                 items={items ?? []}
-                itemPredicate={(query, item) => !query || item.path.toLowerCase().includes(query.toLowerCase())}
+                itemPredicate={itemPredicate}
                 itemRenderer={renderItem}
+                query={filterQuery}
+                onQueryChange={setFilterQuery}
+                inputProps={{
+                    rightElement: (
+                        <FolderPickerFilterActions
+                            query={filterQuery}
+                            onClearQuery={() => setFilterQuery('')}
+                            showLinkedOnlyToggle={showLinkStatus}
+                            isLinkedOnly={isLinkedOnly}
+                            onToggleLinkedOnly={() => setIsLinkedOnly((current) => !current)}
+                        />
+                    ),
+                }}
                 noResults={
                     <MenuItem
                         disabled
-                        text='No results.'
+                        text={isLinkedOnlyActive ? NO_LINKED_RESULTS_TEXT : 'No results.'}
                         roleStructure='listoption'
                     />
                 }

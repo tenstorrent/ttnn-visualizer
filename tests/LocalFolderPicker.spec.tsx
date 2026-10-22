@@ -10,6 +10,7 @@ import { CONFIRM_DELETE_LABEL, ManagedEntity } from '../src/definitions/ManagedE
 import { ReportFolder } from '../src/definitions/Reports';
 import { ServerConfig } from '../src/definitions/ServerConfig';
 import { TEST_IDS } from '../src/definitions/TestIds';
+import { NO_LINKED_RESULTS_TEXT } from '../src/components/report-selection/FolderPickerFilterActions';
 import { getDeleteActionLabel } from '../src/functions/managedEntityLabels';
 import testForPortal from './helpers/testForPortal';
 import { TestProviders } from './helpers/TestProviders';
@@ -265,5 +266,118 @@ describe('LocalFolderPicker link badges', () => {
         expect(document.querySelectorAll('.folder-picker-menu-item .folder-link-status-unknown')).toHaveLength(
             unknownCount,
         );
+    });
+});
+
+describe('LocalFolderPicker linked-only filter', () => {
+    const renderPicker = (
+        linkedRuns = runsWithoutFingerprints('linked-run'),
+        unlinkedRuns = runsWithoutFingerprints('unlinked-run'),
+        handleSelect = vi.fn(),
+    ) => {
+        const ui = (linked: typeof linkedRuns, unlinked: typeof unlinkedRuns) => (
+            <TestProviders>
+                <LocalFolderPicker
+                    items={folders}
+                    value={null}
+                    handleSelect={handleSelect}
+                    linkedRuns={linked}
+                    unlinkedRuns={unlinked}
+                />
+            </TestProviders>
+        );
+        const { rerender } = render(ui(linkedRuns, unlinkedRuns));
+
+        return {
+            rerenderWith: (linked: typeof linkedRuns, unlinked: typeof unlinkedRuns) => rerender(ui(linked, unlinked)),
+        };
+    };
+
+    const openPicker = async () => {
+        fireEvent.click(screen.getByText(SELECT_REPORT_TEXT));
+        await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+    };
+
+    const getRowLabels = () =>
+        [...document.querySelectorAll('.folder-picker-menu-item .bp6-text-overflow-ellipsis')].map(
+            (el) => el.textContent,
+        );
+
+    const typeQuery = (query: string) =>
+        fireEvent.change(screen.getByPlaceholderText('Filter...'), { target: { value: query } });
+
+    it('has no toggle when there are no badges', async () => {
+        renderPicker(runsWithoutFingerprints(), runsWithoutFingerprints());
+        await openPicker();
+
+        expect(screen.queryByTestId(TEST_IDS.FOLDER_PICKER_LINKED_ONLY_TOGGLE)).toBeNull();
+    });
+
+    it('hides unlinked and unknown rows while on, and restores the supplied order when off', async () => {
+        renderPicker();
+        await openPicker();
+
+        const toggle = screen.getByTestId(TEST_IDS.FOLDER_PICKER_LINKED_ONLY_TOGGLE);
+        expect(toggle).toHaveAttribute('aria-pressed', 'false');
+
+        fireEvent.click(toggle);
+        expect(toggle).toHaveAttribute('aria-pressed', 'true');
+        await waitFor(() => expect(getRowLabels()).toEqual(['/linked-run']), WAIT_FOR_OPTIONS);
+
+        fireEvent.click(toggle);
+        await waitFor(
+            () => expect(getRowLabels()).toEqual(['/unknown-run', '/unlinked-run', '/linked-run']),
+            WAIT_FOR_OPTIONS,
+        );
+    });
+
+    it('combines with the text filter', async () => {
+        renderPicker();
+        await openPicker();
+
+        fireEvent.click(screen.getByTestId(TEST_IDS.FOLDER_PICKER_LINKED_ONLY_TOGGLE));
+        typeQuery('run');
+        await waitFor(() => expect(getRowLabels()).toEqual(['/linked-run']), WAIT_FOR_OPTIONS);
+
+        typeQuery('unknown');
+        await waitFor(() => expect(screen.getByText(NO_LINKED_RESULTS_TEXT)).toBeInTheDocument(), WAIT_FOR_OPTIONS);
+    });
+
+    it('still clears the text filter', async () => {
+        renderPicker();
+        await openPicker();
+
+        typeQuery('unknown');
+        await waitFor(() => expect(getRowLabels()).toEqual(['/unknown-run']), WAIT_FOR_OPTIONS);
+
+        fireEvent.click(screen.getByLabelText('Clear filter query'));
+        expect(screen.getByPlaceholderText('Filter...')).toHaveValue('');
+        await waitFor(() => expect(getRowLabels()).toHaveLength(folders.length), WAIT_FOR_OPTIONS);
+    });
+
+    it('stops hiding rows once the badges go away', async () => {
+        const { rerenderWith } = renderPicker();
+        await openPicker();
+
+        fireEvent.click(screen.getByTestId(TEST_IDS.FOLDER_PICKER_LINKED_ONLY_TOGGLE));
+        await waitFor(() => expect(getRowLabels()).toEqual(['/linked-run']), WAIT_FOR_OPTIONS);
+
+        rerenderWith(runsWithoutFingerprints(), runsWithoutFingerprints());
+        await waitFor(() => expect(getRowLabels()).toHaveLength(folders.length), WAIT_FOR_OPTIONS);
+    });
+
+    it('does not select a report when Enter presses the toggle', async () => {
+        const handleSelect = vi.fn();
+        renderPicker(undefined, undefined, handleSelect);
+        await openPicker();
+
+        const toggle = screen.getByTestId(TEST_IDS.FOLDER_PICKER_LINKED_ONLY_TOGGLE);
+        fireEvent.keyDown(toggle, { key: 'Enter' });
+        fireEvent.keyUp(toggle, { key: 'Enter' });
+
+        expect(handleSelect).not.toHaveBeenCalled();
+        // Enter still presses the toggle itself, and the popover stays open on the filtered list.
+        expect(toggle).toHaveAttribute('aria-pressed', 'true');
+        expect(getRowLabels()).toEqual(['/linked-run']);
     });
 });
