@@ -398,6 +398,23 @@ def test_flask_debug_applies_after_the_class_body_has_been_evaluated(monkeypatch
     assert config.DEBUG is True
 
 
+@pytest.mark.parametrize(
+    "env_name, expected",
+    [("DEBUG", True), ("FLASK_DEBUG", False)],
+)
+def test_only_the_bare_debug_variable_requests_the_dev_knob(
+    env_name, expected, monkeypatch
+):
+    # The mirror of the alias tests above: ``FLASK_DEBUG`` must not switch on verbose
+    # logging and gunicorn ``--reload`` either. Both are cleared first so a developer
+    # running under ``pnpm flask:start-debug`` can't decide the outcome. #1922
+    monkeypatch.delenv("DEBUG", raising=False)
+    monkeypatch.delenv("FLASK_DEBUG", raising=False)
+    monkeypatch.setenv(env_name, "true")
+
+    assert app_module._is_dev_debug_requested() is expected
+
+
 ENV_SAMPLE_PATH = Path(__file__).parents[3] / ".env.sample"
 COMMENTED_SETTING_PATTERN = re.compile(r"^#\s*([A-Z][A-Z0-9_]*)=(.*)$")
 
