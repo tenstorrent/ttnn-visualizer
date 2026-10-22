@@ -191,6 +191,7 @@ def _ranked_report(
     tmp_path: Path,
     rows_by_rank: Dict[int, Dict[str, Sequence[Tuple]]],
     unranked: Sequence[str] = (),
+    errors_table: bool = True,
 ) -> Tuple[ReportRegistry, str]:
     """Every table `_report` writes, with `rank` on each but `unranked`.
 
@@ -199,7 +200,9 @@ def _ranked_report(
     """
     directory = tmp_path / "profiler"
     directory.mkdir()
-    schema = (_SCHEMA + _ERRORS + _ARGUMENTS).replace(" UNIQUE", "")
+    schema = (_SCHEMA + (_ERRORS if errors_table else "") + _ARGUMENTS).replace(
+        " UNIQUE", ""
+    )
     for table in re.findall(r"CREATE TABLE (\w+) \(", schema):
         if table not in unranked:
             schema = schema.replace(
@@ -1150,6 +1153,23 @@ class TestOperationDetail:
         for tool in (failures.errors, failures.dram_fallbacks):
             with pytest.raises(ValueError, match="cannot be attributed to rank"):
                 tool(registry, handle, rank=1)
+
+    def test_no_errors_table_reads_no_graph_so_needs_no_graph_rank(self, tmp_path):
+        """Without an errors table no graph is read, so a `captured_graph` without
+        `rank` cannot misattribute anything; the answer says the table is missing."""
+        registry, handle = _ranked_report(
+            tmp_path,
+            {rank: {"operations": [(1, "ttnn.add", 1.0)]} for rank in (0, 1)},
+            unranked=["captured_graph"],
+            errors_table=False,
+        )
+
+        listed = failures.errors(registry, handle, rank=1)
+        detail = linking.operation_detail(registry, handle, operation_id=1, rank=1)
+
+        assert listed["errors"] == []
+        assert "predates the errors table" in listed["caveat"]
+        assert "withheld" not in (detail.get("caveat") or "")
 
     def test_it_carries_the_error_as_the_errors_tool_lists_it(self, tmp_path):
         registry, handle = _report(

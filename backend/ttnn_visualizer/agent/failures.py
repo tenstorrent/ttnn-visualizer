@@ -234,8 +234,10 @@ def errors(
     instance = registry.get(handle)
     with profiler_db(instance) as queries:
         scope = rank_scope(queries, rank)
-        refuse_unattributable(queries, scope, *_ERROR_TABLES)
         has_errors_table = queries.has_table("errors")
+        # Without an errors row no graph is read, so there is nothing to misattribute.
+        if has_errors_table:
+            refuse_unattributable(queries, scope, *_ERROR_TABLES)
         records = _error_records(queries, scope)
         operations = (
             list(
@@ -557,6 +559,7 @@ def report_l1_peak(queries: DatabaseQueries, scope: RankScope) -> L1PeakReport:
     snapshot: Dict[int, List] = {
         operation.operation_id: [] for operation in report.operations
     }
+    # By value, as the app reads them, so a report storing names reads none (#2196).
     for buffer_type in sorted(L1_BUFFER_TYPES, key=lambda entry: entry.value):
         for buffer in queries.query_buffers(
             scoped(queries, "buffers", scope, buffer_type=buffer_type.value)
@@ -726,7 +729,9 @@ def operation_failure_fields(
     """
     fields: Dict[str, object] = {}
     withheld: List[str] = []
-    if _attributable(queries, scope, _ERROR_TABLES, withheld, "error"):
+    if queries.has_table("errors") and _attributable(
+        queries, scope, _ERROR_TABLES, withheld, "error"
+    ):
         error = select_error_for_operation(
             _error_records(queries, scope, operation.operation_id), operation
         )
