@@ -358,7 +358,7 @@ def perf_csv_columns(instance: Instance) -> frozenset:
 DEVICE_ID_COLUMN = "DEVICE ID"
 # Its release decides derived values, such as which `op_category` names exist.
 TT_PERF_REPORT_DISTRIBUTION = "tt-perf-report"
-# `arch` comes first in a cluster descriptor, and the largest real one is 28 KB whole.
+# The largest real cluster descriptor is 28 KB; one past this is not read at all.
 MAX_DESCRIPTOR_CHARS = 1_000_000
 # One chip's entry in the descriptor's `arch` mapping, as tt-metal names architectures.
 _ARCH_ENTRY = re.compile(r"""\d+\s*:\s*(['"]?)([A-Za-z][A-Za-z0-9_]{0,63})\1""")
@@ -462,8 +462,11 @@ def _cluster_descriptor_arch(profiler_path: Optional[str]) -> Optional[str]:
         if path is None:
             return None
         with path.open(encoding="utf-8", errors="replace") as source:
-            text = source.read(MAX_DESCRIPTOR_CHARS)
+            text = source.read(MAX_DESCRIPTOR_CHARS + 1)
     except OSError:
+        return None
+    # A cut could fall inside the `arch` block, and part of it would read as all.
+    if len(text) > MAX_DESCRIPTOR_CHARS:
         return None
     return ", ".join(_descriptor_arch_names(text)) or None
 

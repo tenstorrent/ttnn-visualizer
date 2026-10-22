@@ -415,16 +415,21 @@ class TestReportFacts:
 
         assert loaded["arch"] == {"cluster_descriptor": "blackhole"}
 
-    def test_a_descriptor_is_read_no_further_than_the_cap(self, tmp_path):
+    def test_a_descriptor_past_the_cap_is_left_out_rather_than_read_in_part(
+        self, tmp_path
+    ):
+        """A cut between two chips' entries read as a cluster of one architecture."""
+        content = "arch:\n  0: blackhole\n  1: wormhole_b0\nchips:\n"
         profiler = _write_devices(tmp_path, [(0, 0)])
-        (profiler / "cluster_descriptor.yaml").write_bytes(
-            b"chips:\n" + b"  # padding\n" * 20 + b"arch:\n  0: blackhole\n"
-        )
+        (profiler / "cluster_descriptor.yaml").write_text(content, encoding="utf-8")
 
-        with patch.object(handles, "MAX_DESCRIPTOR_CHARS", 100):
-            loaded = load_report(ReportRegistry(), profiler_path=str(profiler))
+        with patch.object(handles, "MAX_DESCRIPTOR_CHARS", content.index("  1:")):
+            past = load_report(ReportRegistry(), profiler_path=str(profiler))
+        with patch.object(handles, "MAX_DESCRIPTOR_CHARS", len(content)):
+            within = load_report(ReportRegistry(), profiler_path=str(profiler))
 
-        assert loaded["arch"] == {}
+        assert past["arch"] == {}
+        assert within["arch"] == {"cluster_descriptor": "blackhole, wormhole_b0"}
 
     def test_a_descriptor_that_is_not_utf8_is_left_out(self, tmp_path):
         profiler = _write_devices(tmp_path, [(0, 0)])
