@@ -227,9 +227,9 @@ Use **`null`** when you mean “no value yet” or “cleared” in values you o
 
 #### Read on use when the value is needed before the stylesheet is guaranteed to have applied
 
-`GRAPH_COLORS` is an object literal, so its `cssVar()` calls resolve **once, at module evaluation**. That is fine for a value first read during a user interaction, but a module imported before the stylesheet applies captures empty strings for good.
+`GRAPH_COLORS` is an object literal, so its `cssVar()` calls resolve **once, when the module is first evaluated** — not when a property is first read. Every later reader gets whatever the stylesheet declared at that moment, so a module evaluated before the stylesheet applies captures empty strings for good.
 
-Where that risk is real, expose a **getter** instead of a property and keep everything else about the flow — `getPerfChartChrome()` in `src/definitions/PlotConfigurations.ts` is the reference: the properties still live in `_base.scss`, components still never see a literal, but each call re-reads.
+Where that risk is real, expose a **getter** instead of a property and keep everything else about the flow — `getPerfChartChrome()` in `src/definitions/PlotConfigurations.ts` is the reference, and `getL1PeakColours()` in `src/definitions/L1PeakDecomposition.ts` follows it: the properties still live in `_base.scss`, components still never see a literal, but each call re-reads.
 
 ```ts
 export const getPerfChartChrome = (): PerfChartChrome => ({
@@ -238,7 +238,9 @@ export const getPerfChartChrome = (): PerfChartChrome => ({
 });
 ```
 
-Prefer `GRAPH_COLORS` by default; reach for a getter only when import-time evaluation is a genuine hazard, and say so in a docstring, because the repeat `getComputedStyle` read is not free — call it once per render pass, not per element.
+**This is one rule with two shapes, not two competing mechanisms, and there is no third shape.** The object and the getters share the whole flow and differ only in when the read happens. Prefer `GRAPH_COLORS` by default. What makes reading at load safe is `src/main.tsx` importing `./index.scss` before any app module, so a module reached only through the app tree from `main.tsx` may read at load. A module that can also be evaluated outside that tree — imported directly by a test, a worker or a script — takes a getter, and its docstring says where. `tests/PlotConfigurations.spec.ts` is the case in point: it sets the properties on `:root` and calls `getPerfChartChrome()`, where a test that renders `GRAPH_COLORS` has to mock the module instead. The repeat `getComputedStyle` read is not free, so call a getter once per mount, not per render or per element — for example, resolve it in a `useMemo` with an empty dependency list. Settled in #1911.
+
+Either shape fails the same way: `cssVar` returns `''` for a property nobody declared, with no error, so a rename in a stylesheet leaves a graph drawn in no colour. `tests/cssCustomProperties.spec.ts` checks that every name `src/` passes to `cssVar` is declared under `src/scss/`, which means `cssVar` may only be called with a quoted literal name: a computed argument, a reference passed as a value or an aliased import fails it, naming the line. Its header says what it does not check.
 
 ### Same rule for magic layout numbers
 
@@ -1523,11 +1525,3 @@ Adding or tightening a requirement fails two tests until you update them, and th
 **Thresholds that carry a policy decision need at least one test pinning the literal value.** Every `SECRET_KEY` case was written as `"x" * MIN_HOSTED_SECRET_KEY_BYTES`, so when #2003 changed the constant, none of them failed. A test derived from the constant under test cannot detect a change to it.
 
 **The release PR reports enforcement boundaries, not just row edits.** `scripts/startup_requirements_diff.py` compares the documented table *and* the release version at each ref. A requirement staged in `1.0.0` with `enforced_from: 2.0.0` has an identical row on both sides; the release that bumps the version to `2.0.0` is the one it starts refusing boots on, and it is announced under **Now enforced** with nothing in the diff to trigger it.
-
----
-
-## Known inconsistencies
-
-These exist in the codebase today and don't yet have a single canonical answer. Reviewers should flag new code that goes either direction without considering both. Each entry names the inconsistency, the direction new code takes, and its tracking issue; the rule itself lives in the section above that owns it.
-
-- **Two accessors for CSS-custom-property colours.** `GRAPH_COLORS` resolves at module load; `getPerfChartChrome()` re-reads per call. Both are legitimate and both keep the literal in `_base.scss` — pick per [No hex literals in TS/TSX](#no-hex-literals-in-tstsx), and don't add a third mechanism. (#1911)

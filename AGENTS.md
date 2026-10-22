@@ -119,7 +119,7 @@ Open pull requests with **`dev`** as the base branch by default.
 
 ### CSS / SCSS
 
-- Don't hardcode colour values in TS/TSX. Promote to a CSS custom property in `src/scss/_base.scss` (e.g. `--graph-focused-node: #f6bc42;`), then expose it through `GRAPH_COLORS` in `src/definitions/GraphColors.ts` via the `cssVar()` helper. Components import from `GRAPH_COLORS`, never from a literal.
+- Don't hardcode colour values in TS/TSX. Promote to a CSS custom property in `src/scss/_base.scss` (e.g. `--graph-focused-node: #f6bc42;`), then expose it through `GRAPH_COLORS` in `src/definitions/GraphColors.ts` via the `cssVar()` helper. Components read colours through `GRAPH_COLORS`, or through a getter such as `getPerfChartChrome()` where the module can be evaluated outside the app tree that `main.tsx` starts after importing `index.scss`, such as directly by a test (say where in its docstring), never from a literal — [read on use](./CONVENTIONS.md#read-on-use-when-the-value-is-needed-before-the-stylesheet-is-guaranteed-to-have-applied).
 - The same rule applies to magic layout numbers used in more than one place — promote to a SCSS variable or CSS custom property.
 - In component-local SCSS, prefer app-owned classnames over direct `.bp6-*` selector overrides; reserve Blueprint-wide overrides for `src/scss/_blueprintjs.scss`.
 - Use **`@use`**, never `@import` (deprecated by Sass, already migrated). `as *` for tokens meant to be ergonomic at call sites (colour variables); a short namespace for everything else (`variables.$base-font`).
