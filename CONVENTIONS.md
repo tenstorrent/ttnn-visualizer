@@ -1395,7 +1395,7 @@ SERVER_MODE = _parse_env_bool("SERVER_MODE", False)
 
 A second copy of the token list drifts, and **both drift directions fail silently**: add a spelling to one and the other rejects a value the rest of the app honours; remove one and it starts meaning `False`. If a caller needs to know that a value was a typo, take `None` from `parse_bool` — don't re-implement the membership test.
 
-This holds outside `settings.py` too: `create_app`'s root-log-level check, the gunicorn `--reload` check, and `devtools/npe_render_probe.py`'s `SERVER_MODE` refusal all call `str_to_bool`. A dev tool that refuses on a *wider* set than the app looks harmless and isn't — it means the two disagree about what the deployment is.
+This holds outside `settings.py` too: `_is_dev_debug_requested()` in `app.py` (the one read of bare `DEBUG`, behind both the root log level and gunicorn `--reload`) and `devtools/npe_render_probe.py`'s `SERVER_MODE` refusal all call `str_to_bool`. A dev tool that refuses on a *wider* set than the app looks harmless and isn't — it means the two disagree about what the deployment is.
 
 #### The vocabulary is deliberately narrow, and matched across three consumers
 
@@ -1435,7 +1435,9 @@ Settings that parse more richly than their type register a named parser in `_ENV
 
 #### `_ENV_ALIASES` where the variable isn't named after the attribute
 
-Every setting that reads a variable at all reads one named after its attribute, which is right for all of them but `DEBUG`: it is fed by `FLASK_DEBUG`, because a bare `DEBUG` is the log-level knob (see the entry under [Known inconsistencies](#known-inconsistencies)). `USAGE_RECORDING_ACTIVE` is the other departure and is not an alias — it reads no variable of its own at all; see [the descriptor rules below](#the-loop-walks-the-mro-and-skips-derived-settings). `_ENV_ALIASES` maps the attribute to the variable that owns it and `_env_name_for` is the single reader, so the aliased spelling is written once. Without it, `DEBUG=true` — what `pnpm flask:start-debug` sets — turned on Flask's debug mode under `FLASK_ENV=production`, which suppresses the catch-all error handler and returns tracebacks. Add an entry here rather than a special case in the loop if another setting ever grows a differently-named variable.
+Every setting that reads a variable at all reads one named after its attribute, which is right for all of them but `DEBUG`: it is fed by `FLASK_DEBUG`, because a bare `DEBUG` is the development knob (below). `USAGE_RECORDING_ACTIVE` is the other departure and is not an alias — it reads no variable of its own at all; see [the descriptor rules below](#the-loop-walks-the-mro-and-skips-derived-settings). `_ENV_ALIASES` maps the attribute to the variable that owns it and `_env_name_for` is the single reader, so the aliased spelling is written once. Without it, `DEBUG=true` — what `pnpm flask:start-debug` sets — turned on Flask's debug mode under `FLASK_ENV=production`, which suppresses the catch-all error handler and returns tracebacks. Add an entry here rather than a special case in the loop if another setting ever grows a differently-named variable.
+
+**The two names are deliberate, and both stay.** `FLASK_DEBUG` is Flask's own variable for its debug mode, so it keeps the name every Flask user and `.vscode/launch.json` already know. The bare `DEBUG` variable is not a config setting at all: it is the development knob `pnpm flask:start-debug` sets, read only through `_is_dev_debug_requested()` in `app.py`, and it means debug-level logging plus gunicorn `--reload`. Unlike the attribute, `SERVER_MODE` does not switch it off, so a hosted deployment that sets it still logs at debug level and reloads on file changes: it is for development only. Renaming either would break whoever sets it today, and no single new name would describe what bare `DEBUG` does. Read the name at the call site rather than assuming. (#1922)
 
 #### The loop walks the MRO and skips derived settings
 
@@ -1523,11 +1525,3 @@ Adding or tightening a requirement fails two tests until you update them, and th
 **Thresholds that carry a policy decision need at least one test pinning the literal value.** Every `SECRET_KEY` case was written as `"x" * MIN_HOSTED_SECRET_KEY_BYTES`, so when #2003 changed the constant, none of them failed. A test derived from the constant under test cannot detect a change to it.
 
 **The release PR reports enforcement boundaries, not just row edits.** `scripts/startup_requirements_diff.py` compares the documented table *and* the release version at each ref. A requirement staged in `1.0.0` with `enforced_from: 2.0.0` has an identical row on both sides; the release that bumps the version to `2.0.0` is the one it starts refusing boots on, and it is announced under **Now enforced** with nothing in the diff to trigger it.
-
----
-
-## Known inconsistencies
-
-These exist in the codebase today and don't yet have a single canonical answer. Reviewers should flag new code that goes either direction without considering both. Each entry names the inconsistency, the direction new code takes, and its tracking issue; the rule itself lives in the section above that owns it.
-
-- **`DEBUG` and `FLASK_DEBUG` are different knobs with confusable names.** `FLASK_DEBUG` feeds the `DEBUG` *config* value (Flask's debug mode); the `DEBUG` *environment variable* raises the root log level and is what `pnpm flask:start-debug` sets. Both are in `.env.sample`. Read the name at the call site rather than assuming. (#1922)

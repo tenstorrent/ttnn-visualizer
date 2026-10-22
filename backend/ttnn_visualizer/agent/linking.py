@@ -31,12 +31,18 @@ import tempfile
 from collections import Counter
 from dataclasses import dataclass, field
 from enum import Enum
+from functools import partial
 from typing import Dict, List, NamedTuple, Optional, Sequence, Set, Tuple
 
 from tt_perf_report.perf_report import HOST_OP_MARKER
-from ttnn_visualizer.agent import operations, perf_detail, tools
-from ttnn_visualizer.agent.bounds import MAX_LIMIT
+from ttnn_visualizer.agent import failures, operations, perf_detail, tools
+from ttnn_visualizer.agent.bounds import (
+    MAX_LIMIT,
+    GraphTooLargeError,
+    ensure_graph_readable,
+)
 from ttnn_visualizer.agent.handles import CacheVariant, ReportRegistry
+from ttnn_visualizer.agent.scope_outcomes import is_device_operation, scope_pairing
 from ttnn_visualizer.csv_queries import SIGNPOST_OP_TYPE
 from ttnn_visualizer.models import Instance
 
@@ -44,18 +50,6 @@ logger = logging.getLogger(__name__)
 
 # Microseconds, as tt-perf-report writes `device_time`.
 DEVICE_TIME_UNIT = "us"
-
-# The captured graph a link will read, at the one rank it links: the size query takes
-# the read's own rank filter. `query_device_operations` holds every graph at once, so
-# this is checked in SQL before any is loaded. Across 85 local captures the largest
-# total is 55.6 MB, so the bound is ~18x anything seen: it refuses a pathological
-# file, never a real one.
-MAX_CAPTURED_GRAPH_CHARS = 1 << 30
-
-# How tt-metal marks a `function_end` that closed a scope whose launch threw. Graph
-# params are strings; only `program_cache_hit` is converted when serialised. A boolean
-# is accepted too, in case a later serialiser converts it -- the app reads it the same.
-_ABORTED_PARAM_VALUE = "true"
 
 
 class LinkStatus(str, Enum):
@@ -141,16 +135,6 @@ class OperationLink:
         if self.reason:
             response["reason"] = self.reason
         return response
-
-
-def is_device_operation(name: str) -> bool:
-    """`isDeviceOperation` in `src/functions/filterOperations.ts`, kept identical."""
-    return (
-        name != ""
-        and "(torch)" not in name
-        and "::" not in name
-        and "ttnn." not in name
-    )
 
 
 def _align(
@@ -259,10 +243,6 @@ class UnreadableGraphError(ValueError):
     """A captured graph that is not a JSON list of nodes."""
 
 
-class GraphTooLargeError(ValueError):
-    """More captured graph than the link will hold in memory to read."""
-
-
 def _redacted(error: Exception) -> str:
     """An error's text with the system temp directory masked.
 
@@ -318,21 +298,15 @@ def _device_operation_names(raw: Optional[str]) -> Dict[NodeOrder, List[str]]:
         name = params.get("name") if isinstance(params, dict) else None
         if not isinstance(name, str) or not isinstance(params, dict):
             raise UnreadableGraphError(f"a {order.value} node carries no name")
-        lifecycle.append((order, name, params))
+        lifecycle.append((order, name, node))
 
-    open_starts: List[Tuple[str, int]] = []
-    completed: Set[int] = set()
-    for index, (order, name, params) in enumerate(lifecycle):
-        if order is NodeOrder.FUNCTION_START:
-            open_starts.append((name, index))
-            continue
-        for position in range(len(open_starts) - 1, -1, -1):
-            if open_starts[position][0] == name:
-                aborted = params.get("aborted")
-                if aborted is not True and aborted != _ABORTED_PARAM_VALUE:
-                    completed.update((open_starts[position][1], index))
-                del open_starts[position]
-                break
+    start_by_end, aborted_ends = scope_pairing([node for _, _, node in lifecycle])
+    completed: Set[int] = {
+        index
+        for end, start in start_by_end.items()
+        if end not in aborted_ends
+        for index in (start, end)
+    }
 
     for index, (order, name, _) in enumerate(lifecycle):
         if index in completed and is_device_operation(name):
@@ -419,12 +393,7 @@ def _read_profiler_side(
         # the device count would sum the ranks.
         operations.refuse_unattributable(queries, scope, "captured_graph", "devices")
         graph_filters = operations.scoped(queries, "captured_graph", scope)
-        graph_size = queries.query_captured_graph_size(filters=graph_filters)
-        if graph_size > MAX_CAPTURED_GRAPH_CHARS:
-            raise GraphTooLargeError(
-                f"this capture holds {graph_size:,} characters of captured graph, "
-                f"past the {MAX_CAPTURED_GRAPH_CHARS:,} the link will read"
-            )
+        ensure_graph_readable(queries, graph_filters, "the link")
         operation_ids = {
             operation.operation_id
             for operation in queries.query_operations(
@@ -722,7 +691,11 @@ def operation_detail(
     """`operations.operation_detail`, with the performance rows it launched."""
     groups = perf_detail.parse_include(include)
     result = operations.operation_detail(
-        registry, handle, operation_id=operation_id, rank=rank
+        registry,
+        handle,
+        operation_id=operation_id,
+        rank=rank,
+        detail_fields=partial(failures.operation_failure_fields, registry, handle),
     )
     link = operation_link(registry, handle)
     if link.status is LinkStatus.LINKED and result.get("rank") != link.rank:
@@ -796,7 +769,6 @@ def program_cache(
 
 __all__ = [
     "DEVICE_TIME_UNIT",
-    "MAX_CAPTURED_GRAPH_CHARS",
     "PROGRAM_CACHE_LINK_NOTE",
     "TOP_OPS_LINK_NOTE",
     "DeviceOperation",
@@ -808,7 +780,6 @@ __all__ = [
     "UnlinkedRows",
     "collapse_multidevice_operations",
     "device_operation_orders",
-    "is_device_operation",
     "is_host_op_row",
     "match_device_operations",
     "operation_detail",

@@ -23,9 +23,11 @@ from unittest.mock import patch
 import pytest
 from ttnn_visualizer.agent import (
     app_links,
+    bounds,
     linking,
     operations,
     perf_detail,
+    scope_outcomes,
     server,
     tools,
 )
@@ -336,7 +338,7 @@ class TestMatcherParity:
         ],
     )
     def test_device_operation_names_match_the_frontend_filter(self, name, expected):
-        assert linking.is_device_operation(name) is expected
+        assert scope_outcomes.is_device_operation(name) is expected
 
 
 class TestFailedDeviceOperations:
@@ -1511,7 +1513,7 @@ class TestLinkBounds:
     def test_a_captured_graph_past_the_bound_is_not_read(self, linked):
         registry, handle, _ = linked()
 
-        with patch.object(linking, "MAX_CAPTURED_GRAPH_CHARS", 10):
+        with patch.object(bounds, "MAX_CAPTURED_GRAPH_CHARS", 10):
             link = linking.operation_link(registry, handle)
 
         assert link.status is LinkStatus.UNAVAILABLE
@@ -1533,7 +1535,7 @@ class TestLinkBounds:
             connection.close()
         registry, handle, _ = linked(profiler_path=path)
 
-        with patch.object(linking, "MAX_CAPTURED_GRAPH_CHARS", rank_zero_size):
+        with patch.object(bounds, "MAX_CAPTURED_GRAPH_CHARS", rank_zero_size):
             link = linking.operation_link(registry, handle)
 
         assert link.status is LinkStatus.LINKED
@@ -1541,7 +1543,7 @@ class TestLinkBounds:
 
     def test_the_bound_is_far_past_any_real_capture(self):
         """Pinned as a literal: lowering it is a policy change, not a refactor."""
-        assert linking.MAX_CAPTURED_GRAPH_CHARS == 1 << 30
+        assert bounds.MAX_CAPTURED_GRAPH_CHARS == 1 << 30
 
     @pytest.mark.parametrize("directory", [tempfile.gettempdir(), "/tmp"])
     def test_a_reason_does_not_carry_the_temp_directory(

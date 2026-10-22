@@ -144,6 +144,17 @@ def _print_environment(config: DefaultConfig) -> None:
         print(f"{key}={rendered_value}")
 
 
+def _is_dev_debug_requested() -> bool:
+    """Whether the development knob ``pnpm flask:start-debug`` sets is on.
+
+    What the bare ``DEBUG`` variable means, and why it is not ``FLASK_DEBUG``, is in
+    CONVENTIONS.md under "``_ENV_ALIASES`` where the variable isn't named after the
+    attribute" (#1922). No security posture rides on its parse, so an unrecognised value
+    means off rather than warns.
+    """
+    return str_to_bool(os.environ.get("DEBUG", "false"))
+
+
 def create_app(settings_override=None):
     from ttnn_visualizer.views import api
 
@@ -158,7 +169,7 @@ def create_app(settings_override=None):
     if dotenv_path.exists():
         load_dotenv(str(dotenv_path))
 
-    debug_logging = str_to_bool(os.environ.get("DEBUG", "false"))
+    debug_logging = _is_dev_debug_requested()
     log_level = logging.DEBUG if debug_logging else logging.INFO
     root_logger = logging.getLogger()
     root_logger.setLevel(log_level)
@@ -775,7 +786,7 @@ def main():
         # Clean up this temporary app - workers will create their own
         del app
 
-    debug_mode = str_to_bool(os.environ.get("DEBUG", "false"))
+    reload_requested = _is_dev_debug_requested()
     if config.PRINT_ENV:
         _print_environment(config)
 
@@ -803,7 +814,7 @@ def main():
         config.GUNICORN_APP_MODULE,
     ]
 
-    if debug_mode:
+    if reload_requested:
         gunicorn_args.insert(1, "--reload")
 
     if args.daemon:
