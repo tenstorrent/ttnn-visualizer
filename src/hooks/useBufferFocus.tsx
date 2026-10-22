@@ -23,7 +23,10 @@ export const useResetBufferFocus = () => {
         setSelectedAddress(null);
         setSelectedBufferColour(null);
         // Read inside the updater because the toast's own onClick/closeButton capture
-        // resetBufferFocus when created, before the returned toast id is stored. #2149
+        // resetBufferFocus when they're created (before the returned toast id is stored),
+        // so a closure over `activeToast` would be stale. Jotai invokes the updater
+        // synchronously exactly once per state transition, so the dismiss call here
+        // fires deterministically before `null` is committed. #2149
         setActiveToast((previousToast) => {
             if (previousToast !== null) {
                 dismissToast(previousToast);
