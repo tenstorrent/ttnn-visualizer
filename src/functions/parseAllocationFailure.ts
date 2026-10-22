@@ -44,6 +44,8 @@ const toNumber = (value: string | undefined): number | null => (value === undefi
  *
  * Takes the operation rather than its error: the nested error the API returns leaves
  * out the operation's id and name (`ErrorRecord.to_nested_dict`).
+ *
+ * Mirrored as `parse_allocation_failure` in `backend/ttnn_visualizer/agent/allocation_failures.py`.
  */
 export const parseAllocationFailure = ({
     id,
@@ -249,7 +251,10 @@ const getBankFailureDiagnosis = (failure: BankAllocationFailure): AllocationFail
     );
 };
 
-/** Why the allocation did not fit, from its figures; `null` when they cannot say. */
+/**
+ * Why the allocation did not fit, from its figures; `null` when they cannot say.
+ * Mirrored as `diagnose` in `backend/ttnn_visualizer/agent/allocation_failures.py`.
+ */
 export const getAllocationFailureDiagnosis = (
     failure: AllocationFailure,
     showHex = false,

@@ -221,6 +221,7 @@ const getRetriesAfterFailure = (
  * Likely L1-to-DRAM fallbacks, keyed by operation id. Inferred, not recorded: tt-metal writes
  * nothing when an op falls back. Operations must be in id order, as `/api/operations` serves them.
  * A recorded failure followed by DRAM outranks a bare argument mismatch on the same op.
+ * Mirrored as `dram_fallbacks` in `backend/ttnn_visualizer/agent/dram_fallbacks.py`.
  */
 export const getDramFallbacks = (
     operations: DramFallbackOperation[],

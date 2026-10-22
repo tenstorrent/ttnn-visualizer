@@ -26,7 +26,8 @@ export interface LastValidConsumer {
 /**
  * Resolve a tensor's last *meaningful* consumer: the highest consumer op id
  * that isn't itself a deallocate call, since a deallocate consuming the tensor
- * is the very thing we're measuring the distance to.
+ * is the very thing we're measuring the distance to. Mirrored as `last_valid_consumer`
+ * in `backend/ttnn_visualizer/agent/l1_peak.py`.
  */
 export const getLastValidConsumer = (
     consumers: readonly number[],

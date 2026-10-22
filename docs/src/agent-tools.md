@@ -45,9 +45,9 @@ Answers link to the same thing in the web application, for the reader to open:
 
 - `load_report` returns an `app_link` to the report.
 - `operation_detail` and `operation_provenance` return an `app_link` to the operation.
-- `find_operations`, `top_ops`, `program_cache`, `memory_profile` and `tensor_flow`
-  return one `app_link_template`, in which `{operation_id}` takes any operation id the
-  answer lists.
+- `find_operations`, `top_ops`, `program_cache`, `memory_profile`, `tensor_flow`,
+  `errors`, `dram_fallbacks` and `l1_peak` return one `app_link_template`, in which
+  `{operation_id}` takes any operation id the answer lists.
 
 A link names the report by its directories, and the visualizer opens them when the link is
 followed, as `ttnn-visualizer --profiler-path` does: each followed link starts a new session
@@ -84,14 +84,18 @@ another rank's operation under the same id.
 | `zone_timings` | Per-zone, per-RISC totals from `profile_log_device.csv` — firmware and kernel phases, as measured on device. |
 | `diff_reports` | Per-operation-code deltas between two reports, largest movement first, over the whole reports or one signpost range in both. |
 | `find_operations` | Operations matching a name substring or a call-stack substring, with the ids `operation_detail` takes. |
-| `operation_detail` | One operation: its input and output tensors with shape, dtype, layout and memory config, and what it had allocated. With a linked performance report, also the performance rows it launched, their device time and share of the report's, and the operation's total and slowest row, with the same `include` as `top_ops`. |
+| `operation_detail` | One operation: its input and output tensors with shape, dtype, layout and memory config, and what it had allocated, with its error and likely DRAM fallback when it has one. With a linked performance report, also the performance rows it launched, their device time and share of the report's, and the operation's total and slowest row, with the same `include` as `top_ops`. |
 | `memory_profile` | Memory footprint per operation, keyed by buffer type and ranked within each, with each type's largest footprint and the device's L1 geometry. A floor rather than the peak — see below. |
 | `tensor_flow` | Which operation produced a tensor and which ones consumed it. |
 | `operation_provenance` | What one operation was called with, and where in the model code it came from. |
+| `errors` | The errors the run recorded, including an operation that started and never completed: which operation, the device operations whose launch failed, and for an allocation failure its figures and why it did not fit. |
+| `dram_fallbacks` | Operations that likely fell back from L1 to DRAM, inferred from their memory config arguments and from retries after an L1 allocation failure. |
+| `l1_peak` | The run's L1 peak per bank, split into circular buffers, intra-operation tensors, persistent tensors and stale ones, with the operation holding it and the operations closest to it. |
 
-`top_ops`, `program_cache`, `zone_timings` and `diff_reports` read the performance CSVs; the five
-operation tools — `find_operations`, `operation_detail`, `memory_profile`,
-`tensor_flow` and `operation_provenance` — read the profiler report's SQLite database;
+`top_ops`, `program_cache`, `zone_timings` and `diff_reports` read the performance CSVs; the
+operation tools — `find_operations`, `operation_detail`, `memory_profile`, `tensor_flow`,
+`operation_provenance`, `errors`, `dram_fallbacks` and `l1_peak` — read the profiler
+report's SQLite database;
 `load_report` opens both, since its whole job is saying which of the others apply. A capture can carry either, both, or — as far as these tools are concerned —
 neither, which is what makes `load_report`'s answer worth reading first.
 
@@ -183,9 +187,9 @@ buffers are 52–100% of the real L1 peak wherever a peak has any, and intra-op 
 further 24–38%; on `resnet50_may08_1841` the tool reports 487,424 — a figure eighteen
 operations share — where replaying the captured graph gives 1,159,840 at operation 29,
 2.4x out and not the same operations. Two of the local reports hold almost no L1 tensors at
-all, so the tool reports a figure near zero for a model that is saturating L1. Do not use
-this figure to answer an out-of-memory question; neither the true peak nor the operation
-holding it can be derived from it.
+all, so the tool reports a figure near zero for a model that is saturating L1. Neither the
+true peak nor the operation holding it can be derived from it: for an out-of-memory
+question, read `errors` and `l1_peak`.
 
 `memory_profile` groups by operation because the report records what was live *at* each
 operation rather than what that operation allocated. A per-operation sum is therefore the
@@ -300,6 +304,45 @@ columns cannot answer, and `load_report` says so. Each op code's first repeat mi
 named by its CSV row in `first_repeat_miss_perf_id`, and when the handle also holds a
 profiler report, by `first_repeat_miss_operation_id` too, for `operation_provenance` to
 turn into a call site.
+
+**`errors` says where a run stopped and why an allocation failed.** It lists the rows of the
+report's `errors` table, as the web application shows them. An `incomplete_operation` error
+is an operation that started and never completed, so the run most likely crashed inside it.
+An error the report could not place on an operation of that id and name has `attached`
+false; the application shows those at report level. `failed_device_operations` names the
+device operations in the operation's captured graph whose launch did not complete, up to 20,
+and `failed_device_operation_count` counts them all. When the message is one of tt-metal's
+four allocation failures — out of memory, out of memory after considering dependencies,
+circular buffers beyond L1, circular buffers clashing with an L1 buffer —
+`allocation_failure` carries its figures and `diagnosis` says why it did not fit, with the
+reasons [Allocation failures](allocation-failures.md) describes. Only a message's first
+32,768 characters are read for one, several times the longest real message, and its
+`core_range` is cut like a message. `requested_bytes` is the whole request across
+`num_banks`; the other bank figures are per bank. An unattached error's `operation_id` can
+name an unrelated operation, so it is not one to open with `app_link_template`. A report
+that predates the `errors` table says so in its caveat rather than reporting no errors.
+
+**`dram_fallbacks` is inferred.** tt-metal records nothing when an operation falls back
+from L1 to DRAM. An operation counts when its memory config arguments all ask for L1 while
+every output it allocated itself is in DRAM, or when it runs within three operations of a
+same-named one that failed to allocate L1 and its outputs are in DRAM. An output that may
+be a view of a DRAM input is left out. `operation_detail` carries the same `dram_fallback`
+for its operation.
+
+**`l1_peak` is the figure for an out-of-memory question.** It replays every operation's
+captured graph against the post-operation `buffers` snapshot, so it counts what
+`memory_profile` cannot: circular buffers and tensors allocated and freed inside an
+operation. The peak is in bytes per bank, split into circular buffers, intermediate,
+persistent and stale tensors. Stale tensors are still allocated after their last real
+consumer, the only part freeing earlier would help. `top_operations` keeps one entry per
+distinct composition, with `also_at` naming the operations that repeat it, since a model
+that runs one layer stack several times reaches the same figure at each. `also_at` names at
+most 20 of them, and `also_at_count` counts them all: one local capture repeats a
+composition 9,679 times. `precision` is `upper-bound` wherever more than one resident is
+summed, since a capture does not say which cores each occupies. When the replay exceeds the
+device's L1 its figures are withheld and `reason` says why, as the web application's L1 peak
+panel does. The first call on a handle reads every captured graph, which can take seconds on
+a large capture; later calls reuse it.
 
 `zone_timings` carries a caveat of its own: cycles are summed across every core that ran
 the zone, so they measure occupancy rather than wall-clock duration. A core is counted per
