@@ -363,7 +363,7 @@ def test_production_testing_is_not_enabled_by_the_string_false(monkeypatch):
     assert config.TESTING is False
 
 
-def test_the_logging_debug_variable_does_not_enable_flask_debug(monkeypatch):
+def test_the_dev_debug_variable_does_not_enable_flask_debug(monkeypatch):
     # ``DEBUG=true`` is the development knob ``pnpm flask:start-debug`` sets: debug-level
     # logging plus gunicorn ``--reload``, read by ``_is_dev_debug_requested()``.
     # Matching it to the ``DEBUG`` *attribute* would hand Flask debug mode to anyone
