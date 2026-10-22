@@ -886,7 +886,6 @@ describe('PerfTable high dispatch highlight', () => {
     });
 });
 
-
 describe('PerfTable expected cache hits footer (#2169)', () => {
     it('excludes unrecorded repeat calls from the hit percentage and reports the excluded count', () => {
         const rows = enrichRowData(

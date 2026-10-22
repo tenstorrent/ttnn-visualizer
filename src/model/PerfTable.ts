@@ -62,7 +62,9 @@ export interface PerfTableRow {
     op?: number;
     missing?: boolean;
     hash: string | null;
-    cache_hit: boolean | null;
+    // Arrives from the CSV as the string 'True'/'False' or '' (null) on older captures
+    // that predate the column; enrichRowData coerces it to `boolean | null` for the typed row.
+    cache_hit: string | boolean | null;
 }
 
 export interface TypedPerfTableRow extends Omit<
@@ -109,6 +111,7 @@ export interface TypedPerfTableRow extends Omit<
     dram_sharded: boolean | null;
     bound: BoundType | null;
     pm_ideal_ns: number | null;
+    cache_hit: boolean | null;
     device_kernel_duration: number | null;
     brisc_kernel_duration: number | null;
     ncrisc_kernel_duration: number | null;

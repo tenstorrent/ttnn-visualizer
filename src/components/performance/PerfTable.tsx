@@ -539,7 +539,7 @@ const computeFooterTotals = (data: TypedPerfTableRow[], hideHostOps: boolean): P
         }
 
         if (!row.isFirstHashOccurrence && row.hash) {
-            if (row.cache_hit == null) {
+            if (row.cache_hit === null) {
                 unrecordedRepeatOpsCount++;
             } else {
                 recordedRepeatOpsCount++;
