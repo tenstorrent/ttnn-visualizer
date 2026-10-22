@@ -12,7 +12,7 @@ This file covers only what a person changing the code needs.
 
 | Module | Holds |
 |---|---|
-| `handles.py` | Path → handle registry, and the inventory `load_report` returns. No app database and no app context: `Instance` is a plain model of two paths, which is what lets the tools read the query classes directly. It does open the report's own SQLite file, to report what the report can answer. |
+| `handles.py` | Path → handle registry, and the inventory and capture facts `load_report` returns. No app database and no app context: `Instance` is a plain model of two paths, which is what lets the tools read the query classes directly. It does open the report's own SQLite file read-only, to report what the report can answer and how many devices it holds, and reads the perf CSV's `DEVICE ID` column and the cluster descriptor's `arch` block. |
 | `tools.py` | The performance-report tools, `CANONICAL_PROJECTION`, and the caveat logic. |
 | `perf_detail.py` | The field groups `include` adds to a performance row (#2153), and what fills a field no row carries. The generated rows hold the raw CSV columns behind them only because `tools` asks for `detail_columns`; the app's rows do not (#2159). |
 | `operations.py` | The profiler-database tools, including provenance (arguments and call site). Opens its own read-only connection: `LocalQueryRunner` reads `Instance.profiler_path` as the SQLite file, while a handle holds the directory the caller named. |
@@ -77,8 +77,10 @@ letting the field names imply they are comparable. The HTTP serializers re-expos
 per-bank column as plain `size` (`serializers.py:309`), which is how easy the misreading
 is.
 
-**Adding a tool means adding it to `_tool_table`**, with a description carrying the caveats
-an agent needs *before* choosing it — not only in the response. It also means a row in the
+**Adding a tool means adding it to `_tool_table`**, with a `title` and a description carrying
+the caveats an agent needs *before* choosing it — not only in the response. A rule every tool
+shares goes in `INSTRUCTIONS` instead, which clients put in the system prompt; keep it short.
+It also means a row in the
 tool table of [`docs/src/agent-tools.md`](../../../docs/src/agent-tools.md), in the same
 change: that page is the only description of this surface a client's reader gets, and #2035
 puts it inside the application, so a tool missing from it goes missing for the user too.

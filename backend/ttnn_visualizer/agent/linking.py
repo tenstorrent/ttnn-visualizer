@@ -685,13 +685,6 @@ def top_ops(
     return result
 
 
-def _share_percent(device_time: Optional[float], total: float) -> Optional[float]:
-    """Percent of `total`, to three significant figures so a sliver stays non-zero."""
-    if device_time is None or total <= 0:
-        return None
-    return float(f"{device_time / total * 100:.3g}")
-
-
 def _device_time_summary(
     rows: Sequence[Dict], report_total: float
 ) -> Dict[str, object]:
@@ -707,7 +700,7 @@ def _device_time_summary(
     slowest, _ = max(timed, key=lambda pair: pair[1])
     return {
         "device_time": round(total, 3),
-        "device_time_share_percent": _share_percent(total, report_total),
+        "device_time_share_percent": tools.share_percent(total, report_total),
         "slowest_perf_id": slowest.get("id"),
     }
 
@@ -743,7 +736,7 @@ def operation_detail(
         result["perf_rows"] = [
             {
                 **tools.project_row(row),
-                "device_time_share_percent": _share_percent(
+                "device_time_share_percent": tools.share_percent(
                     tools.countable_device_time(row), link.report_device_time_total
                 ),
                 **perf_detail.detail_fields(row, groups, empty),

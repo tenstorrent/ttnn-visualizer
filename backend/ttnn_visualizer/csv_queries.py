@@ -1429,18 +1429,21 @@ class ResolvedSignposts:
 
 
 def resolve_signposts(
-    csv_file: IO[str], tracing_mode: bool = False
+    csv_file: IO[str], tracing_mode: bool = False, low_memory: bool = False
 ) -> ResolvedSignposts:
     """Read a perf CSV's signposts as `generate_perf_report` orders them.
 
     The read and sort are pandas', as the library's are, so equal timestamps order
     the same way in both. Only the three columns it needs are parsed. The file is
     rewound before and after, so the caller can hand it on.
+
+    `low_memory` parses in chunks, as tt-perf-report does not: on every local
+    capture it resolves the same positions, and peaks at a fraction of the memory.
     """
     wanted = {_OP_TYPE_COLUMN, _OP_CODE_COLUMN, _HOST_START_COLUMN}
     csv_file.seek(0)
     rows = pd.read_csv(
-        csv_file, usecols=lambda column: column in wanted, low_memory=False
+        csv_file, usecols=lambda column: column in wanted, low_memory=low_memory
     )
     csv_file.seek(0)
 
@@ -1461,7 +1464,9 @@ def resolve_signposts(
     return ResolvedSignposts(dict(positions_by_name), sorted_by_host_time)
 
 
-def read_signposts(csv_file: IO[str], tracing_mode: bool = False) -> ResolvedSignposts:
+def read_signposts(
+    csv_file: IO[str], tracing_mode: bool = False, low_memory: bool = False
+) -> ResolvedSignposts:
     """`resolve_signposts`, with an unreadable capture answered as the caller's data.
 
     `EmptyDataError` and `ParserError` are both `ValueError`s: a ragged or
@@ -1470,7 +1475,7 @@ def read_signposts(csv_file: IO[str], tracing_mode: bool = False) -> ResolvedSig
     same through either.
     """
     try:
-        return resolve_signposts(csv_file, tracing_mode)
+        return resolve_signposts(csv_file, tracing_mode, low_memory)
     except ValueError as error:
         raise DataFormatError(
             f"could not read the report's signposts: {error}"

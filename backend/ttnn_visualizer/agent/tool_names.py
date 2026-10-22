@@ -15,6 +15,7 @@ from enum import Enum
 class McpToolName(str, Enum):
     LOAD_REPORT = "load_report"
     TOP_OPS = "top_ops"
+    OP_BREAKDOWN = "op_breakdown"
     PROGRAM_CACHE = "program_cache"
     ZONE_TIMINGS = "zone_timings"
     DIFF_REPORTS = "diff_reports"

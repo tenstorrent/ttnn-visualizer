@@ -27,6 +27,8 @@ from ttnn_visualizer.agent.handles import (
     perf_csv_columns,
 )
 from ttnn_visualizer.csv_queries import (
+    MAX_LISTED_SIGNPOSTS,
+    SIGNPOST_OP_TYPE,
     DegradedPerformanceReport,
     DeviceLogProfilerQueries,
     OpsPerformanceQueries,
@@ -37,6 +39,7 @@ from ttnn_visualizer.csv_queries import (
     signpost_range_ignored,
 )
 from ttnn_visualizer.exceptions import (
+    DataFormatError,
     InvalidSignpostRange,
     PerformanceReportNotLoadedException,
 )
@@ -102,6 +105,13 @@ def countable_device_time(row: Dict) -> Optional[float]:
 def _rounded(value: Optional[float]) -> Optional[float]:
     """Nanosecond precision is plenty, and a 17-digit float is context spent."""
     return None if value is None else round(value, 3)
+
+
+def share_percent(part: Optional[float], whole: float) -> Optional[float]:
+    """Percent of `whole`, to three significant figures so a sliver stays non-zero."""
+    if part is None or whole <= 0:
+        return None
+    return float(f"{part / whole * 100:.3g}")
 
 
 # Longer than any signpost a model emits, and short enough that a refusal or a
@@ -230,8 +240,9 @@ def _require_same_source(
     if pinned is not None and _source_now(instance) != pinned:
         raise ValueError(
             f"the performance capture behind {handle!r} has changed since it was "
-            "first read, so a new read would not line up with the operations "
-            "already linked to it. Call load_report again for a fresh handle."
+            "first read, so a new read would not line up with what the handle "
+            "already read or linked from it. Call load_report again for a fresh "
+            "handle."
         )
 
 
@@ -251,20 +262,54 @@ def range_ignored(
 
 
 def _signposts(registry: ReportRegistry, handle: str) -> ResolvedSignposts:
-    """The handle's signposts, read once."""
+    """The handle's signposts, read once per capture."""
 
     def build(instance: Instance) -> ResolvedSignposts:
         _require_same_source(registry, handle, instance)
         return _resolve_signposts(instance)
 
-    _pin_source(registry, handle)
-    return registry.cached_report(handle, build, variant=CacheVariant.SIGNPOSTS)
+    source = _pin_source(registry, handle)
+    return registry.cached_report(
+        handle, build, variant=CacheVariant.SIGNPOSTS, share_key=source
+    )
 
 
 def _resolve_signposts(instance: Instance) -> ResolvedSignposts:
     path = OpsPerformanceQueries.get_local_ops_perf_file_path(instance)
     with open(path, newline="") as csv_file:
-        return read_signposts(csv_file)
+        # In chunks: `load_report` reads this for every handle, and a whole-file
+        # parse peaked at five times the CSV's size.
+        return read_signposts(csv_file, low_memory=True)
+
+
+def with_signposts(
+    registry: ReportRegistry, loaded: Dict[str, object]
+) -> Dict[str, object]:
+    """`load_report`'s answer with the signposts a range can name.
+
+    Read once per capture, through the cache a range is later checked against, and
+    only for a CSV `top_ops` can read. Listed as a refusal lists them, in the order
+    a bound resolves them, with how often each occurs: one name bounds both ends
+    only if it occurs twice.
+    """
+    if loaded.get("performance_csv") is None or loaded.get("performance_csv_problem"):
+        return loaded
+    try:
+        resolved = _signposts(registry, str(loaded["handle"]))
+    except (DataFormatError, OSError, ValueError) as error:
+        return {**loaded, "signposts_problem": str(error)}
+    listing = resolved.listing()
+    return {
+        **loaded,
+        "signpost_count": len(listing),
+        "signposts": [
+            {
+                "name": entry["op_code"],
+                "occurrences": len(resolved.positions_by_name[str(entry["op_code"])]),
+            }
+            for entry in listing[:MAX_LISTED_SIGNPOSTS]
+        ],
+    }
 
 
 # The projection key a range adds, and the one `is_ranged` reads it back by.
@@ -767,14 +812,152 @@ def diff_reports(
     return result
 
 
+# Two of the stacked table's groupings, named as `tt-perf-report --group-by` names
+# the first; the third, by input-0 memory, is not offered.
+BREAKDOWN_GROUPINGS = ("op", "op_category")
+
+OP_BREAKDOWN_NOTE = (
+    "Grouped as the performance view's stacked table and tt-perf-report's stacked "
+    "report group rows: by op, the op code's first word, which keeps every shape of "
+    "an op in one entry and files every host op under (torch); or by op_category. "
+    "Signposts are left out. Each share is of the rows read: "
+    "device_time_share_percent of device_time_total, op_to_op_gap_share_percent of "
+    "op_to_op_gap_total. total_percent sums tt-perf-report's Total %, the share of "
+    "device time and op-to-op gap together. A row's op-to-op gap is the time before "
+    "it, and a host op has no device time."
+)
+
+
+@dataclass
+class _Share:
+    key: Optional[str]
+    count: int = 0
+    device_time: float = 0.0
+    op_to_op_gap: float = 0.0
+    total_percent: float = 0.0
+
+    def add(self, other: "_Share") -> None:
+        self.count += other.count
+        self.device_time += other.device_time
+        self.op_to_op_gap += other.op_to_op_gap
+        self.total_percent += other.total_percent
+
+
+def _row_share(row: Dict) -> _Share:
+    return _Share(
+        key=None,
+        count=1,
+        device_time=countable_device_time(row) or 0.0,
+        op_to_op_gap=finite_number(row.get("op_to_op_gap")) or 0.0,
+        total_percent=finite_number(row.get("total_percent")) or 0.0,
+    )
+
+
+def _breakdown_key(row: Dict, group_by: str) -> Optional[str]:
+    """The stacked table's key: the op code's first word, or the category.
+
+    `generate_stacked_report` in tt-perf-report takes `OP Code`'s first word.
+    """
+    if group_by == "op_category":
+        return row.get("op_category") or None
+    words = str(row.get("op_code") or "").split()
+    return words[0] if words else None
+
+
+def op_breakdown(
+    registry: ReportRegistry,
+    handle: str,
+    group_by: str = "op",
+    by: str = "device_time",
+    limit: Optional[int] = None,
+    start_signpost: Optional[str] = None,
+    end_signpost: Optional[str] = None,
+) -> Dict[str, object]:
+    """Where a report's time went, per op or category, as shares of its totals.
+
+    The performance view's stacked table, built from the rows: tt-perf-report's
+    stacked report is not generated (`_GENERATION_OPTIONS`), and it carries no
+    op-to-op gap. As there, signposts are left out and a host op is counted with
+    no device time.
+    """
+    if group_by not in BREAKDOWN_GROUPINGS:
+        raise ValueError(
+            f"unknown grouping {group_by!r}; expected one of "
+            f"{', '.join(BREAKDOWN_GROUPINGS)}"
+        )
+    if by not in ADDITIVE_METRICS:
+        raise ValueError(
+            f"unknown metric {by!r}; expected one of {', '.join(sorted(ADDITIVE_METRICS))}"
+        )
+    count = bounded(limit)
+
+    signposts = SignpostRange.of(start_signpost, end_signpost)
+    report = canonical_report(registry, handle, signposts)
+    rows = [
+        row
+        for row in report.get("report", [])
+        if row.get("op_type") != SIGNPOST_OP_TYPE
+    ]
+
+    shares: Dict[Optional[str], _Share] = {}
+    for row in rows:
+        key = _breakdown_key(row, group_by)
+        shares.setdefault(key, _Share(key)).add(_row_share(row))
+
+    device_time_total = sum(share.device_time for share in shares.values())
+    gap_total = sum(share.op_to_op_gap for share in shares.values())
+
+    def entry(share: _Share) -> Dict[str, object]:
+        return {
+            "count": share.count,
+            "device_time": round(share.device_time, 3),
+            "device_time_share_percent": share_percent(
+                share.device_time, device_time_total
+            ),
+            "op_to_op_gap": round(share.op_to_op_gap, 3),
+            "op_to_op_gap_share_percent": share_percent(share.op_to_op_gap, gap_total),
+            "total_percent": round(share.total_percent, 3),
+        }
+
+    ranked = sorted(
+        shares.values(),
+        key=lambda share: (-getattr(share, by), share.key is None, share.key or ""),
+    )
+    shown, rest = ranked[:count], ranked[count:]
+    result: Dict[str, object] = {
+        "handle": handle,
+        "grouped_by": group_by,
+        "metric": by,
+        "row_count": len(rows),
+        "group_count": len(shares),
+        "returned": len(shown),
+        "device_time_total": round(device_time_total, 3),
+        "op_to_op_gap_total": round(gap_total, 3),
+        "groups": [{group_by: share.key, **entry(share)} for share in shown],
+        "projection": projection(signposts, bool(report.get("signpost_range_ignored"))),
+        "note": OP_BREAKDOWN_NOTE,
+    }
+    if rest:
+        merged = _Share(None)
+        for share in rest:
+            merged.add(share)
+        result["rest"] = {"group_count": len(rest), **entry(merged)}
+    caveat = partitioned_caveat(rows)
+    if caveat:
+        result["caveat"] = caveat
+    return result
+
+
 def _stderr_log() -> None:
     """Keep stdout clear for whatever transport imports this."""
     logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 
 
 __all__ = [
+    "BREAKDOWN_GROUPINGS",
     "CANONICAL_PROJECTION",
     "MAX_SIGNPOST_NAME_LENGTH",
+    "OP_BREAKDOWN_NOTE",
     "PROGRAM_CACHE_NOTE",
     "SORTABLE_METRICS",
     "SignpostRange",
@@ -784,12 +967,15 @@ __all__ = [
     "countable_device_time",
     "diff_reports",
     "empty_detail_fields",
+    "op_breakdown",
     "partitioned_caveat",
     "program_cache",
     "project_row",
     "projection",
     "range_ignored",
     "row_limit",
+    "share_percent",
     "top_ops",
+    "with_signposts",
     "zone_timings",
 ]

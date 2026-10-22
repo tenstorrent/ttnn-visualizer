@@ -192,6 +192,23 @@ class TestCheckSignpostRange:
         assert resolved.listing() == [{"id": 2, "op_code": "A"}]
 
 
+@pytest.mark.parametrize("tracing_mode", [False, True])
+def test_a_chunked_parse_resolves_the_same_positions(tracing_mode):
+    """`low_memory`, which the agent reads with: ties in host time included."""
+    tied = [
+        ("signpost", "A", "10"),
+        ("tt_dnn_device", "x", "10"),
+        ("signpost", "B", "10"),
+        ("signpost", "A", "5"),
+    ]
+    for rows in (REPEATED, HOST_TIME_REVERSED, tied):
+        raw = _raw_csv(rows)
+
+        chunked = resolve_signposts(StringIO(raw), tracing_mode, low_memory=True)
+
+        assert chunked == resolve_signposts(StringIO(raw), tracing_mode)
+
+
 class TestSignpostListing:
     """The `signposts` list is what the app's range picker offers.
 

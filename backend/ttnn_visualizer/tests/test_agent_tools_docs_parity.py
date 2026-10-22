@@ -21,6 +21,7 @@ from ttnn_visualizer.agent import server, tools
 from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_LIMIT
 from ttnn_visualizer.agent.handles import ReportRegistry
 from ttnn_visualizer.agent.perf_detail import DetailGroup
+from ttnn_visualizer.csv_queries import MAX_LISTED_SIGNPOSTS
 from ttnn_visualizer.tests.docs_parity import reject_duplicates
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -152,6 +153,12 @@ def test_the_signpost_name_limit_the_page_states_is_the_enforced_one():
     page = " ".join(_read(_AGENT_DOCS).split())
 
     assert f"a name longer than {tools.MAX_SIGNPOST_NAME_LENGTH} characters" in page
+
+
+def test_the_signpost_listing_cap_the_page_states_is_the_enforced_one():
+    page = " ".join(_read(_AGENT_DOCS).split())
+
+    assert f"the list stops at {MAX_LISTED_SIGNPOSTS}" in page
 
 
 def test_the_agent_tools_page_is_published():

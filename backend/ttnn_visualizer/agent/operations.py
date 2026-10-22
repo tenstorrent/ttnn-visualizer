@@ -15,14 +15,17 @@ invites the wrong reading carries the unit where it is returned.
 """
 
 import re
-import sqlite3
 from collections import defaultdict
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Dict, Iterator, List, NamedTuple, Optional, Set, Tuple
 
 from ttnn_visualizer.agent.bounds import MAX_LIMIT, bounded
-from ttnn_visualizer.agent.handles import PROFILER_DB_FILE, ReportRegistry
+from ttnn_visualizer.agent.handles import (
+    PROFILER_DB_FILE,
+    ReportRegistry,
+    read_only_connection,
+)
 from ttnn_visualizer.models import Buffer, BufferType, Instance
 from ttnn_visualizer.queries import DatabaseQueries
 
@@ -78,7 +81,7 @@ def profiler_db(instance: Instance) -> Iterator[DatabaseQueries]:
         raise ProfilerDatabaseMissingError(
             f"no {PROFILER_DB_FILE} in {instance.profiler_path}"
         )
-    connection = sqlite3.connect(f"file:{db_file}?mode=ro", uri=True)
+    connection = read_only_connection(db_file)
     try:
         with DatabaseQueries(connection=connection) as queries:
             yield queries
