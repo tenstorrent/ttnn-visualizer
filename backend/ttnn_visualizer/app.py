@@ -149,8 +149,10 @@ def _is_dev_debug_requested() -> bool:
 
     The bare ``DEBUG`` variable means debug-level logging plus gunicorn ``--reload``,
     and deliberately not Flask's debug mode: that is ``FLASK_DEBUG``, which feeds the
-    ``DEBUG`` config attribute through ``_ENV_ALIASES`` (#1922). Nothing rides on it
-    beyond developer convenience, so an unrecognised value means off rather than warns.
+    ``DEBUG`` config attribute through ``_ENV_ALIASES`` (#1922). It is meant for
+    development only: ``SERVER_MODE`` does not gate it, so a hosted deployment that sets
+    it still logs at debug level and reloads on file changes. No security posture rides
+    on its parse, so an unrecognised value means off rather than warns.
     """
     return str_to_bool(os.environ.get("DEBUG", "false"))
 

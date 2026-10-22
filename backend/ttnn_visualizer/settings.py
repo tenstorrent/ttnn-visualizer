@@ -341,9 +341,10 @@ _ENV_PARSERS: Mapping[str, Callable[[str], Any]] = {
 _STRICT_BOOLEANS = frozenset({"SERVER_MODE"})
 
 # Config attributes whose environment variable is spelled differently. ``DEBUG`` is the
-# only one: a bare ``DEBUG`` variable is the log-level knob ``pnpm flask:start-debug``
-# sets, so reading the attribute name would let it turn on Flask's debug mode — and
-# suppress the catch-all error handler — for anyone who only wanted verbose logs.
+# only one: a bare ``DEBUG`` variable is the development knob ``pnpm flask:start-debug``
+# sets, read by ``_is_dev_debug_requested()`` in ``app.py`` (#1922), so reading the
+# attribute name would let it turn on Flask's debug mode — and suppress the catch-all
+# error handler — for anyone who only wanted verbose logs.
 _ENV_ALIASES: Mapping[str, str] = {"DEBUG": "FLASK_DEBUG"}
 
 
@@ -749,9 +750,10 @@ class DefaultConfig(object):
         """Rebuild values derived from operator-controlled settings.
 
         The whole path tree hangs off ``TT_METAL_HOME``, which the class body reads at
-        import and the override loop can read again later — ``create_app``'s
-        ``load_dotenv`` targets ``backend/.env`` while this module's targets the working
-        directory, so the two reads genuinely can differ. Rebuilding the group as a unit
+        import and the override loop can read again later — this module's ``load_dotenv``
+        takes the nearest ``.env`` searching upwards from here (the working directory
+        under a REPL or debugger), while ``create_app``'s always targets ``backend/.env``,
+        so the two reads genuinely can differ. Rebuilding the group as a unit
         is what stops a new root from serving reports out of ``$TT_METAL_HOME/generated``
         while the database and upload directories stay on the import-time tree.
 

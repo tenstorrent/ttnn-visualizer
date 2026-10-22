@@ -415,6 +415,24 @@ def test_only_the_bare_debug_variable_requests_the_dev_knob(
     assert app_module._is_dev_debug_requested() is expected
 
 
+@pytest.mark.parametrize("env_value", [None, "false", "0", "yes"])
+def test_the_dev_knob_is_off_for_unset_false_and_unrecognised_values(
+    env_value, monkeypatch, caplog
+):
+    # ``"yes"`` pins the helper's documented contract: an unrecognised value means off
+    # and stays quiet, unlike config booleans, which warn. Moving it onto the config
+    # parsers would change that, and this is what notices.
+    monkeypatch.delenv("DEBUG", raising=False)
+    monkeypatch.delenv("FLASK_DEBUG", raising=False)
+    if env_value is not None:
+        monkeypatch.setenv("DEBUG", env_value)
+
+    with caplog.at_level(logging.WARNING):
+        assert app_module._is_dev_debug_requested() is False
+
+    assert not caplog.records
+
+
 ENV_SAMPLE_PATH = Path(__file__).parents[3] / ".env.sample"
 COMMENTED_SETTING_PATTERN = re.compile(r"^#\s*([A-Z][A-Z0-9_]*)=(.*)$")
 
@@ -427,7 +445,8 @@ def _documented_boolean_defaults():
 
     Yields ``(env_name, attribute, value)`` triples, since the two names need not
     match: ``FLASK_DEBUG`` is what feeds ``DEBUG``, so the file's bare ``DEBUG`` line
-    is the log-level knob and no config attribute's variable at all.
+    is the development knob ``_is_dev_debug_requested`` reads, and no config attribute's
+    variable at all.
     """
     if not ENV_SAMPLE_PATH.exists():
         pytest.skip(f"{ENV_SAMPLE_PATH.name} is not part of the installed package")
