@@ -330,6 +330,36 @@ def perf_csv_columns(instance: Instance) -> frozenset:
     return _csv_columns(_perf_csv(instance))
 
 
+
+
+def _device_log_answerable(performance_path: Optional[str]) -> bool:
+    """Whether `profile_log_device.csv` decodes cleanly, has the columns `zone_timings`
+    reads, and holds at least one data row. #2184"""
+    if performance_path is None:
+        return False
+    path = Path(performance_path, DeviceLogProfilerQueries.DEVICE_LOG_FILE)
+    if not path.is_file():
+        return False
+    try:
+        with path.open(encoding="utf-8", newline="") as source:
+            if not source.readline():
+                return False
+            header = [cell.strip() for cell in next(csv.reader(source), [])]
+            # Read to the end rather than stopping at the first row: `zone_timings`
+            # decodes the whole file in `query_zone_summary`, so a bad byte past
+            # row 1 has to be found here, matching `_perf_csv_problem`.
+            has_data_row = False
+            for line in source:
+                has_data_row = has_data_row or bool(line.strip())
+    except (OSError, UnicodeDecodeError, csv.Error):
+        return False
+    if not any(header):
+        return False
+    if not DeviceLogProfilerQueries.ZONE_SUMMARY_COLUMNS <= set(header):
+        return False
+    return has_data_row
+
+
 def _inventory(instance: Instance) -> Dict[str, object]:
     """What this report can actually answer.
 
@@ -357,11 +387,7 @@ def _inventory(instance: Instance) -> Dict[str, object]:
 
     performance_path = instance.performance_path
     profiler_path = instance.profiler_path
-    record(
-        "zone_timings",
-        performance_path is not None
-        and Path(performance_path, DeviceLogProfilerQueries.DEVICE_LOG_FILE).is_file(),
-    )
+    record("zone_timings", _device_log_answerable(performance_path))
 
     # Per tool, against the tables it reads. A partial capture can answer
     # `find_operations` and none of the rest, and saying so is the whole point

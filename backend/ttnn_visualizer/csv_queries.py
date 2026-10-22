@@ -376,6 +376,17 @@ class NPEQueries:
 
 class DeviceLogProfilerQueries:
     DEVICE_LOG_FILE = "profile_log_device.csv"
+    ZONE_SUMMARY_COLUMNS = frozenset(
+        {
+            "PCIe slot",
+            "zone name",
+            "RISC processor type",
+            "core_x",
+            "core_y",
+            "run host ID",
+            "time[cycles since reset]",
+        }
+    )
     # Only the columns something downstream depends on. Everything else in the
     # file is passed through untouched, because which columns exist varies by
     # producer and gating on them rejects captures that work fine: the segformer
@@ -535,8 +546,11 @@ class DeviceLogProfilerQueries:
         if not instance.performance_path:
             raise PerformanceReportNotLoadedException()
         path = Path(instance.performance_path, cls.DEVICE_LOG_FILE)
-        with open(path, "r") as handle:
-            first_line = handle.readline()
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                first_line = handle.readline()
+        except (OSError, UnicodeDecodeError):
+            return {}
 
         metadata: Dict[str, str] = {}
         for field in first_line.split(","):
@@ -583,16 +597,7 @@ class DeviceLogProfilerQueries:
         # ones *this* query indexes, so a capture missing one fails here with a
         # reason instead of a `KeyError` mid-parse.
         available = set(self.runner.df.columns if self.runner.df is not None else [])
-        needed = {
-            "PCIe slot",
-            "zone name",
-            "RISC processor type",
-            "core_x",
-            "core_y",
-            "run host ID",
-            "time[cycles since reset]",
-        }
-        missing = sorted(needed - available)
+        missing = sorted(self.ZONE_SUMMARY_COLUMNS - available)
         if missing:
             raise DataFormatError(
                 f"{self.DEVICE_LOG_FILE} cannot be summarised by zone; missing: "
