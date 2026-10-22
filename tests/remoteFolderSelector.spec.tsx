@@ -1757,6 +1757,23 @@ it('does not select a remote report when Enter presses the linked-only toggle', 
     expect(onSelectFolder).not.toHaveBeenCalled();
 });
 
+it('returns focus to the remote filter input when Enter clears the query', async () => {
+    await renderLinkedRankSelector();
+
+    const input = screen.getByPlaceholderText('Filter...');
+    // Let Select's own autofocus on open land first, so it cannot stand in for the refocus.
+    await waitFor(() => expect(input).toHaveFocus(), WAIT_FOR_OPTIONS);
+
+    fireEvent.change(input, { target: { value: 'rank0' } });
+    const clearButton = screen.getByLabelText('Clear filter query');
+    clearButton.focus();
+    fireEvent.keyDown(clearButton, { key: 'Enter' });
+    fireEvent.keyUp(clearButton, { key: 'Enter' });
+
+    expect(input).toHaveValue('');
+    expect(input).toHaveFocus();
+});
+
 it('has no linked-only toggle without link badges', async () => {
     await renderPerformanceSelector({ connectionList: multihostConnection });
 

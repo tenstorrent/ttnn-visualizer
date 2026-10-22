@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Button, ButtonVariant, MenuItem, Position, Tooltip } from '@blueprintjs/core';
 import { ItemPredicate, ItemRenderer, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
@@ -68,6 +68,7 @@ const LocalFolderPicker = ({
     const [folderToDelete, setFolderToDelete] = useState<ReportFolder | null>(null);
     const [filterQuery, setFilterQuery] = useState('');
     const [isLinkedOnly, setIsLinkedOnly] = useState(false);
+    const filterInputRef = useRef<HTMLInputElement>(null);
 
     const isDisabled = disabled || loading || !items || items.length === 0 || !instance;
     const activePath = value;
@@ -84,6 +85,13 @@ const LocalFolderPicker = ({
     // direct-report mode.
     const isDeleteDisabled = loading;
     const showLinkStatus = shouldShowFolderLinkStatus(linkedRuns, unlinkedRuns);
+    // The clear button unmounts once the query is empty, taking focus with it; without this the
+    // popover's keyboard handling (arrows, Enter, typing) stops reaching the picker.
+    const handleClearQuery = () => {
+        setFilterQuery('');
+        filterInputRef.current?.focus();
+    };
+
     // Without badges there is nothing to filter on, so a toggle left on must not hide rows.
     const isLinkedOnlyActive = showLinkStatus && isLinkedOnly;
 
@@ -169,10 +177,11 @@ const LocalFolderPicker = ({
                 query={filterQuery}
                 onQueryChange={setFilterQuery}
                 inputProps={{
+                    inputRef: filterInputRef,
                     rightElement: (
                         <FolderPickerFilterActions
                             query={filterQuery}
-                            onClearQuery={() => setFilterQuery('')}
+                            onClearQuery={handleClearQuery}
                             showLinkedOnlyToggle={showLinkStatus}
                             isLinkedOnly={isLinkedOnly}
                             onToggleLinkedOnly={() => setIsLinkedOnly((current) => !current)}

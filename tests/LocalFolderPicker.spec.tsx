@@ -355,6 +355,25 @@ describe('LocalFolderPicker linked-only filter', () => {
         await waitFor(() => expect(getRowLabels()).toHaveLength(folders.length), WAIT_FOR_OPTIONS);
     });
 
+    it('returns focus to the filter input when Enter clears the query', async () => {
+        renderPicker();
+        await openPicker();
+
+        const input = screen.getByPlaceholderText('Filter...');
+        // Let Select's own autofocus on open land first, so it cannot stand in for the refocus.
+        await waitFor(() => expect(input).toHaveFocus(), WAIT_FOR_OPTIONS);
+
+        typeQuery('unknown');
+        const clearButton = screen.getByLabelText('Clear filter query');
+        clearButton.focus();
+        fireEvent.keyDown(clearButton, { key: 'Enter' });
+        fireEvent.keyUp(clearButton, { key: 'Enter' });
+
+        expect(screen.queryByLabelText('Clear filter query')).toBeNull();
+        expect(input).toHaveValue('');
+        expect(input).toHaveFocus();
+    });
+
     it('stops hiding rows once the badges go away', async () => {
         const { rerenderWith } = renderPicker();
         await openPicker();

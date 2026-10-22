@@ -5,7 +5,7 @@
 import { Button, MenuItem } from '@blueprintjs/core';
 import { IconName, IconNames } from '@blueprintjs/icons';
 import { type ItemPredicate, ItemRenderer, Select } from '@blueprintjs/select';
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useRef, useState } from 'react';
 import 'styles/components/FolderPicker.scss';
 import {
     getFolderLinkState,
@@ -126,6 +126,14 @@ const RemoteFolderSelector = ({
     const showLinkStatus = shouldShowFolderLinkStatus(linkedRuns, unlinkedRuns);
     const [filterQuery, setFilterQuery] = useState('');
     const [isLinkedOnly, setIsLinkedOnly] = useState(false);
+    const filterInputRef = useRef<HTMLInputElement>(null);
+    // The clear button unmounts once the query is empty, taking focus with it; without this the
+    // popover's keyboard handling (arrows, Enter, typing) stops reaching the picker.
+    const handleClearQuery = () => {
+        setFilterQuery('');
+        filterInputRef.current?.focus();
+    };
+
     // Without badges there is nothing to filter on, so a toggle left on must not hide rows.
     const isLinkedOnlyActive = showLinkStatus && isLinkedOnly;
 
@@ -154,10 +162,11 @@ const RemoteFolderSelector = ({
                 query={filterQuery}
                 onQueryChange={setFilterQuery}
                 inputProps={{
+                    inputRef: filterInputRef,
                     rightElement: (
                         <FolderPickerFilterActions
                             query={filterQuery}
-                            onClearQuery={() => setFilterQuery('')}
+                            onClearQuery={handleClearQuery}
                             showLinkedOnlyToggle={showLinkStatus}
                             isLinkedOnly={isLinkedOnly}
                             onToggleLinkedOnly={() => setIsLinkedOnly((current) => !current)}
