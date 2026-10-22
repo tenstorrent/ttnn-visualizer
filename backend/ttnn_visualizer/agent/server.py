@@ -53,34 +53,31 @@ MAX_LINE_BYTES = 1_000_000
 # What every tool shares, said once: a client puts it in the system prompt, ahead of
 # any call, so it is kept short and each description keeps only its own tool's caveats.
 INSTRUCTIONS = (
-    "Read-only tools over TT-NN Visualizer reports: performance reports "
-    "(ops_perf_results CSV, profile_log_device.csv) and profiler reports (db.sqlite).\n"
+    "Read-only tools over TT-NN Visualizer performance reports (ops_perf_results CSV, "
+    "device log) and profiler reports (db.sqlite).\n"
     "- Call load_report first. It returns the handle the other tools take, which of "
     "them the report can answer, its signposts, architecture and device count.\n"
     "- Two id spaces overlap. A performance row's id (a top_ops or perf_rows row's "
     "id, or any *_perf_id) numbers rows of the performance CSV. operation_id is the "
-    "profiler database's: find_operations, "
-    "memory_profile and tensor_flow return it, and operation_detail and "
-    "operation_provenance take it. Passing one as the other answers about a "
-    "different operation; pass a top_ops row's operation_id on.\n"
-    "- Device time and op-to-op gap are microseconds, and an operation's duration is "
+    "profiler database's: find_operations, memory_profile and tensor_flow return it, "
+    "operation_detail and operation_provenance take it. One passed as the other "
+    "answers about a different operation; pass a top_ops row's operation_id on.\n"
+    "- Device time and op-to-op gap are microseconds; an operation's duration is "
     "host seconds. Allocations are bytes per bank, never added across buffer types; "
     "a tensor's size is in its tensor_size_unit.\n"
-    "- Read projection, note and caveat before acting on a number: they say which "
-    "rows were read and what a figure does not mean. Totals are given only for "
-    "summable metrics, and limits are capped.\n"
-    "- start_signpost and end_signpost read the rows strictly between two "
-    "signposts, as tt-perf-report does: Total % is recomputed over the window and "
-    "its first operation has no op-to-op gap. A range that names no window is "
-    "refused with the names the report holds; a report with no signposts is read "
-    "whole, with signpost_range_ignored true.\n"
+    "- Read projection, note and caveat before acting on a number. Totals come only "
+    "for summable metrics, and limits are capped.\n"
+    "- start_signpost and end_signpost read the rows strictly between two signposts, "
+    "as tt-perf-report does: Total % is recomputed over the window and its first "
+    "operation has no op-to-op gap. A range naming no window is refused with the "
+    "report's names; a report without signposts is read whole "
+    "(signpost_range_ignored).\n"
     "- On a multi-host report the database tools read rank 0 unless given rank.\n"
-    "- The first call that generates the performance report, or links it to the "
-    "profiler report, can take seconds on a large capture; later calls reuse it. If "
-    "the CSV is rewritten, or a newer one appears, after load_report, a call that "
-    "reads it is refused: call load_report again.\n"
-    "- An app_link, or an app_link_template filled with an operation_id, opens the "
-    "same thing in the visualizer: give it to the reader."
+    "- The first call that generates or links the performance report can take "
+    "seconds on a large capture; later calls reuse it. A CSV rewritten or superseded "
+    "after load_report is refused: load it again.\n"
+    "- Give the reader any app_link, or an app_link_template filled with an "
+    "operation_id: it opens the same thing in the visualizer."
 )
 
 # Every tool only reads a report and has no effect beyond the handle it may add, so
@@ -250,7 +247,9 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                     "handle": {"type": "string"},
                     "group_by": {
                         "type": "string",
-                        "enum": list(tools.BREAKDOWN_GROUPINGS),
+                        "enum": [
+                            grouping.value for grouping in tools.BreakdownGrouping
+                        ],
                         "description": (
                             "op (the default), as tt-perf-report --group-by op "
                             "groups, or op_category."
@@ -261,7 +260,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                         "description": "Which metric orders the groups.",
                     },
                     "limit": {
-                        "type": "integer",
+                        **_LIMIT_SCHEMA,
                         "description": f"Groups to return, capped at {MAX_LIMIT}.",
                     },
                     **_SIGNPOST_SCHEMAS,
@@ -436,8 +435,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
             "description": (
                 "What one operation was called with, and where in the model code it "
                 "came from: its arguments as name/value pairs, and the innermost "
-                "stack frame's file, line, function and source line. Takes an "
-                "operation_id -- a top_ops row's operation_id, never its id. Older "
+                "stack frame's file, line, function and source line. Older "
                 "captures record no stack trace, and the response says so rather "
                 "than returning an empty call site."
             ),
@@ -510,7 +508,7 @@ def _wire_safe(text: str) -> str:
     return text.encode("utf-8", "backslashreplace").decode("utf-8")
 
 
-def answer_text(payload: Dict) -> str:
+def _answer_text(payload: Dict) -> str:
     """A tool's answer as the text the model reads.
 
     Compact, since indentation was a fifth to a third of a real answer, and with
@@ -671,7 +669,7 @@ def handle_message(message: object, table: Dict[str, Dict]) -> Optional[Dict]:
         _record_tool_call(name, McpToolOutcome.OK)
         return _result(
             request_id,
-            {"content": [{"type": "text", "text": answer_text(payload)}]},
+            {"content": [{"type": "text", "text": _answer_text(payload)}]},
         )
 
     return _error(request_id, -32601, f"method not found: {method}")

@@ -15,7 +15,8 @@ import logging
 import sys
 from collections import defaultdict
 from dataclasses import asdict, dataclass
-from typing import Dict, List, Optional, Sequence, Set
+from enum import Enum
+from typing import Dict, Iterable, List, Optional, Sequence, Set, cast
 
 from ttnn_visualizer.agent import perf_detail
 from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_LIMIT, bounded
@@ -107,6 +108,18 @@ def _rounded(value: Optional[float]) -> Optional[float]:
     return None if value is None else round(value, 3)
 
 
+def _require_choice(kind: str, value: str, allowed: Iterable[str]) -> None:
+    """Refuse `value` unless it is one of `allowed`, naming every choice."""
+    if value not in allowed:
+        raise ValueError(
+            f"unknown {kind} {value!r}; expected one of {', '.join(sorted(allowed))}"
+        )
+
+
+def is_signpost_row(row: Dict) -> bool:
+    return row.get("op_type") == SIGNPOST_OP_TYPE
+
+
 def share_percent(part: Optional[float], whole: float) -> Optional[float]:
     """Percent of `whole`, to three significant figures so a sliver stays non-zero."""
     if part is None or whole <= 0:
@@ -177,6 +190,7 @@ def canonical_report(
     A report generated with swallowed errors is the exception: it is kept by the
     handle that read it alone, so loading the report again regenerates it.
     """
+    _require_performance_report(registry, handle)
     ignored = range_ignored(registry, handle, signposts)
     if signposts is not None and not ignored:
         check_range(registry, handle, signposts)
@@ -193,6 +207,15 @@ def canonical_report(
     source = _pin_source(registry, handle)
     report = registry.cached_report(handle, build, scope=scope, share_key=source)
     return {**report, "signpost_range_ignored": True} if ignored else report
+
+
+def _require_performance_report(registry: ReportRegistry, handle: str) -> None:
+    """Refuse, as the agent's to fix, a performance read of a handle loaded without one."""
+    if not registry.get(handle).performance_path:
+        raise ValueError(
+            f"{handle!r} was loaded without a performance_path, so it holds no "
+            "performance report; call load_report with one"
+        )
 
 
 def check_range(
@@ -263,6 +286,7 @@ def range_ignored(
 
 def _signposts(registry: ReportRegistry, handle: str) -> ResolvedSignposts:
     """The handle's signposts, read once per capture."""
+    _require_performance_report(registry, handle)
 
     def build(instance: Instance) -> ResolvedSignposts:
         _require_same_source(registry, handle, instance)
@@ -296,20 +320,28 @@ def with_signposts(
         return loaded
     try:
         resolved = _signposts(registry, str(loaded["handle"]))
-    except (DataFormatError, OSError, ValueError) as error:
+    except (DataFormatError, OSError, TypeError, ValueError) as error:
         return {**loaded, "signposts_problem": str(error)}
-    listing = resolved.listing()
-    return {
+    named = resolved.occurrences()
+    # A longer name cannot be passed back as a bound, and is the capture's text, not ours.
+    usable = [entry for entry in named if len(entry[0]) <= MAX_SIGNPOST_NAME_LENGTH]
+    result: Dict[str, object] = {
         **loaded,
-        "signpost_count": len(listing),
+        "signpost_count": len(named),
         "signposts": [
-            {
-                "name": entry["op_code"],
-                "occurrences": len(resolved.positions_by_name[str(entry["op_code"])]),
-            }
-            for entry in listing[:MAX_LISTED_SIGNPOSTS]
+            {"name": name, "occurrences": occurrences}
+            for name, occurrences in usable[:MAX_LISTED_SIGNPOSTS]
         ],
     }
+    if len(usable) < len(named):
+        result["signposts_unlisted_too_long"] = len(named) - len(usable)
+    if resolved.device_count is not None:
+        device_count = cast(Dict[str, int], loaded.get("device_count") or {})
+        result["device_count"] = {
+            "performance_csv": resolved.device_count,
+            **device_count,
+        }
+    return result
 
 
 # The projection key a range adds, and the one `is_ranged` reads it back by.
@@ -454,10 +486,7 @@ def top_ops(
     include: Optional[List[str]] = None,
 ) -> Dict[str, object]:
     """The costliest ops by one metric, with the projection that produced them."""
-    if by not in SORTABLE_METRICS:
-        raise ValueError(
-            f"unknown metric {by!r}; expected one of {', '.join(sorted(SORTABLE_METRICS))}"
-        )
+    _require_choice("metric", by, SORTABLE_METRICS)
     groups = perf_detail.parse_include(include)
     count = row_limit(limit, groups)
 
@@ -704,10 +733,7 @@ def diff_reports(
     One range applies to both reports, which is the before-and-after case: the
     same signposts in two runs.
     """
-    if by not in SORTABLE_METRICS:
-        raise ValueError(
-            f"unknown metric {by!r}; expected one of {', '.join(sorted(SORTABLE_METRICS))}"
-        )
+    _require_choice("metric", by, SORTABLE_METRICS)
     # Refused rather than aggregated some other way. A diff groups by op code and
     # compares the two sides, so for a rate or an allocation every number in the
     # response is a sum of them: one 10-TFLOPS matmul against two at 8 reads as
@@ -812,9 +838,13 @@ def diff_reports(
     return result
 
 
-# Two of the stacked table's groupings, named as `tt-perf-report --group-by` names
-# the first; the third, by input-0 memory, is not offered.
-BREAKDOWN_GROUPINGS = ("op", "op_category")
+class BreakdownGrouping(str, Enum):
+    """Two of the stacked table's groupings, named as `tt-perf-report --group-by` names
+    the first; the third, by input-0 memory, is not offered."""
+
+    OP = "op"
+    OP_CATEGORY = "op_category"
+
 
 OP_BREAKDOWN_NOTE = (
     "Grouped as the performance view's stacked table and tt-perf-report's stacked "
@@ -843,22 +873,12 @@ class _Share:
         self.total_percent += other.total_percent
 
 
-def _row_share(row: Dict) -> _Share:
-    return _Share(
-        key=None,
-        count=1,
-        device_time=countable_device_time(row) or 0.0,
-        op_to_op_gap=finite_number(row.get("op_to_op_gap")) or 0.0,
-        total_percent=finite_number(row.get("total_percent")) or 0.0,
-    )
-
-
-def _breakdown_key(row: Dict, group_by: str) -> Optional[str]:
+def _breakdown_key(row: Dict, grouping: BreakdownGrouping) -> Optional[str]:
     """The stacked table's key: the op code's first word, or the category.
 
     `generate_stacked_report` in tt-perf-report takes `OP Code`'s first word.
     """
-    if group_by == "op_category":
+    if grouping is BreakdownGrouping.OP_CATEGORY:
         return row.get("op_category") or None
     words = str(row.get("op_code") or "").split()
     return words[0] if words else None
@@ -867,7 +887,7 @@ def _breakdown_key(row: Dict, group_by: str) -> Optional[str]:
 def op_breakdown(
     registry: ReportRegistry,
     handle: str,
-    group_by: str = "op",
+    group_by: str = BreakdownGrouping.OP.value,
     by: str = "device_time",
     limit: Optional[int] = None,
     start_signpost: Optional[str] = None,
@@ -880,60 +900,58 @@ def op_breakdown(
     op-to-op gap. As there, signposts are left out and a host op is counted with
     no device time.
     """
-    if group_by not in BREAKDOWN_GROUPINGS:
-        raise ValueError(
-            f"unknown grouping {group_by!r}; expected one of "
-            f"{', '.join(BREAKDOWN_GROUPINGS)}"
-        )
-    if by not in ADDITIVE_METRICS:
-        raise ValueError(
-            f"unknown metric {by!r}; expected one of {', '.join(sorted(ADDITIVE_METRICS))}"
-        )
+    _require_choice(
+        "grouping", group_by, [grouping.value for grouping in BreakdownGrouping]
+    )
+    _require_choice("metric", by, ADDITIVE_METRICS)
+    grouping = BreakdownGrouping(group_by)
     count = bounded(limit)
 
     signposts = SignpostRange.of(start_signpost, end_signpost)
     report = canonical_report(registry, handle, signposts)
-    rows = [
-        row
-        for row in report.get("report", [])
-        if row.get("op_type") != SIGNPOST_OP_TYPE
-    ]
+    rows = [row for row in report.get("report", []) if not is_signpost_row(row)]
 
-    shares: Dict[Optional[str], _Share] = {}
+    share_by_key: Dict[Optional[str], _Share] = {}
     for row in rows:
-        key = _breakdown_key(row, group_by)
-        shares.setdefault(key, _Share(key)).add(_row_share(row))
+        key = _breakdown_key(row, grouping)
+        share = share_by_key.get(key)
+        if share is None:
+            share = share_by_key[key] = _Share(key)
+        share.count += 1
+        share.device_time += countable_device_time(row) or 0.0
+        share.op_to_op_gap += finite_number(row.get("op_to_op_gap")) or 0.0
+        share.total_percent += finite_number(row.get("total_percent")) or 0.0
 
-    device_time_total = sum(share.device_time for share in shares.values())
-    gap_total = sum(share.op_to_op_gap for share in shares.values())
+    device_time_total = sum(share.device_time for share in share_by_key.values())
+    gap_total = sum(share.op_to_op_gap for share in share_by_key.values())
 
     def entry(share: _Share) -> Dict[str, object]:
         return {
             "count": share.count,
-            "device_time": round(share.device_time, 3),
+            "device_time": _rounded(share.device_time),
             "device_time_share_percent": share_percent(
                 share.device_time, device_time_total
             ),
-            "op_to_op_gap": round(share.op_to_op_gap, 3),
+            "op_to_op_gap": _rounded(share.op_to_op_gap),
             "op_to_op_gap_share_percent": share_percent(share.op_to_op_gap, gap_total),
-            "total_percent": round(share.total_percent, 3),
+            "total_percent": _rounded(share.total_percent),
         }
 
     ranked = sorted(
-        shares.values(),
+        share_by_key.values(),
         key=lambda share: (-getattr(share, by), share.key is None, share.key or ""),
     )
     shown, rest = ranked[:count], ranked[count:]
     result: Dict[str, object] = {
         "handle": handle,
-        "grouped_by": group_by,
+        "grouped_by": grouping.value,
         "metric": by,
         "row_count": len(rows),
-        "group_count": len(shares),
+        "group_count": len(share_by_key),
         "returned": len(shown),
-        "device_time_total": round(device_time_total, 3),
-        "op_to_op_gap_total": round(gap_total, 3),
-        "groups": [{group_by: share.key, **entry(share)} for share in shown],
+        "device_time_total": _rounded(device_time_total),
+        "op_to_op_gap_total": _rounded(gap_total),
+        "groups": [{grouping.value: share.key, **entry(share)} for share in shown],
         "projection": projection(signposts, bool(report.get("signpost_range_ignored"))),
         "note": OP_BREAKDOWN_NOTE,
     }
@@ -954,7 +972,7 @@ def _stderr_log() -> None:
 
 
 __all__ = [
-    "BREAKDOWN_GROUPINGS",
+    "BreakdownGrouping",
     "CANONICAL_PROJECTION",
     "MAX_SIGNPOST_NAME_LENGTH",
     "OP_BREAKDOWN_NOTE",
@@ -967,6 +985,7 @@ __all__ = [
     "countable_device_time",
     "diff_reports",
     "empty_detail_fields",
+    "is_signpost_row",
     "op_breakdown",
     "partitioned_caveat",
     "program_cache",

@@ -155,6 +155,25 @@ def test_the_signpost_name_limit_the_page_states_is_the_enforced_one():
     assert f"a name longer than {tools.MAX_SIGNPOST_NAME_LENGTH} characters" in page
 
 
+@pytest.mark.parametrize(
+    "rule, page_phrase",
+    [
+        ("Call load_report first", "Call `load_report` first"),
+        ("Two id spaces overlap", "different id spaces"),
+        ("microseconds", "microseconds"),
+        ("strictly between two signposts", "strictly between"),
+        ("read rank 0 unless given rank", "default to rank 0"),
+        ("app_link", "`app_link`"),
+    ],
+)
+def test_each_shared_instruction_is_explained_on_the_page(rule, page_phrase):
+    """`INSTRUCTIONS` restates rules this page explains, so each is held to it."""
+    page = " ".join(_read(_AGENT_DOCS).split())
+
+    assert rule in server.INSTRUCTIONS
+    assert page_phrase in page
+
+
 def test_the_signpost_listing_cap_the_page_states_is_the_enforced_one():
     page = " ".join(_read(_AGENT_DOCS).split())
 

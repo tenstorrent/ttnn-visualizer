@@ -190,6 +190,42 @@ class TestOpBreakdown:
     def test_every_group_returned_leaves_no_rest(self, tmp_path):
         assert "rest" not in _breakdown(tmp_path, [_row()])
 
+    def test_a_report_with_no_rows_has_no_groups(self, tmp_path):
+        result = _breakdown(tmp_path, [_signpost_row("ONLY")])
+
+        assert (result["row_count"], result["groups"]) == (0, [])
+        assert result["device_time_total"] == 0.0
+        assert "rest" not in result
+
+    def test_total_percent_orders_the_groups_when_asked(self, tmp_path):
+        rows = [
+            _row(op_code="Busy", device_time="90", total_percent="10"),
+            _row(op_code="Waiting", device_time="10", total_percent="90"),
+        ]
+
+        result = _breakdown(tmp_path, rows, by="total_percent")
+
+        assert [group["op"] for group in result["groups"]] == ["Waiting", "Busy"]
+
+    def test_rows_without_a_category_group_under_null_last_among_equals(self, tmp_path):
+        rows = [
+            _row(op_code="A", op_category="", device_time="10"),
+            _row(op_code="B", op_category="Compute", device_time="10"),
+        ]
+
+        result = _breakdown(tmp_path, rows, group_by="op_category")
+
+        assert [group["op_category"] for group in result["groups"]] == [
+            "Compute",
+            None,
+        ]
+
+    @pytest.mark.parametrize("limit, returned", [(0, 1), (-5, 1), (1000, 3)])
+    def test_a_limit_out_of_range_is_held_inside_it(self, tmp_path, limit, returned):
+        rows = [_row(op_code=name) for name in ("A", "B", "C")]
+
+        assert _breakdown(tmp_path, rows, limit=limit)["returned"] == returned
+
     def test_the_order_follows_the_metric_asked_for(self, tmp_path):
         rows = [
             _row(op_code="Busy", device_time="90", op_to_op_gap="1"),

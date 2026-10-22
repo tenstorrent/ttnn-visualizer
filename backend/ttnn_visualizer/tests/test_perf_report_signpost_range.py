@@ -209,6 +209,40 @@ def test_a_chunked_parse_resolves_the_same_positions(tracing_mode):
         assert chunked == resolve_signposts(StringIO(raw), tracing_mode)
 
 
+# pandas sizes a chunk by row count from the table's width; 61 more columns make it 8,192
+# rows, as a real capture's hundred-odd columns do, so these rows span two chunks.
+FILLER_COLUMNS = 61
+CHUNKED_ROW_COUNT = 12_000
+
+
+def _wide_csv(odd_host_time=None):
+    filler = "," * FILLER_COLUMNS
+    header = "OP TYPE,OP CODE,HOST START TS" + "".join(
+        f",F{index}" for index in range(FILLER_COLUMNS)
+    )
+    lines = [header]
+    for index in range(CHUNKED_ROW_COUNT):
+        op_type, op_code, host_start = "tt_dnn_device", "x", str(index)
+        if index in (10, CHUNKED_ROW_COUNT - 10):
+            op_type, op_code = "signpost", "START" if index == 10 else "END"
+        if odd_host_time is not None and index == CHUNKED_ROW_COUNT - 100:
+            host_start = odd_host_time
+        lines.append(f"{op_type},{op_code},{host_start}{filler}")
+    return "\n".join(lines) + "\n"
+
+
+@pytest.mark.parametrize("odd_host_time", [None, "oops"])
+def test_a_chunked_parse_types_each_column_as_the_whole_file_does(odd_host_time):
+    """A chunk holding one non-numeric host time typed the column apart from the
+    rest, and sorting the mix raised `TypeError` where the whole-file parse sorts."""
+    raw = _wide_csv(odd_host_time)
+
+    chunked = resolve_signposts(StringIO(raw), low_memory=True)
+
+    assert chunked == resolve_signposts(StringIO(raw))
+    assert set(chunked.positions_by_name) == {"START", "END"}
+
+
 class TestSignpostListing:
     """The `signposts` list is what the app's range picker offers.
 

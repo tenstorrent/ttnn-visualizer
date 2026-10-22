@@ -46,7 +46,9 @@ which units the figures are in, how a signpost range is read, and what the `proj
 `note` and `caveat` fields are for. Each tool's own description keeps only what is
 particular to it. `tools/list` gives every tool a `title`, and marks each one read-only,
 idempotent and closed-world (`readOnlyHint`, `idempotentHint`, `openWorldHint`), since
-none writes anything or reaches past the report it is given. Answers are compact JSON.
+none writes anything or reaches past the report it is given. `load_report` reads whatever
+directory it is given, though, so a client that approves read-only tools without asking
+lets an agent open any report this user can read. Answers are compact JSON.
 
 ## Links into the visualizer
 
@@ -109,8 +111,9 @@ neither, which is what makes `load_report`'s answer worth reading first.
 Call `load_report` first. It reports what is answerable rather than making you discover it
 one failed call at a time, because the report kinds are independent: a performance-only
 capture has no operation graph and no tensor data, and a report with no device profiler log
-cannot answer `zone_timings`. `top_ops`, `op_breakdown` and `program_cache` are listed
-only when the performance CSV can be reported on, and when it cannot,
+cannot answer `zone_timings`, and a performance tool asked of a handle loaded without a
+`performance_path` is refused and says so. `top_ops`, `op_breakdown` and `program_cache` are
+listed only when the performance CSV can be reported on, and when it cannot,
 `performance_csv_problem` says why
 (`empty`, `no data rows`, `missing columns: …`, or that it cannot be read or decoded).
 Each database tool is checked against the tables it actually reads, so a truncated
@@ -124,8 +127,9 @@ of them.
   resolves them, with how often each occurs — one name bounds both ends of a range only if
   it occurs twice — and `signpost_count` counts them all, since the list stops at 20. Both
   are absent when the performance CSV cannot be reported on, and empty when it holds no
-  signposts. When the CSV can be reported on but its signposts cannot be read,
-  `signposts_problem` says why. Loading reads the signposts, so a handle answers from the
+  signposts. A name longer than 256 characters, which a range cannot take, is counted but
+  left out of the list, and `signposts_unlisted_too_long` says how many were. When the CSV
+  can be reported on but its signposts cannot be read, `signposts_problem` says why. Loading reads the signposts, so a handle answers from the
   CSV it was loaded on: one rewritten or superseded after that is refused, and
   `load_report` again gives a fresh handle.
 - `arch` and `device_count` are keyed by the file each was read from, since a handle's two
@@ -136,7 +140,8 @@ of them.
   `wormhole_b0`, and joined with commas if its chips differ. The profiler database itself
   records no architecture. `device_count.performance_csv` counts the devices the
   performance CSV has rows for, which no other answer shows because rows are merged across
-  devices; `device_count.profiler` counts the profiler database's devices, every rank's.
+  devices; it is read with the signposts, so it is absent whenever they are.
+  `device_count.profiler` counts the profiler database's devices, every rank's.
 - `tt_perf_report_version` is the tt-perf-report release the performance answers are
   generated with, which decides fields such as `op_category`.
 

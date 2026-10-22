@@ -33,7 +33,6 @@ from typing import (
     cast,
 )
 
-import pandas as pd
 from ttnn_visualizer.csv_queries import (
     PROGRAM_CACHE_HIT_COLUMN,
     PROGRAM_HASH_COLUMN,
@@ -50,6 +49,7 @@ from ttnn_visualizer.utils import pick_cluster_descriptor_path
 PROFILER_DB_FILE = "db.sqlite"
 
 Cached = TypeVar("Cached")
+Answer = TypeVar("Answer")
 
 
 class CacheVariant(str, Enum):
@@ -253,6 +253,33 @@ def read_only_connection(db_file: Path) -> sqlite3.Connection:
     return sqlite3.connect(f"{db_file.absolute().as_uri()}?mode=ro", uri=True)
 
 
+def _read_profiler_db(
+    profiler_path: Optional[str],
+    read: Callable[[sqlite3.Connection], Answer],
+    default: Answer,
+) -> Answer:
+    """`read` on the profiler database, or `default` when there is none to read.
+
+    A truncated or non-SQLite file is a broken capture, and `default` is the honest
+    answer for it, as for a missing one.
+    """
+    if profiler_path is None:
+        return default
+    db_file = Path(profiler_path, PROFILER_DB_FILE)
+    if not db_file.is_file():
+        return default
+    try:
+        connection = read_only_connection(db_file)
+    except sqlite3.Error:
+        return default
+    try:
+        return read(connection)
+    except sqlite3.Error:
+        return default
+    finally:
+        connection.close()
+
+
 def _readable_tables(profiler_path: Optional[str]) -> frozenset:
     """The tables a profiler database actually holds, or nothing.
 
@@ -264,28 +291,16 @@ def _readable_tables(profiler_path: Optional[str]) -> frozenset:
     answers for every tool and is cheaper than the calls an agent would
     otherwise spend finding out.
     """
-    if profiler_path is None:
-        return frozenset()
-    db_file = Path(profiler_path, PROFILER_DB_FILE)
-    if not db_file.is_file():
-        return frozenset()
-    try:
-        connection = read_only_connection(db_file)
-    except sqlite3.Error:
-        return frozenset()
-    try:
-        return frozenset(
+    return _read_profiler_db(
+        profiler_path,
+        lambda connection: frozenset(
             name
             for (name,) in connection.execute(
                 "SELECT name FROM sqlite_master WHERE type = 'table'"
             )
-        )
-    except sqlite3.Error:
-        # A truncated or non-SQLite file reaching this point is a broken capture,
-        # and "cannot answer" is the honest inventory entry for it.
-        return frozenset()
-    finally:
-        connection.close()
+        ),
+        frozenset(),
+    )
 
 
 # Columns tt-perf-report requires before it can produce a report without exiting.
@@ -355,28 +370,25 @@ def perf_csv_columns(instance: Instance) -> frozenset:
     return _csv_columns(_perf_csv(instance))
 
 
-DEVICE_ID_COLUMN = "DEVICE ID"
 # Its release decides derived values, such as which `op_category` names exist.
 TT_PERF_REPORT_DISTRIBUTION = "tt-perf-report"
 # The largest real cluster descriptor is 28 KB; one past this is not read at all.
 MAX_DESCRIPTOR_CHARS = 1_000_000
 # One chip's entry in the descriptor's `arch` mapping, as tt-metal names architectures.
 _ARCH_ENTRY = re.compile(r"""\d+\s*:\s*(['"]?)([A-Za-z][A-Za-z0-9_]{0,63})\1""")
+# A YAML comment: `#` after whitespace, to the end of the line.
+_YAML_COMMENT = re.compile(r"\s+#.*$")
 
 
-def _perf_csv_device_count(path: Optional[Path]) -> Optional[int]:
-    """How many devices the ops perf CSV has rows for, or None when it cannot say.
-
-    Every answer merges a row's devices into one, so this is where the count shows.
-    One column through pandas' parser: a third of `csv.reader`'s time on 100 MB.
-    """
-    if path is None or DEVICE_ID_COLUMN not in _csv_columns(path):
+def _distinct_devices(connection: sqlite3.Connection) -> Optional[int]:
+    columns = {row[1] for row in connection.execute("PRAGMA table_info(devices)")}
+    if "device_id" not in columns:
         return None
-    try:
-        devices = pd.read_csv(path, usecols=[DEVICE_ID_COLUMN])[DEVICE_ID_COLUMN]
-    except (OSError, ValueError):
-        return None
-    return int(devices.nunique())
+    key = "device_id, rank" if "rank" in columns else "device_id"
+    (count,) = connection.execute(
+        f"SELECT COUNT(*) FROM (SELECT DISTINCT {key} FROM devices)"
+    ).fetchone()
+    return int(count)
 
 
 def _profiler_device_count(profiler_path: Optional[str]) -> Optional[int]:
@@ -384,28 +396,7 @@ def _profiler_device_count(profiler_path: Optional[str]) -> Optional[int]:
 
     Distinct, since some captures write a device's row more than once.
     """
-    if profiler_path is None:
-        return None
-    db_file = Path(profiler_path, PROFILER_DB_FILE)
-    if not db_file.is_file():
-        return None
-    try:
-        connection = read_only_connection(db_file)
-    except sqlite3.Error:
-        return None
-    try:
-        columns = {row[1] for row in connection.execute("PRAGMA table_info(devices)")}
-        if "device_id" not in columns:
-            return None
-        key = "device_id, rank" if "rank" in columns else "device_id"
-        (count,) = connection.execute(
-            f"SELECT COUNT(*) FROM (SELECT DISTINCT {key} FROM devices)"
-        ).fetchone()
-        return int(count)
-    except sqlite3.Error:
-        return None
-    finally:
-        connection.close()
+    return _read_profiler_db(profiler_path, _distinct_devices, None)
 
 
 def _arch_names(entries: Iterable[str]) -> List[str]:
@@ -425,7 +416,7 @@ def _descriptor_arch_names(text: str) -> List[str]:
     way to a crash or a flood, and only these names are wanted. tt-metal writes the
     mapping as a block, and older releases as a flow mapping across lines.
     """
-    lines = iter(text.splitlines())
+    lines = (_YAML_COMMENT.sub("", line) for line in text.splitlines())
     for line in lines:
         header = line.rstrip()
         if header in ("arch:", "arch: {"):
@@ -494,10 +485,8 @@ def _hardware(
     if descriptor_arch is not None:
         arch["cluster_descriptor"] = descriptor_arch
 
+    # The performance CSV's count is added with its signposts, read in the same pass.
     device_count: Dict[str, int] = {}
-    perf_devices = _perf_csv_device_count(perf_csv)
-    if perf_devices is not None:
-        device_count["performance_csv"] = perf_devices
     profiler_devices = _profiler_device_count(instance.profiler_path)
     if profiler_devices is not None:
         device_count["profiler"] = profiler_devices

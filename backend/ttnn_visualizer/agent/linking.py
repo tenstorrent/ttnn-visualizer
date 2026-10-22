@@ -37,7 +37,6 @@ from tt_perf_report.perf_report import HOST_OP_MARKER
 from ttnn_visualizer.agent import operations, perf_detail, tools
 from ttnn_visualizer.agent.bounds import MAX_LIMIT
 from ttnn_visualizer.agent.handles import CacheVariant, ReportRegistry
-from ttnn_visualizer.csv_queries import SIGNPOST_OP_TYPE
 from ttnn_visualizer.models import Instance
 
 logger = logging.getLogger(__name__)
@@ -237,7 +236,7 @@ def match_device_operations(
     graph always pass; the check guards orders assembled any other way. The raw orders are tried before either collapse, so a
     spurious collapsed prefix cannot pre-empt a complete end-order match.
     """
-    alignable = [row for row in rows if row.get("op_type") != SIGNPOST_OP_TYPE]
+    alignable = [row for row in rows if not tools.is_signpost_row(row)]
 
     first = _attempt(function_start, alignable, MatchedOn.FUNCTION_START)
     if first:
@@ -363,7 +362,7 @@ def is_host_op_row(row: Dict) -> bool:
 
 def _pairable(row: Dict) -> bool:
     """A row a device operation could pair with: host ops and signposts launch none."""
-    return not is_host_op_row(row) and row.get("op_type") != SIGNPOST_OP_TYPE
+    return not is_host_op_row(row) and not tools.is_signpost_row(row)
 
 
 def _canonical_rows(registry: ReportRegistry, handle: str) -> List[Dict]:
@@ -371,7 +370,7 @@ def _canonical_rows(registry: ReportRegistry, handle: str) -> List[Dict]:
 
 
 def _unlinked_reason(row: Dict) -> UnlinkedReason:
-    if row.get("op_type") == SIGNPOST_OP_TYPE:
+    if tools.is_signpost_row(row):
         return UnlinkedReason.SIGNPOST
     if is_host_op_row(row):
         return UnlinkedReason.HOST_OP

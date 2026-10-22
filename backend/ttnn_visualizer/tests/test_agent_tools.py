@@ -237,7 +237,8 @@ class TestReportInventory:
         assert loaded["answerable"] == []
         assert "find_operations" in loaded["unanswerable"]
 
-    def test_a_broken_newest_perf_csv_is_named_but_not_answerable(self, tmp_path):
+    @pytest.mark.parametrize("tool", ["top_ops", "op_breakdown"])
+    def test_a_broken_newest_perf_csv_is_named_but_not_answerable(self, tmp_path, tool):
         """#2170: When the newest `ops_perf_results*.csv` is unreadable or empty,
         the inventory judges the file `top_ops` actually selects rather than an
         older readable capture in the same directory."""
@@ -252,8 +253,8 @@ class TestReportInventory:
         loaded = load_report(ReportRegistry(), performance_path=str(tmp_path))
 
         assert loaded["performance_csv"] == "ops_perf_results_new.csv"
-        assert "top_ops" not in loaded["answerable"]
-        assert "top_ops" in loaded["unanswerable"]
+        assert tool not in loaded["answerable"]
+        assert tool in loaded["unanswerable"]
         assert loaded["performance_csv_problem"] == "empty"
 
     def test_a_missing_directory_is_refused_with_the_path(self, tmp_path):
@@ -403,6 +404,17 @@ class TestReportFacts:
         assert loaded["arch"] == {}
         assert loaded["device_count"] == {"profiler": 1}
 
+    def test_a_comment_on_an_arch_line_is_not_part_of_the_name(self, tmp_path):
+        profiler = _write_devices(tmp_path, [(0, 0)])
+        (profiler / "cluster_descriptor.yaml").write_text(
+            "arch:  # one per chip\n  0: blackhole  # n300\n  1: blackhole\n",
+            encoding="utf-8",
+        )
+
+        loaded = load_report(ReportRegistry(), profiler_path=str(profiler))
+
+        assert loaded["arch"] == {"cluster_descriptor": "blackhole"}
+
     def test_odd_content_beside_a_plain_arch_does_not_refuse_the_report(self, tmp_path):
         """A YAML parse raised `ValueError` on an impossible date anywhere in the file."""
         profiler = _write_devices(tmp_path, [(0, 0)])
@@ -462,15 +474,100 @@ class TestReportFacts:
         assert loaded["arch"] == {}
 
     def test_the_performance_csv_counts_the_devices_it_has_rows_for(self, tmp_path):
-        """Every answer merges a row's devices, so nothing else shows the count."""
+        """Every answer merges a row's devices, so nothing else shows the count. Read
+        in the signposts' pass, so it comes with them."""
         rows = smoke_rows()
         rows.append({**rows[0], "DEVICE ID": ""})
         write_ops_perf(tmp_path, rows)
+        registry = ReportRegistry()
 
-        loaded = load_report(ReportRegistry(), performance_path=str(tmp_path))
+        loaded = tools.with_signposts(
+            registry, load_report(registry, performance_path=str(tmp_path))
+        )
 
         assert {row["DEVICE ID"] for row in smoke_rows()} == {"0", "1"}
         assert loaded["device_count"] == {"performance_csv": 2}
+
+    def test_the_newest_csv_is_the_one_counted(self, tmp_path):
+        older = write_ops_perf(tmp_path, smoke_rows()).rename(
+            tmp_path / "ops_perf_results_old.csv"
+        )
+        newer = write_ops_perf(
+            tmp_path, [{**row, "DEVICE ID": "0"} for row in smoke_rows()]
+        )
+        os.utime(older, (1000, 1000))
+        os.utime(newer, (2000, 2000))
+        registry = ReportRegistry()
+
+        loaded = tools.with_signposts(
+            registry, load_report(registry, performance_path=str(tmp_path))
+        )
+
+        assert loaded["device_count"] == {"performance_csv": 1}
+
+    def test_a_csv_pandas_cannot_parse_gives_no_count_and_still_loads(
+        self, tmp_path, event_log_directory
+    ):
+        write_ops_perf(tmp_path, smoke_rows())
+        with (tmp_path / "ops_perf_results.csv").open("a") as out:
+            out.write('"unclosed,row\n')
+
+        response = server.handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": "load_report",
+                    "arguments": {"performance_path": str(tmp_path)},
+                },
+            },
+            server._tool_table(ReportRegistry()),
+        )
+
+        assert "isError" not in response["result"]
+        loaded = json.loads(response["result"]["content"][0]["text"])
+        assert loaded["device_count"] == {}
+        assert "signposts_problem" in loaded
+
+    @pytest.mark.parametrize(
+        "schema",
+        [
+            None,
+            "CREATE TABLE operations (operation_id int)",
+            "CREATE TABLE devices (rank int)",
+        ],
+    )
+    def test_a_database_without_device_ids_gives_no_count(self, tmp_path, schema):
+        """A file that is not SQLite, no `devices` table, or one without `device_id`."""
+        profiler = tmp_path / "profiler"
+        profiler.mkdir()
+        if schema is None:
+            (profiler / "db.sqlite").write_bytes(b"not a database, just bytes")
+        else:
+            connection = sqlite3.connect(profiler / "db.sqlite")
+            connection.execute(schema)
+            connection.commit()
+            connection.close()
+
+        loaded = load_report(ReportRegistry(), profiler_path=str(profiler))
+
+        assert loaded["device_count"] == {}
+
+    def test_a_missing_tt_perf_report_gives_a_null_version(self, tmp_path):
+        write_ops_perf(tmp_path, smoke_rows())
+        handles._tt_perf_report_version.cache_clear()
+        try:
+            with patch.object(
+                handles,
+                "distribution_version",
+                side_effect=handles.PackageNotFoundError,
+            ):
+                loaded = load_report(ReportRegistry(), performance_path=str(tmp_path))
+        finally:
+            handles._tt_perf_report_version.cache_clear()
+
+        assert loaded["tt_perf_report_version"] is None
 
     def test_a_csv_without_a_device_column_gives_no_count(self, tmp_path):
         (tmp_path / "ops_perf_results.csv").write_text("OP CODE\nMatmul\n")
@@ -620,6 +717,68 @@ class TestLoadReportSignposts:
                 )
 
         resolve.assert_called_once()
+
+    def test_a_name_too_long_to_pass_back_is_counted_but_not_listed(self, tmp_path):
+        """The capture's text, which an agent could not pass back as a bound."""
+        rows = smoke_rows()
+        long_name = "x" * (tools.MAX_SIGNPOST_NAME_LENGTH + 1)
+        rows.insert(2, signpost(long_name, rows[2]))
+        rows.insert(4, signpost("PERF_START", rows[4]))
+
+        loaded = self._loaded(ReportRegistry(), tmp_path, rows)
+
+        assert loaded["signpost_count"] == 2
+        assert loaded["signposts"] == [{"name": "PERF_START", "occurrences": 1}]
+        assert loaded["signposts_unlisted_too_long"] == 1
+
+    def test_a_host_time_a_chunk_types_apart_still_loads(
+        self, tmp_path, event_log_directory
+    ):
+        """One non-numeric host time past pandas' first chunk raised `TypeError`, which
+        refused the whole `load_report` on a capture that loaded before."""
+        template = smoke_rows()[0]
+        filler = {f"F{index}": "" for index in range(60)}
+        rows = []
+        for index in range(12_000):
+            row = {**template, **filler, "HOST START TS": str(index)}
+            if index in (10, 11_990):
+                row.update({"OP TYPE": "signpost", "OP CODE": f"MARK_{index}"})
+            rows.append(row)
+        rows[11_900]["HOST START TS"] = "oops"
+        write_ops_perf(tmp_path, rows)
+
+        response = server.handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": "load_report",
+                    "arguments": {"performance_path": str(tmp_path)},
+                },
+            },
+            server._tool_table(ReportRegistry()),
+        )
+
+        assert "isError" not in response["result"]
+        loaded = json.loads(response["result"]["content"][0]["text"])
+        assert [entry["name"] for entry in loaded["signposts"]] == [
+            "MARK_10",
+            "MARK_11990",
+        ]
+        assert {"top_ops", "op_breakdown"} <= set(loaded["answerable"])
+
+    @pytest.mark.parametrize(
+        "error", [TypeError("'<' not supported"), DataFormatError("ragged")]
+    )
+    def test_a_signpost_read_that_fails_never_refuses_the_report(self, tmp_path, error):
+        """The signposts describe the capture; failing to read them is said, not raised."""
+        registry = ReportRegistry()
+        with patch.object(tools, "_resolve_signposts", side_effect=error):
+            loaded = self._loaded(registry, tmp_path, signposted_rows())
+
+        assert loaded["signposts_problem"] == str(error)
+        assert "signposts" not in loaded
 
     def test_a_capture_rewritten_after_loading_is_refused(self, tmp_path):
         """The listing pins the capture at load, so a handle never mixes two."""
@@ -2117,6 +2276,61 @@ class TestTransport:
         assert schema["by"]["enum"] == sorted(tools.ADDITIVE_METRICS)
         assert schema["limit"]["description"].startswith("Groups to return")
 
+    def test_op_breakdown_refuses_a_range_the_report_cannot_honour(self, tmp_path):
+        registry = ReportRegistry()
+        write_device_log(tmp_path, MODERN_HEADER, [])
+        load_report(registry, performance_path=str(tmp_path))
+        with (
+            _signposts_in("report-1"),
+            patch.object(tools, "_generate_canonical_report") as generate,
+            patch.object(server, "record_event") as record,
+        ):
+            response = server.handle_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "op_breakdown",
+                        "arguments": {"handle": "report-1", "start_signpost": "TYPO"},
+                    },
+                },
+                server._tool_table(registry),
+            )
+
+        assert response["result"]["isError"] is True
+        text = response["result"]["content"][0]["text"]
+        assert "no signpost named 'TYPO'" in text and "'PERF_DECODE'" in text
+        assert record.call_args.kwargs["outcome"] is McpToolOutcome.REFUSED
+        generate.assert_not_called()
+
+    @pytest.mark.parametrize("tool", ["op_breakdown", "top_ops", "program_cache"])
+    def test_a_performance_tool_on_a_profiler_only_handle_says_why(
+        self, tmp_path, tool
+    ):
+        """It said `failed: No performance report loaded for this instance`, an
+        error in the app's words, where it is the agent's to fix."""
+        profiler = _write_devices(tmp_path / "profiler", [(0, 0)])
+        registry = ReportRegistry()
+        load_report(registry, profiler_path=str(profiler))
+
+        with patch.object(server, "record_event") as record:
+            response = server.handle_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {"name": tool, "arguments": {"handle": "report-1"}},
+                },
+                server._tool_table(registry),
+            )
+
+        assert response["result"]["isError"] is True
+        assert "loaded without a performance_path" in (
+            response["result"]["content"][0]["text"]
+        )
+        assert record.call_args.kwargs["outcome"] is McpToolOutcome.REFUSED
+
     def test_op_breakdown_answers_through_the_server(self, tmp_path):
         registry = ReportRegistry()
         write_device_log(tmp_path, MODERN_HEADER, [])
@@ -2148,7 +2362,7 @@ class TestTransport:
 
     def test_a_figure_that_is_not_finite_reads_as_null(self):
         """Bare `NaN` and `Infinity` are not JSON, and a client would refuse the frame."""
-        text = server.answer_text(
+        text = server._answer_text(
             {"total": float("inf"), "rows": [{"share": float("nan")}, 1.5]}
         )
 
