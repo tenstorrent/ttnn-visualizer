@@ -227,7 +227,7 @@ Use **`null`** when you mean “no value yet” or “cleared” in values you o
 
 #### Read on use when the value is needed before the stylesheet is guaranteed to have applied
 
-`GRAPH_COLORS` is an object literal, so its `cssVar()` calls resolve **once, at module evaluation**. That is fine for a value first read during a user interaction, but a module imported before the stylesheet applies captures empty strings for good.
+`GRAPH_COLORS` is an object literal, so its `cssVar()` calls resolve **once, when the module is first evaluated** — not when a property is first read. Every later reader gets whatever the stylesheet declared at that moment, so a module evaluated before the stylesheet applies captures empty strings for good.
 
 Where that risk is real, expose a **getter** instead of a property and keep everything else about the flow — `getPerfChartChrome()` in `src/definitions/PlotConfigurations.ts` is the reference, and `getL1PeakColours()` in `src/definitions/L1PeakDecomposition.ts` follows it: the properties still live in `_base.scss`, components still never see a literal, but each call re-reads.
 
@@ -238,7 +238,7 @@ export const getPerfChartChrome = (): PerfChartChrome => ({
 });
 ```
 
-**This is one rule with two shapes, not two competing mechanisms, and there is no third shape.** The object and the getters share the whole flow and differ only in when the read happens. Prefer `GRAPH_COLORS` by default; reach for a getter only when the module may evaluate before the stylesheet has applied, and say so in a docstring. That ordering is a reason to read late, not an observed failure: nothing pins when the stylesheet applies relative to a module's first evaluation, so a getter is the shape that does not depend on it. The repeat `getComputedStyle` read is not free, so call a getter once per render pass, not per element — for example, resolve it once in a mount-time `useMemo`. Settled in #1911.
+**This is one rule with two shapes, not two competing mechanisms, and there is no third shape.** The object and the getters share the whole flow and differ only in when the read happens. Prefer `GRAPH_COLORS` by default. What makes reading at load safe is `src/main.tsx` importing `./index.scss` before any app module, so a module reached only through the app tree from `main.tsx` may read at load. A module that can also be evaluated outside that tree — imported directly by a test, a worker or a script — takes a getter, and its docstring says where. `tests/PlotConfigurations.spec.ts` is the case in point: it sets the properties on `:root` and calls `getPerfChartChrome()`, where a test that renders `GRAPH_COLORS` has to mock the module instead. The repeat `getComputedStyle` read is not free, so call a getter once per mount, not per render or per element — for example, resolve it in a `useMemo` with an empty dependency list. Settled in #1911.
 
 Either shape fails the same way: `cssVar` returns `''` for a property nobody declared, with no error, so a rename in a stylesheet leaves a graph drawn in no colour. `tests/cssCustomProperties.spec.ts` checks that every name `src/` passes to `cssVar` is declared under `src/scss/`, which means `cssVar` may only be called with a quoted literal name: a computed argument, a reference passed as a value or an aliased import fails it, naming the line. Its header says what it does not check.
 

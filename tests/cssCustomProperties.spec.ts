@@ -16,7 +16,10 @@ const CSS_VAR_DEFINITION = /^export const cssVar = /m;
 // An alias would hide every later call from this scan, so an import that renames `cssVar` is
 // left in place to be reported.
 const CSS_VAR_ALIAS = /\bcssVar\s+as\b/;
-const IMPORT_STATEMENT = /^import\b[\s\S]*?\bfrom\s*['"][^'"]+['"];?/gm;
+// Ends at the statement's semicolon (Prettier's `semi: true` guarantees one) rather than at a
+// `from '…'`: a side-effect import has no `from`, and a lazy match would run on to the next one
+// anywhere in the file, blanking the code in between.
+const IMPORT_STATEMENT = /^import\b[^;]*;/gm;
 const COMMENT_LINE = /^\s*(\/\/|\/\*|\*)/;
 // Anchored to the line start so a property named in a comment or read through `var(--x)`
 // is not mistaken for a declaration.
@@ -39,13 +42,16 @@ const readFilesWithExtensions = (directory: string, extensions: string[]) =>
 // Blanks a match but keeps its newlines, so reported line numbers still point at the source.
 const blankKeepingLines = (match: string) => match.replace(/[^\n]/g, '');
 
+const blankImports = (text: string) =>
+    text.replace(IMPORT_STATEMENT, (statement) =>
+        CSS_VAR_ALIAS.test(statement) ? statement : blankKeepingLines(statement),
+    );
+
 // Imports and the definition are the references that are neither a call nor checkable, and
 // comment lines are skipped so a docstring naming `cssVar` is not taken for one.
 const sourceLines: SourceLine[] = readFilesWithExtensions(SOURCE_DIRECTORY, ['.ts', '.tsx']).flatMap(
     ({ path, text }) => {
-        const withoutImports = text.replace(IMPORT_STATEMENT, (statement) =>
-            CSS_VAR_ALIAS.test(statement) ? statement : blankKeepingLines(statement),
-        );
+        const withoutImports = blankImports(text);
         const scanned =
             path === CSS_VAR_DEFINITION_FILE ? withoutImports.replace(CSS_VAR_DEFINITION, '') : withoutImports;
 
@@ -79,6 +85,20 @@ describe('cssVar custom properties', () => {
 
         expect(literalNames.length).toBeGreaterThan(0);
         expect(uncheckableReferences).toEqual([]);
+    });
+
+    it('blanks only the import statements, not the code after a side-effect import', () => {
+        const source = [
+            "import 'styles/example.scss';",
+            "const probe = cssVar('--nope-not-declared');",
+            "/** The distinction from 'Repeats'. */",
+        ].join('\n');
+
+        expect(blankImports(source).split('\n')).toEqual([
+            '',
+            "const probe = cssVar('--nope-not-declared');",
+            "/** The distinction from 'Repeats'. */",
+        ]);
     });
 
     it('reads only properties a stylesheet declares', () => {
