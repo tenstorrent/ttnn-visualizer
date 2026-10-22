@@ -1393,7 +1393,7 @@ SERVER_MODE = _parse_env_bool("SERVER_MODE", False)
 
 A second copy of the token list drifts, and **both drift directions fail silently**: add a spelling to one and the other rejects a value the rest of the app honours; remove one and it starts meaning `False`. If a caller needs to know that a value was a typo, take `None` from `parse_bool` — don't re-implement the membership test.
 
-This holds outside `settings.py` too: `create_app`'s root-log-level check, the gunicorn `--reload` check, and `devtools/npe_render_probe.py`'s `SERVER_MODE` refusal all call `str_to_bool`. A dev tool that refuses on a *wider* set than the app looks harmless and isn't — it means the two disagree about what the deployment is.
+This holds outside `settings.py` too: `_is_dev_debug_requested()` in `app.py` (the one read of bare `DEBUG`, behind both the root log level and gunicorn `--reload`) and `devtools/npe_render_probe.py`'s `SERVER_MODE` refusal all call `str_to_bool`. A dev tool that refuses on a *wider* set than the app looks harmless and isn't — it means the two disagree about what the deployment is.
 
 #### The vocabulary is deliberately narrow, and matched across three consumers
 

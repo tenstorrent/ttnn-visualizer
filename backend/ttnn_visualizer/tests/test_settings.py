@@ -436,6 +436,45 @@ def test_the_dev_knob_is_off_for_unset_false_and_unrecognised_values(
     assert not caplog.records
 
 
+@pytest.mark.parametrize(
+    "debug, flask_debug, expected",
+    [
+        ("true", None, logging.DEBUG),
+        ("false", None, logging.INFO),
+        ("false", "true", logging.INFO),
+    ],
+)
+def test_the_dev_knob_sets_the_root_log_level(
+    debug, flask_debug, expected, monkeypatch, tmp_path
+):
+    # The helper tests above can't see the call site: this is what notices
+    # ``create_app`` reading ``FLASK_DEBUG`` or an inline variable again. ``DEBUG`` is
+    # set to ``"false"`` rather than deleted so a local ``backend/.env`` can't flip the
+    # off cases, since ``load_dotenv`` doesn't override what is already set. #1922
+    monkeypatch.setenv("DEBUG", debug)
+    if flask_debug is None:
+        monkeypatch.delenv("FLASK_DEBUG", raising=False)
+    else:
+        monkeypatch.setenv("FLASK_DEBUG", flask_debug)
+
+    # ``create_app`` sets the root logger and every handler's level process-wide, so
+    # leaving them changed would make later ``caplog`` tests order-dependent.
+    root_logger = logging.getLogger()
+    original_level = root_logger.level
+    original_handlers = {handler: handler.level for handler in root_logger.handlers}
+    try:
+        create_app(settings_override=base_test_settings(str(tmp_path)))
+
+        assert root_logger.level == expected
+    finally:
+        root_logger.setLevel(original_level)
+        for handler in list(root_logger.handlers):
+            if handler in original_handlers:
+                handler.setLevel(original_handlers[handler])
+            else:
+                root_logger.removeHandler(handler)
+
+
 ENV_SAMPLE_PATH = Path(__file__).parents[3] / ".env.sample"
 COMMENTED_SETTING_PATTERN = re.compile(r"^#\s*([A-Z][A-Z0-9_]*)=(.*)$")
 
