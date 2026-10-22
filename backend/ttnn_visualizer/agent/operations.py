@@ -363,20 +363,26 @@ def _compute_l1_pressure(
     for buf in buffers:
         buffers_by_device[_int_attr(buf, "device_id")].append(buf)
 
-    candidates: List[L1Pressure] = []
+    device_windows: Dict[int, Tuple[int, int]] = {}
     for device in devices:
         window = _device_l1_window(device)
-        if window is None:
-            continue
-        dev_id = _int_attr(device, "device_id")
-        candidates.append(
-            _compute_device_l1_pressure(
-                buffers_by_device.get(dev_id, ()),
-                dev_id,
-                window[0],
-                window[1],
-            )
+        if window is not None:
+            device_windows[_int_attr(device, "device_id")] = window
+
+    if not device_windows:
+        return None
+
+    fallback_window = next(iter(device_windows.values()))
+    all_device_ids = sorted(set(device_windows) | set(buffers_by_device))
+    candidates: List[L1Pressure] = [
+        _compute_device_l1_pressure(
+            buffers_by_device.get(dev_id, ()),
+            dev_id,
+            device_windows.get(dev_id, fallback_window)[0],
+            device_windows.get(dev_id, fallback_window)[1],
         )
+        for dev_id in all_device_ids
+    ]
 
     if not candidates:
         return None
@@ -922,9 +928,21 @@ def memory_profile(
         }
         scoped_devices = _scoped_devices(queries, scope)
         capacity = _device_capacity(queries, scope, scoped_devices)
+        has_l1_rows = any(
+            _buffer_type_name(row[1]) == BufferType.L1.name for row in grouped
+        )
         raw_buffers = (
-            list(queries.query_buffers(filters=scoped(queries, "buffers", scope)))
-            if wanted in (None, BufferType.L1.name) and scoped_devices
+            list(
+                queries.query_buffers(
+                    filters=scoped(
+                        queries,
+                        "buffers",
+                        scope,
+                        buffer_type=[BufferType.L1.value, BufferType.L1.name],
+                    )
+                )
+            )
+            if wanted in (None, BufferType.L1.name) and scoped_devices and has_l1_rows
             else []
         )
 

@@ -119,21 +119,25 @@ export function computeL1PressureForOperation(
         }
     }
 
+    const pickMostConstrained = (worst: L1PressureMetrics, metrics: L1PressureMetrics): L1PressureMetrics =>
+        metrics.largestFreeBytes < worst.largestFreeBytes ||
+        (metrics.largestFreeBytes === worst.largestFreeBytes && metrics.fullnessPercent > worst.fullnessPercent)
+            ? metrics
+            : worst;
+
     if (deviceWindows.size > 0) {
+        const fallbackWindow = deviceWindows.values().next().value!;
+        const candidateIds = new Set<number>([...deviceWindows.keys(), ...buffersByDevice.keys()]);
         const metricsPerDevice: L1PressureMetrics[] = [];
-        for (const [deviceId, window] of deviceWindows.entries()) {
+        for (const deviceId of candidateIds) {
+            const window = deviceWindows.get(deviceId) ?? fallbackWindow;
             const deviceBuffers = buffersByDevice.get(deviceId) ?? [];
             metricsPerDevice.push(
                 computeMetricsForDevice(deviceBuffers, window.start, window.end, window.end - window.start),
             );
         }
 
-        return metricsPerDevice.reduce((worst, metrics) =>
-            metrics.largestFreeBytes < worst.largestFreeBytes ||
-            (metrics.largestFreeBytes === worst.largestFreeBytes && metrics.fullnessPercent > worst.fullnessPercent)
-                ? metrics
-                : worst,
-        );
+        return metricsPerDevice.reduce(pickMostConstrained);
     }
 
     const deviceGroups = [...buffersByDevice.values()];
@@ -144,7 +148,7 @@ export function computeL1PressureForOperation(
 
     return deviceGroups
         .map((deviceBuffers) => computeMetricsForDevice(deviceBuffers, l1Start, l1End, defaultUsableSize))
-        .reduce((worst, metrics) => (metrics.fullnessPercent > worst.fullnessPercent ? metrics : worst));
+        .reduce(pickMostConstrained);
 }
 
 function computeMetricsForDevice(

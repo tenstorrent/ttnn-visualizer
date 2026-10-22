@@ -208,6 +208,62 @@ test('computeL1PressureForOperation bounds each device by address_at_first_l1_cb
 
     expect(result.freeSegments).toBe(1);
     expect(result.largestFreeBytes).toBe(1370848 - 137084);
-    expect(result.fullnessPercent).toBeCloseTo(10, 5);
-    expect(result.largestFreePercent).toBeCloseTo(90, 5);
+    expect(result.fullnessPercent).toBeCloseTo((137084 / 1370848) * 100, 5);
+    expect(result.largestFreePercent).toBeCloseTo(((1370848 - 137084) / 1370848) * 100, 5);
+});
+
+test('computeL1PressureForOperation selects the device with the smallest largestFreeBytes even when another device has higher fullness', () => {
+    const devices = [
+        {
+            device_id: 0,
+            address_at_first_l1_bank: 0,
+            address_at_first_l1_cb_buffer: 0,
+            l1_bank_size: 1000,
+            worker_l1_size: 1000,
+            l1_num_banks: 64,
+            num_banks_per_storage_core: 1,
+            num_compute_cores: 64,
+            num_x_compute_cores: 8,
+            num_x_cores: 8,
+            num_y_compute_cores: 8,
+            num_y_cores: 8,
+            total_l1_for_interleaved_buffers: 0,
+            total_l1_for_sharded_buffers: 0,
+            total_l1_for_tensors: 0,
+            total_l1_memory: 0,
+            cb_limit: 0,
+        },
+        {
+            device_id: 1,
+            address_at_first_l1_bank: 0,
+            address_at_first_l1_cb_buffer: 0,
+            l1_bank_size: 1000,
+            worker_l1_size: 1000,
+            l1_num_banks: 64,
+            num_banks_per_storage_core: 1,
+            num_compute_cores: 64,
+            num_x_compute_cores: 8,
+            num_x_cores: 8,
+            num_y_compute_cores: 8,
+            num_y_cores: 8,
+            total_l1_for_interleaved_buffers: 0,
+            total_l1_for_sharded_buffers: 0,
+            total_l1_for_tensors: 0,
+            total_l1_memory: 0,
+            cb_limit: 0,
+        },
+    ];
+    // Device 0: 30% full, fragmented so largestFreeBytes is 350.
+    // Device 1: 60% full, contiguous so largestFreeBytes is 400.
+    const buffers = [
+        makeBuffer(0, 100, 0),
+        makeBuffer(450, 100, 0),
+        makeBuffer(900, 100, 0),
+        makeBuffer(0, 600, 1),
+    ];
+
+    const result = computeL1PressureForOperation(buffers, 0, 1000, devices);
+    expect(result.largestFreeBytes).toBe(350);
+    expect(result.fullnessPercent).toBeCloseTo(30, 5);
+    expect(result.freeSegments).toBe(2);
 });
