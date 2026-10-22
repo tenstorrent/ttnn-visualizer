@@ -9,7 +9,7 @@ import OperationDetailsComponent from '../src/components/operation-details/Opera
 import SideNavigation from '../src/components/SideNavigation';
 import { BufferType } from '../src/model/BufferType';
 import { dismissToast } from '../src/functions/createToastNotification';
-import { selectedAddressAtom, selectedBufferColourAtom, selectedTensorIdAtom } from '../src/store/app';
+import { activeToastAtom, selectedAddressAtom, selectedBufferColourAtom, selectedTensorIdAtom } from '../src/store/app';
 import { summariseOperationBuffers } from '../src/functions/summariseOperationBuffers';
 import { TestProviders } from './helpers/TestProviders';
 import type { AtomProviderInitialValues } from './helpers/atomProvider';
@@ -27,6 +27,7 @@ const OPERATION_ID = 1;
 const TENSOR_ID = 10;
 const COLOUR = '#4e79a7';
 const BUFFER_FOCUS: AtomProviderInitialValues = [
+    [activeToastAtom, 'buffer-toast'],
     [selectedTensorIdAtom, TENSOR_ID],
     [selectedAddressAtom, ADDRESS],
     [selectedBufferColourAtom, COLOUR],
@@ -116,7 +117,7 @@ describe('OperationDetailsComponent and a focused buffer (#2042)', () => {
 
         pressAndRelease(screen.getByRole('heading', { name: 'L1 Memory' }));
         expect(getBufferFocusProbe()).toHaveTextContent('dismissed');
-        expect(dismissToast).toHaveBeenCalledExactlyOnceWith();
+        expect(dismissToast).toHaveBeenCalledExactlyOnceWith('mock-toast-id');
     });
 
     it('keeps it through a click on a control, which acts on its own', () => {
@@ -141,7 +142,7 @@ describe('OperationDetailsComponent and a focused buffer (#2042)', () => {
         pressAndRelease(screen.getByRole('navigation', { name: 'Main navigation' }));
 
         expect(getBufferFocusProbe()).toHaveTextContent('dismissed');
-        expect(dismissToast).toHaveBeenCalledExactlyOnceWith();
+        expect(dismissToast).toHaveBeenCalledExactlyOnceWith('buffer-toast');
     });
 
     it('keeps it through a click in the panel describing the focused tensor', () => {

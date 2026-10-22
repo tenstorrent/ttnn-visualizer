@@ -22,9 +22,15 @@ export const useResetBufferFocus = () => {
         setSelectedTensorId(null);
         setSelectedAddress(null);
         setSelectedBufferColour(null);
-        setActiveToast(null);
-        // No id, so this closes every open toast rather than only the focused buffer's. #2149
-        dismissToast();
+        // Read inside the updater because the toast's own onClick/closeButton capture
+        // resetBufferFocus when created, before the returned toast id is stored. #2149
+        setActiveToast((previousToast) => {
+            if (previousToast !== null) {
+                dismissToast(previousToast);
+            }
+
+            return null;
+        });
     }, [setActiveToast, setSelectedAddress, setSelectedBufferColour, setSelectedTensorId]);
 };
 

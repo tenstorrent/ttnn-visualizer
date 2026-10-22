@@ -133,6 +133,7 @@ describe('useBufferFocus', () => {
 
     it('clears the selection when the toast itself is clicked', () => {
         const result = focusBuffer();
+        const focusedToast = result.current.activeToast;
         const { onClick } = lastToastCall()[1]!;
 
         act(() => onClick!({} as MouseEvent<HTMLElement>));
@@ -141,7 +142,7 @@ describe('useBufferFocus', () => {
         expect(result.current.selectedAddress).toBeNull();
         expect(result.current.selectedTensorId).toBeNull();
         expect(result.current.selectedBufferColour).toBeNull();
-        expect(dismiss).toHaveBeenLastCalledWith(undefined);
+        expect(dismiss).toHaveBeenLastCalledWith(focusedToast);
     });
 
     it('clears the selection from the toast\u2019s own close button', () => {
@@ -149,6 +150,7 @@ describe('useBufferFocus', () => {
         // the hook ever hands it to the toast. Removing the `closeButton` option, or
         // wiring it to a callback that does nothing, left all 2804 tests green.
         const result = focusBuffer();
+        const focusedToast = result.current.activeToast;
         const { closeButton } = lastToastCall()[1]!;
         const { getByRole } = render(closeButton as ReactElement);
 
@@ -158,15 +160,16 @@ describe('useBufferFocus', () => {
         expect(result.current.selectedAddress).toBeNull();
         expect(result.current.selectedTensorId).toBeNull();
         expect(result.current.selectedBufferColour).toBeNull();
-        expect(dismiss).toHaveBeenLastCalledWith(undefined);
+        expect(dismiss).toHaveBeenLastCalledWith(focusedToast);
     });
 
-    it('dismisses every toast when the selection is reset', () => {
+    it('dismisses the focused buffer toast when the selection is reset', () => {
         const result = focusBuffer();
+        const focusedToast = result.current.activeToast;
 
         act(() => result.current.resetBufferFocus());
 
-        expect(dismiss).toHaveBeenLastCalledWith(undefined);
+        expect(dismiss).toHaveBeenLastCalledWith(focusedToast);
         expect(result.current.activeToast).toBeNull();
     });
 });
