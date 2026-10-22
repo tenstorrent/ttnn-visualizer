@@ -378,9 +378,13 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
                                     <Label
                                         className='memory-zoom-range-label'
                                         disabled={!zoomedInViewMainMemory}
+                                        // A <label> forwards clicks to its first labelable descendant, so prevent it
+                                        // from activating the nested reset <button> when the label text is clicked. #2150
+                                        onClick={(event) => event.preventDefault()}
                                     >
                                         L1 memory zoom range
                                         <Button
+                                            aria-label='Reset L1 memory zoom range'
                                             className='memory-zoom-range-reset'
                                             disabled={
                                                 !zoomedInViewMainMemory ||
