@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useState } from 'react';
-import { Button, ButtonGroup, ButtonVariant, Intent, Label, RangeSlider, Size, Switch } from '@blueprintjs/core';
+import { Button, ButtonGroup, ButtonVariant, Intent, RangeSlider, Size, Switch } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom } from 'jotai';
 import classNames from 'classnames';
@@ -375,12 +375,9 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
                                         />
                                     )}
 
-                                    <Label
-                                        className='memory-zoom-range-label'
-                                        disabled={!zoomedInViewMainMemory}
-                                        // A <label> forwards clicks to its first labelable descendant, so prevent it
-                                        // from activating the nested reset <button> when the label text is clicked. #2150
-                                        onClick={(event) => event.preventDefault()}
+                                    <div
+                                        className='memory-zoom-range-label bp4-label'
+                                        aria-disabled={!zoomedInViewMainMemory}
                                     >
                                         L1 memory zoom range
                                         <Button
@@ -400,7 +397,7 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
                                             }}
                                         />
                                         {!zoomedInViewMainMemory && '(Requires buffer zoom to be enabled)'}
-                                    </Label>
+                                    </div>
 
                                     <MemoryPlotRenderer
                                         className={classNames('l1-memory-renderer zoom-reference', {
