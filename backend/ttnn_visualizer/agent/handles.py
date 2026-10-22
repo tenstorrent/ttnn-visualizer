@@ -330,8 +330,6 @@ def perf_csv_columns(instance: Instance) -> frozenset:
     return _csv_columns(_perf_csv(instance))
 
 
-
-
 def _device_log_answerable(performance_path: Optional[str]) -> bool:
     """Whether `profile_log_device.csv` decodes cleanly, has the columns `zone_timings`
     reads, and holds at least one data row. #2184"""
@@ -355,7 +353,13 @@ def _device_log_answerable(performance_path: Optional[str]) -> bool:
         return False
     if not any(header):
         return False
-    if not DeviceLogProfilerQueries.ZONE_SUMMARY_COLUMNS <= set(header):
+    # Both the columns zone_timings groups by and the columns every device-log row must carry.
+    # ZONE_SUMMARY_COLUMNS is a superset for grouping, but a log missing timer_id (etc.) has
+    # to be refused here before zone_timings opens DeviceLogProcess and fails on a KeyError. #2184
+    required = set(DeviceLogProfilerQueries.REQUIRED_DEVICE_LOG_COLUMNS) | set(
+        DeviceLogProfilerQueries.ZONE_SUMMARY_COLUMNS,
+    )
+    if not required <= set(header):
         return False
     return has_data_row
 

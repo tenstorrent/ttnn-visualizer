@@ -63,6 +63,7 @@ from ttnn_visualizer.tests.smoke_capture import (
 from ttnn_visualizer.tests.test_device_log_columns import (
     MODERN_HEADER,
     PREAMBLE,
+    _drop_column,
     write_device_log,
 )
 
@@ -274,8 +275,10 @@ class TestReportInventory:
 
         missing_col = tmp_path / "missing_col"
         missing_col.mkdir()
-        incomplete_header = [c for c in MODERN_HEADER if c != "core_x"]
-        write_device_log(missing_col, incomplete_header, ZONED_ROWS)
+        incomplete_header, incomplete_rows = _drop_column(
+            MODERN_HEADER, ZONED_ROWS, "core_x"
+        )
+        write_device_log(missing_col, incomplete_header, incomplete_rows)
         loaded_incomplete = load_report(
             ReportRegistry(), performance_path=str(missing_col)
         )
@@ -283,11 +286,10 @@ class TestReportInventory:
 
     def test_a_non_utf8_device_log_does_not_break_load_report(self, tmp_path):
         """A device log with non-UTF-8 bytes in the preamble or past the first 8 KB is
-        treated as unanswerable for `zone_timings` without breaking `load_report`. #2184"""
-        header_line = ", ".join(MODERN_HEADER) + "\n"
-        row_lines = "".join(
-            ", ".join(str(cell) for cell in row) + "\n" for row in ZONED_ROWS
-        )
+        treated as unanswerable for `zone_timings` without breaking `load_report`. #2184
+        """
+        header_line = MODERN_HEADER + "\n"
+        row_lines = "".join(row + "\n" for row in ZONED_ROWS)
         latin1_preamble = (PREAMBLE + ", Note: 5\xb5s\n").encode("latin-1")
         (tmp_path / DeviceLogProfilerQueries.DEVICE_LOG_FILE).write_bytes(
             latin1_preamble + (header_line + row_lines).encode("utf-8")
@@ -312,9 +314,7 @@ class TestReportInventory:
         (late_bad_byte / DeviceLogProfilerQueries.DEVICE_LOG_FILE).write_bytes(
             valid_prefix + b"0, 0, 0, BRISC, 100, 1, bad\xffzone, src.cpp\n"
         )
-        loaded_late = load_report(
-            ReportRegistry(), performance_path=str(late_bad_byte)
-        )
+        loaded_late = load_report(ReportRegistry(), performance_path=str(late_bad_byte))
         assert "zone_timings" in loaded_late["unanswerable"]
 
     def test_a_missing_directory_is_refused_with_the_path(self, tmp_path):
