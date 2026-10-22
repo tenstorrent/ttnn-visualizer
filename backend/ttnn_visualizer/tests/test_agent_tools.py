@@ -154,7 +154,9 @@ class TestReportInventory:
         operation questions have no input.
         """
         write_device_log(tmp_path, MODERN_HEADER, [])
-        (tmp_path / "ops_perf_results_x.csv").write_text("ID\n", encoding="utf-8")
+        write_ops_perf(tmp_path, smoke_rows()).rename(
+            tmp_path / "ops_perf_results_x.csv"
+        )
 
         loaded = load_report(ReportRegistry(), performance_path=str(tmp_path))
 
@@ -174,6 +176,7 @@ class TestReportInventory:
         }
         assert loaded["capture"]["ARCH"] == "wormhole_b0"
         assert loaded["performance_csv"] == "ops_perf_results_x.csv"
+        assert loaded["performance_csv_problem"] is None
 
     def test_it_never_names_a_tool_that_is_not_registered(self, tmp_path):
         """`operations` was listed whenever a `db.sqlite` was present, but no such
@@ -236,6 +239,25 @@ class TestReportInventory:
 
         assert loaded["answerable"] == []
         assert "find_operations" in loaded["unanswerable"]
+
+    def test_a_broken_newest_perf_csv_is_named_but_not_answerable(self, tmp_path):
+        """#2170: When the newest `ops_perf_results*.csv` is unreadable or empty,
+        the inventory judges the file `top_ops` actually selects rather than an
+        older readable capture in the same directory."""
+        older = write_ops_perf(tmp_path, smoke_rows()).rename(
+            tmp_path / "ops_perf_results_old.csv"
+        )
+        newer = tmp_path / "ops_perf_results_new.csv"
+        newer.write_bytes(b"")
+        os.utime(older, (1000, 1000))
+        os.utime(newer, (2000, 2000))
+
+        loaded = load_report(ReportRegistry(), performance_path=str(tmp_path))
+
+        assert loaded["performance_csv"] == "ops_perf_results_new.csv"
+        assert "top_ops" not in loaded["answerable"]
+        assert "top_ops" in loaded["unanswerable"]
+        assert loaded["performance_csv_problem"] == "empty"
 
     def test_a_missing_directory_is_refused_with_the_path(self, tmp_path):
         with pytest.raises(ValueError, match="performance_path is not a directory"):

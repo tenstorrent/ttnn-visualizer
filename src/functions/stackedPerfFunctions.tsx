@@ -6,7 +6,7 @@ import { JSX } from 'react';
 import HighlightedText from '../components/HighlightedText';
 import { formatPercentage, formatSize } from './math';
 import { StackedColumnKeys, StackedTableColumn, TypedStackedPerfRow } from '../definitions/StackedPerfTable';
-import { CellColour } from '../definitions/CellColour';
+import { CellColour, DEFAULT_CELL_COLOUR, FALLBACK_CELL_COLOUR } from '../definitions/CellColour';
 
 const OPERATION_COLOURS: { [key: string]: CellColour } = {
     '(torch)': CellColour.Red,
@@ -22,9 +22,6 @@ const OPERATION_COLOURS: { [key: string]: CellColour } = {
     OptimizedConvNew: CellColour.Orange, // Deprecated - Conv2d is the new name for this operation
     Conv2d: CellColour.Orange,
 };
-
-const DEFAULT_COLOUR = CellColour.White;
-const FALLBACK_COLOUR = CellColour.Grey;
 
 export const formatStackedCell = (
     row: TypedStackedPerfRow,
@@ -82,21 +79,21 @@ export const getCellColour = (row: TypedStackedPerfRow, key: StackedColumnKeys):
             row[StackedColumnKeys.OpCode].includes(opCodeKey),
         );
 
-        return match ? OPERATION_COLOURS[match] : FALLBACK_COLOUR;
+        return match ? OPERATION_COLOURS[match] : FALLBACK_CELL_COLOUR;
     }
 
     if (key === StackedColumnKeys.OpsCount || key === StackedColumnKeys.DeviceTimeSumUs) {
-        return DEFAULT_COLOUR;
+        return DEFAULT_CELL_COLOUR;
     }
 
     if (typeof value === 'number') {
-        return value > 0 ? DEFAULT_COLOUR : FALLBACK_COLOUR;
+        return value > 0 ? DEFAULT_CELL_COLOUR : FALLBACK_CELL_COLOUR;
     }
 
     if (key === StackedColumnKeys.OpCategory) {
-        return DEFAULT_COLOUR;
+        return DEFAULT_CELL_COLOUR;
     }
 
     // Shouldn't get to this point but need to return something
-    return DEFAULT_COLOUR;
+    return DEFAULT_CELL_COLOUR;
 };
