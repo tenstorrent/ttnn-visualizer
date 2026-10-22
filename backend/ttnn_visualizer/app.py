@@ -147,12 +147,10 @@ def _print_environment(config: DefaultConfig) -> None:
 def _is_dev_debug_requested() -> bool:
     """Whether the development knob ``pnpm flask:start-debug`` sets is on.
 
-    The bare ``DEBUG`` variable means debug-level logging plus gunicorn ``--reload``,
-    and deliberately not Flask's debug mode: that is ``FLASK_DEBUG``, which feeds the
-    ``DEBUG`` config attribute through ``_ENV_ALIASES`` (#1922). It is meant for
-    development only: ``SERVER_MODE`` does not gate it, so a hosted deployment that sets
-    it still logs at debug level and reloads on file changes. No security posture rides
-    on its parse, so an unrecognised value means off rather than warns.
+    What the bare ``DEBUG`` variable means, and why it is not ``FLASK_DEBUG``, is in
+    CONVENTIONS.md under "``_ENV_ALIASES`` where the variable isn't named after the
+    attribute" (#1922). No security posture rides on its parse, so an unrecognised value
+    means off rather than warns.
     """
     return str_to_bool(os.environ.get("DEBUG", "false"))
 

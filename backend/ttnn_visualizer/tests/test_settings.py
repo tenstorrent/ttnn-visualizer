@@ -399,19 +399,21 @@ def test_flask_debug_applies_after_the_class_body_has_been_evaluated(monkeypatch
     assert config.DEBUG is True
 
 
+@pytest.mark.parametrize("env_value", ["true", "1"])
 @pytest.mark.parametrize(
     "env_name, expected",
     [("DEBUG", True), ("FLASK_DEBUG", False)],
 )
 def test_only_the_bare_debug_variable_requests_the_dev_knob(
-    env_name, expected, monkeypatch
+    env_name, expected, env_value, monkeypatch
 ):
     # The mirror of the alias tests above: ``FLASK_DEBUG`` must not switch on verbose
     # logging and gunicorn ``--reload`` either. Both are cleared first so a developer
-    # running under ``pnpm flask:start-debug`` can't decide the outcome. #1922
+    # running under ``pnpm flask:start-debug`` can't decide the outcome. ``"1"`` keeps
+    # a helper that only accepted the literal ``"true"`` from passing. #1922
     monkeypatch.delenv("DEBUG", raising=False)
     monkeypatch.delenv("FLASK_DEBUG", raising=False)
-    monkeypatch.setenv(env_name, "true")
+    monkeypatch.setenv(env_name, env_value)
 
     assert app_module._is_dev_debug_requested() is expected
 
