@@ -399,13 +399,11 @@ def perf_csv_columns(instance: Instance) -> frozenset:
 
 
 # Its release decides derived values, such as which `op_category` names exist.
-TT_PERF_REPORT_DISTRIBUTION = "tt-perf-report"
+_TT_PERF_REPORT_DISTRIBUTION = "tt-perf-report"
 # The largest real cluster descriptor is 28 KB; one past this is not read at all.
 MAX_DESCRIPTOR_CHARS = 1_000_000
 # One chip's entry in the descriptor's `arch` mapping, as tt-metal names architectures.
 _ARCH_ENTRY = re.compile(r"""\d+\s*:\s*(['"]?)([A-Za-z][A-Za-z0-9_]{0,63})\1""")
-# A YAML comment: `#` after whitespace, to the end of the line.
-_YAML_COMMENT = re.compile(r"\s+#.*$")
 
 
 def _distinct_devices(connection: sqlite3.Connection) -> Optional[int]:
@@ -427,6 +425,18 @@ def _profiler_device_count(profiler_path: Optional[str]) -> Optional[int]:
     return _read_profiler_db(profiler_path, _distinct_devices, None)
 
 
+def _without_comment(line: str) -> str:
+    """`line` before a YAML comment: a `#` that starts it or follows whitespace.
+
+    Found with `find`, since a regex for whitespace then `#` backtracks
+    quadratically over a long run of whitespace that no `#` ends.
+    """
+    start = line.find("#")
+    while start > 0 and not line[start - 1].isspace():
+        start = line.find("#", start + 1)
+    return line if start < 0 else line[:start].rstrip()
+
+
 def _arch_names(entries: Iterable[str]) -> List[str]:
     names = []
     for entry in entries:
@@ -444,7 +454,7 @@ def _descriptor_arch_names(text: str) -> List[str]:
     way to a crash or a flood, and only these names are wanted. tt-metal writes the
     mapping as a block, and older releases as a flow mapping across lines.
     """
-    lines = (_YAML_COMMENT.sub("", line) for line in text.splitlines())
+    lines = (_without_comment(line) for line in text.splitlines())
     for line in lines:
         header = line.rstrip()
         if header in ("arch:", "arch: {"):
@@ -493,7 +503,7 @@ def _cluster_descriptor_arch(profiler_path: Optional[str]) -> Optional[str]:
 @functools.lru_cache(maxsize=None)
 def _tt_perf_report_version() -> Optional[str]:
     try:
-        return distribution_version(TT_PERF_REPORT_DISTRIBUTION)
+        return distribution_version(_TT_PERF_REPORT_DISTRIBUTION)
     except PackageNotFoundError:
         return None
 

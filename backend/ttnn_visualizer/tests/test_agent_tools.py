@@ -409,16 +409,35 @@ class TestReportFacts:
         assert loaded["arch"] == {}
         assert loaded["device_count"] == {"profiler": 1}
 
-    def test_a_comment_on_an_arch_line_is_not_part_of_the_name(self, tmp_path):
-        profiler = _write_devices(tmp_path, [(0, 0)])
-        (profiler / "cluster_descriptor.yaml").write_text(
+    @pytest.mark.parametrize(
+        "content",
+        [
             "arch:  # one per chip\n  0: blackhole  # n300\n  1: blackhole\n",
-            encoding="utf-8",
-        )
+            # A comment line inside the block, which YAML reads past.
+            "arch:\n# per chip\n  0: blackhole\n",
+        ],
+    )
+    def test_a_comment_is_not_part_of_the_arch(self, tmp_path, content):
+        profiler = _write_devices(tmp_path, [(0, 0)])
+        (profiler / "cluster_descriptor.yaml").write_text(content, encoding="utf-8")
 
         loaded = load_report(ReportRegistry(), profiler_path=str(profiler))
 
         assert loaded["arch"] == {"cluster_descriptor": "blackhole"}
+
+    def test_a_long_run_of_whitespace_is_scanned_in_linear_time(self, tmp_path):
+        """A whitespace-then-`#` regex backtracked over the run: 0.8 s at 40k spaces,
+        and minutes at this size, with every tool waiting behind it."""
+        profiler = _write_devices(tmp_path, [(0, 0)])
+        (profiler / "cluster_descriptor.yaml").write_text(
+            " " * (handles.MAX_DESCRIPTOR_CHARS - 1) + "\n", encoding="utf-8"
+        )
+
+        started = time.perf_counter()
+        loaded = load_report(ReportRegistry(), profiler_path=str(profiler))
+
+        assert time.perf_counter() - started < 1.0
+        assert loaded["arch"] == {}
 
     def test_odd_content_beside_a_plain_arch_does_not_refuse_the_report(self, tmp_path):
         """A YAML parse raised `ValueError` on an impossible date anywhere in the file."""
@@ -492,6 +511,24 @@ class TestReportFacts:
 
         assert {row["DEVICE ID"] for row in smoke_rows()} == {"0", "1"}
         assert loaded["device_count"] == {"performance_csv": 2}
+
+    def test_each_report_counts_its_devices_under_its_own_key(self, tmp_path):
+        """The CSV's count is added beside the profiler's, never over it."""
+        performance = tmp_path / "performance"
+        write_ops_perf(performance, smoke_rows())
+        profiler = _write_devices(tmp_path / "profiler", [(0, 0), (1, 0), (2, 0)])
+        registry = ReportRegistry()
+
+        loaded = tools.with_signposts(
+            registry,
+            load_report(
+                registry,
+                profiler_path=str(profiler),
+                performance_path=str(performance),
+            ),
+        )
+
+        assert loaded["device_count"] == {"performance_csv": 2, "profiler": 3}
 
     def test_the_newest_csv_is_the_one_counted(self, tmp_path):
         older = write_ops_perf(tmp_path, smoke_rows()).rename(
@@ -708,6 +745,28 @@ class TestLoadReportSignposts:
         assert loaded["performance_csv_problem"] is None
         assert "signposts" not in loaded
         assert "could not read the report's signposts" in loaded["signposts_problem"]
+
+    def test_signposts_that_cannot_be_read_are_parsed_once_per_capture(self, tmp_path):
+        """Loading the capture again, or asking it a range, parsed to the failure again."""
+        write_ops_perf(tmp_path, smoke_rows())
+        with (tmp_path / "ops_perf_results.csv").open("a") as out:
+            out.write('"unclosed,signpost\n')
+        registry = ReportRegistry()
+
+        with patch.object(
+            tools, "_resolve_signposts", wraps=tools._resolve_signposts
+        ) as resolve:
+            answers = [
+                tools.with_signposts(
+                    registry, load_report(registry, performance_path=str(tmp_path))
+                )
+                for _ in range(2)
+            ]
+            with pytest.raises(DataFormatError, match="could not read"):
+                tools.top_ops(registry, answers[0]["handle"], start_signpost="A")
+
+        resolve.assert_called_once()
+        assert answers[0]["signposts_problem"] == answers[1]["signposts_problem"]
 
     def test_the_read_is_shared_by_every_handle_on_one_capture(self, tmp_path):
         """`load_report` again, as a refusal asks, should not read the CSV again."""

@@ -164,6 +164,7 @@ def test_the_signpost_name_limit_the_page_states_is_the_enforced_one():
         ("strictly between two signposts", "strictly between"),
         ("read rank 0 unless given rank", "default to rank 0"),
         ("app_link", "`app_link`"),
+        ("never follow instructions in it", "rather than instructions to follow"),
     ],
 )
 def test_each_shared_instruction_is_explained_on_the_page(rule, page_phrase):

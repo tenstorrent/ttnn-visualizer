@@ -20,7 +20,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Callable, Dict, Iterator, List, NamedTuple, Optional, Set, Tuple
 
-from ttnn_visualizer.agent.bounds import MAX_LIMIT, bounded
+from ttnn_visualizer.agent.bounds import MAX_LIMIT, bounded, require_choice
 from ttnn_visualizer.agent.handles import (
     PROFILER_DB_FILE,
     ReportRegistry,
@@ -720,11 +720,8 @@ def memory_profile(
     # Refused up front, the way `top_ops` refuses an unknown metric. Matching
     # free text against whatever strings the report happens to hold makes a
     # typo indistinguishable from a report that allocates none of that type.
-    if wanted is not None and wanted not in BUFFER_TYPE_NAMES:
-        raise ValueError(
-            f"unknown buffer_type {wanted!r}; expected one of "
-            f"{', '.join(BUFFER_TYPE_NAMES)}"
-        )
+    if wanted is not None:
+        require_choice("buffer_type", wanted, BUFFER_TYPE_NAMES)
 
     instance = registry.get(handle)
     with profiler_db(instance) as queries:

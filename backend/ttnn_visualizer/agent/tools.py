@@ -16,10 +16,15 @@ import sys
 from collections import defaultdict
 from dataclasses import asdict, dataclass
 from enum import Enum
-from typing import Dict, Iterable, List, Optional, Sequence, Set, cast
+from typing import Dict, List, Optional, Sequence, Set, Union, cast
 
 from ttnn_visualizer.agent import perf_detail
-from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_LIMIT, bounded
+from ttnn_visualizer.agent.bounds import (
+    MAX_DETAILED_LIMIT,
+    MAX_LIMIT,
+    bounded,
+    require_choice,
+)
 from ttnn_visualizer.agent.cells import finite_number
 from ttnn_visualizer.agent.handles import (
     CacheVariant,
@@ -86,6 +91,7 @@ SORTABLE_METRICS: Dict[str, str] = {
     "dram": "dram",
     "cores": "cores",
 }
+DEFAULT_METRIC = "device_time"
 
 # Metrics a report-level sum is meaningful for. `dram` is GB/s, `flops` is
 # TFLOPS and `cores` is a per-op allocation: adding them across operations
@@ -106,14 +112,6 @@ def countable_device_time(row: Dict) -> Optional[float]:
 def _rounded(value: Optional[float]) -> Optional[float]:
     """Nanosecond precision is plenty, and a 17-digit float is context spent."""
     return None if value is None else round(value, 3)
-
-
-def _require_choice(kind: str, value: str, allowed: Iterable[str]) -> None:
-    """Refuse `value` unless it is one of `allowed`, naming every choice."""
-    if value not in allowed:
-        raise ValueError(
-            f"unknown {kind} {value!r}; expected one of {', '.join(sorted(allowed))}"
-        )
 
 
 def is_signpost_row(row: Dict) -> bool:
@@ -285,17 +283,24 @@ def range_ignored(
 
 
 def _signposts(registry: ReportRegistry, handle: str) -> ResolvedSignposts:
-    """The handle's signposts, read once per capture."""
+    """The handle's signposts, read once per capture -- or why they cannot be."""
     _require_performance_report(registry, handle)
 
-    def build(instance: Instance) -> ResolvedSignposts:
+    def build(instance: Instance) -> Union[ResolvedSignposts, DataFormatError]:
         _require_same_source(registry, handle, instance)
-        return _resolve_signposts(instance)
+        try:
+            return _resolve_signposts(instance)
+        except DataFormatError as error:
+            # The same bytes fail the same way, and a rewritten CSV is another source.
+            return error
 
     source = _pin_source(registry, handle)
-    return registry.cached_report(
+    resolved = registry.cached_report(
         handle, build, variant=CacheVariant.SIGNPOSTS, share_key=source
     )
+    if isinstance(resolved, DataFormatError):
+        raise resolved.with_traceback(None)
+    return resolved
 
 
 def _resolve_signposts(instance: Instance) -> ResolvedSignposts:
@@ -435,7 +440,7 @@ def _sub_devices(rows: List[Dict]) -> set:
     }
 
 
-def project_row(row: Dict, metric: str = "device_time") -> Dict[str, object]:
+def project_row(row: Dict, metric: str = DEFAULT_METRIC) -> Dict[str, object]:
     """One performance row as every tool reports it.
 
     Shared so a row reads the same wherever it appears: `top_ops` ranks it and
@@ -479,14 +484,14 @@ def row_limit(limit: Optional[int], groups: Sequence[perf_detail.DetailGroup]) -
 def top_ops(
     registry: ReportRegistry,
     handle: str,
-    by: str = "device_time",
+    by: str = DEFAULT_METRIC,
     limit: Optional[int] = None,
     start_signpost: Optional[str] = None,
     end_signpost: Optional[str] = None,
     include: Optional[List[str]] = None,
 ) -> Dict[str, object]:
     """The costliest ops by one metric, with the projection that produced them."""
-    _require_choice("metric", by, SORTABLE_METRICS)
+    require_choice("metric", by, SORTABLE_METRICS)
     groups = perf_detail.parse_include(include)
     count = row_limit(limit, groups)
 
@@ -719,7 +724,7 @@ def diff_reports(
     registry: ReportRegistry,
     handle_a: str,
     handle_b: str,
-    by: str = "device_time",
+    by: str = DEFAULT_METRIC,
     limit: Optional[int] = None,
     start_signpost: Optional[str] = None,
     end_signpost: Optional[str] = None,
@@ -733,7 +738,7 @@ def diff_reports(
     One range applies to both reports, which is the before-and-after case: the
     same signposts in two runs.
     """
-    _require_choice("metric", by, SORTABLE_METRICS)
+    require_choice("metric", by, SORTABLE_METRICS)
     # Refused rather than aggregated some other way. A diff groups by op code and
     # compares the two sides, so for a rate or an allocation every number in the
     # response is a sum of them: one 10-TFLOPS matmul against two at 8 reads as
@@ -846,6 +851,9 @@ class BreakdownGrouping(str, Enum):
     OP_CATEGORY = "op_category"
 
 
+BREAKDOWN_GROUPINGS = frozenset(grouping.value for grouping in BreakdownGrouping)
+
+
 OP_BREAKDOWN_NOTE = (
     "Grouped as the performance view's stacked table and tt-perf-report's stacked "
     "report group rows: by op, the op code's first word, which keeps every shape of "
@@ -865,6 +873,12 @@ class _Share:
     device_time: float = 0.0
     op_to_op_gap: float = 0.0
     total_percent: float = 0.0
+
+    def add_row(self, row: Dict) -> None:
+        self.count += 1
+        self.device_time += countable_device_time(row) or 0.0
+        self.op_to_op_gap += finite_number(row.get("op_to_op_gap")) or 0.0
+        self.total_percent += finite_number(row.get("total_percent")) or 0.0
 
     def add(self, other: "_Share") -> None:
         self.count += other.count
@@ -888,7 +902,7 @@ def op_breakdown(
     registry: ReportRegistry,
     handle: str,
     group_by: str = BreakdownGrouping.OP.value,
-    by: str = "device_time",
+    by: str = DEFAULT_METRIC,
     limit: Optional[int] = None,
     start_signpost: Optional[str] = None,
     end_signpost: Optional[str] = None,
@@ -900,10 +914,8 @@ def op_breakdown(
     op-to-op gap. As there, signposts are left out and a host op is counted with
     no device time.
     """
-    _require_choice(
-        "grouping", group_by, [grouping.value for grouping in BreakdownGrouping]
-    )
-    _require_choice("metric", by, ADDITIVE_METRICS)
+    require_choice("grouping", group_by, BREAKDOWN_GROUPINGS)
+    require_choice("metric", by, ADDITIVE_METRICS)
     grouping = BreakdownGrouping(group_by)
     count = bounded(limit)
 
@@ -917,10 +929,7 @@ def op_breakdown(
         share = share_by_key.get(key)
         if share is None:
             share = share_by_key[key] = _Share(key)
-        share.count += 1
-        share.device_time += countable_device_time(row) or 0.0
-        share.op_to_op_gap += finite_number(row.get("op_to_op_gap")) or 0.0
-        share.total_percent += finite_number(row.get("total_percent")) or 0.0
+        share.add_row(row)
 
     device_time_total = sum(share.device_time for share in share_by_key.values())
     gap_total = sum(share.op_to_op_gap for share in share_by_key.values())
@@ -972,8 +981,10 @@ def _stderr_log() -> None:
 
 
 __all__ = [
+    "BREAKDOWN_GROUPINGS",
     "BreakdownGrouping",
     "CANONICAL_PROJECTION",
+    "DEFAULT_METRIC",
     "MAX_SIGNPOST_NAME_LENGTH",
     "OP_BREAKDOWN_NOTE",
     "PROGRAM_CACHE_NOTE",

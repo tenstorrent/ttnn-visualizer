@@ -610,7 +610,7 @@ RANGED_LINK_NOTE = (
 def top_ops(
     registry: ReportRegistry,
     handle: str,
-    by: str = "device_time",
+    by: str = tools.DEFAULT_METRIC,
     limit: Optional[int] = None,
     start_signpost: Optional[str] = None,
     end_signpost: Optional[str] = None,

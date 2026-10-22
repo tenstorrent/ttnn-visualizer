@@ -10,6 +10,7 @@ range when one did. An end before the start returns no rows. The perf report rou
 used to pass those straight through with a 200.
 """
 
+import warnings
 from http import HTTPStatus
 from io import StringIO
 from unittest import mock
@@ -215,32 +216,90 @@ FILLER_COLUMNS = 61
 CHUNKED_ROW_COUNT = 12_000
 
 
-def _wide_csv(odd_host_time=None):
+def _wide_csv(odd_host_time=None, odd_device_id=None):
+    """Eight devices' rows, with an odd value past the first chunk if asked for."""
     filler = "," * FILLER_COLUMNS
-    header = "OP TYPE,OP CODE,HOST START TS" + "".join(
+    header = "OP TYPE,OP CODE,HOST START TS,DEVICE ID" + "".join(
         f",F{index}" for index in range(FILLER_COLUMNS)
     )
     lines = [header]
     for index in range(CHUNKED_ROW_COUNT):
         op_type, op_code, host_start = "tt_dnn_device", "x", str(index)
+        device_id = str(index % 8)
         if index in (10, CHUNKED_ROW_COUNT - 10):
             op_type, op_code = "signpost", "START" if index == 10 else "END"
         if odd_host_time is not None and index == CHUNKED_ROW_COUNT - 100:
             host_start = odd_host_time
-        lines.append(f"{op_type},{op_code},{host_start}{filler}")
+        if odd_device_id is not None and index == CHUNKED_ROW_COUNT - 50:
+            device_id = odd_device_id
+        lines.append(f"{op_type},{op_code},{host_start},{device_id}{filler}")
     return "\n".join(lines) + "\n"
 
 
-@pytest.mark.parametrize("odd_host_time", [None, "oops"])
-def test_a_chunked_parse_types_each_column_as_the_whole_file_does(odd_host_time):
+@pytest.mark.parametrize(
+    "odd, device_count",
+    [
+        ({}, 8),
+        ({"odd_host_time": "oops"}, 8),
+        # The whole-file parse keeps the column as text: "0" to "7", and "host".
+        # Not "N/A", which pandas reads as missing in every chunk alike.
+        ({"odd_device_id": "host"}, 9),
+    ],
+)
+def test_a_chunked_parse_types_each_column_as_the_whole_file_does(odd, device_count):
     """A chunk holding one non-numeric host time typed the column apart from the
-    rest, and sorting the mix raised `TypeError` where the whole-file parse sorts."""
-    raw = _wide_csv(odd_host_time)
+    rest, and sorting the mix raised `TypeError` where the whole-file parse sorts;
+    `nunique` counted one chunk's 1 and another's "1" apart."""
+    raw = _wide_csv(**odd)
 
     chunked = resolve_signposts(StringIO(raw), low_memory=True)
 
     assert chunked == resolve_signposts(StringIO(raw))
     assert set(chunked.positions_by_name) == {"START", "END"}
+    assert chunked.device_count == device_count
+
+
+@pytest.mark.parametrize(
+    "odd, column",
+    [
+        ({"odd_host_time": "oops"}, "HOST START TS"),
+        ({"odd_device_id": "host"}, "DEVICE ID"),
+    ],
+)
+def test_the_wide_csv_spans_chunks_that_type_its_odd_column_apart(odd, column):
+    """The premise of the tests around it, which would pass without reaching the
+    re-read if pandas sized its chunks differently."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", pd.errors.DtypeWarning)
+        rows = pd.read_csv(StringIO(_wide_csv(**odd)), low_memory=True)
+
+    assert pd.api.types.infer_dtype(rows[column], skipna=True).startswith("mixed")
+
+
+@pytest.mark.parametrize(
+    "odd, read_again",
+    [
+        ({}, []),
+        ({"odd_host_time": "oops"}, ["HOST START TS"]),
+        ({"odd_device_id": "host"}, ["DEVICE ID"]),
+    ],
+)
+def test_only_a_column_typed_apart_is_read_again_and_in_chunks(odd, read_again):
+    """A whole-file re-read brought back the peak `low_memory` is there to avoid."""
+    raw = _wide_csv(**odd)
+    header = raw.split("\n", 1)[0].split(",")
+
+    with mock.patch.object(pd, "read_csv", wraps=pd.read_csv) as read:
+        resolve_signposts(StringIO(raw), low_memory=True)
+
+    calls = read.call_args_list
+    assert [call.kwargs["low_memory"] for call in calls] == [True] * (
+        1 + len(read_again)
+    )
+    assert [
+        [name for name in header if call.kwargs["usecols"](name)] for call in calls[1:]
+    ] == [[name] for name in read_again]
+    assert all(call.kwargs["dtype"] is str for call in calls[1:])
 
 
 class TestSignpostListing:

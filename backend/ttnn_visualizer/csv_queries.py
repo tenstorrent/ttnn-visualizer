@@ -1450,26 +1450,32 @@ def resolve_signposts(
     `low_memory` parses in chunks, as tt-perf-report does not: on every local
     capture it resolves the same positions, and peaks at a fraction of the memory.
     A chunk can type a column apart from the rest, though -- one non-numeric host
-    time leaves ints and strings that cannot be sorted together -- so a column read
-    that way is read again whole, as tt-perf-report reads it.
+    time leaves ints and strings that cannot be sorted together -- so a host time
+    or device id read that way is read again as text, still in chunks: the text a
+    whole-file parse keeps for a column it cannot type.
     """
     wanted = {_OP_TYPE_COLUMN, _OP_CODE_COLUMN, _HOST_START_COLUMN, _DEVICE_ID_COLUMN}
 
-    def read(in_chunks: bool) -> pd.DataFrame:
+    def read(columns: Set[str], as_text: bool = False) -> pd.DataFrame:
         csv_file.seek(0)
-        # Its warning is about the mixed column the whole-file read below replaces.
+        # Its warning is about a mixed column, which is read again below.
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", pd.errors.DtypeWarning)
             return pd.read_csv(
-                csv_file, usecols=lambda column: column in wanted, low_memory=in_chunks
+                csv_file,
+                usecols=lambda column: column in columns,
+                low_memory=low_memory,
+                dtype=str if as_text else None,
             )
 
-    rows = read(low_memory)
-    if low_memory and any(
-        pd.api.types.infer_dtype(rows[column], skipna=True).startswith("mixed")
-        for column in rows.columns
-    ):
-        rows = read(False)
+    rows = read(wanted)
+    if low_memory:
+        # The two the answer depends on: the sort, and the distinct-device count.
+        for column in (_HOST_START_COLUMN, _DEVICE_ID_COLUMN):
+            if column in rows.columns and pd.api.types.infer_dtype(
+                rows[column], skipna=True
+            ).startswith("mixed"):
+                rows[column] = read({column}, as_text=True)[column]
     csv_file.seek(0)
 
     sorted_by_host_time = _HOST_START_COLUMN in rows.columns and not tracing_mode
