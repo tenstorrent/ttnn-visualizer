@@ -169,8 +169,9 @@ $mmio-fill: rgba(colours.$tt-yellow, 0.18);
         .cluster-links {
             position: absolute;
 
-            // Stack above chip bodies / borders / eth ports so long-haul and
-            // inter-host curves render *over* the chips they route past.
+            // Stack above chip bodies / borders / eth ports so link ends meet the
+            // ports cleanly. Routed links run round chips rather than over them;
+            // curves (mesh mode, inter-host, unrouted) can still pass over one.
             z-index: 4;
             pointer-events: none;
             overflow: visible;
@@ -180,6 +181,7 @@ $mmio-fill: rgba(colours.$tt-yellow, 0.18);
             stroke: $eth-line;
             stroke-width: 2;
             stroke-linecap: round;
+            stroke-linejoin: round;
             opacity: 0.55;
             transition:
                 opacity 0.12s ease,
@@ -194,6 +196,13 @@ $mmio-fill: rgba(colours.$tt-yellow, 0.18);
 
             &.is-dimmed {
                 opacity: 0.08;
+            }
+
+            // A spanning link that could not be routed round the chips, so its curve
+            // may cross ones it does not touch; dotted to keep it from reading as
+            // touching them. #1951
+            &.is-unrouted {
+                stroke-dasharray: 2 4;
             }
 
             // Inter-host links styled distinctly from intra-host.
