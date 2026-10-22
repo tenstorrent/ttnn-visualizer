@@ -12,7 +12,13 @@ import { stringToArchitecture } from '../../functions/stringToArchitecture';
 import { useGetClusterTopology } from '../../hooks/useAPI';
 import { KEEPS_BUFFER_FOCUS_CLASS } from '../../definitions/BufferFocus';
 import { getChipDesign } from '../../functions/getChipDesign';
-import { GridCell, RoutePlan, buildRoutePaths, planRoutes } from '../../functions/clusterLinkRouting';
+import {
+    GridCell,
+    MAX_PORTS_PER_EDGE,
+    RoutePlan,
+    buildRoutePaths,
+    planRoutes,
+} from '../../functions/clusterLinkRouting';
 import {
     FALLBACK_PER_HOST_COLS,
     getCondensedHostLayout,
@@ -112,10 +118,14 @@ interface ClusterRenderModel {
     idFontSize: number;
     isMultiHost: boolean;
     worldSize: number;
-    // Padding around the SVG link layer so outward-bowing curves aren't clipped.
+    // Padding around the SVG link layer so outward-bowing curves and routed links'
+    // outside lanes aren't clipped.
     svgPad: number;
     // Room left and right of the grid for routed links' outside lanes; 0 in mesh mode.
     routeMargin: number;
+    // Unscaled stage width, margins included. Fit-to-screen and the stage both size from
+    // it: if they disagree, fit-to-screen clips the left lanes again. #1951
+    stageWidth: number;
     // Layout actually applied (may fall back to `condensed` if `mesh` was
     // requested but no host has usable mesh data).
     layoutMode: ClusterLayoutMode;
@@ -340,6 +350,13 @@ function buildClusterRenderModel(
         chip.ethPorts = [...portsByUid.values()].sort((portA, portB) => portA.chan - portB.chan);
     }
 
+    const meshDistance = (a: ClusterCoordinates, b: ClusterCoordinates): number =>
+        Math.abs(a[CLUSTER_COORDS.X] - b[CLUSTER_COORDS.X]) + Math.abs(a[CLUSTER_COORDS.Y] - b[CLUSTER_COORDS.Y]);
+    // A same-host link that skips at least one cell. The one test for both the routing below
+    // and the long-haul tagging in step 3, so a link cannot be tagged long-haul without
+    // having been offered to the router, or the reverse. #1951
+    const isSpanning = (a: ClusterChip, b: ClusterChip) => a.rank === b.rank && meshDistance(a.coords, b.coords) > 1;
+
     // Condensed mode routes intra-host links that span more than one cell around the chips
     // between their ends instead of over them, and fixes both ends' port edges here, before
     // the per-chip placement below could pick them independently. Mesh mode keeps its
@@ -353,23 +370,19 @@ function buildClusterRenderModel(
             x: chip.coords[CLUSTER_COORDS.X],
             y: chip.coords[CLUSTER_COORDS.Y],
         });
-        const spanning = resolvedLinks.filter(
-            ({ a, b, interHost }) =>
-                !interHost &&
-                Math.abs(a.coords[CLUSTER_COORDS.X] - b.coords[CLUSTER_COORDS.X]) +
-                    Math.abs(a.coords[CLUSTER_COORDS.Y] - b.coords[CLUSTER_COORDS.Y]) >
-                    1,
-        );
+        const spanning = resolvedLinks
+            .filter(({ a, b }) => isSpanning(a, b))
+            .map((link) => ({ ...link, id: routeId(link.uidA, link.uidB) }));
         const { plans, needsTrailingRow } = planRoutes(
-            spanning.map(({ a, b, uidA, uidB }) => ({ id: routeId(uidA, uidB), a: cellOf(a), b: cellOf(b) })),
+            spanning.map(({ id, a, b }) => ({ id, a: cellOf(a), b: cellOf(b) })),
             renderChips.map(cellOf),
             totalRows,
             totalCols,
         );
-        spanning.forEach(({ uidA, uidB }) => {
-            const plan = plans.get(routeId(uidA, uidB));
+        spanning.forEach(({ id, uidA, uidB }) => {
+            const plan = plans.get(id);
             if (plan) {
-                routePlans.set(routeId(uidA, uidB), plan);
+                routePlans.set(id, plan);
                 routedEdgeByUid.set(uidA, plan.edgeA);
                 routedEdgeByUid.set(uidB, plan.edgeB);
             }
@@ -433,9 +446,6 @@ function buildClusterRenderModel(
     // edge its route fixed. Within each edge ports are sorted by partner
     // perpendicular-axis coord then canonical link key; long-haul/inter-host
     // uids are tagged for step 4.
-    const meshDistance = (a: ClusterCoordinates, b: ClusterCoordinates): number =>
-        Math.abs(a[CLUSTER_COORDS.X] - b[CLUSTER_COORDS.X]) + Math.abs(a[CLUSTER_COORDS.Y] - b[CLUSTER_COORDS.Y]);
-
     const perpendicularEdges = (edge: CLUSTER_ETH_POSITION): CLUSTER_ETH_POSITION[] => {
         if (edge === CLUSTER_ETH_POSITION.LEFT || edge === CLUSTER_ETH_POSITION.RIGHT) {
             return [CLUSTER_ETH_POSITION.TOP, CLUSTER_ETH_POSITION.BOTTOM];
@@ -510,7 +520,7 @@ function buildClusterRenderModel(
                 directNeighbourEdges.add(chord);
             } else {
                 deferred.push({ port, chord });
-                if (sameRank) {
+                if (isSpanning(clusterChip, connectedChip)) {
                     longHaulUids.add(port.uid);
                 }
             }
@@ -523,7 +533,12 @@ function buildClusterRenderModel(
         // canonical link key so both endpoints pick the same side and the
         // bezier bows in one direction instead of arcing across. #1510
         const outwardForChip = ALL_EDGES.filter((edge) => isOutwardEdge(clusterChip, edge));
-        for (const { port, chord } of deferred) {
+        // Routed ports first: their edges are fixed, and the rest must see how full they are.
+        const routedFirst = [...deferred].sort(
+            (left, right) => Number(routedEdgeByUid.has(right.port.uid)) - Number(routedEdgeByUid.has(left.port.uid)),
+        );
+        const isFull = (edge: CLUSTER_ETH_POSITION) => (ethPosition.get(edge)?.length ?? 0) >= MAX_PORTS_PER_EDGE;
+        for (const { port, chord } of routedFirst) {
             const perp = perpendicularEdges(chord);
             let chosen: CLUSTER_ETH_POSITION;
             const routedEdge = routedEdgeByUid.get(port.uid);
@@ -544,6 +559,15 @@ function buildClusterRenderModel(
                     const linkKey = canonicalLinkKeyByUid.get(port.uid) ?? port.uid;
                     chosen = candidates[hashLinkKey(linkKey) % candidates.length];
                 }
+            }
+            // Routing packs ports onto outward edges; an edge past its slots would push a port
+            // onto the corner cell or off the chip. Move to the next edge with room, outward
+            // first, and keep the choice only when every edge is full. #1951
+            if (routedEdge === undefined && isFull(chosen)) {
+                chosen =
+                    [...outwardForChip, ...perp, ...ALL_EDGES].find(
+                        (edge) => !isFull(edge) && !directNeighbourEdges.has(edge),
+                    ) ?? chosen;
             }
             if (!ethPosition.has(chosen)) {
                 ethPosition.set(chosen, []);
@@ -656,7 +680,14 @@ function buildClusterRenderModel(
             chipKeyB: b.key,
             interHost,
             pathD: routedPath ?? (useCurve ? swooshPath(portA, portB) : undefined),
-            unrouted: !useMeshCoords && longHaul && routedPath === undefined,
+            // A diagonal was never offered a route (the router only handles one row or one
+            // column), so its curve is the same as before #1951 and is not marked.
+            unrouted:
+                !useMeshCoords &&
+                longHaul &&
+                routedPath === undefined &&
+                (a.coords[CLUSTER_COORDS.X] === b.coords[CLUSTER_COORDS.X] ||
+                    a.coords[CLUSTER_COORDS.Y] === b.coords[CLUSTER_COORDS.Y]),
         });
     };
 
@@ -697,6 +728,7 @@ function buildClusterRenderModel(
             // The outside lanes can reach further than a stride on a busy grid.
             svgPad: Math.max(Math.round(stride), routes.margin),
             routeMargin: routes.margin,
+            stageWidth: contentWidth + 2 * routes.margin,
             layoutMode,
             isMeshAvailable,
             anyHostFellToIdOrder,
@@ -809,7 +841,7 @@ function ClusterRenderer() {
             ? Math.max(
                   ZOOM_MIN,
                   Math.min(
-                      containerSize.width / (renderModel.contentWidth + 2 * renderModel.routeMargin),
+                      containerSize.width / renderModel.stageWidth,
                       containerSize.height / renderModel.contentHeight,
                       1,
                   ),
@@ -881,9 +913,10 @@ function ClusterRenderer() {
         ethPositionsByChip,
         linkSegments,
         idFontSize,
-        // Padding lets outward-bowing curves render outside the grid bounds.
+        // Padding lets outward-bowing curves and outside lanes render outside the grid bounds.
         svgPad,
         routeMargin,
+        stageWidth,
         isMultiHost,
         worldSize,
         layoutMode: activeLayoutMode,
@@ -1014,7 +1047,7 @@ function ClusterRenderer() {
                     style={{
                         // Routed links' outside lanes sit in a margin either side of the grid,
                         // inside the stage so the scroll container can reach the left one. #1951
-                        width: `${(contentWidth + 2 * routeMargin) * zoom}px`,
+                        width: `${stageWidth * zoom}px`,
                         height: `${contentHeight * zoom}px`,
                     }}
                 >

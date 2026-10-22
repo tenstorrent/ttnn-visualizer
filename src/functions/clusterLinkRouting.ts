@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { CLUSTER_ETH_POSITION } from '../model/ClusterModel';
+import { CLUSTER_NODE_GRID_SIZE } from './clusterPositioning';
 
 // Orthogonal routing for condensed-layout links that span more than one cell. A bezier
 // between two ports drew those links straight over every chip between them, because the
@@ -10,9 +11,9 @@ import { CLUSTER_ETH_POSITION } from '../model/ClusterModel';
 // leave through a blank row (the top pad, a group gutter, a host gutter, or one trailing
 // row) and run down a lane outside the grid edge. #1951
 
-/** Ports a routed edge takes before the next candidate edge is tried. `getEthGridPosition`
- * fits four ports between an edge's corner cells. */
-export const MAX_ROUTED_PORTS_PER_EDGE = 4;
+/** Ports an edge holds cleanly: `getEthGridPosition` lays them out between the edge's two
+ * corner cells. A routed edge stops taking ports here, and pass 2 avoids filling past it. */
+export const MAX_PORTS_PER_EDGE = CLUSTER_NODE_GRID_SIZE - 2;
 /** Spacing between neighbouring lanes, inside a blank row and outside the grid. */
 export const ROUTE_LANE_PITCH = 6;
 /** Distance from the grid edge, or from a chip edge, to the nearest lane. */
@@ -31,7 +32,8 @@ export interface RoutingLinkInput {
     b: GridCell;
 }
 
-type RouteSide = 'left' | 'right';
+/** The side of the grid a column route's outside lane runs down. */
+export type RouteSide = CLUSTER_ETH_POSITION.LEFT | CLUSTER_ETH_POSITION.RIGHT;
 
 export type RoutePlan =
     // Nothing sits between the two cells, so the direct line is already clear.
@@ -39,14 +41,14 @@ export type RoutePlan =
     // Same row: both ends step into the same blank row, run across it and step back.
     | { kind: 'row'; edgeA: CLUSTER_ETH_POSITION; edgeB: CLUSTER_ETH_POSITION; freeRow: number }
     // Same column: each end reaches the lane on `side`, directly or through the blank row
-    // given for that end (absent when its port opens straight onto the lane).
+    // given for that end (`null` when its port opens straight onto the lane).
     | {
           kind: 'column';
           edgeA: CLUSTER_ETH_POSITION;
           edgeB: CLUSTER_ETH_POSITION;
           side: RouteSide;
-          rowA?: number;
-          rowB?: number;
+          rowA: number | null;
+          rowB: number | null;
       };
 
 export interface RoutingPlan {
@@ -93,17 +95,36 @@ export const planRoutes = (
 ): RoutingPlan => {
     const occupied = new Set(cells.map((cell) => cellId(cell.x, cell.y)));
     const freeRows = getFreeRows(cells, totalRows);
-    const portCounts = new Map<string, number>();
+    const portCountByEdgeKey = new Map<string, number>();
     const plans = new Map<string, RoutePlan>();
     let needsTrailingRow = false;
 
+    const edgeKey = (cell: GridCell, edge: CLUSTER_ETH_POSITION) => `${cell.key}:${edge}`;
     const hasRoom = (cell: GridCell, edge: CLUSTER_ETH_POSITION) =>
-        (portCounts.get(`${cell.key}:${edge}`) ?? 0) < MAX_ROUTED_PORTS_PER_EDGE;
-    const claim = (cell: GridCell, edge: CLUSTER_ETH_POSITION, row?: number) => {
-        const countKey = `${cell.key}:${edge}`;
-        portCounts.set(countKey, (portCounts.get(countKey) ?? 0) + 1);
+        (portCountByEdgeKey.get(edgeKey(cell, edge)) ?? 0) < MAX_PORTS_PER_EDGE;
+    const claim = (cell: GridCell, edge: CLUSTER_ETH_POSITION, row: number | null = null) => {
+        portCountByEdgeKey.set(edgeKey(cell, edge), (portCountByEdgeKey.get(edgeKey(cell, edge)) ?? 0) + 1);
         if (row === totalRows) {
             needsTrailingRow = true;
+        }
+    };
+
+    // Nothing sits between the two cells, so the direct line is already clear: `near` is the
+    // nearer cell's edge facing the other, `far` the other's facing back. Edges stay in a/b order.
+    const tryStraight = (
+        id: string,
+        a: GridCell,
+        b: GridCell,
+        near: GridCell,
+        nearEdge: CLUSTER_ETH_POSITION,
+        farEdge: CLUSTER_ETH_POSITION,
+    ) => {
+        const far = near === a ? b : a;
+        if (hasRoom(near, nearEdge) && hasRoom(far, farEdge)) {
+            claim(near, nearEdge);
+            claim(far, farEdge);
+            const [edgeA, edgeB] = near === a ? [nearEdge, farEdge] : [farEdge, nearEdge];
+            plans.set(id, { kind: 'straight', edgeA, edgeB });
         }
     };
 
@@ -124,35 +145,26 @@ export const planRoutes = (
             const isClear = !rangeBetween(upper.y, lower.y).some((y) => occupied.has(cellId(a.x, y)));
 
             if (isClear) {
-                if (hasRoom(upper, CLUSTER_ETH_POSITION.BOTTOM) && hasRoom(lower, CLUSTER_ETH_POSITION.TOP)) {
-                    claim(upper, CLUSTER_ETH_POSITION.BOTTOM);
-                    claim(lower, CLUSTER_ETH_POSITION.TOP);
-                    const [edgeA, edgeB] =
-                        upper === a
-                            ? [CLUSTER_ETH_POSITION.BOTTOM, CLUSTER_ETH_POSITION.TOP]
-                            : [CLUSTER_ETH_POSITION.TOP, CLUSTER_ETH_POSITION.BOTTOM];
-                    plans.set(id, { kind: 'straight', edgeA, edgeB });
-                }
+                tryStraight(id, a, b, upper, CLUSTER_ETH_POSITION.BOTTOM, CLUSTER_ETH_POSITION.TOP);
             } else {
-                const side: RouteSide = a.x < totalCols / 2 ? 'left' : 'right';
-                const sideEdge = side === 'left' ? CLUSTER_ETH_POSITION.LEFT : CLUSTER_ETH_POSITION.RIGHT;
-                const isOuterColumn = side === 'left' ? a.x === 0 : a.x === totalCols - 1;
+                const side: RouteSide = a.x < totalCols / 2 ? CLUSTER_ETH_POSITION.LEFT : CLUSTER_ETH_POSITION.RIGHT;
+                const isOuterColumn = side === CLUSTER_ETH_POSITION.LEFT ? a.x === 0 : a.x === totalCols - 1;
                 // An outer-column chip opens straight onto the lane; anything else steps
                 // into a blank row first.
                 const candidates = [
-                    ...(isOuterColumn ? [sideEdge] : []),
+                    ...(isOuterColumn ? [side] : []),
                     CLUSTER_ETH_POSITION.TOP,
                     CLUSTER_ETH_POSITION.BOTTOM,
                 ];
                 const pick = (cell: GridCell) =>
                     candidates.find(
-                        (edge) => hasRoom(cell, edge) && (edge === sideEdge || rowThrough(cell, edge) !== null),
+                        (edge) => hasRoom(cell, edge) && (edge === side || rowThrough(cell, edge) !== null),
                     );
                 const edgeA = pick(a);
                 const edgeB = pick(b);
                 if (edgeA !== undefined && edgeB !== undefined) {
-                    const rowA = rowThrough(a, edgeA) ?? undefined;
-                    const rowB = rowThrough(b, edgeB) ?? undefined;
+                    const rowA = rowThrough(a, edgeA);
+                    const rowB = rowThrough(b, edgeB);
                     claim(a, edgeA, rowA);
                     claim(b, edgeB, rowB);
                     plans.set(id, { kind: 'column', edgeA, edgeB, side, rowA, rowB });
@@ -163,21 +175,14 @@ export const planRoutes = (
             const isClear = !rangeBetween(left.x, right.x).some((x) => occupied.has(cellId(x, a.y)));
 
             if (isClear) {
-                if (hasRoom(left, CLUSTER_ETH_POSITION.RIGHT) && hasRoom(right, CLUSTER_ETH_POSITION.LEFT)) {
-                    claim(left, CLUSTER_ETH_POSITION.RIGHT);
-                    claim(right, CLUSTER_ETH_POSITION.LEFT);
-                    const [edgeA, edgeB] =
-                        left === a
-                            ? [CLUSTER_ETH_POSITION.RIGHT, CLUSTER_ETH_POSITION.LEFT]
-                            : [CLUSTER_ETH_POSITION.LEFT, CLUSTER_ETH_POSITION.RIGHT];
-                    plans.set(id, { kind: 'straight', edgeA, edgeB });
-                }
+                tryStraight(id, a, b, left, CLUSTER_ETH_POSITION.RIGHT, CLUSTER_ETH_POSITION.LEFT);
             } else {
                 // Both ends must use the same blank row, so the edge is chosen for the pair.
                 const edge = [CLUSTER_ETH_POSITION.TOP, CLUSTER_ETH_POSITION.BOTTOM].find(
                     (candidate) => rowThrough(a, candidate) !== null && hasRoom(a, candidate) && hasRoom(b, candidate),
                 );
                 if (edge !== undefined) {
+                    // The `find` above only accepts an edge with a blank row through it.
                     const freeRow = rowThrough(a, edge)!;
                     claim(a, edge, freeRow);
                     claim(b, edge, freeRow);
@@ -260,7 +265,7 @@ const toPath = (points: [number, number][]) =>
  */
 export const buildRoutePaths = (links: RoutedLinkInput[], geometry: RouteGeometry): RoutePaths => {
     const { stride, chipSize, contentWidth } = geometry;
-    const sideX = (side: RouteSide) => (side === 'left' ? 0 : contentWidth);
+    const sideX = (side: RouteSide) => (side === CLUSTER_ETH_POSITION.LEFT ? 0 : contentWidth);
 
     // Step 1: horizontal runs inside blank rows, keyed by row and half.
     interface Run extends Interval {
@@ -295,7 +300,7 @@ export const buildRoutePaths = (links: RoutedLinkInput[], geometry: RouteGeometr
                     ['b', portB, plan.rowB],
                 ] as const
             ).forEach(([endpoint, port, row]) => {
-                if (row !== undefined) {
+                if (row !== null) {
                     addRun({
                         id,
                         endpoint,
@@ -339,10 +344,9 @@ export const buildRoutePaths = (links: RoutedLinkInput[], geometry: RouteGeometr
             const yA = runY.get(`${link.id}:a`) ?? link.portA.y;
             const yB = runY.get(`${link.id}:b`) ?? link.portB.y;
             const { side } = link.plan;
-            spansBySide.set(side, [
-                ...(spansBySide.get(side) ?? []),
-                { link, side, yA, yB, start: Math.min(yA, yB), end: Math.max(yA, yB) },
-            ]);
+            const spans = spansBySide.get(side) ?? [];
+            spans.push({ link, side, yA, yB, start: Math.min(yA, yB), end: Math.max(yA, yB) });
+            spansBySide.set(side, spans);
         }
     }
 
@@ -360,7 +364,7 @@ export const buildRoutePaths = (links: RoutedLinkInput[], geometry: RouteGeometr
         const laneOf = assignLanes(sorted, stride / 2);
         sorted.forEach((span) => {
             const offset = ROUTE_LANE_CLEARANCE + laneOf.get(span)! * ROUTE_LANE_PITCH;
-            laneXById.set(span.link.id, side === 'left' ? -offset : contentWidth + offset);
+            laneXById.set(span.link.id, side === CLUSTER_ETH_POSITION.LEFT ? -offset : contentWidth + offset);
         });
         laneCountMax = Math.max(laneCountMax, Math.max(...laneOf.values()) + 1);
     });

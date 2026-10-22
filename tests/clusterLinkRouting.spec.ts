@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     GridCell,
-    MAX_ROUTED_PORTS_PER_EDGE,
+    MAX_PORTS_PER_EDGE,
     ROUTE_LANE_CLEARANCE,
     ROUTE_LANE_PITCH,
     RoutedLinkInput,
@@ -42,20 +42,20 @@ describe('planRoutes', () => {
         // 0 -> 8 crosses chip 4: the first mechanism behind #1951 put chip 8's port on TOP.
         const { plans } = planRoutes([link(GROUPED, 0, 8)], GROUPED, GROUPED_ROWS, 4);
 
-        expect(plans.get('0-8')).toMatchObject({ kind: 'column', edgeA: LEFT, edgeB: LEFT, side: 'left' });
+        expect(plans.get('0-8')).toMatchObject({ kind: 'column', edgeA: LEFT, edgeB: LEFT, side: LEFT });
         expect(planRoutes([link(GROUPED, 3, 11)], GROUPED, GROUPED_ROWS, 4).plans.get('3-11')).toMatchObject({
             edgeA: RIGHT,
             edgeB: RIGHT,
-            side: 'right',
+            side: RIGHT,
         });
     });
 
     it('sends an interior-column span through the blank row beside each end', () => {
         const { plans } = planRoutes([link(GROUPED, 1, 9), link(GROUPED, 6, 14)], GROUPED, GROUPED_ROWS, 4);
 
-        expect(plans.get('1-9')).toEqual({ kind: 'column', edgeA: TOP, edgeB: TOP, side: 'left', rowA: 1, rowB: 4 });
+        expect(plans.get('1-9')).toEqual({ kind: 'column', edgeA: TOP, edgeB: TOP, side: LEFT, rowA: 1, rowB: 4 });
         // Chip 6 is a bottom-row chip; the gutter is below it. Column 2 of 4 goes right.
-        expect(plans.get('6-14')).toMatchObject({ edgeA: BOTTOM, edgeB: BOTTOM, side: 'right', rowA: 4, rowB: 7 });
+        expect(plans.get('6-14')).toMatchObject({ edgeA: BOTTOM, edgeB: BOTTOM, side: RIGHT, rowA: 4, rowB: 7 });
     });
 
     it('flags the trailing row only when a route uses it', () => {
@@ -71,17 +71,40 @@ describe('planRoutes', () => {
     });
 
     it('moves to the next edge once one holds its share of ports', () => {
-        const links = Array.from({ length: MAX_ROUTED_PORTS_PER_EDGE + 1 }, (_, i) => link(GROUPED, 0, 8, `c${i}`));
+        const links = Array.from({ length: MAX_PORTS_PER_EDGE + 1 }, (_, i) => link(GROUPED, 0, 8, `c${i}`));
         const { plans } = planRoutes(links, GROUPED, GROUPED_ROWS, 4);
 
-        expect(plans.get(`c${MAX_ROUTED_PORTS_PER_EDGE - 1}`)).toMatchObject({ edgeA: LEFT });
-        expect(plans.get(`c${MAX_ROUTED_PORTS_PER_EDGE}`)).toMatchObject({ edgeA: TOP, rowA: 1 });
+        expect(plans.get(`c${MAX_PORTS_PER_EDGE - 1}`)).toMatchObject({ edgeA: LEFT });
+        expect(plans.get(`c${MAX_PORTS_PER_EDGE}`)).toMatchObject({ edgeA: TOP, rowA: 1 });
     });
 
     it('routes a same-row span through one blank row shared by both ends', () => {
         const { plans } = planRoutes([link(GROUPED, 0, 2)], GROUPED, GROUPED_ROWS, 4);
 
         expect(plans.get('0-2')).toEqual({ kind: 'row', edgeA: TOP, edgeB: TOP, freeRow: 1 });
+    });
+
+    it('routes a bottom-row span through the trailing row', () => {
+        const { plans, needsTrailingRow } = planRoutes([link(GROUPED, 12, 14)], GROUPED, GROUPED_ROWS, 4);
+
+        expect(plans.get('12-14')).toEqual({ kind: 'row', edgeA: BOTTOM, edgeB: BOTTOM, freeRow: 7 });
+        expect(needsTrailingRow).toBe(true);
+    });
+
+    it('moves a same-row span to the other blank row once one edge is full, then gives up', () => {
+        const links = Array.from({ length: 2 * MAX_PORTS_PER_EDGE + 1 }, (_, i) => link(GROUPED, 0, 2, `r${i}`));
+        const { plans } = planRoutes(links, GROUPED, GROUPED_ROWS, 4);
+
+        // Row 1 chips: TOP opens on the top pad, BOTTOM on chip 4's row — so BOTTOM is no
+        // route at all, and the pair gives up once TOP is full.
+        expect(plans.get(`r${MAX_PORTS_PER_EDGE - 1}`)).toMatchObject({ edgeA: TOP, freeRow: 1 });
+        expect(plans.has(`r${MAX_PORTS_PER_EDGE}`)).toBe(false);
+
+        // Chips 4 and 6 have the gutter below them and chips 0 and 2 above: BOTTOM only.
+        const lower = Array.from({ length: MAX_PORTS_PER_EDGE + 1 }, (_, i) => link(GROUPED, 4, 6, `l${i}`));
+        const { plans: lowerPlans } = planRoutes(lower, GROUPED, GROUPED_ROWS, 4);
+        expect(lowerPlans.get(`l${MAX_PORTS_PER_EDGE - 1}`)).toMatchObject({ edgeA: BOTTOM, freeRow: 4 });
+        expect(lowerPlans.has(`l${MAX_PORTS_PER_EDGE}`)).toBe(false);
     });
 
     it('leaves a link out when no blank row is beside it', () => {
@@ -112,7 +135,7 @@ describe('buildRoutePaths', () => {
     const columnLink = (id: string, pairKey: string, rowA: number, rowB: number): RoutedLinkInput => ({
         id,
         pairKey,
-        plan: { kind: 'column', edgeA: LEFT, edgeB: LEFT, side: 'left' },
+        plan: { kind: 'column', edgeA: LEFT, edgeB: LEFT, side: LEFT, rowA: null, rowB: null },
         portA: leftPort(rowA),
         portB: leftPort(rowB),
     });
@@ -147,6 +170,40 @@ describe('buildRoutePaths', () => {
         expect(margin).toBe(2 * ROUTE_LANE_CLEARANCE);
     });
 
+    it('runs a same-row route along one y inside the half of the blank row nearest its chips', () => {
+        const rowLink = (id: string, edge: CLUSTER_ETH_POSITION, freeRow: number, portY: number): RoutedLinkInput => ({
+            id,
+            pairKey: id,
+            plan: { kind: 'row', edgeA: edge, edgeB: edge, freeRow },
+            portA: { x: 40, y: portY, edge },
+            portB: { x: 350, y: portY, edge },
+        });
+        // TOP ports on row 2 into row 1; BOTTOM ports on row 3 into row 4.
+        const { pathById } = buildRoutePaths(
+            [rowLink('up', TOP, 1, 2 * STRIDE + 2), rowLink('down', BOTTOM, 4, 3 * STRIDE + 148)],
+            geometry,
+        );
+        const vertices = (id: string) =>
+            pathById
+                .get(id)!
+                .replace('M ', '')
+                .split(' L ')
+                .map((point) => point.split(' ').map(Number));
+
+        const up = vertices('up');
+        expect(up).toHaveLength(4);
+        expect(up[1][1]).toBe(up[2][1]);
+        // Lower half of row 1, the half next to row 2.
+        expect(up[1][1]).toBeGreaterThan(1 * STRIDE + 75);
+        expect(up[1][1]).toBeLessThan(1 * STRIDE + 150);
+
+        const down = vertices('down');
+        expect(down[1][1]).toBe(down[2][1]);
+        // Upper half of row 4, the half next to row 3.
+        expect(down[1][1]).toBeGreaterThan(4 * STRIDE);
+        expect(down[1][1]).toBeLessThan(4 * STRIDE + 75);
+    });
+
     it('keeps runs from the rows either side of a blank row in separate halves', () => {
         // Chip 9's link rises into the gutter (row 4) from below; chip 5's descends into it from above.
         const { pathById } = buildRoutePaths(
@@ -154,14 +211,14 @@ describe('buildRoutePaths', () => {
                 {
                     id: 'up',
                     pairKey: 'up',
-                    plan: { kind: 'column', edgeA: TOP, edgeB: TOP, side: 'left', rowA: 1, rowB: 4 },
+                    plan: { kind: 'column', edgeA: TOP, edgeB: TOP, side: LEFT, rowA: 1, rowB: 4 },
                     portA: { x: 192, y: 2 * STRIDE + 2, edge: TOP },
                     portB: { x: 192, y: 5 * STRIDE + 2, edge: TOP },
                 },
                 {
                     id: 'down',
                     pairKey: 'down',
-                    plan: { kind: 'column', edgeA: BOTTOM, edgeB: BOTTOM, side: 'left', rowA: 4, rowB: 7 },
+                    plan: { kind: 'column', edgeA: BOTTOM, edgeB: BOTTOM, side: LEFT, rowA: 4, rowB: 7 },
                     portA: { x: 200, y: 3 * STRIDE + 148, edge: BOTTOM },
                     portB: { x: 200, y: 6 * STRIDE + 148, edge: BOTTOM },
                 },

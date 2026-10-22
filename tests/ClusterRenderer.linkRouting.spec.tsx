@@ -5,6 +5,7 @@
 import { cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ClusterRenderer from '../src/components/cluster/ClusterRenderer';
+import { CHIP_GAP } from '../src/functions/clusterPositioning';
 import type { ClusterTopology } from '../src/model/ClusterModel';
 
 // Links that span more than one cell used to be drawn over every chip between their ends.
@@ -35,6 +36,26 @@ class ResizeObserverStub {
     disconnect() {}
 }
 /* eslint-enable class-methods-use-this */
+
+const REPORTED_WIDTH = 400;
+
+/** Reports a container narrower than the UBB layout, so fit-to-screen has to zoom out. */
+class ReportingResizeObserver {
+    constructor(private readonly callback: ResizeObserverCallback) {}
+
+    observe() {
+        this.callback(
+            [{ contentRect: { width: REPORTED_WIDTH, height: 10_000 } }] as unknown as ResizeObserverEntry[],
+            this as unknown as ResizeObserver,
+        );
+    }
+
+    /* eslint-disable class-methods-use-this -- no-op stub has nothing to hold */
+    unobserve() {}
+
+    disconnect() {}
+    /* eslint-enable class-methods-use-this */
+}
 
 type Endpoint = { chip: number; chan: number };
 
@@ -92,6 +113,43 @@ const UBB_LINKS: [number, number, number][] = [
     ]),
 ];
 
+/** Two slotted 16-chip hosts, each with its own same-slot links, and one link between them. */
+const twoHostTopology = (): ClusterTopology => {
+    const hosts = [0, 1].map((rank) => {
+        const chipIds = Array.from({ length: 16 }, (_, chip) => chip);
+        return {
+            rank,
+            descriptor: {
+                arch: Object.fromEntries(chipIds.map((chip) => [chip, 'wormhole_b0'])),
+                chip_unique_ids: Object.fromEntries(chipIds.map((chip) => [chip, String(rank * 100 + chip)])),
+                chips_with_mmio: [{ 0: 0 }],
+                ethernet_connections: [],
+                asic_locations: Object.fromEntries(chipIds.map((c) => [c, (c % 8) + 1])),
+            },
+            meshChips: {},
+        };
+    });
+    return {
+        isMultiHost: true,
+        worldSize: 2,
+        unresolvedRemoteCount: 0,
+        hosts,
+        intraHostLinks: [0, 1].flatMap((rank) =>
+            Array.from({ length: 8 }, (_, chip) => ({
+                rank,
+                a: { chip, chan: 0 },
+                b: { chip: chip + 8, chan: 0 },
+            })),
+        ),
+        interHostLinks: [
+            {
+                a: { rank: 0, chip: 0, chan: 1, chipUniqueId: '0' },
+                b: { rank: 1, chip: 0, chan: 1, chipUniqueId: '100' },
+            },
+        ],
+    } as unknown as ClusterTopology;
+};
+
 interface Rect {
     id: string;
     left: number;
@@ -100,16 +158,22 @@ interface Rect {
     bottom: number;
 }
 
+/** `<rank>-<chip id>`, so chips stay distinct across hosts. */
+const chipIdOf = (cell: Element) =>
+    `${cell.getAttribute('data-rank')}-${cell.querySelector('.chip-id')!.textContent!.replace('Device ', '').trim()}`;
+
 /** Chip boxes in link-layer pixels, from their grid cells and rendered size. */
 const chipRects = (): Rect[] =>
     [...document.querySelectorAll<HTMLElement>('.chip')].map((cell) => {
         const size = parseFloat(cell.style.width);
-        const stride = size + 5;
+        const stride = size + CHIP_GAP;
         const left = (Number(cell.style.gridColumn) - 1) * stride;
         const top = (Number(cell.style.gridRow) - 1) * stride;
-        const id = cell.querySelector('.chip-id')!.textContent!.replace('Device ', '').trim();
-        return { id, left, top, right: left + size, bottom: top + size };
+        return { id: chipIdOf(cell), left, top, right: left + size, bottom: top + size };
     });
+
+/** All numbers in a path's `d`, in order. */
+const pathNumbers = (element: Element) => (element.getAttribute('d')?.match(/-?[\d.]+/g) ?? []).map(Number);
 
 /** Points along a link, sampling curves finely enough to catch a pass over a chip. */
 const pointsOf = (element: Element): [number, number][] => {
@@ -117,9 +181,8 @@ const pointsOf = (element: Element): [number, number][] => {
         const [x1, y1, x2, y2] = ['x1', 'y1', 'x2', 'y2'].map((name) => Number(element.getAttribute(name)));
         return Array.from({ length: 41 }, (_, i) => [x1 + ((x2 - x1) * i) / 40, y1 + ((y2 - y1) * i) / 40]);
     }
-    const d = element.getAttribute('d')!;
-    const numbers = (d.match(/-?[\d.]+/g) ?? []).map(Number);
-    if (d.includes('C')) {
+    const numbers = pathNumbers(element);
+    if (element.getAttribute('d')!.includes('C')) {
         const [x0, y0, x1, y1, x2, y2, x3, y3] = numbers;
         return Array.from({ length: 81 }, (_, i) => {
             const t = i / 80;
@@ -166,6 +229,12 @@ const linkCrossings = () => {
     });
 };
 
+type Crossing = ReturnType<typeof linkCrossings>[number];
+
+/** The one drawn link whose ends are these two chips. */
+const linkBetween = (crossings: Crossing[], first: string, second: string) =>
+    crossings.find(({ ends }) => ends.includes(first) && ends.includes(second))!;
+
 beforeEach(() => {
     vi.stubGlobal('ResizeObserver', ResizeObserverStub);
     topologyOverride = null;
@@ -193,16 +262,14 @@ describe('cluster link routing', () => {
         topologyOverride = topologyOf({ chipCount: 32, links: UBB_LINKS, slots: true });
         render(<ClusterRenderer />);
 
-        const chipNine = [...document.querySelectorAll('.chip')].find(
-            (cell) => cell.querySelector('.chip-id')?.textContent?.replace('Device ', '').trim() === '9',
-        )!;
+        const chipNine = [...document.querySelectorAll('.chip')].find((cell) => chipIdOf(cell) === '0-9')!;
         fireEvent.mouseEnter(chipNine);
 
         const highlighted = linkCrossings().filter(({ element }) => element.classList.contains('is-highlighted'));
         // Ring links to chips 1 and 17 (two channels each), neighbours 8, 10 and 13.
         expect(highlighted).toHaveLength(7);
         highlighted.forEach(({ ends, crossed }) => {
-            expect(ends).toContain('9');
+            expect(ends).toContain('0-9');
             expect(crossed).toEqual([]);
         });
     });
@@ -222,10 +289,9 @@ describe('cluster link routing', () => {
         expect(Math.max(...xs)).toBeLessThanOrEqual(contentWidth + margin);
         // A lane is the x of a vertical run left of the grid; a link has one each.
         const leftLanes = new Set(
-            [...document.querySelectorAll('path.cluster-link')].flatMap((path) => {
-                const numbers = (path.getAttribute('d')!.match(/-?[\d.]+/g) ?? []).map(Number);
-                return numbers.filter((x, i) => i % 2 === 0 && x < 0);
-            }),
+            [...document.querySelectorAll('path.cluster-link')].flatMap((path) =>
+                pathNumbers(path).filter((x, i) => i % 2 === 0 && x < 0),
+            ),
         );
         // One lane per link would need 32; sharing lanes between spans that do not meet needs 20.
         expect(leftLanes.size).toBeGreaterThan(0);
@@ -253,15 +319,83 @@ describe('cluster link routing', () => {
             ],
         });
         render(<ClusterRenderer />);
+        const crossings = linkCrossings();
 
-        const [boxedIn, routed] = linkCrossings().sort((a, b) => Number(a.ends[0]) - Number(b.ends[0]) || 0);
-        const byEnds = (ends: string[]) =>
-            [boxedIn, routed].find(({ ends: found }) => ends.every((e) => found.includes(e)))!;
-
-        expect(byEnds(['4', '6']).element.classList.contains('is-unrouted')).toBe(true);
-        expect(byEnds(['4', '6']).element.getAttribute('d')).toContain('C');
+        expect(linkBetween(crossings, '0-4', '0-6').element.classList.contains('is-unrouted')).toBe(true);
+        expect(linkBetween(crossings, '0-4', '0-6').element.getAttribute('d')).toContain('C');
         // 1 -> 9 leaves through the top pad and the trailing row added for it.
-        expect(byEnds(['1', '9']).element.classList.contains('is-unrouted')).toBe(false);
-        expect(byEnds(['1', '9']).crossed).toEqual([]);
+        expect(linkBetween(crossings, '0-1', '0-9').element.classList.contains('is-unrouted')).toBe(false);
+        expect(linkBetween(crossings, '0-1', '0-9').crossed).toEqual([]);
+        // Two pad rows, three chip rows and the trailing row. Without that row the route
+        // would still cross nothing, just below the grid, so the height is what pins it.
+        const cluster = document.querySelector<HTMLElement>('.cluster')!;
+        const size = parseFloat(document.querySelector<HTMLElement>('.chip')!.style.width);
+        expect(parseFloat(cluster.style.height)).toBe(6 * size + 5 * CHIP_GAP);
+    });
+
+    it('leaves a diagonal link on its old curve, unmarked', () => {
+        // The router handles one row or one column; a diagonal was never offered a route,
+        // so it is drawn as it was before #1951 rather than flagged as a failure.
+        topologyOverride = topologyOf({ chipCount: 12, links: [[0, 5, 1]] });
+        render(<ClusterRenderer />);
+
+        const [diagonal] = [...document.querySelectorAll('.cluster-link')];
+        expect(diagonal.getAttribute('d')).toContain('C');
+        expect(diagonal.classList.contains('is-unrouted')).toBe(false);
+    });
+
+    it('keeps every port on its chip when one edge is asked for more than it holds', () => {
+        // Six channels between two chips of the boxed-in middle row. Chip 4's only open edge
+        // is LEFT, and chip 6 has none; without the per-edge cap the fifth and sixth ports
+        // land on the corner cell and then off the chip.
+        topologyOverride = topologyOf({ chipCount: 12, links: [[4, 6, 6]] });
+        render(<ClusterRenderer />);
+
+        const rects = chipRects();
+        const crossings = linkCrossings();
+        expect(crossings).toHaveLength(6);
+        (['0-4', '0-6'] as const).forEach((chipId) => {
+            const rect = rects.find(({ id }) => id === chipId)!;
+            const ends = crossings.map(({ points, ends: found }) =>
+                found[0] === chipId ? points[0] : points[points.length - 1],
+            );
+            ends.forEach((point) => expect(contains(rect, point, -1)).toBe(true));
+            expect(new Set(ends.map(([x, y]) => `${x},${y}`)).size).toBe(6);
+        });
+    });
+
+    it('fits the stage, lanes included, to the container', () => {
+        vi.stubGlobal('ResizeObserver', ReportingResizeObserver);
+        topologyOverride = topologyOf({ chipCount: 32, links: UBB_LINKS, slots: true });
+        render(<ClusterRenderer />);
+
+        const stage = document.querySelector<HTMLElement>('.cluster-stage')!;
+        const cluster = document.querySelector<HTMLElement>('.cluster')!;
+        const zoom = Number(/scale\(([\d.]+)\)/.exec(cluster.style.transform)![1]);
+        const stageWidth = parseFloat(stage.style.width);
+        const marginLeft = parseFloat(cluster.style.marginLeft);
+
+        expect(zoom).toBeLessThan(1);
+        expect(stageWidth).toBeCloseTo(REPORTED_WIDTH, 5);
+        expect(marginLeft).toBeGreaterThan(0);
+        // The stage is the scaled grid plus a scaled margin either side.
+        expect(stageWidth - 2 * marginLeft).toBeCloseTo(parseFloat(cluster.style.width) * zoom, 5);
+        const leftmost = Math.min(...linkCrossings().flatMap(({ points }) => points.map(([x]) => x)));
+        expect(leftmost * zoom).toBeGreaterThanOrEqual(-marginLeft);
+    });
+
+    it('routes each host’s own links on a multi-host layout and leaves cross-host links curved', () => {
+        topologyOverride = twoHostTopology();
+        render(<ClusterRenderer />);
+
+        const crossings = linkCrossings();
+        const intraHost = crossings.filter(({ element }) => !element.classList.contains('is-inter-host'));
+        const interHost = crossings.filter(({ element }) => element.classList.contains('is-inter-host'));
+
+        expect(intraHost).toHaveLength(16);
+        intraHost.forEach(({ crossed }) => expect(crossed).toEqual([]));
+        expect(interHost).toHaveLength(1);
+        expect(interHost[0].element.getAttribute('d')).toContain('C');
+        expect(interHost[0].element.classList.contains('is-unrouted')).toBe(false);
     });
 });
