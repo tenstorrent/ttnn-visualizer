@@ -114,7 +114,7 @@ const UBB_LINKS: [number, number, number][] = [
 ];
 
 /** Two slotted 16-chip hosts, each with its own same-slot links, and one link between them. */
-const twoHostTopology = (): ClusterTopology => {
+const twoHostTopology = ({ ringChannels = 1, crossHostChannels = 1 } = {}): ClusterTopology => {
     const hosts = [0, 1].map((rank) => {
         const chipIds = Array.from({ length: 16 }, (_, chip) => chip);
         return {
@@ -135,18 +135,18 @@ const twoHostTopology = (): ClusterTopology => {
         unresolvedRemoteCount: 0,
         hosts,
         intraHostLinks: [0, 1].flatMap((rank) =>
-            Array.from({ length: 8 }, (_, chip) => ({
-                rank,
-                a: { chip, chan: 0 },
-                b: { chip: chip + 8, chan: 0 },
-            })),
+            Array.from({ length: 8 }, (_, chip) => chip).flatMap((chip) =>
+                Array.from({ length: ringChannels }, (_, chan) => ({
+                    rank,
+                    a: { chip, chan },
+                    b: { chip: chip + 8, chan },
+                })),
+            ),
         ),
-        interHostLinks: [
-            {
-                a: { rank: 0, chip: 0, chan: 1, chipUniqueId: '0' },
-                b: { rank: 1, chip: 0, chan: 1, chipUniqueId: '100' },
-            },
-        ],
+        interHostLinks: Array.from({ length: crossHostChannels }, (_, i) => ({
+            a: { rank: 0, chip: 0, chan: ringChannels + i, chipUniqueId: '0' },
+            b: { rank: 1, chip: 0, chan: ringChannels + i, chipUniqueId: '100' },
+        })),
     } as unknown as ClusterTopology;
 };
 
@@ -362,6 +362,55 @@ describe('cluster link routing', () => {
             ends.forEach((point) => expect(contains(rect, point, -1)).toBe(true));
             expect(new Set(ends.map(([x, y]) => `${x},${y}`)).size).toBe(6);
         });
+    });
+
+    // Each link's two ports must land on the two chips it joins, and no two ports may share a
+    // spot. A port pushed past its edge's slots can fall into the gap or onto the next chip
+    // down, so checking only "inside some chip" would not catch it.
+    const expectPortsOnTheirChips = (expectedPairs: string[][]) => {
+        const crossings = linkCrossings();
+        const endpoints = crossings.flatMap(({ points }) => [points[0], points[points.length - 1]]);
+        crossings.forEach(({ ends }) => {
+            expect(expectedPairs.some((pair) => pair.every((chip) => ends.includes(chip)))).toBe(true);
+        });
+        expect(new Set(endpoints.map(([x, y]) => `${x},${y}`)).size).toBe(endpoints.length);
+    };
+
+    it('keeps routed and unrouted ports sharing an edge within its slots', () => {
+        // Chip 8's routed links to chips 0 and 16 fill its LEFT edge (two channels each); the
+        // diagonal to chip 25 is never routed and pass 2 would have picked LEFT too.
+        topologyOverride = topologyOf({
+            chipCount: 32,
+            links: [
+                [8, 0, 2],
+                [8, 16, 2],
+                [8, 25, 2],
+            ],
+            slots: true,
+        });
+        render(<ClusterRenderer />);
+
+        expect(linkCrossings()).toHaveLength(6);
+        expectPortsOnTheirChips([
+            ['0-8', '0-0'],
+            ['0-8', '0-16'],
+            ['0-8', '0-25'],
+        ]);
+    });
+
+    it('keeps cross-host ports off an edge that routed links have filled', () => {
+        // Four routed channels from each host's chip 0 to chip 8 fill chip 0's LEFT edge; the
+        // cross-host links from chip 0 are placed afterwards and must find another edge.
+        topologyOverride = twoHostTopology({ ringChannels: 4, crossHostChannels: 2 });
+        render(<ClusterRenderer />);
+
+        expect(linkCrossings()).toHaveLength(2 * 8 * 4 + 2);
+        expectPortsOnTheirChips([
+            ...[0, 1].flatMap((rank) =>
+                Array.from({ length: 8 }, (_, chip) => [`${rank}-${chip}`, `${rank}-${chip + 8}`]),
+            ),
+            ['0-0', '1-0'],
+        ]);
     });
 
     it('fits the stage, lanes included, to the container', () => {
