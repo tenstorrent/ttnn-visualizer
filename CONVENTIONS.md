@@ -227,9 +227,9 @@ Use **`null`** when you mean “no value yet” or “cleared” in values you o
 
 #### Read on use when the value is needed before the stylesheet is guaranteed to have applied
 
-`GRAPH_COLORS` is an object literal, so its `cssVar()` calls resolve **once, at module evaluation**. That is fine for a value first read during a user interaction, but a module imported before the stylesheet applies captures empty strings for good.
+`GRAPH_COLORS` is an object literal, so its `cssVar()` calls resolve **once, when the module is first evaluated** — not when a property is first read. Every later reader gets whatever the stylesheet declared at that moment, so a module evaluated before the stylesheet applies captures empty strings for good.
 
-Where that risk is real, expose a **getter** instead of a property and keep everything else about the flow — `getPerfChartChrome()` in `src/definitions/PlotConfigurations.ts` is the reference: the properties still live in `_base.scss`, components still never see a literal, but each call re-reads.
+Where that risk is real, expose a **getter** instead of a property and keep everything else about the flow — `getPerfChartChrome()` in `src/definitions/PlotConfigurations.ts` is the reference, and `getL1PeakColours()` in `src/definitions/L1PeakDecomposition.ts` follows it: the properties still live in `_base.scss`, components still never see a literal, but each call re-reads.
 
 ```ts
 export const getPerfChartChrome = (): PerfChartChrome => ({
@@ -238,7 +238,9 @@ export const getPerfChartChrome = (): PerfChartChrome => ({
 });
 ```
 
-Prefer `GRAPH_COLORS` by default; reach for a getter only when import-time evaluation is a genuine hazard, and say so in a docstring, because the repeat `getComputedStyle` read is not free — call it once per render pass, not per element.
+**This is one rule with two shapes, not two competing mechanisms, and there is no third shape.** The object and the getters share the whole flow and differ only in when the read happens. Prefer `GRAPH_COLORS` by default. What makes reading at load safe is `src/main.tsx` importing `./index.scss` before any app module, so a module reached only through the app tree from `main.tsx` may read at load. A module that can also be evaluated outside that tree — imported directly by a test, a worker or a script — takes a getter, and its docstring says where. `tests/PlotConfigurations.spec.ts` is the case in point: it sets the properties on `:root` and calls `getPerfChartChrome()`, where a test that renders `GRAPH_COLORS` has to mock the module instead. The repeat `getComputedStyle` read is not free, so call a getter once per mount, not per render or per element — for example, resolve it in a `useMemo` with an empty dependency list. Settled in #1911.
+
+Either shape fails the same way: `cssVar` returns `''` for a property nobody declared, with no error, so a rename in a stylesheet leaves a graph drawn in no colour. `tests/cssCustomProperties.spec.ts` checks that every name `src/` passes to `cssVar` is declared under `src/scss/`, which means `cssVar` may only be called with a quoted literal name: a computed argument, a reference passed as a value or an aliased import fails it, naming the line. Its header says what it does not check.
 
 ### Same rule for magic layout numbers
 
@@ -1393,7 +1395,7 @@ SERVER_MODE = _parse_env_bool("SERVER_MODE", False)
 
 A second copy of the token list drifts, and **both drift directions fail silently**: add a spelling to one and the other rejects a value the rest of the app honours; remove one and it starts meaning `False`. If a caller needs to know that a value was a typo, take `None` from `parse_bool` — don't re-implement the membership test.
 
-This holds outside `settings.py` too: `create_app`'s root-log-level check, the gunicorn `--reload` check, and `devtools/npe_render_probe.py`'s `SERVER_MODE` refusal all call `str_to_bool`. A dev tool that refuses on a *wider* set than the app looks harmless and isn't — it means the two disagree about what the deployment is.
+This holds outside `settings.py` too: `_is_dev_debug_requested()` in `app.py` (the one read of bare `DEBUG`, behind both the root log level and gunicorn `--reload`) and `devtools/npe_render_probe.py`'s `SERVER_MODE` refusal all call `str_to_bool`. A dev tool that refuses on a *wider* set than the app looks harmless and isn't — it means the two disagree about what the deployment is.
 
 #### The vocabulary is deliberately narrow, and matched across three consumers
 
@@ -1433,7 +1435,9 @@ Settings that parse more richly than their type register a named parser in `_ENV
 
 #### `_ENV_ALIASES` where the variable isn't named after the attribute
 
-Every setting that reads a variable at all reads one named after its attribute, which is right for all of them but `DEBUG`: it is fed by `FLASK_DEBUG`, because a bare `DEBUG` is the log-level knob (see the entry under [Known inconsistencies](#known-inconsistencies)). `USAGE_RECORDING_ACTIVE` is the other departure and is not an alias — it reads no variable of its own at all; see [the descriptor rules below](#the-loop-walks-the-mro-and-skips-derived-settings). `_ENV_ALIASES` maps the attribute to the variable that owns it and `_env_name_for` is the single reader, so the aliased spelling is written once. Without it, `DEBUG=true` — what `pnpm flask:start-debug` sets — turned on Flask's debug mode under `FLASK_ENV=production`, which suppresses the catch-all error handler and returns tracebacks. Add an entry here rather than a special case in the loop if another setting ever grows a differently-named variable.
+Every setting that reads a variable at all reads one named after its attribute, which is right for all of them but `DEBUG`: it is fed by `FLASK_DEBUG`, because a bare `DEBUG` is the development knob (below). `USAGE_RECORDING_ACTIVE` is the other departure and is not an alias — it reads no variable of its own at all; see [the descriptor rules below](#the-loop-walks-the-mro-and-skips-derived-settings). `_ENV_ALIASES` maps the attribute to the variable that owns it and `_env_name_for` is the single reader, so the aliased spelling is written once. Without it, `DEBUG=true` — what `pnpm flask:start-debug` sets — turned on Flask's debug mode under `FLASK_ENV=production`, which suppresses the catch-all error handler and returns tracebacks. Add an entry here rather than a special case in the loop if another setting ever grows a differently-named variable.
+
+**The two names are deliberate, and both stay.** `FLASK_DEBUG` is Flask's own variable for its debug mode, so it keeps the name every Flask user and `.vscode/launch.json` already know. The bare `DEBUG` variable is not a config setting at all: it is the development knob `pnpm flask:start-debug` sets, read only through `_is_dev_debug_requested()` in `app.py`, and it means debug-level logging plus gunicorn `--reload`. Unlike the attribute, `SERVER_MODE` does not switch it off, so a hosted deployment that sets it still logs at debug level and reloads on file changes: it is for development only. Renaming either would break whoever sets it today, and no single new name would describe what bare `DEBUG` does. Read the name at the call site rather than assuming. (#1922)
 
 #### The loop walks the MRO and skips derived settings
 
@@ -1521,12 +1525,3 @@ Adding or tightening a requirement fails two tests until you update them, and th
 **Thresholds that carry a policy decision need at least one test pinning the literal value.** Every `SECRET_KEY` case was written as `"x" * MIN_HOSTED_SECRET_KEY_BYTES`, so when #2003 changed the constant, none of them failed. A test derived from the constant under test cannot detect a change to it.
 
 **The release PR reports enforcement boundaries, not just row edits.** `scripts/startup_requirements_diff.py` compares the documented table *and* the release version at each ref. A requirement staged in `1.0.0` with `enforced_from: 2.0.0` has an identical row on both sides; the release that bumps the version to `2.0.0` is the one it starts refusing boots on, and it is announced under **Now enforced** with nothing in the diff to trigger it.
-
----
-
-## Known inconsistencies
-
-These exist in the codebase today and don't yet have a single canonical answer. Reviewers should flag new code that goes either direction without considering both. Each entry names the inconsistency, the direction new code takes, and its tracking issue; the rule itself lives in the section above that owns it.
-
-- **Two accessors for CSS-custom-property colours.** `GRAPH_COLORS` resolves at module load; `getPerfChartChrome()` re-reads per call. Both are legitimate and both keep the literal in `_base.scss` — pick per [No hex literals in TS/TSX](#no-hex-literals-in-tstsx), and don't add a third mechanism. (#1911)
-- **`DEBUG` and `FLASK_DEBUG` are different knobs with confusable names.** `FLASK_DEBUG` feeds the `DEBUG` *config* value (Flask's debug mode); the `DEBUG` *environment variable* raises the root log level and is what `pnpm flask:start-debug` sets. Both are in `.env.sample`. Read the name at the call site rather than assuming. (#1922)
