@@ -364,7 +364,8 @@ def test_production_testing_is_not_enabled_by_the_string_false(monkeypatch):
 
 
 def test_the_logging_debug_variable_does_not_enable_flask_debug(monkeypatch):
-    # ``DEBUG=true`` is what ``pnpm flask:start-debug`` sets to raise the log level.
+    # ``DEBUG=true`` is the development knob ``pnpm flask:start-debug`` sets: debug-level
+    # logging plus gunicorn ``--reload``, read by ``_is_dev_debug_requested()``.
     # Matching it to the ``DEBUG`` *attribute* would hand Flask debug mode to anyone
     # who wanted verbose logs, and ``Flask.debug`` returning truthy suppresses the
     # catch-all error handler — tracebacks in responses, under SERVER_MODE too.
@@ -770,7 +771,8 @@ def test_every_strict_boolean_names_a_real_boolean_setting():
 
 def test_every_env_alias_names_a_real_setting():
     # Same string-keyed hazard, with a worse failure: a dead alias sends the loop back
-    # to the attribute name, which for ``DEBUG`` is the log-level variable.
+    # to the attribute name, which for ``DEBUG`` is the development knob
+    # ``_is_dev_debug_requested()`` reads.
     assert set(_ENV_ALIASES) <= set(vars(DefaultConfig))
 
     # An alias pointing at a name that is also an attribute would have the loop write
