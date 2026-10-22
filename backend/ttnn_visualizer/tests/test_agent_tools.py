@@ -170,6 +170,9 @@ class TestReportInventory:
             "memory_profile",
             "tensor_flow",
             "operation_provenance",
+            "errors",
+            "dram_fallbacks",
+            "l1_peak",
         }
         assert loaded["capture"]["ARCH"] == "wormhole_b0"
         assert loaded["performance_csv"] == "ops_perf_results_x.csv"
@@ -211,12 +214,14 @@ class TestReportInventory:
 
         loaded = load_report(ReportRegistry(), profiler_path=str(profiler))
 
-        assert loaded["answerable"] == ["find_operations"]
+        assert loaded["answerable"] == ["find_operations", "errors"]
         assert {
             "memory_profile",
             "operation_detail",
             "tensor_flow",
             "operation_provenance",
+            "dram_fallbacks",
+            "l1_peak",
         } <= set(loaded["unanswerable"])
 
     def test_an_empty_database_file_is_not_answerable(self, tmp_path):
@@ -1478,6 +1483,9 @@ class TestTransport:
             "memory_profile",
             "tensor_flow",
             "operation_provenance",
+            "errors",
+            "dram_fallbacks",
+            "l1_peak",
         }
         assert all(
             tool["inputSchema"]["type"] == "object"

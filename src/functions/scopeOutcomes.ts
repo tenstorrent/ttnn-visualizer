@@ -117,7 +117,8 @@ export const getScopeOutcomes = (nodes: Node[], hasRecordedError: boolean): Scop
 /**
  * The device operations in one operation's captured graph whose launch did not complete.
  * Read only for an operation with a recorded error, so a scope left open counts as failed,
- * as the device operations tree marks it.
+ * as the device operations tree marks it. Mirrored, with `getScopeOutcomes`, as
+ * `failed_device_operation_names` in `backend/ttnn_visualizer/agent/scope_outcomes.py`.
  */
 export const getFailedDeviceOperationNames = (nodes: Node[] | null | undefined): string[] => {
     if (!Array.isArray(nodes)) {
