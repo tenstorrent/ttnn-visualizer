@@ -229,7 +229,7 @@ Use **`null`** when you mean “no value yet” or “cleared” in values you o
 
 `GRAPH_COLORS` is an object literal, so its `cssVar()` calls resolve **once, at module evaluation**. That is fine for a value first read during a user interaction, but a module imported before the stylesheet applies captures empty strings for good.
 
-Where that risk is real, expose a **getter** instead of a property and keep everything else about the flow — `getPerfChartChrome()` in `src/definitions/PlotConfigurations.ts` is the reference: the properties still live in `_base.scss`, components still never see a literal, but each call re-reads.
+Where that risk is real, expose a **getter** instead of a property and keep everything else about the flow — `getPerfChartChrome()` in `src/definitions/PlotConfigurations.ts` is the reference, and `getL1PeakColours()` in `src/definitions/L1PeakDecomposition.ts` follows it: the properties still live in `_base.scss`, components still never see a literal, but each call re-reads.
 
 ```ts
 export const getPerfChartChrome = (): PerfChartChrome => ({
@@ -238,7 +238,9 @@ export const getPerfChartChrome = (): PerfChartChrome => ({
 });
 ```
 
-Prefer `GRAPH_COLORS` by default; reach for a getter only when import-time evaluation is a genuine hazard, and say so in a docstring, because the repeat `getComputedStyle` read is not free — call it once per render pass, not per element.
+**This is one rule with two shapes, not two competing mechanisms, and there is no third shape.** The object and the getters share the whole flow and differ only in when the read happens. Prefer `GRAPH_COLORS` by default; reach for a getter only when the module may evaluate before the stylesheet has applied, and say so in a docstring. That ordering is a reason to read late, not an observed failure: nothing pins when the stylesheet applies relative to a module's first evaluation, so a getter is the shape that does not depend on it. The repeat `getComputedStyle` read is not free, so call a getter once per render pass, not per element — for example, resolve it once in a mount-time `useMemo`. Settled in #1911.
+
+Either shape fails the same way: `cssVar` returns `''` for a property nobody declared, with no error, so a rename in a stylesheet leaves a graph drawn in no colour. `tests/cssCustomProperties.spec.ts` checks that every name `src/` passes to `cssVar` is declared under `src/scss/`, which means `cssVar` may only be called with a quoted literal name: a computed argument, a reference passed as a value or an aliased import fails it, naming the line. Its header says what it does not check.
 
 ### Same rule for magic layout numbers
 
@@ -1528,5 +1530,4 @@ Adding or tightening a requirement fails two tests until you update them, and th
 
 These exist in the codebase today and don't yet have a single canonical answer. Reviewers should flag new code that goes either direction without considering both. Each entry names the inconsistency, the direction new code takes, and its tracking issue; the rule itself lives in the section above that owns it.
 
-- **Two accessors for CSS-custom-property colours.** `GRAPH_COLORS` resolves at module load; `getPerfChartChrome()` re-reads per call. Both are legitimate and both keep the literal in `_base.scss` — pick per [No hex literals in TS/TSX](#no-hex-literals-in-tstsx), and don't add a third mechanism. (#1911)
 - **`DEBUG` and `FLASK_DEBUG` are different knobs with confusable names.** `FLASK_DEBUG` feeds the `DEBUG` *config* value (Flask's debug mode); the `DEBUG` *environment variable* raises the root log level and is what `pnpm flask:start-debug` sets. Both are in `.env.sample`. Read the name at the call site rather than assuming. (#1922)
