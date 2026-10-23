@@ -5,6 +5,7 @@
 import { TypedPerfTableRow } from '../model/PerfTable';
 import isValidNumber from './isValidNumber';
 
+// Mirrored as `core_utilisation` in `backend/ttnn_visualizer/agent/perf_flags.py`.
 function getCoreUtilization(row: TypedPerfTableRow, maxCores: number): number {
     const ideal = row.pm_ideal_ns ?? null;
     const kernelDuration = row.device_time ?? null;

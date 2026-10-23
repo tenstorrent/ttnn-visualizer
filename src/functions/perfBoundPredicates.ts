@@ -6,6 +6,7 @@ import { BoundType } from '../definitions/PerfTable';
 import { HIGH_DISPATCH_THRESHOLD_US } from '../definitions/Performance';
 import { TypedPerfTableRow } from '../model/PerfTable';
 
+// Mirrored as `_is_slow_dram_dominant` in `backend/ttnn_visualizer/agent/perf_flags.py`.
 export function isSlowDramDominant(row: TypedPerfTableRow): boolean {
     return (
         row.bound === BoundType.SLOW &&
