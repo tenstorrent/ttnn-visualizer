@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { LinkedOperationData, PerfTableRow, TypedPerfTableRow } from '../model/PerfTable';
-import { BoundAnalysis } from '../definitions/PerfTable';
+import { BoundAnalysis, RepeatCacheOutcome } from '../definitions/PerfTable';
 import { OperationCategories } from '../definitions/StackedPerfTable';
 import { BufferType } from '../model/BufferType';
 import { DeviceOperationLayoutTypes } from '../model/APIData';
@@ -57,6 +57,21 @@ export const getOpIdByPerfId = (opIdsMap: { perfId?: string; opId: number }[]): 
     }
 
     return opIdByPerfId;
+};
+
+// A later row of a hashed program is a repeat call, and its cache result is unrecorded when the
+// capture has no PROGRAM CACHE HIT value. Hashless rows, such as comparison placeholders, are never
+// repeats. `program_cache` in `backend/ttnn_visualizer/agent/tools.py` restates this by hand. #2169
+export const getRepeatCacheOutcome = (row: TypedPerfTableRow): RepeatCacheOutcome | null => {
+    if (!row.hash || row.isFirstHashOccurrence) {
+        return null;
+    }
+
+    if (row.cache_hit === null) {
+        return RepeatCacheOutcome.UNRECORDED;
+    }
+
+    return row.cache_hit ? RepeatCacheOutcome.HIT : RepeatCacheOutcome.MISS;
 };
 
 // Converts the raw string-based rows produced by tt-perf-report (via the backend CSV parse) into

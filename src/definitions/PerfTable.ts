@@ -203,3 +203,9 @@ export const comparisonKeys: ColumnKeys[] = [
 ];
 
 export type PerfTableFilters = Partial<Record<ColumnKeys, string>> | null;
+
+export enum RepeatCacheOutcome {
+    HIT = 'hit',
+    MISS = 'miss',
+    UNRECORDED = 'unrecorded',
+}

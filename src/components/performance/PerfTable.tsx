@@ -10,11 +10,18 @@ import { Fragment, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import 'styles/components/PerfReport.scss';
 import { OpType, PATTERN_COUNT } from '../../definitions/Performance';
-import { ColumnDefinition, ColumnKeys, PerfTableFilters, comparisonKeys } from '../../definitions/PerfTable';
+import {
+    ColumnDefinition,
+    ColumnKeys,
+    PerfTableFilters,
+    RepeatCacheOutcome,
+    comparisonKeys,
+} from '../../definitions/PerfTable';
 import { TypedPerfTableRow } from '../../model/PerfTable';
 import ROUTES from '../../definitions/Routes';
 import { TEST_IDS } from '../../definitions/TestIds';
 import isValidNumber from '../../functions/isValidNumber';
+import { getRepeatCacheOutcome } from '../../functions/enrichPerfRowData';
 import { formatPercentage, formatSize } from '../../functions/math';
 import { formatCell, isHostOp } from '../../functions/perfFunctions';
 import { getEligiblePerfColumns, getFooterColumns, getVisiblePerfColumns } from '../../functions/perfTableColumns';
@@ -504,14 +511,13 @@ const PerformanceTable = ({
     );
 };
 
-// Same repeat-call classification as `program_cache` in `backend/ttnn_visualizer/agent/tools.py`,
-// computed over the selected range: unrecorded repeats are excluded from the hit denominator. #2169
 const getCacheHitSummary = (cacheHits: number, recorded: number, unrecorded: number): string => {
-    if (recorded === 0 && unrecorded > 0) {
-        return `No cache results recorded\n(${unrecorded} unrecorded)`;
+    // A 0% would read as every repeat missing, so say there is nothing to divide instead.
+    if (recorded === 0) {
+        return unrecorded > 0 ? `No cache results recorded\n(${unrecorded} unrecorded)` : 'No repeat calls';
     }
 
-    const cacheHitPercent = recorded > 0 ? (cacheHits / recorded) * 100 : 0;
+    const cacheHitPercent = (cacheHits / recorded) * 100;
     const baseSummary = `${formatPercentage(cacheHitPercent)} expected cache hits`;
 
     if (unrecorded > 0) {
@@ -538,15 +544,18 @@ const computeFooterTotals = (data: TypedPerfTableRow[], hideHostOps: boolean): P
             hostOpsCount++;
         }
 
-        if (!row.isFirstHashOccurrence && row.hash) {
-            if (row.cache_hit === null) {
-                unrecordedRepeatOpsCount++;
-            } else {
-                recordedRepeatOpsCount++;
+        // The hit percentage is out of the repeats that recorded a result, as in `program_cache`
+        // (`backend/ttnn_visualizer/agent/tools.py`). Unlike that tool, which reads the whole report,
+        // this counts the rows the table shows: the selected range after any active filters. #2169
+        const repeatCacheOutcome = getRepeatCacheOutcome(row);
 
-                if (row.cache_hit) {
-                    cacheHits++;
-                }
+        if (repeatCacheOutcome === RepeatCacheOutcome.UNRECORDED) {
+            unrecordedRepeatOpsCount++;
+        } else if (repeatCacheOutcome !== null) {
+            recordedRepeatOpsCount++;
+
+            if (repeatCacheOutcome === RepeatCacheOutcome.HIT) {
+                cacheHits++;
             }
         }
     }
