@@ -97,9 +97,12 @@ neither, which is what makes `load_report`'s answer worth reading first.
 
 Call `load_report` first. It reports what is answerable rather than making you discover it
 one failed call at a time, because the report kinds are independent: a performance-only
-capture has no operation graph and no tensor data, and `zone_timings` is listed only when the device profiler log decodes, has the required columns, and has at least one data row. `top_ops` and `program_cache` are listed only when the
-performance CSV can be reported on, and when it cannot, `performance_csv_problem` says why
-(`empty`, `no data rows`, `missing columns: …`, or that it cannot be read or decoded).
+capture has no operation graph and no tensor data. `zone_timings` is listed only when
+`profile_log_device.csv` decodes as UTF-8, has every column the tool reads (`timer_id`,
+`zone name`, `run host ID`, `PCIe slot`, `RISC processor type`, `core_x`, `core_y` and
+`time[cycles since reset]`), and has at least one data row. `top_ops` and `program_cache`
+are listed only when the performance CSV can be reported on, and when it cannot,
+`performance_csv_problem` says why (`empty`, `no data rows`, `missing columns: …`, or that it cannot be read or decoded).
 Each database tool is checked against the tables it actually reads, so a truncated
 capture that holds `operations` but not `buffers` is reported as answering
 `find_operations` and nothing else, rather than advertising every tool and failing most
