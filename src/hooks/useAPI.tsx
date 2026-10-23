@@ -122,6 +122,8 @@ const EMPTY_PERF_RETURN = { report: [], stacked_report: [], signposts: [] };
  *
  * Mutates the passed array in place for performance — these arrays can be
  * very large and are consumed immediately by the hooks below.
+ *
+ * Mirrored as `_node_id` in `backend/ttnn_visualizer/agent/circular_buffers.py`. #2185
  */
 const updateDeviceOperationId = (nodes: unknown): void => {
     if (!Array.isArray(nodes)) {

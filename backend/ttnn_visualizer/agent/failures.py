@@ -26,10 +26,14 @@ from typing import (
     Union,
 )
 
-from ttnn_visualizer.agent import allocation_failures
+from ttnn_visualizer.agent import allocation_failures, circular_buffers
 from ttnn_visualizer.agent import dram_fallbacks as fallback_rules
 from ttnn_visualizer.agent import l1_peak as peak_replay
-from ttnn_visualizer.agent.bounds import bounded, ensure_graph_readable
+from ttnn_visualizer.agent.bounds import (
+    GraphTooLargeError,
+    bounded,
+    ensure_graph_readable,
+)
 from ttnn_visualizer.agent.handles import TOOL_TABLES, CacheVariant, ReportRegistry
 from ttnn_visualizer.agent.operations import (
     BUFFER_SIZE_UNIT,
@@ -179,17 +183,20 @@ def _graphs(
     }
 
 
+def _parsed_graph(raw: str) -> Optional[List[object]]:
+    """A captured graph's nodes, or None when it is not a JSON list."""
+    try:
+        nodes = json.loads(raw)
+    except ValueError:
+        return None
+    return nodes if isinstance(nodes, list) else None
+
+
 def _graph_for(
     graphs: Dict[Tuple[int, int], str], operation: Operation
 ) -> List[object]:
     raw = rank_or_zero(graphs, operation.operation_id, operation.rank)
-    if not raw:
-        return []
-    try:
-        nodes = json.loads(raw)
-    except ValueError:
-        return []
-    return nodes if isinstance(nodes, list) else []
+    return (_parsed_graph(raw) or []) if raw else []
 
 
 def _allocation_failure(message: Optional[str]) -> Optional[Dict[str, object]]:
@@ -714,16 +721,26 @@ def operation_failure_fields(
     scope: RankScope,
     operation: Operation,
 ) -> Tuple[Dict[str, object], Optional[str]]:
-    """The error and likely DRAM fallback `operation_detail` adds for one operation,
-    as its `detail_fields`.
+    """The error, likely DRAM fallback and circular buffers `operation_detail` adds for
+    one operation, as its `detail_fields`.
 
-    Both are optional, unlike in `errors` and `dram_fallbacks`: the rest of the detail
+    All are optional, unlike in `errors` and `dram_fallbacks`: the rest of the detail
     answers without them. So where their rows cannot be attributed to the rank, they
     are left out, and the caveat returned says why, rather than refusing the whole
     detail.
     """
     fields: Dict[str, object] = {}
     withheld: List[str] = []
+    read: List[Dict[Tuple[int, int], str]] = []
+
+    def graphs() -> Dict[Tuple[int, int], str]:
+        # The error and the circular buffers read the same row; read it once.
+        if not read:
+            read.append(
+                _graphs(queries, scope, "operation_detail", [operation.operation_id])
+            )
+        return read[0]
+
     if _attributable(queries, scope, ("errors",), withheld, "error"):
         error = select_error_for_operation(
             _error_records(queries, scope, operation.operation_id), operation
@@ -731,10 +748,29 @@ def operation_failure_fields(
         if error is not None and _attributable(
             queries, scope, ("captured_graph",), withheld, "error"
         ):
-            graphs = _graphs(
-                queries, scope, "an error lookup", [operation.operation_id]
-            )
-            fields["error"] = _error_entry(error, _graph_for(graphs, operation))
+            fields["error"] = _error_entry(error, _graph_for(graphs(), operation))
+    # A report without the table, or without a row for this operation, says nothing
+    # about its circular buffers, which a count of zero would claim it did.
+    if queries.has_table("captured_graph") and _attributable(
+        queries, scope, ("captured_graph",), withheld, "circular_buffers"
+    ):
+        try:
+            rows = graphs()
+        except GraphTooLargeError as error:
+            withheld.append(f"circular_buffers is withheld: {error}")
+        else:
+            raw = rank_or_zero(rows, operation.operation_id, operation.rank)
+            nodes = _parsed_graph(raw) if raw is not None else None
+            if raw is not None and nodes is None:
+                # Read as empty, it would claim the operation allocated none.
+                withheld.append(
+                    "circular_buffers is withheld: the operation's captured graph "
+                    "is not a JSON list of nodes"
+                )
+            elif nodes is not None:
+                fields["circular_buffers"] = (
+                    circular_buffers.operation_circular_buffers(nodes)
+                )
     if all(
         queries.has_table(table) for table in TOOL_TABLES[McpToolName.DRAM_FALLBACKS]
     ) and _attributable(queries, scope, _FALLBACK_TABLES, withheld, "dram_fallback"):
