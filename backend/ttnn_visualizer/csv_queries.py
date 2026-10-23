@@ -376,6 +376,20 @@ class NPEQueries:
 
 class DeviceLogProfilerQueries:
     DEVICE_LOG_FILE = "profile_log_device.csv"
+    # What `query_zone_summary` groups by. Kept apart from
+    # REQUIRED_DEVICE_LOG_COLUMNS because only that one route needs them; see the
+    # comment in `query_zone_summary` before folding the two together.
+    ZONE_SUMMARY_COLUMNS = frozenset(
+        {
+            "PCIe slot",
+            "zone name",
+            "RISC processor type",
+            "core_x",
+            "core_y",
+            "run host ID",
+            "time[cycles since reset]",
+        }
+    )
     # Only the columns something downstream depends on. Everything else in the
     # file is passed through untouched, because which columns exist varies by
     # producer and gating on them rejects captures that work fine: the segformer
@@ -390,6 +404,10 @@ class DeviceLogProfilerQueries:
         # so a capture without it would be served to a client expecting it.
         "run host ID",
     ]
+    # Every column `zone_timings` needs: `__enter__` refuses a log without the
+    # required ones, and `query_zone_summary` then groups by the rest. The agent
+    # inventory checks this set so it never lists a log the tool would refuse.
+    ZONE_TIMINGS_COLUMNS = frozenset(REQUIRED_DEVICE_LOG_COLUMNS) | ZONE_SUMMARY_COLUMNS
 
     # The `type` column's vocabulary, as tt-metal writes it. Deliberately not
     # required -- older captures predate the column -- but pinned here so the
@@ -531,12 +549,20 @@ class DeviceLogProfilerQueries:
         `__enter__` skips it (`offset=1`) because pandas would read it as a
         header, so the only way to the clock is to read the line directly — and
         without the clock a cycle count cannot be turned into a duration.
+
+        An unreadable file, or a first line that is not UTF-8, gives `{}` rather
+        than raising: the clock is then unknown, and callers must treat it so.
+        A broken device log must not fail `load_report` for a capture whose ops
+        perf CSV is fine. #2184
         """
         if not instance.performance_path:
             raise PerformanceReportNotLoadedException()
         path = Path(instance.performance_path, cls.DEVICE_LOG_FILE)
-        with open(path, "r") as handle:
-            first_line = handle.readline()
+        try:
+            with open(path, "rb") as handle:
+                first_line = handle.readline().decode("utf-8")
+        except (OSError, UnicodeDecodeError):
+            return {}
 
         metadata: Dict[str, str] = {}
         for field in first_line.split(","):
@@ -583,16 +609,7 @@ class DeviceLogProfilerQueries:
         # ones *this* query indexes, so a capture missing one fails here with a
         # reason instead of a `KeyError` mid-parse.
         available = set(self.runner.df.columns if self.runner.df is not None else [])
-        needed = {
-            "PCIe slot",
-            "zone name",
-            "RISC processor type",
-            "core_x",
-            "core_y",
-            "run host ID",
-            "time[cycles since reset]",
-        }
-        missing = sorted(needed - available)
+        missing = sorted(self.ZONE_SUMMARY_COLUMNS - available)
         if missing:
             raise DataFormatError(
                 f"{self.DEVICE_LOG_FILE} cannot be summarised by zone; missing: "
