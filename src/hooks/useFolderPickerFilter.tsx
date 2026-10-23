@@ -26,7 +26,17 @@ interface FolderPickerFilter {
 const useFolderPickerFilter = (showLinkStatus: boolean): FolderPickerFilter => {
     const [query, setQuery] = useState('');
     const [isLinkedOnly, setIsLinkedOnly] = useState(false);
+    const [prevShowLinkStatus, setPrevShowLinkStatus] = useState(showLinkStatus);
     const inputRef = useRef<HTMLInputElement>(null);
+
+    // Turn the toggle off when the badges go, so it does not come back pressed against a report
+    // the user never filtered on.
+    if (showLinkStatus !== prevShowLinkStatus) {
+        setPrevShowLinkStatus(showLinkStatus);
+        if (!showLinkStatus) {
+            setIsLinkedOnly(false);
+        }
+    }
 
     // The clear button unmounts once the query is empty, taking focus with it; without this the
     // popover's keyboard handling (arrows, Enter, typing) stops reaching the picker.
@@ -38,7 +48,8 @@ const useFolderPickerFilter = (showLinkStatus: boolean): FolderPickerFilter => {
     const handleToggleLinkedOnly = () => setIsLinkedOnly((current) => !current);
 
     return {
-        // Without badges there is nothing to filter on, so a toggle left on must not hide rows.
+        // Without badges there is nothing to filter on, so the toggle must not hide rows even on
+        // the render that turns it off.
         isLinkedOnlyActive: showLinkStatus && isLinkedOnly,
         selectProps: {
             query,

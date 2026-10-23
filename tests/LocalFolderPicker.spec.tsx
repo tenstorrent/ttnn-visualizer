@@ -10,7 +10,11 @@ import { CONFIRM_DELETE_LABEL, ManagedEntity } from '../src/definitions/ManagedE
 import { ReportFolder } from '../src/definitions/Reports';
 import { ServerConfig } from '../src/definitions/ServerConfig';
 import { TEST_IDS } from '../src/definitions/TestIds';
-import { CLEAR_FILTER_QUERY_LABEL, NO_LINKED_RESULTS_TEXT } from '../src/definitions/FolderLinkStatus';
+import {
+    CLEAR_FILTER_QUERY_LABEL,
+    LINKED_ONLY_LABEL,
+    NO_LINKED_RESULTS_TEXT,
+} from '../src/definitions/FolderLinkStatus';
 import { getDeleteActionLabel } from '../src/functions/managedEntityLabels';
 import testForPortal from './helpers/testForPortal';
 import { TestProviders } from './helpers/TestProviders';
@@ -356,7 +360,8 @@ describe('LocalFolderPicker linked-only filter', () => {
     });
 
     it('returns focus to the filter input when Enter clears the query', async () => {
-        renderPicker();
+        const handleSelect = vi.fn();
+        renderPicker(undefined, undefined, handleSelect);
         await openPicker();
 
         const input = screen.getByPlaceholderText('Filter...');
@@ -369,6 +374,7 @@ describe('LocalFolderPicker linked-only filter', () => {
         fireEvent.keyDown(clearButton, { key: 'Enter' });
         fireEvent.keyUp(clearButton, { key: 'Enter' });
 
+        expect(handleSelect).not.toHaveBeenCalled();
         expect(screen.queryByLabelText(CLEAR_FILTER_QUERY_LABEL)).toBeNull();
         expect(input).toHaveValue('');
         expect(input).toHaveFocus();
@@ -383,6 +389,21 @@ describe('LocalFolderPicker linked-only filter', () => {
 
         rerenderWith(runsWithoutFingerprints(), runsWithoutFingerprints());
         await waitFor(() => expect(getRowLabels()).toHaveLength(folders.length), WAIT_FOR_OPTIONS);
+    });
+
+    it('comes back off when the badges return', async () => {
+        const { rerenderWith } = renderPicker();
+        await openPicker();
+
+        fireEvent.click(screen.getByRole('button', { name: LINKED_ONLY_LABEL, pressed: false }));
+        await waitFor(() => expect(getRowLabels()).toEqual(['/linked-run']), WAIT_FOR_OPTIONS);
+
+        rerenderWith(runsWithoutFingerprints(), runsWithoutFingerprints());
+        await waitFor(() => expect(getRowLabels()).toHaveLength(folders.length), WAIT_FOR_OPTIONS);
+
+        rerenderWith(runsWithoutFingerprints('linked-run'), runsWithoutFingerprints('unlinked-run'));
+        expect(screen.getByRole('button', { name: LINKED_ONLY_LABEL, pressed: false })).toBeTruthy();
+        expect(getRowLabels()).toHaveLength(folders.length);
     });
 
     it('does not select a report when Enter presses the toggle', async () => {

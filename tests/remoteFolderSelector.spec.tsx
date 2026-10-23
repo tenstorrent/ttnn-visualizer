@@ -1773,10 +1773,14 @@ it('does not select a remote report when Enter presses the linked-only toggle', 
     fireEvent.keyUp(toggle, { key: 'Enter' });
 
     expect(onSelectFolder).not.toHaveBeenCalled();
+    // Enter still presses the toggle itself, and the popover stays open on the filtered list.
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    expect(getRemoteRowLabels()).toHaveLength(1);
 });
 
 it('returns focus to the remote filter input when Enter clears the query', async () => {
-    await renderLinkedRankSelector();
+    const onSelectFolder = vi.fn();
+    await renderLinkedRankSelector(onSelectFolder);
 
     const input = screen.getByPlaceholderText('Filter...');
     // Let Select's own autofocus on open land first, so it cannot stand in for the refocus.
@@ -1788,6 +1792,8 @@ it('returns focus to the remote filter input when Enter clears the query', async
     fireEvent.keyDown(clearButton, { key: 'Enter' });
     fireEvent.keyUp(clearButton, { key: 'Enter' });
 
+    expect(onSelectFolder).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText(CLEAR_FILTER_QUERY_LABEL)).toBeNull();
     expect(input).toHaveValue('');
     expect(input).toHaveFocus();
 });
