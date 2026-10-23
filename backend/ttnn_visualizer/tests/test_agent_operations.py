@@ -1153,6 +1153,25 @@ class TestOperationDetail:
         assert pressure["allocated_bytes"] == 4096
         assert pressure["high_water_bytes"] == 4196
 
+    def test_l1_pressure_is_none_when_operation_has_no_buffer_rows(self, loaded):
+        """An incomplete or unrecorded operation with zero `buffers` rows must
+        return `l1_pressure: None` with a caveat rather than claiming 100% free L1."""
+        sql = _REPORT_SQL + """
+        INSERT INTO operations VALUES (7, 'ttnn.incomplete_op', 0.0);
+        INSERT INTO operations VALUES (8, 'ttnn.null_addr_op', 1.0);
+        INSERT INTO buffers VALUES
+            (8, 0, NULL, 8192, 'L1', 0),
+            (8, 0, 4096, 2048, 'L1', 0);
+        """
+        registry, handle = loaded(sql, name="l1-no-buffers")
+
+        detail_empty = agent_operations.operation_detail(registry, handle, 7)
+        assert detail_empty["l1_pressure"] is None
+        assert "no buffer rows were recorded" in detail_empty["caveat"]
+
+        detail_null_addr = agent_operations.operation_detail(registry, handle, 8)
+        assert detail_null_addr["l1_pressure"]["allocated_bytes"] == 2048
+
 
 class TestOperationProvenance:
     def test_it_answers_what_the_operation_was_called_with(self, loaded):

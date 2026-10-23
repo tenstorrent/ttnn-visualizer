@@ -230,9 +230,9 @@ def _buffer_type_name(value: object) -> str:
 
 
 L1_PRESSURE_NOTE = (
-    "Free-space figures are an upper bound: `buffers` records tensor "
-    "allocations only, excluding circular buffers and tensors allocated and "
-    "freed inside one operation."
+    "Sizes are bytes per bank on `device_id` only. Free-space figures are an "
+    "upper bound: `buffers` records tensor allocations only, excluding "
+    "circular buffers and tensors allocated and freed inside one operation."
 )
 
 
@@ -299,7 +299,7 @@ def _compute_device_l1_pressure(
         if _buffer_type_name(buf.buffer_type) != BufferType.L1.name:
             continue
         size = _int_attr(buf, "max_size_per_bank")
-        if size <= 0:
+        if size <= 0 or getattr(buf, "address", None) is None:
             continue
         address = _int_attr(buf, "address")
         if address not in by_address or size > by_address[address]:
@@ -350,15 +350,20 @@ def _compute_l1_pressure(
 ) -> Optional[L1Pressure]:
     """Per-operation L1 fullness and free-segment fragmentation. #2172
 
-    Matches `computeL1PressureForOperation` in `src/functions/l1Pressure.ts`
-    with per-device `[address_at_first_l1_cb_buffer,
-    address_at_first_l1_cb_buffer + l1_bank_size)` bounds: groups L1 tensor
-    buffers by `device_id`, deduplicates and clips intervals to each device's
-    usable L1 window before merging overlapping or adjacent allocations, and
-    returns the most constrained device (smallest `largest_free_block`,
-    tie-broken by highest `fullness_pct`, then `allocated_bytes`, then
-    `device_id`).
+    Shares the core rule of `computeL1PressureForOperation` in
+    `src/functions/l1Pressure.ts`: per-device `[address_at_first_l1_cb_buffer,
+    min(worker_l1_size, address_at_first_l1_cb_buffer + l1_bank_size))` bounds,
+    deduplicating and clipping L1 tensor intervals per `device_id` before
+    merging overlapping or adjacent allocations, and selecting the most
+    constrained device (smallest `largest_free_block`, then highest
+    `fullness_pct`, `allocated_bytes`, and lowest `device_id`). Unlike the UI
+    helper, returns `None` when the operation recorded no `buffers` rows or no
+    valid device geometry, and ignores zero-size `buffers` rows rather than
+    splitting free segments on zero-width points.
     """
+    if not buffers:
+        return None
+
     buffers_by_device: Dict[int, List[Buffer]] = defaultdict(list)
     for buf in buffers:
         buffers_by_device[_int_attr(buf, "device_id")].append(buf)
@@ -867,6 +872,11 @@ def operation_detail(
         **_caveats(scope, {buffer.device_id for buffer in buffers}),
     }
     result.update(added)
+    if not buffers:
+        result["caveat"] = joined_caveat(
+            result.get("caveat"),
+            "l1_pressure is null because no buffer rows were recorded for this operation.",
+        )
     if withheld:
         result["caveat"] = joined_caveat(result.get("caveat"), withheld)
     return result

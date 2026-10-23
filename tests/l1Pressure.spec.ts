@@ -255,12 +255,7 @@ test('computeL1PressureForOperation selects the device with the smallest largest
     ];
     // Device 0: 30% full, fragmented so largestFreeBytes is 350.
     // Device 1: 60% full, contiguous so largestFreeBytes is 400.
-    const buffers = [
-        makeBuffer(0, 100, 0),
-        makeBuffer(450, 100, 0),
-        makeBuffer(900, 100, 0),
-        makeBuffer(0, 600, 1),
-    ];
+    const buffers = [makeBuffer(0, 100, 0), makeBuffer(450, 100, 0), makeBuffer(900, 100, 0), makeBuffer(0, 600, 1)];
 
     const result = computeL1PressureForOperation(buffers, 0, 1000, devices);
     expect(result.largestFreeBytes).toBe(350);
