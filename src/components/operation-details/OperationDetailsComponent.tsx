@@ -376,7 +376,7 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
                                     )}
 
                                     <div
-                                        className='memory-zoom-range-label bp4-label'
+                                        className='memory-zoom-range-label'
                                         aria-disabled={!zoomedInViewMainMemory}
                                     >
                                         L1 memory zoom range
