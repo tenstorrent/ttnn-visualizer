@@ -48,9 +48,9 @@ export const L1_RESIDENT_KIND_LABEL: Readonly<Record<L1ResidentKind, string>> = 
 };
 
 /**
- * Resolved on use, not captured at import: `cssVar` reads the computed style, which is not
- * guaranteed to have applied when this module first evaluates. Same reason
- * `getPerfChartChrome` is a function.
+ * Resolved on use, not captured at import: `cssVar` reads the computed style, and this module
+ * is also evaluated outside the app tree, by tests such as `tests/l1PeakDecomposition.spec.ts`.
+ * Same reason `getPerfChartChrome` is a function.
  */
 export const getL1PeakColours = (): Readonly<Record<L1ResidentKind | 'capacity', string>> => ({
     [L1ResidentKind.CIRCULAR_BUFFER]: cssVar(`--l1-peak-cb`),

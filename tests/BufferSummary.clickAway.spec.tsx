@@ -58,7 +58,7 @@ describe('BufferSummary dismissing a focused buffer (#2042)', () => {
         pressAndRelease(screen.getByRole('heading', { name: 'Buffers by operation' }));
 
         expect(getBufferFocusProbe()).toHaveTextContent('dismissed');
-        expect(dismissToast).toHaveBeenCalledExactlyOnceWith();
+        expect(dismissToast).toHaveBeenCalledExactlyOnceWith('buffer-toast');
     });
 
     it('keeps it through a tab switch', () => {
@@ -77,7 +77,7 @@ describe('BufferSummary dismissing a focused buffer (#2042)', () => {
         pressAndRelease(screen.getByRole('navigation', { name: 'Main navigation' }));
 
         expect(getBufferFocusProbe()).toHaveTextContent('dismissed');
-        expect(dismissToast).toHaveBeenCalledExactlyOnceWith();
+        expect(dismissToast).toHaveBeenCalledExactlyOnceWith('buffer-toast');
     });
 
     it('keeps it through a rail button, which still works', () => {

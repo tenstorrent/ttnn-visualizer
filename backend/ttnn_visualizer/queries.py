@@ -316,6 +316,10 @@ class DatabaseQueries:
         query += " GROUP BY operation_id, buffer_type, device_id"
         return self.query_runner.execute_query(query, params)
 
+    def has_table(self, table_name: str) -> bool:
+        """True if the report holds ``table_name``, which older captures may not."""
+        return self._check_table_exists(table_name)
+
     def table_has_rank_column(self, table_name: str) -> bool:
         """
         True if ``table_name`` carries ``rank``, so a rank filter can reach it.
@@ -712,8 +716,12 @@ class DatabaseQueries:
             yield BufferChunk(*row)
 
     def query_tensors(
-        self, filters: Optional[Dict[str, Any]] = None
+        self,
+        filters: Optional[Dict[str, Any]] = None,
+        size_from_buffers: bool = True,
     ) -> Generator[Tensor, None, None]:
+        """`size_from_buffers=False` leaves `size` None where `tensors` has no column
+        for it, skipping the input, output and `buffers` joins that find one."""
         tensor_columns = self._get_table_columns("tensors")
         size_on_tensors = "size" in tensor_columns
         rank_on_tensors = "rank" in tensor_columns
@@ -753,8 +761,10 @@ class DatabaseQueries:
             select_parts.append("t.rank")
         if size_on_tensors:
             select_parts.append("t.size")
-        else:
+        elif size_from_buffers:
             select_parts.append("b.max_size_per_bank AS size")
+        else:
+            select_parts.append("NULL AS size")
 
         if device_tensors_exists:
             select_parts.append(
@@ -794,7 +804,7 @@ class DatabaseQueries:
         if rank_on_tensors:
             group_by += ", t.rank"
 
-        if size_on_tensors:
+        if size_on_tensors or not size_from_buffers:
             join_lines = []
             if device_tensors_exists:
                 join_lines.append(f"LEFT JOIN device_tensors dt ON {dt_join}")

@@ -26,7 +26,11 @@ import {
     upsertReportLink,
 } from '../src/functions/reportLinks';
 import { FolderLinkState } from '../src/definitions/FolderLinkStatus';
-import { getFolderLinkState, shouldShowFolderLinkStatus } from '../src/functions/folderLinkStatus';
+import {
+    getFolderLinkState,
+    matchesLinkedOnlyFilter,
+    shouldShowFolderLinkStatus,
+} from '../src/functions/folderLinkStatus';
 import { createReportLink, runsWithoutFingerprints } from './helpers/reportLinkFixtures';
 
 const RUN_A = 'v1:run-a';
@@ -174,6 +178,20 @@ describe('shouldShowFolderLinkStatus', () => {
         expect(shouldShowFolderLinkStatus(runsWithoutFingerprints(), runsWithoutFingerprints())).toBe(false);
         expect(shouldShowFolderLinkStatus(null, null)).toBe(false);
         expect(shouldShowFolderLinkStatus(runsWithoutFingerprints('a'), runsWithoutFingerprints())).toBe(true);
+    });
+});
+
+describe('matchesLinkedOnlyFilter', () => {
+    it.each(Object.values(FolderLinkState))('lets a %s row through with the filter off', (linkState) => {
+        expect(matchesLinkedOnlyFilter(false, linkState)).toBe(true);
+    });
+
+    it.each([
+        [FolderLinkState.LINKED, true],
+        [FolderLinkState.UNKNOWN, false],
+        [FolderLinkState.UNLINKED, false],
+    ])('with the filter on, lets a %s row through: %s', (linkState, expected) => {
+        expect(matchesLinkedOnlyFilter(true, linkState)).toBe(expected);
     });
 });
 
