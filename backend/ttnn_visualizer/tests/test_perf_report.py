@@ -1,3 +1,5 @@
+import pytest
+
 # SPDX-License-Identifier: Apache-2.0
 #
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
@@ -395,3 +397,96 @@ class TestPerfReportCsvEscaping(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_http_route_converts_real_perf_report_missing_device_id_exit_to_422(
+    client, tmp_path
+):
+    """Unmocked `tt-perf-report` exit on missing `DEVICE ID` returns 422 naming the CSV. #2183"""
+    from ttnn_visualizer.extensions import db
+    from ttnn_visualizer.models import InstanceTable
+
+    report_dir = tmp_path / "real-perf-exit"
+    report_dir.mkdir()
+    (report_dir / "ops_perf_results_real_missing.csv").write_text(
+        "OP CODE,OP TYPE,GLOBAL CALL COUNT\nMatmul,tt_dnn_device,1\n",
+        encoding="utf-8",
+    )
+    with client.application.app_context():
+        db.session.add(
+            InstanceTable(
+                instance_id="pytest-real-perf-exit",
+                active_report={},
+                performance_path=str(report_dir),
+            )
+        )
+        db.session.commit()
+
+    response = client.get(
+        "/api/performance/perf-results/report",
+        query_string={"instanceId": "pytest-real-perf-exit"},
+    )
+    body = response.get_data(as_text=True)
+    assert response.status_code == 422
+    assert "ops_perf_results_real_missing.csv could not be parsed (exit code 1)" in body
+    assert str(tmp_path) not in body
+
+
+@pytest.mark.parametrize(
+    ("exit_arg", "expected_suffix"),
+    [
+        (2, " (exit code 2)"),
+        (None, ""),
+        ("/secret/internal/path", ""),
+        (True, ""),
+    ],
+)
+def test_perf_report_exit_code_formatting_never_echoes_non_int_codes(
+    client, tmp_path, exit_arg, expected_suffix
+):
+    """HTTP route converts `tt-perf-report` exits into 422 naming only the CSV file and
+    only interpolating genuine integer exit codes. #2183"""
+    from unittest.mock import patch
+
+    from ttnn_visualizer import csv_queries
+    from ttnn_visualizer.extensions import db
+    from ttnn_visualizer.models import InstanceTable
+
+    report_dir = tmp_path / "perf-exit"
+    report_dir.mkdir()
+    (report_dir / "ops_perf_results_missing_dev.csv").write_text(
+        "OP CODE,OP TYPE,GLOBAL CALL COUNT\nMatmul,tt_dnn_device,1\n",
+        encoding="utf-8",
+    )
+    with client.application.app_context():
+        db.session.add(
+            InstanceTable(
+                instance_id="pytest-perf-exit",
+                active_report={},
+                performance_path=str(report_dir),
+            )
+        )
+        db.session.commit()
+
+    exec_ns = {"arg": exit_arg}
+    code_obj = compile(
+        "def _exit(*a, **k):\n    raise SystemExit(arg)\n",
+        csv_queries.perf_report.__file__,
+        "exec",
+    )
+    exec(code_obj, exec_ns)
+    with patch.object(
+        csv_queries.perf_report, "generate_perf_report", side_effect=exec_ns["_exit"]
+    ):
+        response = client.get(
+            "/api/performance/perf-results/report",
+            query_string={"instanceId": "pytest-perf-exit"},
+        )
+
+    body = response.get_data(as_text=True)
+    assert response.status_code == 422
+    assert (
+        f"ops_perf_results_missing_dev.csv could not be parsed{expected_suffix}" in body
+    )
+    assert str(tmp_path) not in body
+    assert "/secret/internal/path" not in body
