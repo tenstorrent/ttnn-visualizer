@@ -504,8 +504,8 @@ const PerformanceTable = ({
     );
 };
 
-// Mirrors `program_cache` in `backend/ttnn_visualizer/agent/tools.py`: repeat calls with no
-// recorded cache result are excluded from the hit percentage denominator. #2169
+// Same repeat-call classification as `program_cache` in `backend/ttnn_visualizer/agent/tools.py`,
+// computed over the selected range: unrecorded repeats are excluded from the hit denominator. #2169
 const getCacheHitSummary = (cacheHits: number, recorded: number, unrecorded: number): string => {
     if (recorded === 0 && unrecorded > 0) {
         return `No cache results recorded\n(${unrecorded} unrecorded)`;

@@ -904,6 +904,11 @@ describe('PerfTable expected cache hits footer (#2169)', () => {
 
         const footer = screen.getByRole('table').querySelector('tfoot')!;
         expect(footer).toHaveTextContent(/50% expected cache hits\s*\(2 unrecorded excluded\)/);
+        const cacheHitCell = Array.from(footer.querySelectorAll('td')).find((cell) =>
+            cell.textContent?.includes('expected cache hits'),
+        );
+        expect(cacheHitCell).toHaveClass('pre-wrap');
+        expect(cacheHitCell?.textContent).toContain('\n(2 unrecorded excluded)');
     });
 
     it('reports when all repeat calls have no recorded cache results and ignores hashless placeholders', () => {

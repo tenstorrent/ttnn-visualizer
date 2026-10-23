@@ -489,8 +489,9 @@ def program_cache(
     """How often each op code built a program again rather than reusing it.
 
     The performance view's rule, by hand: a hash's first row in report order is a first
-    call (`enrichPerfRowData.ts`), and a later row that missed is a recompute candidate
-    (`computePerfHeuristicFlags.ts`); mirror a change there. The whole report, since a
+    call (`enrichPerfRowData.ts`), a later row that missed is a recompute candidate
+    (`computePerfHeuristicFlags.ts`), and unrecorded repeats are excluded from the hit
+    denominator (`computeFooterTotals` in `PerfTable.tsx`); mirror a change there. The whole report, since a
     program first called before a window would read as a first call inside it.
     """
     count = bounded(limit)
