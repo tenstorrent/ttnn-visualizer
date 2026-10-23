@@ -132,6 +132,25 @@ def test_the_page_describes_every_include_group():
     assert not missing, f"include groups the page does not describe: {missing}"
 
 
+def test_the_page_carries_where_the_flags_differ_from_the_view():
+    """The one flag the tools answer differently, and the rule a range does not move."""
+    page = " ".join(_read(_AGENT_DOCS).split())
+
+    assert "#2162" in page
+    assert "a 1 ns ideal time never flags `low_utilisation`" in page
+    assert "decided over the whole report" in page
+    assert "`errors`" in page and "`dram_fallbacks`" in page
+
+
+def test_the_page_carries_the_flags_cache_disabled_caveat():
+    """Recompute candidates on a run with the cache off read as programs built again."""
+    page = " ".join(_read(_AGENT_DOCS).split())
+
+    assert "`flag_basis.caveat` carries the caveat `program_cache` gives" in page
+    assert "a run with the program cache disabled records" in page
+    assert "`flag_basis.flagged_rows` counts each flag over every row" in page
+
+
 def test_the_page_carries_the_program_cache_caveats():
     """A first call misses by design, and no hits at all may mean the cache was off."""
     page = " ".join(_read(_AGENT_DOCS).split())

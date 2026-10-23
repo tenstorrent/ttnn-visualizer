@@ -79,7 +79,7 @@ another rank's operation under the same id.
 | Tool | Answers |
 |---|---|
 | `load_report` | What this report contains, and which of the tools below apply to it. Returns a handle the others take. |
-| `top_ops` | The costliest operations by device time, op-to-op gap, total percentage, FLOPS, DRAM bandwidth or core count, over the whole report or a signpost range. Each row carries the profiler `operation_id` it links to, when the handle holds both reports — see below. `include` adds the fields that say why an operation took its time. |
+| `top_ops` | The costliest operations by device time, op-to-op gap, total percentage, FLOPS, DRAM bandwidth or core count, over the whole report or a signpost range. Each row carries the profiler `operation_id` it links to, when the handle holds both reports — see below. `include` adds the fields that say why an operation took its time, and the performance view's heuristic flags. |
 | `program_cache` | Whether programs were built again rather than reused: per op code, its calls, distinct programs, and how many repeat calls hit or missed the program cache. |
 | `zone_timings` | Per-zone, per-RISC totals from `profile_log_device.csv` — firmware and kernel phases, as measured on device. |
 | `diff_reports` | Per-operation-code deltas between two reports, largest movement first, over the whole reports or one signpost range in both. |
@@ -258,6 +258,9 @@ any of these groups:
 - `cache`: the program hash, whether the program cache held it, and the global call count.
 - `kernels`: the compute and data-movement kernel sources and their hashes, as lists.
 - `advice`: tt-perf-report's advice for the operation, which today covers matmuls.
+- `flags`: the performance view's heuristic flags for the operation — `dram_bound`,
+  `low_utilisation`, `underutilised_cores` and `recompute_candidate` — each with the figures
+  it fired on. See below.
 
 Times in these groups are microseconds, like `device_time`, although the CSV records most
 of them in nanoseconds. They come from the same merged row as the rest of it: for an
@@ -285,6 +288,66 @@ fills it on the tt-metal that wrote the report. A field empty on some rows only 
 one those operations do not have, such as a block size on an operation that is not a
 matmul; the `noc` fields are filled only for the operations tt-metal matched to its NoC
 traces.
+
+**`flags` are the performance view's heuristic flags, with their evidence.** Asked for
+them, every row carries `flags`, a list in the order the performance view shows them and
+empty when none applies, and the `total_percent` that gates the first three of them. The
+answer's `flag_basis` says what they were read against. Each entry names its `flag` and
+the figures behind it, in place of the view's display text, and repeats no field the row
+already carries:
+
+- `dram_bound`: DRAM bandwidth is the likely bottleneck. `reason` is `bound_dram` when
+  tt-perf-report's `bound` is `DRAM`, or `slow_dram_above_flops` when it is `SLOW` and DRAM
+  is a larger percentage of its peak than FLOPs are; `dram_percent` and `flops_percent` are
+  the two percentages.
+- `low_utilisation`: `core_utilisation_percent` is below 30%, cut rather than rounded to
+  three places so a figure under the threshold never reads as at it. It is the perf model's
+  ideal time over the device time, scaled by the cores the operation could have used over
+  the cores it did. `roofline_modelled` is false when tt-perf-report has no roofline model
+  for the operation (`bound_analysis` `none`), so the ideal time it is compared against is
+  less reliable, and null when the report does not say.
+- `underutilised_cores`: the row's `cores` are fewer than a quarter of `core_capacity`,
+  which is the row's own available cores (`core_capacity_from` `available_cores`) or, for a
+  row without them, the device's (`max_cores`).
+- `recompute_candidate`: a repeat call of a program that missed the program cache — a
+  repeat miss, as `program_cache` counts one. The `cache` group's `program_hash` names the
+  program.
+
+The first three apply only to an operation whose `total_percent` is at least 0.5, so they
+move with a signpost range, over which tt-perf-report recomputes `total_percent`, as the
+view's move with its signpost filter. None applies to a signpost or a host operation.
+Whether a row is its program's first call is decided over the whole report, as
+`program_cache` decides it, even when a range is read: the view decides it over the rows it
+shows, so there a program first called before the window reads as first called inside it.
+
+`flag_basis.flagged_rows` counts each flag over every row the answer read — the whole
+report or the signpost range for `top_ops`, every row of the operation for
+`operation_detail` — so a flag on a row past the cap is not missed. When every repeat call
+in the report that recorded a cache result missed, `flag_basis.caveat` carries the caveat
+`program_cache` gives: that is what a run with the program cache disabled records, so
+check whether it was before reading each recompute candidate as a program built again.
+`flag_basis.note` repeats the one difference from the view, below.
+
+`flag_basis.max_cores` is the device's core count, read where the web application reads it,
+through the same reader as `/api/performance/device-log/meta`: `Max Compute Cores` on the
+device log's first line (`max_cores_source` `device_log`); else the default for the device
+log's `architecture`, or Wormhole's when there is no device log or it names no architecture
+the application knows (`architecture_default`); or, where it is more, the most cores any row
+of the report used (`report_rows`). A count of 0 falls back to Wormhole's
+(`fallback_default`). The rows that fallback reads are the whole report's even for a ranged
+read, since a window does not change the device, where the view reads the rows it shows.
+
+One flag deliberately differs from the view's. The view reads tt-metal's 1 ns ideal-time
+placeholder, described above, as a modelled time, which against an operation's real
+duration gives a utilisation near zero, so it flags low utilisation on operations the
+model never modelled ([#2162](https://github.com/tenstorrent/ttnn-visualizer/issues/2162)):
+across ten local and demo captures, 166 of its 239 low-utilisation flags. Here a 1 ns ideal
+time never flags `low_utilisation`. Every other flag on those captures is the view's.
+
+The view's other two flags are not in the list, because other tools answer them in more
+detail: an allocation failure is `errors`' (and `operation_detail`'s `error`), and a likely
+DRAM fallback is `dram_fallbacks`' (and `operation_detail`'s `dram_fallback`). Recompute
+candidates are also counted per op code by `program_cache`.
 
 **`program_cache` says whether programs were built again.** A row is its program's first
 call when no earlier row in the report carries its program hash, and a repeat call

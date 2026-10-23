@@ -6,6 +6,7 @@ import csv
 import json
 import logging
 import os
+import re
 import sys
 import tempfile
 import traceback
@@ -20,6 +21,7 @@ from typing import (
     Dict,
     List,
     Literal,
+    NamedTuple,
     Optional,
     Set,
     Tuple,
@@ -374,6 +376,33 @@ class NPEQueries:
                 return json.load(f)
 
 
+class DeviceLogMeta(NamedTuple):
+    """What `/api/performance/device-log/meta` serves of the device log's first line."""
+
+    architecture: Optional[str] = None
+    frequency: Optional[int] = None
+    # Null on captures whose first line names no count, which most older ones are.
+    max_cores: Optional[int] = None
+
+
+# Searched for anywhere on the line, so a missing comma or a leading BOM still reads.
+_META_ARCHITECTURE = re.compile(r"ARCH:\s*([\w\d_]+)")
+_META_FREQUENCY = re.compile(r"CHIP_FREQ\[MHz\]:\s*(\d+)")
+_META_MAX_CORES = re.compile(r"Max Compute Cores:\s*(\d+)")
+
+
+def parse_device_meta(line: str) -> DeviceLogMeta:
+    """The architecture, clock and core count a device log's first line names."""
+    architecture = _META_ARCHITECTURE.search(line)
+    frequency = _META_FREQUENCY.search(line)
+    max_cores = _META_MAX_CORES.search(line)
+    return DeviceLogMeta(
+        architecture=architecture.group(1) if architecture else None,
+        frequency=int(frequency.group(1)) if frequency else None,
+        max_cores=int(max_cores.group(1)) if max_cores else None,
+    )
+
+
 class DeviceLogProfilerQueries:
     DEVICE_LOG_FILE = "profile_log_device.csv"
     # Only the columns something downstream depends on. Everything else in the
@@ -544,6 +573,20 @@ class DeviceLogProfilerQueries:
             if separator:
                 metadata[key.strip()] = value.strip()
         return metadata
+
+    @classmethod
+    def read_device_meta(cls, instance: Instance) -> DeviceLogMeta:
+        """The device log's first line as `/api/performance/device-log/meta` reads it.
+
+        The route and the agent's flags read the device's core count through this one
+        reader, so they cannot disagree about a device. Decoded leniently: a stray byte
+        anywhere in the first block of the file must not cost the line.
+        """
+        if not instance.performance_path:
+            raise PerformanceReportNotLoadedException()
+        path = Path(instance.performance_path, cls.DEVICE_LOG_FILE)
+        with open(path, "r", encoding="utf-8", errors="ignore") as handle:
+            return parse_device_meta(handle.readline().strip())
 
     def query_zone_summary(
         self, limit: Optional[int] = None

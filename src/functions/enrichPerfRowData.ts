@@ -62,6 +62,7 @@ export const getOpIdByPerfId = (opIdsMap: { perfId?: string; opId: number }[]): 
 // Converts the raw string-based rows produced by tt-perf-report (via the backend CSV parse) into
 // the typed numeric rows the performance table renders. Keep the parsing here aligned with the
 // columns tt-perf-report emits so the table reflects the same data.
+// The fields the heuristic flags read are mirrored as `typed_row` in `backend/ttnn_visualizer/agent/perf_flags.py`.
 export const enrichRowData = (
     rows: PerfTableRow[],
     opIdsMap: { perfId?: string; opId: number }[],
@@ -123,6 +124,7 @@ export const enrichRowData = (
     });
 
     // Mark which rows are the first occurrence of each hash
+    // Mirrored as `program_calls` in `backend/ttnn_visualizer/agent/perf_flags.py`.
     const hashFirstOccurrence = new Map<string | null, boolean>();
     for (const row of typedRows) {
         if (row.hash && !hashFirstOccurrence.has(row.hash)) {

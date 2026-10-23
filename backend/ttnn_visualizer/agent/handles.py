@@ -48,6 +48,11 @@ class CacheVariant(str, Enum):
     SOURCE = "source"
     # The detail fields no row of the whole report carries, read once per handle.
     EMPTY_DETAIL_FIELDS = "empty_detail_fields"
+    # The device's cores and the report's first calls, which the `flags` group reads.
+    PERF_FLAG_INPUTS = "perf_flag_inputs"
+    # Each flag's count by signpost range, kept apart from the scoped snapshots so a
+    # count never evicts a report.
+    FLAGGED_ROWS = "flagged_rows"
     # Likely DRAM fallbacks by rank, which every `operation_detail` call reads.
     DRAM_FALLBACKS = "dram_fallbacks"
     # The L1 peak replay by rank, which reads every operation and captured graph.

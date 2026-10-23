@@ -7,6 +7,7 @@ import { TypedPerfTableRow } from '../model/PerfTable';
 import { stringToArchitecture } from './stringToArchitecture';
 
 // Core counts don't match documentation exactly because there are 1 or 2 rows of harvested cores, so they are not considered as working cores
+// Mirrored as `_CORE_COUNT` in `backend/ttnn_visualizer/agent/perf_flags.py`.
 const CORE_COUNT: Record<Exclude<DeviceArchitecture, DeviceArchitecture.UNKNOWN>, number> = {
     [DeviceArchitecture.GRAYSKULL]: 108,
     [DeviceArchitecture.WORMHOLE]: 64,
@@ -31,6 +32,7 @@ function getArchitectureDefaultCores(architecture: DeviceArchitecture): number {
     return CORE_COUNT[architecture];
 }
 
+// Mirrored as `core_count` in `backend/ttnn_visualizer/agent/perf_flags.py`.
 function getCoreCount(architecture: DeviceArchitecture, data: TypedPerfTableRow[]): number {
     const architectureDefault = getArchitectureDefaultCores(architecture);
     let highestCoreCount = 0;
@@ -50,7 +52,10 @@ function getCoreCount(architecture: DeviceArchitecture, data: TypedPerfTableRow[
     return highestCoreCount > architectureDefault ? highestCoreCount : architectureDefault;
 }
 
-/** Resolve device capacity for utilisation heuristics and UI core count display. */
+/**
+ * Resolve device capacity for utilisation heuristics and UI core count display.
+ * Mirrored as `resolve_max_cores` in `backend/ttnn_visualizer/agent/perf_flags.py`.
+ */
 export function resolveMaxCores(deviceMeta: DeviceMetaLike | null | undefined, rows: TypedPerfTableRow[]): number {
     // The device log's raw `ARCH:` token: normalised, so an unrecognised one still honours the rows' core counts.
     const architecture = stringToArchitecture(deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE);

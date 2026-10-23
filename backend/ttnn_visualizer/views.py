@@ -1416,25 +1416,6 @@ def get_performance_data_raw(instance: Instance):
 @api.route("/performance/device-log/meta", methods=["GET"])
 @with_instance
 def get_performance_device_meta(instance: Instance):
-    def get_first_line(file_path: Path) -> str:
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-            return f.readline().strip()
-
-    def parse_arch_and_freq(line: str):
-        arch_match = re.search(r"ARCH:\s*([\w\d_]+)", line)
-        freq_match = re.search(r"CHIP_FREQ\[MHz\]:\s*(\d+)", line)
-        cores_match = re.search(r"Max Compute Cores:\s*(\d+)", line)
-
-        architecture = arch_match.group(1) if arch_match else None
-        frequency = int(freq_match.group(1)) if freq_match else None
-        max_cores = int(cores_match.group(1)) if cores_match else None
-
-        return {
-            "architecture": architecture,
-            "frequency": frequency,
-            "max_cores": max_cores,
-        }
-
     if not instance.performance_path:
         raise PerformanceReportNotLoadedException()
 
@@ -1449,9 +1430,7 @@ def get_performance_device_meta(instance: Instance):
         return response_not_found()
 
     try:
-        first_line = get_first_line(file_path)
-        meta = parse_arch_and_freq(first_line)
-        return jsonify(meta)
+        return jsonify(DeviceLogProfilerQueries.read_device_meta(instance)._asdict())
 
     except Exception as e:
         logger.exception("Failed to parse device meta")
