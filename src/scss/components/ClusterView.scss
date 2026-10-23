@@ -126,6 +126,10 @@ $mmio-fill: rgba(colours.$tt-yellow, 0.18);
         border-top-color: colours.$tt-teal;
     }
 
+    .legend-line-unrouted {
+        border-top-style: dotted;
+    }
+
     .legend-multihost-tag {
         margin-left: auto;
         padding: 2px 8px;
@@ -201,8 +205,12 @@ $mmio-fill: rgba(colours.$tt-yellow, 0.18);
             // A spanning link that could not be routed round the chips, so its curve
             // may cross ones it does not touch; dotted to keep it from reading as
             // touching them. #1951
+            //
+            // Zero-length dashes with round caps draw dots one stroke-width across, so
+            // the gap is the period less the width: 5 at rest and 3.5 highlighted, so
+            // the line still reads as dotted when highlighted and at fit zoom.
             &.is-unrouted {
-                stroke-dasharray: 2 4;
+                stroke-dasharray: 0 7;
             }
 
             // Inter-host links styled distinctly from intra-host.

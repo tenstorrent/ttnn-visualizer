@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { CLUSTER_ETH_POSITION } from '../model/ClusterModel';
-import { CLUSTER_NODE_GRID_SIZE } from './clusterPositioning';
+import { MAX_PORTS_PER_EDGE } from './clusterPositioning';
 
 // Orthogonal routing for condensed-layout links that span more than one cell. A bezier
 // between two ports drew those links straight over every chip between them, because the
@@ -11,9 +11,6 @@ import { CLUSTER_NODE_GRID_SIZE } from './clusterPositioning';
 // leave through a blank row (the top pad, a group gutter, a host gutter, or one trailing
 // row) and run down a lane outside the grid edge. #1951
 
-/** Ports an edge holds cleanly: `getEthGridPosition` lays them out between the edge's two
- * corner cells. A routed edge stops taking ports here, and pass 2 avoids filling past it. */
-export const MAX_PORTS_PER_EDGE = CLUSTER_NODE_GRID_SIZE - 2;
 /** Spacing between neighbouring lanes, inside a blank row and outside the grid. */
 export const ROUTE_LANE_PITCH = 6;
 /** Distance from the grid edge, or from a chip edge, to the nearest lane. */
@@ -53,6 +50,8 @@ export type RoutePlan =
 
 export interface RoutingPlan {
     plans: Map<string, RoutePlan>;
+    /** Ids of the links offered that got no plan, so the caller keeps their curves. */
+    unrouted: Set<string>;
     /** A route uses the row below the last one, so the caller has to add it to the grid. */
     needsTrailingRow: boolean;
 }
@@ -85,7 +84,8 @@ export const getFreeRows = (cells: GridCell[], totalRows: number): Set<number> =
  * `0 ↔ 8` back up the column through chip 4.
  *
  * A link that cannot be routed — a diagonal, an interior row with no blank row beside it, or
- * every candidate edge full — is left out, and the caller keeps its curve.
+ * every candidate edge full — gets no plan and is listed in `unrouted` instead, so this is the
+ * one place that decides what counts as a failed route.
  */
 export const planRoutes = (
     links: RoutingLinkInput[],
@@ -192,7 +192,8 @@ export const planRoutes = (
         }
     }
 
-    return { plans, needsTrailingRow };
+    const unrouted = new Set(links.map(({ id }) => id).filter((id) => !plans.has(id)));
+    return { plans, unrouted, needsTrailingRow };
 };
 
 export interface RoutePort {

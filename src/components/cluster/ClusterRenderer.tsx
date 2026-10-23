@@ -12,13 +12,7 @@ import { stringToArchitecture } from '../../functions/stringToArchitecture';
 import { useGetClusterTopology } from '../../hooks/useAPI';
 import { KEEPS_BUFFER_FOCUS_CLASS } from '../../definitions/BufferFocus';
 import { getChipDesign } from '../../functions/getChipDesign';
-import {
-    GridCell,
-    MAX_PORTS_PER_EDGE,
-    RoutePlan,
-    buildRoutePaths,
-    planRoutes,
-} from '../../functions/clusterLinkRouting';
+import { GridCell, RoutePlan, buildRoutePaths, planRoutes } from '../../functions/clusterLinkRouting';
 import {
     FALLBACK_PER_HOST_COLS,
     getCondensedHostLayout,
@@ -39,6 +33,7 @@ import {
     CHIP_GAP,
     CHIP_PADDING,
     CLUSTER_NODE_GRID_SIZE,
+    MAX_PORTS_PER_EDGE,
     ZOOM_MAX,
     ZOOM_MIN,
     ZOOM_PIXEL_SCALE,
@@ -126,6 +121,8 @@ interface ClusterRenderModel {
     // Unscaled stage width, margins included. Fit-to-screen and the stage both size from
     // it: if they disagree, fit-to-screen clips the left lanes again. #1951
     stageWidth: number;
+    // Some link is drawn in the dotted unrouted style, so the legend explains it.
+    hasUnroutedLink: boolean;
     // Layout actually applied (may fall back to `condensed` if `mesh` was
     // requested but no host has usable mesh data).
     layoutMode: ClusterLayoutMode;
@@ -364,6 +361,8 @@ function buildClusterRenderModel(
     const routeId = (uidA: string, uidB: string) => `${uidA}__${uidB}`;
     const routePlans = new Map<string, RoutePlan>();
     const routedEdgeByUid = new Map<string, CLUSTER_ETH_POSITION>();
+    // Offered to the router and refused; drawn as a dotted curve. Empty in mesh mode.
+    let unroutedIds = new Set<string>();
     if (!useMeshCoords) {
         const cellOf = (chip: RenderChip): GridCell => ({
             key: chip.key,
@@ -373,7 +372,7 @@ function buildClusterRenderModel(
         const spanning = resolvedLinks
             .filter(({ a, b }) => isSpanning(a, b))
             .map((link) => ({ ...link, id: routeId(link.uidA, link.uidB) }));
-        const { plans, needsTrailingRow } = planRoutes(
+        const { plans, unrouted, needsTrailingRow } = planRoutes(
             spanning.map(({ id, a, b }) => ({ id, a: cellOf(a), b: cellOf(b) })),
             renderChips.map(cellOf),
             totalRows,
@@ -387,6 +386,7 @@ function buildClusterRenderModel(
                 routedEdgeByUid.set(uidB, plan.edgeB);
             }
         });
+        unroutedIds = unrouted;
         if (needsTrailingRow) {
             totalRows += 1;
         }
@@ -562,12 +562,14 @@ function buildClusterRenderModel(
             }
             // Routing packs ports onto outward edges; an edge past its slots would push a port
             // onto the corner cell or off the chip. Move to the next edge with room, outward
-            // first, and keep the choice only when every edge is full. #1951
+            // first, then one facing a direct neighbour, and keep the choice only when every
+            // edge is full. #1951
             if (routedEdge === undefined && isFull(chosen)) {
+                const byPreference = [...outwardForChip, ...perp, ...ALL_EDGES];
                 chosen =
-                    [...outwardForChip, ...perp, ...ALL_EDGES].find(
-                        (edge) => !isFull(edge) && !directNeighbourEdges.has(edge),
-                    ) ?? chosen;
+                    byPreference.find((edge) => !isFull(edge) && !directNeighbourEdges.has(edge)) ??
+                    byPreference.find((edge) => !isFull(edge)) ??
+                    chosen;
             }
             if (!ethPosition.has(chosen)) {
                 ethPosition.set(chosen, []);
@@ -581,7 +583,17 @@ function buildClusterRenderModel(
         ethPosition.forEach((ports, position) => {
             const isVerticalEdge = position === CLUSTER_ETH_POSITION.LEFT || position === CLUSTER_ETH_POSITION.RIGHT;
             const partnerAxis = isVerticalEdge ? CLUSTER_COORDS.Y : CLUSTER_COORDS.X;
+            // An edge holding more than its slots spills its last ports onto the corner cell
+            // and off the chip; routed ports go first then, so the spill is never a routed
+            // path that ends off its chip. #1951
+            const isOverfull = ports.length > MAX_PORTS_PER_EDGE;
             const sorted = [...ports].sort((portA, portB) => {
+                if (isOverfull) {
+                    const routedDelta = Number(routedEdgeByUid.has(portB.uid)) - Number(routedEdgeByUid.has(portA.uid));
+                    if (routedDelta !== 0) {
+                        return routedDelta;
+                    }
+                }
                 const partnerA = clusterChip.connectedChipsByEthId.get(portA.uid);
                 const partnerB = clusterChip.connectedChipsByEthId.get(portB.uid);
                 if (partnerA && partnerB) {
@@ -680,14 +692,7 @@ function buildClusterRenderModel(
             chipKeyB: b.key,
             interHost,
             pathD: routedPath ?? (useCurve ? swooshPath(portA, portB) : undefined),
-            // A diagonal was never offered a route (the router only handles one row or one
-            // column), so its curve is the same as before #1951 and is not marked.
-            unrouted:
-                !useMeshCoords &&
-                longHaul &&
-                routedPath === undefined &&
-                (a.coords[CLUSTER_COORDS.X] === b.coords[CLUSTER_COORDS.X] ||
-                    a.coords[CLUSTER_COORDS.Y] === b.coords[CLUSTER_COORDS.Y]),
+            unrouted: unroutedIds.has(routeId(uidA, uidB)),
         });
     };
 
@@ -728,6 +733,7 @@ function buildClusterRenderModel(
             // The outside lanes can reach further than a stride on a busy grid.
             svgPad: Math.max(Math.round(stride), routes.margin),
             routeMargin: routes.margin,
+            hasUnroutedLink: linkSegments.some((segment) => segment.unrouted),
             stageWidth: contentWidth + 2 * routes.margin,
             layoutMode,
             isMeshAvailable,
@@ -917,6 +923,7 @@ function ClusterRenderer() {
         svgPad,
         routeMargin,
         stageWidth,
+        hasUnroutedLink,
         isMultiHost,
         worldSize,
         layoutMode: activeLayoutMode,
@@ -1023,6 +1030,11 @@ function ClusterRenderer() {
                 <span className='legend-item'>
                     <span className='legend-line' /> Ethernet link
                 </span>
+                {hasUnroutedLink && (
+                    <span className='legend-item'>
+                        <span className='legend-line legend-line-unrouted' /> Link not routed round chips
+                    </span>
+                )}
                 {isMultiHost && (
                     <>
                         <span className='legend-item'>

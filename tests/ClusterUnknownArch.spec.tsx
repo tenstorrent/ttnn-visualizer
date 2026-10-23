@@ -6,6 +6,7 @@ import { cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ClusterRenderer from '../src/components/cluster/ClusterRenderer';
 import { ClusterTopology, IntraHostEthernetLink } from '../src/model/ClusterModel';
+import { ResizeObserverStub, topologyQueryResult } from './helpers/clusterTopologyFixtures';
 
 // Cluster placement and links come from the cluster descriptor; the arch descriptor is
 // only enrichment. An unrecognised arch used to blank the whole view because port uids
@@ -86,31 +87,13 @@ vi.mock('react-router', async () => ({
 }));
 vi.mock('../src/hooks/useAPI', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../src/hooks/useAPI')>()),
-    useGetClusterTopology: () => ({
-        data: topologyOverride ?? twoChipTopology(clusterArch),
-        isLoading: false,
-        isError: false,
-        error: null,
-    }),
+    useGetClusterTopology: () => topologyQueryResult(topologyOverride ?? twoChipTopology(clusterArch)),
 }));
 
 const ports = () => [...document.querySelectorAll('.eth')];
 const portLabels = () => ports().map((el) => el.querySelector('span')?.textContent ?? '');
 const portTitles = () => ports().map((el) => el.getAttribute('title') ?? '');
 const links = () => [...document.querySelectorAll('.cluster-link')];
-
-// The component observes its scroll container to fit the topology; jsdom has no
-// ResizeObserver and the fitted size is irrelevant to what these tests assert. Has to be
-// a class — vitest rejects an arrow function used as a constructor mock.
-/* eslint-disable class-methods-use-this -- no-op stub has nothing to hold */
-class ResizeObserverStub {
-    observe() {}
-
-    unobserve() {}
-
-    disconnect() {}
-}
-/* eslint-enable class-methods-use-this */
 
 beforeEach(() => {
     vi.stubGlobal('ResizeObserver', ResizeObserverStub);

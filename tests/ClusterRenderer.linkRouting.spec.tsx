@@ -5,12 +5,12 @@
 import { cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ClusterRenderer from '../src/components/cluster/ClusterRenderer';
-import { CHIP_GAP } from '../src/functions/clusterPositioning';
+import { CHIP_GAP, CLUSTER_NODE_GRID_SIZE } from '../src/functions/clusterPositioning';
 import type { ClusterTopology } from '../src/model/ClusterModel';
+import { ResizeObserverStub, hostOf, topologyOfHosts, topologyQueryResult } from './helpers/clusterTopologyFixtures';
 
 // Links that span more than one cell used to be drawn over every chip between their ends.
-// These render the issue's shape and check the drawn geometry against the chips. Same
-// harness as ClusterCondensedPlacement.spec.tsx. #1951
+// These render the issue's shape and check the drawn geometry against the chips. #1951
 let topologyOverride: ClusterTopology | null = null;
 
 vi.mock('react-router', async () => ({
@@ -19,23 +19,8 @@ vi.mock('react-router', async () => ({
 }));
 vi.mock('../src/hooks/useAPI', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../src/hooks/useAPI')>()),
-    useGetClusterTopology: () => ({
-        data: topologyOverride,
-        isLoading: false,
-        isError: false,
-        error: null,
-    }),
+    useGetClusterTopology: () => topologyQueryResult(topologyOverride),
 }));
-
-/* eslint-disable class-methods-use-this -- no-op stub has nothing to hold */
-class ResizeObserverStub {
-    observe() {}
-
-    unobserve() {}
-
-    disconnect() {}
-}
-/* eslint-enable class-methods-use-this */
 
 const REPORTED_WIDTH = 400;
 
@@ -67,8 +52,8 @@ interface HostSpec {
     mesh?: boolean;
 }
 
+/** Channels are numbered per chip in the order `links` lists them. */
 const topologyOf = ({ chipCount, links, slots, mesh }: HostSpec): ClusterTopology => {
-    const chipIds = Array.from({ length: chipCount }, (_, chip) => chip);
     const nextChannel = new Map<number, number>();
     const channelOf = (chip: number) => {
         const chan = nextChannel.get(chip) ?? 0;
@@ -81,26 +66,9 @@ const topologyOf = ({ chipCount, links, slots, mesh }: HostSpec): ClusterTopolog
             { chip: b, chan: channelOf(b) },
         ]),
     );
-    return {
-        isMultiHost: false,
-        worldSize: 1,
-        unresolvedRemoteCount: 0,
-        hosts: [
-            {
-                rank: 0,
-                descriptor: {
-                    arch: Object.fromEntries(chipIds.map((chip) => [chip, 'wormhole_b0'])),
-                    chip_unique_ids: Object.fromEntries(chipIds.map((chip) => [chip, String(chip)])),
-                    chips_with_mmio: [{ 0: 0 }],
-                    ethernet_connections: connections,
-                    ...(slots ? { asic_locations: Object.fromEntries(chipIds.map((c) => [c, (c % 8) + 1])) } : {}),
-                },
-                meshChips: mesh ? Object.fromEntries(chipIds.map((c) => [c, [c, 0, 0, 0]])) : {},
-            },
-        ],
+    return topologyOfHosts([hostOf({ rank: 0, chipCount, slots, mesh, ethernetConnections: connections })], {
         intraHostLinks: connections.map(([a, b]) => ({ rank: 0, a, b })),
-        interHostLinks: [],
-    } as unknown as ClusterTopology;
+    });
 };
 
 // The issue's UBB: four groups of eight joined in a ring by same-slot links, two channels
@@ -113,42 +81,30 @@ const UBB_LINKS: [number, number, number][] = [
     ]),
 ];
 
-/** Two slotted 16-chip hosts, each with its own same-slot links, and one link between them. */
-const twoHostTopology = ({ ringChannels = 1, crossHostChannels = 1 } = {}): ClusterTopology => {
-    const hosts = [0, 1].map((rank) => {
-        const chipIds = Array.from({ length: 16 }, (_, chip) => chip);
-        return {
-            rank,
-            descriptor: {
-                arch: Object.fromEntries(chipIds.map((chip) => [chip, 'wormhole_b0'])),
-                chip_unique_ids: Object.fromEntries(chipIds.map((chip) => [chip, String(rank * 100 + chip)])),
-                chips_with_mmio: [{ 0: 0 }],
-                ethernet_connections: [],
-                asic_locations: Object.fromEntries(chipIds.map((c) => [c, (c % 8) + 1])),
-            },
-            meshChips: {},
-        };
-    });
-    return {
-        isMultiHost: true,
-        worldSize: 2,
-        unresolvedRemoteCount: 0,
-        hosts,
-        intraHostLinks: [0, 1].flatMap((rank) =>
-            Array.from({ length: 8 }, (_, chip) => chip).flatMap((chip) =>
-                Array.from({ length: ringChannels }, (_, chan) => ({
-                    rank,
-                    a: { chip, chan },
-                    b: { chip: chip + 8, chan },
-                })),
+/**
+ * Two slotted 16-chip hosts, each with its own same-slot links, and links between their chip 0s.
+ * The cross-host links take the lower channels, so channel order alone cannot place the routed
+ * ports first.
+ */
+const twoHostTopology = ({ ringChannels = 1, crossHostChannels = 1 } = {}): ClusterTopology =>
+    topologyOfHosts(
+        [0, 1].map((rank) => hostOf({ rank, chipCount: 16, slots: true })),
+        {
+            intraHostLinks: [0, 1].flatMap((rank) =>
+                Array.from({ length: 8 }, (_, chip) => chip).flatMap((chip) =>
+                    Array.from({ length: ringChannels }, (_, chan) => ({
+                        rank,
+                        a: { chip, chan: crossHostChannels + chan },
+                        b: { chip: chip + 8, chan },
+                    })),
+                ),
             ),
-        ),
-        interHostLinks: Array.from({ length: crossHostChannels }, (_, i) => ({
-            a: { rank: 0, chip: 0, chan: ringChannels + i, chipUniqueId: '0' },
-            b: { rank: 1, chip: 0, chan: ringChannels + i, chipUniqueId: '100' },
-        })),
-    } as unknown as ClusterTopology;
-};
+            interHostLinks: Array.from({ length: crossHostChannels }, (_, chan) => ({
+                a: { rank: 0, chip: 0, chan, chipUniqueId: '0' },
+                b: { rank: 1, chip: 0, chan, chipUniqueId: '100' },
+            })),
+        },
+    );
 
 interface Rect {
     id: string;
@@ -256,6 +212,7 @@ describe('cluster link routing', () => {
             crossings.filter(({ crossed }) => crossed.length > 0).map(({ ends, crossed }) => ({ ends, crossed })),
         ).toEqual([]);
         expect(document.querySelectorAll('.is-unrouted')).toHaveLength(0);
+        expect(document.querySelector('.legend-line-unrouted')).toBeNull();
     });
 
     it('highlights only the hovered chip’s links, none of them over another chip', () => {
@@ -296,6 +253,24 @@ describe('cluster link routing', () => {
         // One lane per link would need 32; sharing lanes between spans that do not meet needs 20.
         expect(leftLanes.size).toBeGreaterThan(0);
         expect(leftLanes.size).toBeLessThanOrEqual(20);
+
+        // Two spans sharing a lane must stay half a stride apart, or they read as one line.
+        const stride = parseFloat(document.querySelector<HTMLElement>('.chip')!.style.width) + CHIP_GAP;
+        const spansByLane = new Map<number, [number, number][]>();
+        document.querySelectorAll('path.cluster-link').forEach((path) => {
+            const numbers = pathNumbers(path);
+            for (let i = 0; i + 3 < numbers.length; i += 2) {
+                const [x1, y1, x2, y2] = numbers.slice(i, i + 4);
+                if (x1 === x2 && (x1 < 0 || x1 > contentWidth)) {
+                    spansByLane.set(x1, [...(spansByLane.get(x1) ?? []), [Math.min(y1, y2), Math.max(y1, y2)]]);
+                }
+            }
+        });
+        expect(spansByLane.size).toBeGreaterThan(0);
+        spansByLane.forEach((spans) => {
+            const sorted = [...spans].sort(([startA], [startB]) => startA - startB);
+            sorted.slice(1).forEach(([start], i) => expect(start - sorted[i][1]).toBeGreaterThan(stride / 2));
+        });
     });
 
     it('leaves mesh layouts on their curves, with no stage margin', () => {
@@ -333,15 +308,16 @@ describe('cluster link routing', () => {
         expect(parseFloat(cluster.style.height)).toBe(6 * size + 5 * CHIP_GAP);
     });
 
-    it('leaves a diagonal link on its old curve, unmarked', () => {
-        // The router handles one row or one column; a diagonal was never offered a route,
-        // so it is drawn as it was before #1951 rather than flagged as a failure.
+    it('marks a diagonal link, which the router cannot route, and explains it in the legend', () => {
+        // The router handles one row or one column, so a diagonal keeps a curve that can cross
+        // chips, and is dotted like any other link it could not route.
         topologyOverride = topologyOf({ chipCount: 12, links: [[0, 5, 1]] });
         render(<ClusterRenderer />);
 
         const [diagonal] = [...document.querySelectorAll('.cluster-link')];
         expect(diagonal.getAttribute('d')).toContain('C');
-        expect(diagonal.classList.contains('is-unrouted')).toBe(false);
+        expect(diagonal.classList.contains('is-unrouted')).toBe(true);
+        expect(document.querySelector('.legend-line-unrouted')).not.toBeNull();
     });
 
     it('keeps every port on its chip when one edge is asked for more than it holds', () => {
@@ -378,13 +354,14 @@ describe('cluster link routing', () => {
 
     it('keeps routed and unrouted ports sharing an edge within its slots', () => {
         // Chip 8's routed links to chips 0 and 16 fill its LEFT edge (two channels each); the
-        // diagonal to chip 25 is never routed and pass 2 would have picked LEFT too.
+        // diagonal to chip 25 is never routed and pass 2 would have picked LEFT too. Listed
+        // first, it takes chip 8's lowest channels, so only pass 2's order places it last.
         topologyOverride = topologyOf({
             chipCount: 32,
             links: [
+                [8, 25, 2],
                 [8, 0, 2],
                 [8, 16, 2],
-                [8, 25, 2],
             ],
             slots: true,
         });
@@ -396,6 +373,100 @@ describe('cluster link routing', () => {
             ['0-8', '0-16'],
             ['0-8', '0-25'],
         ]);
+    });
+
+    /** Ports on a corner cell or past the chip's port grid, where an over-full edge spills them. */
+    const misplacedPortCount = () =>
+        [...document.querySelectorAll<HTMLElement>('.chip .eth')].filter((port) => {
+            const [x, y] = [port.style.gridColumn, port.style.gridRow].map(Number);
+            const isEdgeCell = (value: number) => value === 1 || value === CLUSTER_NODE_GRID_SIZE;
+            const isOffGrid = (value: number) => value < 1 || value > CLUSTER_NODE_GRID_SIZE;
+            return (isEdgeCell(x) && isEdgeCell(y)) || isOffGrid(x) || isOffGrid(y);
+        }).length;
+
+    it('keeps every port in its edge’s slots with a four-channel ring pair', () => {
+        // The issue's shape with two channels on every pair and four on 25 <-> 1. Chip 25's
+        // only routable edge is TOP, and its routed links fill it; pass 2 used to keep piling
+        // ports onto it, pushing 17 <-> 25's onto the corner cell and chip 26.
+        const links = UBB_LINKS.map(([a, b, channels]): [number, number, number] => [
+            a,
+            b,
+            a === 25 && b === 1 ? 4 : Math.max(channels, 2),
+        ]);
+        topologyOverride = topologyOf({ chipCount: 32, links, slots: true });
+        render(<ClusterRenderer />);
+
+        expect(misplacedPortCount()).toBe(0);
+        expectPortsOnTheirChips(links.map(([a, b]) => [`0-${a}`, `0-${b}`]));
+    });
+
+    it('gives routed ports the first slots of an edge that overflows anyway', () => {
+        // Id order, four rows. Chip 4's TOP, BOTTOM and RIGHT edges are full of direct
+        // neighbours and its routed link to chip 12 fills LEFT, so the diagonal to chip 1 has
+        // nowhere left. Its partner sits higher than chip 12, so ordering by partner alone
+        // would put the routed ports past the slots.
+        topologyOverride = topologyOf({
+            chipCount: 16,
+            links: [
+                [4, 0, 4],
+                [4, 8, 4],
+                [4, 5, 4],
+                [4, 12, 4],
+                [4, 1, 2],
+            ],
+        });
+        render(<ClusterRenderer />);
+
+        const routed = linkCrossings().filter(({ ends }) => ends.includes('0-12'));
+        expect(routed).toHaveLength(4);
+        routed.forEach(({ ends, crossed, element }) => {
+            expect(ends).toContain('0-4');
+            expect(crossed).toEqual([]);
+            expect(element.classList.contains('is-unrouted')).toBe(false);
+        });
+    });
+
+    it('moves an overflowing port to a free edge before one facing a direct neighbour', () => {
+        // Id order, three rows. Chip 4's six links to chip 6 cannot be routed and want LEFT;
+        // the fifth and sixth overflow it. TOP faces direct neighbour chip 0, BOTTOM faces
+        // chip 8 but nothing links them, so the overflow belongs on BOTTOM.
+        topologyOverride = topologyOf({
+            chipCount: 12,
+            links: [
+                [4, 0, 1],
+                [4, 6, 6],
+            ],
+        });
+        render(<ClusterRenderer />);
+
+        const chipFour = [...document.querySelectorAll('.chip')].find((cell) => chipIdOf(cell) === '0-4')!;
+        const portsOn = (edge: string) => chipFour.querySelectorAll(`.eth-position-${edge}`).length;
+        expect(portsOn('left')).toBe(4);
+        expect(portsOn('top')).toBe(1);
+        expect(portsOn('bottom')).toBe(2);
+    });
+
+    it('keeps every port in its edge’s slots on stacked hosts linked chip for chip', () => {
+        topologyOverride = topologyOfHosts(
+            [0, 1].map((rank) => hostOf({ rank, chipCount: 16 })),
+            {
+                intraHostLinks: [0, 1].flatMap((rank) =>
+                    Array.from({ length: 8 }, (_, chip) => chip).flatMap((chip) =>
+                        [2, 3].map((chan) => ({ rank, a: { chip, chan }, b: { chip: chip + 8, chan } })),
+                    ),
+                ),
+                interHostLinks: Array.from({ length: 16 }, (_, chip) => chip).flatMap((chip) =>
+                    [0, 1].map((chan) => ({
+                        a: { rank: 0, chip, chan, chipUniqueId: String(chip) },
+                        b: { rank: 1, chip, chan, chipUniqueId: String(100 + chip) },
+                    })),
+                ),
+            },
+        );
+        render(<ClusterRenderer />);
+
+        expect(linkCrossings()).toHaveLength(2 * 8 * 2 + 16 * 2);
+        expect(misplacedPortCount()).toBe(0);
     });
 
     it('keeps cross-host ports off an edge that routed links have filled', () => {

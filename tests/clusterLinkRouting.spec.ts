@@ -5,7 +5,6 @@
 import { describe, expect, it } from 'vitest';
 import {
     GridCell,
-    MAX_PORTS_PER_EDGE,
     ROUTE_LANE_CLEARANCE,
     ROUTE_LANE_PITCH,
     RoutedLinkInput,
@@ -13,6 +12,7 @@ import {
     getFreeRows,
     planRoutes,
 } from '../src/functions/clusterLinkRouting';
+import { MAX_PORTS_PER_EDGE } from '../src/functions/clusterPositioning';
 import { CLUSTER_ETH_POSITION } from '../src/model/ClusterModel';
 
 const { TOP, BOTTOM, LEFT, RIGHT } = CLUSTER_ETH_POSITION;
@@ -105,6 +105,19 @@ describe('planRoutes', () => {
         const { plans: lowerPlans } = planRoutes(lower, GROUPED, GROUPED_ROWS, 4);
         expect(lowerPlans.get(`l${MAX_PORTS_PER_EDGE - 1}`)).toMatchObject({ edgeA: BOTTOM, freeRow: 4 });
         expect(lowerPlans.has(`l${MAX_PORTS_PER_EDGE}`)).toBe(false);
+    });
+
+    it('lists every link it offered no plan as unrouted, diagonals included', () => {
+        const full = Array.from({ length: MAX_PORTS_PER_EDGE + 1 }, (_, i) => link(GROUPED, 4, 6, `l${i}`));
+        const { plans, unrouted } = planRoutes(
+            [link(GROUPED, 0, 5, 'diagonal'), link(GROUPED, 0, 8), ...full],
+            GROUPED,
+            GROUPED_ROWS,
+            4,
+        );
+
+        expect([...unrouted].sort()).toEqual(['diagonal', `l${MAX_PORTS_PER_EDGE}`]);
+        [...unrouted].forEach((id) => expect(plans.has(id)).toBe(false));
     });
 
     it('leaves a link out when no blank row is beside it', () => {
