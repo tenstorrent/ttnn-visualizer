@@ -32,15 +32,21 @@ export interface RoutingLinkInput {
 /** The side of the grid a column route's outside lane runs down. */
 export type RouteSide = CLUSTER_ETH_POSITION.LEFT | CLUSTER_ETH_POSITION.RIGHT;
 
+export enum ROUTE_PLAN_KIND {
+    STRAIGHT = 'straight',
+    ROW = 'row',
+    COLUMN = 'column',
+}
+
 export type RoutePlan =
     // Nothing sits between the two cells, so the direct line is already clear.
-    | { kind: 'straight'; edgeA: CLUSTER_ETH_POSITION; edgeB: CLUSTER_ETH_POSITION }
+    | { kind: ROUTE_PLAN_KIND.STRAIGHT; edgeA: CLUSTER_ETH_POSITION; edgeB: CLUSTER_ETH_POSITION }
     // Same row: both ends step into the same blank row, run across it and step back.
-    | { kind: 'row'; edgeA: CLUSTER_ETH_POSITION; edgeB: CLUSTER_ETH_POSITION; freeRow: number }
+    | { kind: ROUTE_PLAN_KIND.ROW; edgeA: CLUSTER_ETH_POSITION; edgeB: CLUSTER_ETH_POSITION; freeRow: number }
     // Same column: each end reaches the lane on `side`, directly or through the blank row
     // given for that end (`null` when its port opens straight onto the lane).
     | {
-          kind: 'column';
+          kind: ROUTE_PLAN_KIND.COLUMN;
           edgeA: CLUSTER_ETH_POSITION;
           edgeB: CLUSTER_ETH_POSITION;
           side: RouteSide;
@@ -124,7 +130,7 @@ export const planRoutes = (
             claim(near, nearEdge);
             claim(far, farEdge);
             const [edgeA, edgeB] = near === a ? [nearEdge, farEdge] : [farEdge, nearEdge];
-            plans.set(id, { kind: 'straight', edgeA, edgeB });
+            plans.set(id, { kind: ROUTE_PLAN_KIND.STRAIGHT, edgeA, edgeB });
         }
     };
 
@@ -167,7 +173,7 @@ export const planRoutes = (
                     const rowB = rowThrough(b, edgeB);
                     claim(a, edgeA, rowA);
                     claim(b, edgeB, rowB);
-                    plans.set(id, { kind: 'column', edgeA, edgeB, side, rowA, rowB });
+                    plans.set(id, { kind: ROUTE_PLAN_KIND.COLUMN, edgeA, edgeB, side, rowA, rowB });
                 }
             }
         } else if (a.y === b.y && a.x !== b.x) {
@@ -186,7 +192,7 @@ export const planRoutes = (
                     const freeRow = rowThrough(a, edge)!;
                     claim(a, edge, freeRow);
                     claim(b, edge, freeRow);
-                    plans.set(id, { kind: 'row', edgeA: edge, edgeB: edge, freeRow });
+                    plans.set(id, { kind: ROUTE_PLAN_KIND.ROW, edgeA: edge, edgeB: edge, freeRow });
                 }
             }
         }
@@ -269,9 +275,11 @@ export const buildRoutePaths = (links: RoutedLinkInput[], geometry: RouteGeometr
     const sideX = (side: RouteSide) => (side === CLUSTER_ETH_POSITION.LEFT ? 0 : contentWidth);
 
     // Step 1: horizontal runs inside blank rows, keyed by row and half.
+    type Endpoint = 'a' | 'b';
+    const runKey = (id: string, endpoint: Endpoint) => `${id}:${endpoint}`;
     interface Run extends Interval {
         id: string;
-        endpoint: 'a' | 'b';
+        endpoint: Endpoint;
         row: number;
         fromBelow: boolean;
     }
@@ -284,7 +292,7 @@ export const buildRoutePaths = (links: RoutedLinkInput[], geometry: RouteGeometr
     };
 
     for (const { id, plan, portA, portB } of links) {
-        if (plan.kind === 'row') {
+        if (plan.kind === ROUTE_PLAN_KIND.ROW) {
             addRun({
                 id,
                 endpoint: 'a',
@@ -293,7 +301,7 @@ export const buildRoutePaths = (links: RoutedLinkInput[], geometry: RouteGeometr
                 start: Math.min(portA.x, portB.x),
                 end: Math.max(portA.x, portB.x),
             });
-        } else if (plan.kind === 'column') {
+        } else if (plan.kind === ROUTE_PLAN_KIND.COLUMN) {
             const edgeX = sideX(plan.side);
             (
                 [
@@ -328,26 +336,29 @@ export const buildRoutePaths = (links: RoutedLinkInput[], geometry: RouteGeometr
             const y = run.fromBelow
                 ? rowTop + chipSize - ROUTE_LANE_CLEARANCE - lane * pitch
                 : rowTop + ROUTE_LANE_CLEARANCE + lane * pitch;
-            runY.set(`${run.id}:${run.endpoint}`, y);
+            runY.set(runKey(run.id, run.endpoint), y);
         });
     });
 
-    // Step 2: vertical lanes outside the grid, one set per side.
+    // Step 2: vertical lanes outside the grid, one set per side. A span runs between the y
+    // each end reaches the lane at: its run's y when it steps through a blank row, otherwise
+    // its port's own y. Step 3 draws from the same spans.
     interface Span extends Interval {
         link: RoutedLinkInput;
-        side: RouteSide;
         yA: number;
         yB: number;
     }
     const spansBySide = new Map<RouteSide, Span[]>();
+    const spanById = new Map<string, Span>();
     for (const link of links) {
-        if (link.plan.kind === 'column') {
-            const yA = runY.get(`${link.id}:a`) ?? link.portA.y;
-            const yB = runY.get(`${link.id}:b`) ?? link.portB.y;
-            const { side } = link.plan;
-            const spans = spansBySide.get(side) ?? [];
-            spans.push({ link, side, yA, yB, start: Math.min(yA, yB), end: Math.max(yA, yB) });
-            spansBySide.set(side, spans);
+        if (link.plan.kind === ROUTE_PLAN_KIND.COLUMN) {
+            const yA = runY.get(runKey(link.id, 'a')) ?? link.portA.y;
+            const yB = runY.get(runKey(link.id, 'b')) ?? link.portB.y;
+            const span: Span = { link, yA, yB, start: Math.min(yA, yB), end: Math.max(yA, yB) };
+            const spans = spansBySide.get(link.plan.side) ?? [];
+            spans.push(span);
+            spansBySide.set(link.plan.side, spans);
+            spanById.set(link.id, span);
         }
     }
 
@@ -373,7 +384,7 @@ export const buildRoutePaths = (links: RoutedLinkInput[], geometry: RouteGeometr
     // Step 3: paths.
     const pathById = new Map<string, string>();
     for (const { id, plan, portA, portB } of links) {
-        if (plan.kind === 'straight') {
+        if (plan.kind === ROUTE_PLAN_KIND.STRAIGHT) {
             pathById.set(
                 id,
                 toPath([
@@ -381,8 +392,8 @@ export const buildRoutePaths = (links: RoutedLinkInput[], geometry: RouteGeometr
                     [portB.x, portB.y],
                 ]),
             );
-        } else if (plan.kind === 'row') {
-            const y = runY.get(`${id}:a`)!;
+        } else if (plan.kind === ROUTE_PLAN_KIND.ROW) {
+            const y = runY.get(runKey(id, 'a'))!;
             pathById.set(
                 id,
                 toPath([
@@ -394,16 +405,16 @@ export const buildRoutePaths = (links: RoutedLinkInput[], geometry: RouteGeometr
             );
         } else {
             const laneX = laneXById.get(id)!;
-            const yA = runY.get(`${id}:a`);
-            const yB = runY.get(`${id}:b`);
+            const { yA, yB } = spanById.get(id)!;
+            // An end that steps through a blank row turns onto its run first.
             pathById.set(
                 id,
                 toPath([
                     [portA.x, portA.y],
-                    ...(yA === undefined ? [] : [[portA.x, yA] as [number, number]]),
-                    [laneX, yA ?? portA.y],
-                    [laneX, yB ?? portB.y],
-                    ...(yB === undefined ? [] : [[portB.x, yB] as [number, number]]),
+                    ...(plan.rowA === null ? [] : [[portA.x, yA] as [number, number]]),
+                    [laneX, yA],
+                    [laneX, yB],
+                    ...(plan.rowB === null ? [] : [[portB.x, yB] as [number, number]]),
                     [portB.x, portB.y],
                 ]),
             );

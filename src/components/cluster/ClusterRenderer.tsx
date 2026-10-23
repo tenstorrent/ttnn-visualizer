@@ -154,6 +154,9 @@ interface ResolvedLink {
     b: RenderChip;
     uidA: string;
     uidB: string;
+    /** Keys this link in route plans, route paths and the unrouted set. Built once here, so
+     * every lookup agrees on the uid order. #1951 */
+    id: string;
     interHost: boolean;
     index: number;
 }
@@ -318,6 +321,7 @@ function buildClusterRenderModel(
     };
 
     const resolvedLinks: ResolvedLink[] = [];
+    const routeId = (uidA: string, uidB: string) => `${uidA}__${uidB}`;
 
     intraHostLinks.forEach((link, index) => {
         const a = chipsByKey.get(chipKey(link.rank, link.a.chip));
@@ -325,7 +329,7 @@ function buildClusterRenderModel(
         if (a && b) {
             const [uidA, uidB] = recordConnection(a, link.a.chan, b, link.b.chan);
             rememberLinkKey(uidA, uidB);
-            resolvedLinks.push({ a, b, uidA, uidB, interHost: false, index });
+            resolvedLinks.push({ a, b, uidA, uidB, id: routeId(uidA, uidB), interHost: false, index });
         }
     });
 
@@ -335,7 +339,7 @@ function buildClusterRenderModel(
         if (a && b) {
             const [uidA, uidB] = recordConnection(a, link.a.chan, b, link.b.chan);
             rememberLinkKey(uidA, uidB);
-            resolvedLinks.push({ a, b, uidA, uidB, interHost: true, index });
+            resolvedLinks.push({ a, b, uidA, uidB, id: routeId(uidA, uidB), interHost: true, index });
         }
     });
 
@@ -358,20 +362,20 @@ function buildClusterRenderModel(
     // between their ends instead of over them, and fixes both ends' port edges here, before
     // the per-chip placement below could pick them independently. Mesh mode keeps its
     // curves. #1951
-    const routeId = (uidA: string, uidB: string) => `${uidA}__${uidB}`;
     const routePlans = new Map<string, RoutePlan>();
     const routedEdgeByUid = new Map<string, CLUSTER_ETH_POSITION>();
     // Offered to the router and refused; drawn as a dotted curve. Empty in mesh mode.
     let unroutedIds = new Set<string>();
+    // Sorts routed ports ahead of the rest, wherever an edge's first slots must go to them.
+    const compareRoutedFirst = (uidA: string, uidB: string) =>
+        Number(routedEdgeByUid.has(uidB)) - Number(routedEdgeByUid.has(uidA));
     if (!useMeshCoords) {
         const cellOf = (chip: RenderChip): GridCell => ({
             key: chip.key,
             x: chip.coords[CLUSTER_COORDS.X],
             y: chip.coords[CLUSTER_COORDS.Y],
         });
-        const spanning = resolvedLinks
-            .filter(({ a, b }) => isSpanning(a, b))
-            .map((link) => ({ ...link, id: routeId(link.uidA, link.uidB) }));
+        const spanning = resolvedLinks.filter(({ a, b }) => isSpanning(a, b));
         const { plans, unrouted, needsTrailingRow } = planRoutes(
             spanning.map(({ id, a, b }) => ({ id, a: cellOf(a), b: cellOf(b) })),
             renderChips.map(cellOf),
@@ -534,9 +538,7 @@ function buildClusterRenderModel(
         // bezier bows in one direction instead of arcing across. #1510
         const outwardForChip = ALL_EDGES.filter((edge) => isOutwardEdge(clusterChip, edge));
         // Routed ports first: their edges are fixed, and the rest must see how full they are.
-        const routedFirst = [...deferred].sort(
-            (left, right) => Number(routedEdgeByUid.has(right.port.uid)) - Number(routedEdgeByUid.has(left.port.uid)),
-        );
+        const routedFirst = [...deferred].sort((left, right) => compareRoutedFirst(left.port.uid, right.port.uid));
         const isFull = (edge: CLUSTER_ETH_POSITION) => (ethPosition.get(edge)?.length ?? 0) >= MAX_PORTS_PER_EDGE;
         for (const { port, chord } of routedFirst) {
             const perp = perpendicularEdges(chord);
@@ -589,7 +591,7 @@ function buildClusterRenderModel(
             const isOverfull = ports.length > MAX_PORTS_PER_EDGE;
             const sorted = [...ports].sort((portA, portB) => {
                 if (isOverfull) {
-                    const routedDelta = Number(routedEdgeByUid.has(portB.uid)) - Number(routedEdgeByUid.has(portA.uid));
+                    const routedDelta = compareRoutedFirst(portA.uid, portB.uid);
                     if (routedDelta !== 0) {
                         return routedDelta;
                     }
@@ -653,8 +655,7 @@ function buildClusterRenderModel(
     };
 
     const routes = buildRoutePaths(
-        resolvedLinks.flatMap(({ a, b, uidA, uidB }) => {
-            const id = routeId(uidA, uidB);
+        resolvedLinks.flatMap(({ a, b, uidA, uidB, id }) => {
             const plan = routePlans.get(id);
             const portA = portPixelByUid.get(uidA);
             const portB = portPixelByUid.get(uidB);
@@ -663,15 +664,7 @@ function buildClusterRenderModel(
         { stride, chipSize: clusterChipSize, contentWidth },
     );
 
-    const pushSegment = (
-        a: RenderChip,
-        b: RenderChip,
-        uidA: string,
-        uidB: string,
-        interHost: boolean,
-        prefix: string,
-        index: number,
-    ) => {
+    const pushSegment = ({ a, b, uidA, uidB, id, interHost, index }: ResolvedLink) => {
         const portA = portPixelByUid.get(uidA);
         const portB = portPixelByUid.get(uidB);
         // A uid can exist without a placed port when its chord direction is degenerate.
@@ -679,11 +672,11 @@ function buildClusterRenderModel(
             return;
         }
         // A routed path wins; otherwise inter-host always curves and intra-host curves only when long-haul.
-        const routedPath = routes.pathById.get(routeId(uidA, uidB));
+        const routedPath = routes.pathById.get(id);
         const longHaul = !interHost && (longHaulUids.has(uidA) || longHaulUids.has(uidB));
         const useCurve = interHost || longHaul;
         linkSegments.push({
-            key: `${prefix}__${uidA}__${uidB}__${index}`,
+            key: `${interHost ? 'inter' : 'intra'}__${uidA}__${uidB}__${index}`,
             x1: portA.x,
             y1: portA.y,
             x2: portB.x,
@@ -692,13 +685,11 @@ function buildClusterRenderModel(
             chipKeyB: b.key,
             interHost,
             pathD: routedPath ?? (useCurve ? swooshPath(portA, portB) : undefined),
-            unrouted: unroutedIds.has(routeId(uidA, uidB)),
+            unrouted: unroutedIds.has(id),
         });
     };
 
-    resolvedLinks.forEach(({ a, b, uidA, uidB, interHost, index }) => {
-        pushSegment(a, b, uidA, uidB, interHost, interHost ? 'inter' : 'intra', index);
-    });
+    resolvedLinks.forEach(pushSegment);
 
     const neighboursByChip = new Map<string, Set<string>>();
     const noteNeighbour = (a: string, b: string) => {
