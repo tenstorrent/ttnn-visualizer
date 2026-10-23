@@ -338,11 +338,14 @@ def _device_log_answerable(performance_path: Optional[str]) -> bool:
     path = Path(performance_path, DeviceLogProfilerQueries.DEVICE_LOG_FILE)
     if not path.is_file():
         return False
+    header = []
     try:
         with path.open(encoding="utf-8", newline="") as source:
-            if not source.readline():
-                return False
-            header = [cell.strip() for cell in next(csv.reader(source), [])]
+            source.readline()
+            for row in csv.reader(source):
+                if any(cell.strip() for cell in row):
+                    header = [cell.strip() for cell in row]
+                    break
             # Read to the end rather than stopping at the first row: `zone_timings`
             # decodes the whole file in `query_zone_summary`, so a bad byte past
             # row 1 has to be found here, matching `_perf_csv_problem`.
@@ -351,11 +354,6 @@ def _device_log_answerable(performance_path: Optional[str]) -> bool:
                 has_data_row = has_data_row or bool(line.strip())
     except (OSError, UnicodeDecodeError, csv.Error):
         return False
-    if not any(header):
-        return False
-    # Both the columns zone_timings groups by and the columns every device-log row must carry.
-    # ZONE_SUMMARY_COLUMNS is a superset for grouping, but a log missing timer_id (etc.) has
-    # to be refused here before zone_timings opens DeviceLogProcess and fails on a KeyError. #2184
     required = set(DeviceLogProfilerQueries.REQUIRED_DEVICE_LOG_COLUMNS) | set(
         DeviceLogProfilerQueries.ZONE_SUMMARY_COLUMNS,
     )

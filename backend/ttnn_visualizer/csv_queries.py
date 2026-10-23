@@ -547,8 +547,8 @@ class DeviceLogProfilerQueries:
             raise PerformanceReportNotLoadedException()
         path = Path(instance.performance_path, cls.DEVICE_LOG_FILE)
         try:
-            with open(path, "r", encoding="utf-8") as handle:
-                first_line = handle.readline()
+            with open(path, "rb") as handle:
+                first_line = handle.readline().decode("utf-8")
         except (OSError, UnicodeDecodeError):
             return {}
 

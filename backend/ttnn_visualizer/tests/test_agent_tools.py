@@ -273,16 +273,17 @@ class TestReportInventory:
         loaded_header = load_report(ReportRegistry(), performance_path=str(header_only))
         assert "zone_timings" in loaded_header["unanswerable"]
 
-        missing_col = tmp_path / "missing_col"
-        missing_col.mkdir()
-        incomplete_header, incomplete_rows = _drop_column(
-            MODERN_HEADER, ZONED_ROWS, "core_x"
-        )
-        write_device_log(missing_col, incomplete_header, incomplete_rows)
-        loaded_incomplete = load_report(
-            ReportRegistry(), performance_path=str(missing_col)
-        )
-        assert "zone_timings" in loaded_incomplete["unanswerable"]
+        for dropped_col in ("core_x", "timer_id"):
+            missing_col = tmp_path / f"missing_{dropped_col}"
+            missing_col.mkdir()
+            incomplete_header, incomplete_rows = _drop_column(
+                MODERN_HEADER, ZONED_ROWS, dropped_col
+            )
+            write_device_log(missing_col, incomplete_header, incomplete_rows)
+            loaded_incomplete = load_report(
+                ReportRegistry(), performance_path=str(missing_col)
+            )
+            assert "zone_timings" in loaded_incomplete["unanswerable"]
 
     def test_a_non_utf8_device_log_does_not_break_load_report(self, tmp_path):
         """A device log with non-UTF-8 bytes in the preamble or past the first 8 KB is
@@ -305,6 +306,21 @@ class TestReportInventory:
         with pytest.raises(UnicodeDecodeError):
             tools.zone_timings(registry, loaded["handle"])
 
+        bad_15_field_row = (
+            b"1,1,1,BRISC,18952,14595968859092,0,1025,,,BRISC-FW,ZONE_START,433,"
+            b"/home/j\xf6rg/brisc.cc,\n"
+        )
+        early_bad_row = tmp_path / "early_bad_row"
+        early_bad_row.mkdir()
+        (early_bad_row / DeviceLogProfilerQueries.DEVICE_LOG_FILE).write_bytes(
+            (PREAMBLE + "\n" + header_line).encode("utf-8") + bad_15_field_row
+        )
+        loaded_early = load_report(
+            ReportRegistry(), performance_path=str(early_bad_row)
+        )
+        assert loaded_early["capture"]["ARCH"] == "wormhole_b0"
+        assert "zone_timings" in loaded_early["unanswerable"]
+
         late_bad_byte = tmp_path / "late_bad_byte"
         late_bad_byte.mkdir()
         valid_prefix = (PREAMBLE + "\n" + header_line + (row_lines * 120)).encode(
@@ -312,9 +328,10 @@ class TestReportInventory:
         )
         assert len(valid_prefix) > 8192
         (late_bad_byte / DeviceLogProfilerQueries.DEVICE_LOG_FILE).write_bytes(
-            valid_prefix + b"0, 0, 0, BRISC, 100, 1, bad\xffzone, src.cpp\n"
+            valid_prefix + bad_15_field_row
         )
         loaded_late = load_report(ReportRegistry(), performance_path=str(late_bad_byte))
+        assert loaded_late["capture"]["ARCH"] == "wormhole_b0"
         assert "zone_timings" in loaded_late["unanswerable"]
 
     def test_a_missing_directory_is_refused_with_the_path(self, tmp_path):
