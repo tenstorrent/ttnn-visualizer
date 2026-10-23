@@ -685,7 +685,7 @@ class TestProgramCache:
         # A 0% would read as every repeat missing.
         assert result["repeat_hit_percent"] is None
         assert "2 of 2 repeat calls recorded no cache result" in result["caveat"]
-        assert "performance view counts them as misses" in result["caveat"]
+        assert "there is no hit percentage." in result["caveat"]
         # Nothing says these missed, so nothing says the cache was off.
         assert "program cache disabled" not in result["caveat"]
 
@@ -706,6 +706,7 @@ class TestProgramCache:
         assert result["repeat_unrecorded"] == 1
         assert result["repeat_hit_percent"] == 50.0
         assert "1 of 3 repeat calls recorded no cache result" in result["caveat"]
+        assert "the hit percentage is out of the rest." in result["caveat"]
 
     def test_every_recorded_repeat_missing_still_says_the_cache_may_have_been_off(
         self, handle_with

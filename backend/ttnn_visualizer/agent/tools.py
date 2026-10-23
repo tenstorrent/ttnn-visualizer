@@ -489,9 +489,11 @@ def program_cache(
     """How often each op code built a program again rather than reusing it.
 
     The performance view's rule, by hand: a hash's first row in report order is a first
-    call (`enrichPerfRowData.ts`), and a later row that missed is a recompute candidate
-    (`computePerfHeuristicFlags.ts`); mirror a change there. The whole report, since a
-    program first called before a window would read as a first call inside it.
+    call, and a later row is a repeat that hit, missed or recorded nothing
+    (`getRepeatCacheOutcome` in `enrichPerfRowData.ts`). A miss is a recompute
+    candidate, and the table footer leaves unrecorded repeats out of its hit
+    percentage; mirror a change there. The whole report, since a program first called
+    before a window would read as a first call inside it.
     """
     count = bounded(limit)
     rows = canonical_report(registry, handle).get("report", [])
@@ -564,7 +566,6 @@ def program_cache(
                 if recorded
                 else "there is no hit percentage."
             )
-            + " The performance view counts them as misses instead."
         )
     if recorded and repeat_misses == recorded:
         caveats.append(
