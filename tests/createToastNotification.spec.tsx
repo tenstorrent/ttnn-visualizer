@@ -169,7 +169,18 @@ describe('useBufferFocus', () => {
 
         act(() => result.current.resetBufferFocus());
 
-        expect(dismiss).toHaveBeenLastCalledWith(focusedToast);
+        expect(dismiss).toHaveBeenCalledExactlyOnceWith(focusedToast);
+        expect(result.current.activeToast).toBeNull();
+    });
+
+    // Every route reset runs here (useClearSelectedBuffer), usually with nothing focused,
+    // so a reset with no buffer toast must leave unrelated toasts open. #2149
+    it('leaves other toasts alone when reset with no buffer focused', () => {
+        const { result } = renderHook(() => useBufferFocus());
+
+        act(() => result.current.resetBufferFocus());
+
+        expect(dismiss).not.toHaveBeenCalled();
         expect(result.current.activeToast).toBeNull();
     });
 });
