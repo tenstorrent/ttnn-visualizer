@@ -117,18 +117,6 @@ export const enrichRowData = (
             l1_largest_free_percent: l1Pressure?.largestFreePercent ?? null,
             allocation_failure: getLinkedValue(linkedOperationData?.allocationFailureByOpId, op),
             dram_fallback: getLinkedValue(linkedOperationData?.dramFallbackByOpId, op),
-            // CSV column arrives as the strings 'True'/'False' or ''/null for captures
-            // produced before the column existed. Coerce to boolean | null so downstream
-            // code (footer totals, flags) treats all three states consistently. #2169
-            cache_hit: ((): boolean | null => {
-                if (row.cache_hit === true || row.cache_hit === 'True') {
-                    return true;
-                }
-                if (row.cache_hit === false || row.cache_hit === 'False') {
-                    return false;
-                }
-                return null;
-            })(),
             ...getRowAttributes(row),
             isFirstHashOccurrence: true, // Default to true, will be updated if needed in next step
         };

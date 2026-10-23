@@ -890,11 +890,11 @@ describe('PerfTable expected cache hits footer (#2169)', () => {
     it('excludes unrecorded repeat calls from the hit percentage and reports the excluded count', () => {
         const rows = enrichRowData(
             [
-                makeRawPerfRow({ id: '1', op_code: 'Matmul', raw_op_code: 'Matmul', hash: 'h1', cache_hit: 'False' }),
-                makeRawPerfRow({ id: '2', op_code: 'Matmul', raw_op_code: 'Matmul', hash: 'h1', cache_hit: 'True' }),
-                makeRawPerfRow({ id: '3', op_code: 'Matmul', raw_op_code: 'Matmul', hash: 'h1', cache_hit: 'False' }),
-                makeRawPerfRow({ id: '4', op_code: 'Matmul', raw_op_code: 'Matmul', hash: 'h1', cache_hit: '' }),
-                makeRawPerfRow({ id: '5', op_code: 'Matmul', raw_op_code: 'Matmul', hash: 'h1', cache_hit: '' }),
+                makeRawPerfRow({ id: '1', op_code: 'Matmul', raw_op_code: 'Matmul', hash: 'h1', cache_hit: false }),
+                makeRawPerfRow({ id: '2', op_code: 'Matmul', raw_op_code: 'Matmul', hash: 'h1', cache_hit: true }),
+                makeRawPerfRow({ id: '3', op_code: 'Matmul', raw_op_code: 'Matmul', hash: 'h1', cache_hit: false }),
+                makeRawPerfRow({ id: '4', op_code: 'Matmul', raw_op_code: 'Matmul', hash: 'h1', cache_hit: null }),
+                makeRawPerfRow({ id: '5', op_code: 'Matmul', raw_op_code: 'Matmul', hash: 'h1', cache_hit: null }),
             ],
             [],
             null,
@@ -909,10 +909,10 @@ describe('PerfTable expected cache hits footer (#2169)', () => {
     it('reports when all repeat calls have no recorded cache results and ignores hashless placeholders', () => {
         const rows = enrichRowData(
             [
-                makeRawPerfRow({ id: '1', op_code: 'Matmul', raw_op_code: 'Matmul', hash: 'h1', cache_hit: 'False' }),
-                makeRawPerfRow({ id: '2', op_code: 'Matmul', raw_op_code: 'Matmul', hash: 'h1', cache_hit: '' }),
-                makeRawPerfRow({ id: '3', op_code: 'Matmul', raw_op_code: 'Matmul', hash: 'h1', cache_hit: '' }),
-                makeRawPerfRow({ id: '4', op_code: 'Matmul', raw_op_code: 'Matmul', hash: 'h1', cache_hit: '' }),
+                makeRawPerfRow({ id: '1', op_code: 'Matmul', raw_op_code: 'Matmul', hash: 'h1', cache_hit: false }),
+                makeRawPerfRow({ id: '2', op_code: 'Matmul', raw_op_code: 'Matmul', hash: 'h1', cache_hit: null }),
+                makeRawPerfRow({ id: '3', op_code: 'Matmul', raw_op_code: 'Matmul', hash: 'h1', cache_hit: null }),
+                makeRawPerfRow({ id: '4', op_code: 'Matmul', raw_op_code: 'Matmul', hash: 'h1', cache_hit: null }),
             ],
             [],
             null,
