@@ -9,6 +9,7 @@ import os
 import sys
 import tempfile
 import traceback
+import warnings
 from collections import defaultdict
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -105,6 +106,8 @@ REPORT_ROW_ID_OFFSET = 2
 _OP_TYPE_COLUMN = "OP TYPE"
 _OP_CODE_COLUMN = "OP CODE"
 _HOST_START_COLUMN = "HOST START TS"
+# Read in the same pass for the agent's `load_report`, which reports the device count.
+_DEVICE_ID_COLUMN = "DEVICE ID"
 
 # A row's program and whether the program cache held it. Older captures lack both.
 PROGRAM_HASH_COLUMN = "PROGRAM HASH"
@@ -1413,6 +1416,11 @@ class ResolvedSignposts:
 
     positions_by_name: Dict[str, List[int]]
     sorted_by_host_time: bool
+    # Distinct `DEVICE ID`s the rows name, or None when the CSV has no such column.
+    device_count: Optional[int] = None
+
+    def _in_bound_order(self) -> List[Tuple[str, List[int]]]:
+        return sorted(self.positions_by_name.items(), key=lambda item: item[1][0])
 
     def listing(self) -> List[Dict[str, object]]:
         """One entry per name, at the row a bound on that name resolves to.
@@ -1422,26 +1430,52 @@ class ResolvedSignposts:
         """
         return [
             {"id": positions[0] + REPORT_ROW_ID_OFFSET, "op_code": name}
-            for name, positions in sorted(
-                self.positions_by_name.items(), key=lambda item: item[1][0]
-            )
+            for name, positions in self._in_bound_order()
         ]
+
+    def occurrences(self) -> List[Tuple[str, int]]:
+        """Each name with how often it occurs, in `listing`'s order."""
+        return [(name, len(positions)) for name, positions in self._in_bound_order()]
 
 
 def resolve_signposts(
-    csv_file: IO[str], tracing_mode: bool = False
+    csv_file: IO[str], tracing_mode: bool = False, low_memory: bool = False
 ) -> ResolvedSignposts:
     """Read a perf CSV's signposts as `generate_perf_report` orders them.
 
     The read and sort are pandas', as the library's are, so equal timestamps order
-    the same way in both. Only the three columns it needs are parsed. The file is
-    rewound before and after, so the caller can hand it on.
+    the same way in both. Only the columns it needs are parsed. The file is rewound
+    before and after, so the caller can hand it on.
+
+    `low_memory` parses in chunks, as tt-perf-report does not: on every local
+    capture it resolves the same positions, and peaks at a fraction of the memory.
+    A chunk can type a column apart from the rest, though -- one non-numeric host
+    time leaves ints and strings that cannot be sorted together -- so a host time
+    or device id read that way is read again as text, still in chunks: the text a
+    whole-file parse keeps for a column it cannot type.
     """
-    wanted = {_OP_TYPE_COLUMN, _OP_CODE_COLUMN, _HOST_START_COLUMN}
-    csv_file.seek(0)
-    rows = pd.read_csv(
-        csv_file, usecols=lambda column: column in wanted, low_memory=False
-    )
+    wanted = {_OP_TYPE_COLUMN, _OP_CODE_COLUMN, _HOST_START_COLUMN, _DEVICE_ID_COLUMN}
+
+    def read(columns: Set[str], as_text: bool = False) -> pd.DataFrame:
+        csv_file.seek(0)
+        # Its warning is about a mixed column, which is read again below.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", pd.errors.DtypeWarning)
+            return pd.read_csv(
+                csv_file,
+                usecols=lambda column: column in columns,
+                low_memory=low_memory,
+                dtype=str if as_text else None,
+            )
+
+    rows = read(wanted)
+    if low_memory:
+        # The two the answer depends on: the sort, and the distinct-device count.
+        for column in (_HOST_START_COLUMN, _DEVICE_ID_COLUMN):
+            if column in rows.columns and pd.api.types.infer_dtype(
+                rows[column], skipna=True
+            ).startswith("mixed"):
+                rows[column] = read({column}, as_text=True)[column]
     csv_file.seek(0)
 
     sorted_by_host_time = _HOST_START_COLUMN in rows.columns and not tracing_mode
@@ -1458,10 +1492,17 @@ def resolve_signposts(
         for position, name in zip(signposts.index, signposts[_OP_CODE_COLUMN]):
             positions_by_name[str(name)].append(int(position))
 
-    return ResolvedSignposts(dict(positions_by_name), sorted_by_host_time)
+    device_count = (
+        int(rows[_DEVICE_ID_COLUMN].nunique())
+        if _DEVICE_ID_COLUMN in rows.columns
+        else None
+    )
+    return ResolvedSignposts(dict(positions_by_name), sorted_by_host_time, device_count)
 
 
-def read_signposts(csv_file: IO[str], tracing_mode: bool = False) -> ResolvedSignposts:
+def read_signposts(
+    csv_file: IO[str], tracing_mode: bool = False, low_memory: bool = False
+) -> ResolvedSignposts:
     """`resolve_signposts`, with an unreadable capture answered as the caller's data.
 
     `EmptyDataError` and `ParserError` are both `ValueError`s: a ragged or
@@ -1470,7 +1511,7 @@ def read_signposts(csv_file: IO[str], tracing_mode: bool = False) -> ResolvedSig
     same through either.
     """
     try:
-        return resolve_signposts(csv_file, tracing_mode)
+        return resolve_signposts(csv_file, tracing_mode, low_memory)
     except ValueError as error:
         raise DataFormatError(
             f"could not read the report's signposts: {error}"

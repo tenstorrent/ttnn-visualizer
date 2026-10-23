@@ -20,8 +20,8 @@ from ttnn_visualizer.agent import (
     allocation_failures,
     bounds,
     failures,
+    handles,
     linking,
-    operations,
     server,
 )
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
@@ -1066,9 +1066,7 @@ class TestOperationDetail:
         failures.dram_fallbacks(registry, handle)
 
         with (
-            patch.object(
-                operations.sqlite3, "connect", wraps=sqlite3.connect
-            ) as connect,
+            patch.object(handles.sqlite3, "connect", wraps=sqlite3.connect) as connect,
             patch.object(
                 DatabaseQueries,
                 "query_error_records",

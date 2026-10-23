@@ -12,8 +12,8 @@ This file covers only what a person changing the code needs.
 
 | Module | Holds |
 |---|---|
-| `handles.py` | Path → handle registry, and the inventory `load_report` returns. No app database and no app context: `Instance` is a plain model of two paths, which is what lets the tools read the query classes directly. It does open the report's own SQLite file, to report what the report can answer. |
-| `tools.py` | The performance-report tools, `CANONICAL_PROJECTION`, and the caveat logic. |
+| `handles.py` | Path → handle registry, and the inventory and capture facts `load_report` returns. No app database and no app context: `Instance` is a plain model of two paths, which is what lets the tools read the query classes directly. It does open the report's own SQLite file read-only, to report what the report can answer and how many devices it holds, and reads the cluster descriptor's `arch` block. |
+| `tools.py` | The performance-report tools, `CANONICAL_PROJECTION`, and the caveat logic. `with_signposts` adds the signposts and the perf CSV's device count to `load_report`'s answer, read in one pass through `csv_queries.resolve_signposts`. |
 | `perf_detail.py` | The field groups `include` adds to a performance row (#2153), and what fills a field no row carries. The generated rows hold the raw CSV columns behind them only because `tools` asks for `detail_columns`; the app's rows do not (#2159). |
 | `operations.py` | The profiler-database tools, including provenance (arguments and call site). Opens its own read-only connection: `LocalQueryRunner` reads `Instance.profiler_path` as the SQLite file, while a handle holds the directory the caller named. |
 | `linking.py` | The join from a performance row to the profiler operation that launched it: a port of the app's positional match (`src/functions/deviceOperationMatching.ts`). `TestMatcherParity` restates the app's cases, so it catches drift in the port only: **a change to the app's matcher or the order lists in `useAPI.tsx` fails nothing here and must be mirrored in `linking.py` by hand** (`isDeviceOperation` and the scope pairing are in `scope_outcomes.py`, below) — as must a change to `isCountableDeviceTime`, which `tools.countable_device_time` restates for `operation_detail`'s device-time shares, and a change to the first-call rule in `enrichPerfRowData.ts` or the recompute-candidate flag in `computePerfHeuristicFlags.ts`, which `tools.program_cache` restates. The only module reading both halves, so `tools` and `operations` never import each other; `server` routes `top_ops`, `program_cache` and `operation_detail` through it. |
@@ -79,8 +79,10 @@ letting the field names imply they are comparable. The HTTP serializers re-expos
 per-bank column as plain `size` (`serializers.py:309`), which is how easy the misreading
 is.
 
-**Adding a tool means adding it to `_tool_table`**, with a description carrying the caveats
-an agent needs *before* choosing it — not only in the response. It also means a row in the
+**Adding a tool means adding it to `_tool_table`**, with a `title` and a description carrying
+the caveats an agent needs *before* choosing it — not only in the response. A rule every tool
+shares goes in `INSTRUCTIONS` instead, which clients put in the system prompt; keep it short.
+It also means a row in the
 tool table of [`docs/src/agent-tools.md`](../../../docs/src/agent-tools.md), in the same
 change: that page is the only description of this surface a client's reader gets, and #2035
 puts it inside the application, so a tool missing from it goes missing for the user too.
