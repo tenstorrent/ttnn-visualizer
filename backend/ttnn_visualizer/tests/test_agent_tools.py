@@ -300,6 +300,67 @@ class TestTopOps:
         with _signposts_in("report-1"):
             yield
 
+    def test_a_csv_missing_device_id_converts_perf_report_exit_naming_the_csv(
+        self, tmp_path, event_log_directory
+    ):
+        """A CSV missing `DEVICE ID` triggers `tt-perf-report`'s `sys.exit(1)`, which
+        is converted into `DataFormatError` naming only the file (never `tmp_path`) so
+        the MCP server stays up. #2183"""
+        csv_path = tmp_path / "ops_perf_results_no_device.csv"
+        csv_path.write_text(
+            "OP CODE,OP TYPE,GLOBAL CALL COUNT\nMatmul,tt_dnn_device,1\n",
+            encoding="utf-8",
+        )
+        registry = ReportRegistry()
+        handle = load_report(registry, performance_path=str(tmp_path))["handle"]
+
+        with pytest.raises(
+            DataFormatError,
+            match=r"ops_perf_results_no_device\.csv could not be parsed \(exit code 1\)",
+        ) as exc_info:
+            tools.top_ops(registry, handle)
+        assert isinstance(exc_info.value.__cause__, SystemExit)
+        assert str(tmp_path) not in str(exc_info.value)
+
+        response = server.handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": "top_ops",
+                    "arguments": {"handle": handle},
+                },
+            },
+            server._tool_table(registry),
+        )
+        error_text = response["result"]["content"][0]["text"]
+        assert response["result"]["isError"] is True
+        assert (
+            "ops_perf_results_no_device.csv could not be parsed (exit code 1)"
+            in error_text
+        )
+        assert str(tmp_path) not in error_text
+
+    def test_a_worker_abort_mid_perf_report_still_propagates(self, tmp_path):
+        """A `SystemExit` raised from a non-library frame while `tt-perf-report` is on
+        the call stack (e.g. gunicorn's SIGABRT timeout handler) must propagate. #2183
+        """
+        write_ops_perf(tmp_path, smoke_rows())
+        registry = ReportRegistry()
+        handle = load_report(registry, performance_path=str(tmp_path))["handle"]
+
+        def _worker_abort(*args, **kwargs):
+            raise SystemExit(1)
+
+        with patch.object(
+            csv_queries.perf_report,
+            "merge_device_rows",
+            side_effect=_worker_abort,
+        ):
+            with pytest.raises(SystemExit):
+                tools.top_ops(registry, handle)
+
     def _registry(self, tmp_path):
         registry = ReportRegistry()
         write_device_log(tmp_path, MODERN_HEADER, [])

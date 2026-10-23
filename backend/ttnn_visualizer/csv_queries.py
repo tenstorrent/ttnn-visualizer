@@ -1225,6 +1225,27 @@ class OpsPerformanceReportQueries:
                         cls.DEFAULT_STACKED_CSV_FILE,
                         not merge_devices,
                     )
+            except SystemExit as e:
+                # tt-perf-report calls sys.exit(1) on unparseable inputs (e.g. missing
+                # DEVICE ID). Convert library exits so the MCP server stays up and the
+                # HTTP route returns 422, while letting worker aborts propagate. #2183
+                tb_frames = traceback.extract_tb(e.__traceback__)
+                perf_report_dir = os.path.dirname(os.path.abspath(perf_report.__file__))
+                if (
+                    not tb_frames
+                    or os.path.dirname(os.path.abspath(tb_frames[-1].filename))
+                    != perf_report_dir
+                ):
+                    raise
+                logger.exception("tt-perf-report exited while loading report")
+                code_suffix = (
+                    f" (exit code {e.code})"
+                    if isinstance(e.code, int) and not isinstance(e.code, bool)
+                    else ""
+                )
+                raise DataFormatError(
+                    f"performance report could not be parsed{code_suffix}"
+                ) from e
             except Exception as e:
                 logger.error(f"Error loading report: {e}")
                 logger.error(f"Full traceback:\n{traceback.format_exc()}")
@@ -1568,8 +1589,18 @@ class DegradedPerformanceReport(Exception):
 def _generate_performance_report(
     source: _PerformanceReportSource, options: _PerformanceReportOptions
 ) -> Dict:
-    raw_csv = Path(source.path).read_text()
-    return OpsPerformanceReportQueries._generate_report_uncached(raw_csv, options)
+    csv_path = Path(source.path)
+    raw_csv = csv_path.read_text()
+    try:
+        return OpsPerformanceReportQueries._generate_report_uncached(raw_csv, options)
+    except DataFormatError as e:
+        prefix = "performance report could not be parsed"
+        msg = str(e)
+        if msg.startswith(prefix):
+            raise DataFormatError(
+                f"{csv_path.name} could not be parsed{msg[len(prefix):]}"
+            ) from e.__cause__
+        raise
 
 
 @lru_cache(maxsize=MAX_CACHED_PERFORMANCE_REPORTS)
