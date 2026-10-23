@@ -1798,6 +1798,47 @@ it('returns focus to the remote filter input when Enter clears the query', async
     expect(input).toHaveFocus();
 });
 
+// Most sessions have no badges, and the filter actions still replace Blueprint's clear button.
+it('clears the remote query and says "No results" without badges', async () => {
+    await renderPerformanceSelector({ connectionList: multihostConnection });
+
+    const input = screen.getByPlaceholderText('Filter...');
+    fireEvent.change(input, { target: { value: 'matches-nothing' } });
+    await waitFor(() => expect(screen.getByText('No results')).toBeTruthy(), WAIT_FOR_OPTIONS);
+
+    fireEvent.click(screen.getByLabelText(CLEAR_FILTER_QUERY_LABEL));
+    expect(input).toHaveValue('');
+    await waitFor(() => expect(getRemoteRowLabels()).toHaveLength(multihostFolders.length), WAIT_FOR_OPTIONS);
+});
+
+it('says "No results" when nothing matches with the linked-only toggle off', async () => {
+    await renderLinkedRankSelector();
+
+    fireEvent.change(screen.getByPlaceholderText('Filter...'), { target: { value: 'matches-nothing' } });
+    await waitFor(() => expect(screen.getByText('No results')).toBeTruthy(), WAIT_FOR_OPTIONS);
+});
+
+// The filter must agree with the badge: a link to an earlier run (#2069) is not a link.
+it('hides a remote rank linked only to an earlier run', async () => {
+    const folders = [
+        { ...rankFolder(1), runFingerprint: 'v1:later' },
+        { ...rankFolder(0), runFingerprint: 'v1:linked' },
+    ];
+
+    await renderPerformanceSelector({
+        connectionList: multihostConnection,
+        folderList: folders,
+        linkedRuns: new Map(folders.map((folder) => [folder.syncedName!, 'v1:linked'])),
+        unlinkedRuns: runsWithoutFingerprints(),
+    });
+
+    fireEvent.click(screen.getByTestId(TEST_IDS.FOLDER_PICKER_LINKED_ONLY_TOGGLE));
+    await waitFor(
+        () => expect(getRemoteRowLabels()).toEqual([expect.stringContaining(`Rank 0: ${TIMESTAMP}`)]),
+        WAIT_FOR_OPTIONS,
+    );
+});
+
 it('has no linked-only toggle without link badges', async () => {
     await renderPerformanceSelector({ connectionList: multihostConnection });
 

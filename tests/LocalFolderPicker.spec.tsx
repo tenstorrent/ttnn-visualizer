@@ -420,4 +420,53 @@ describe('LocalFolderPicker linked-only filter', () => {
         expect(toggle).toHaveAttribute('aria-pressed', 'true');
         expect(getRowLabels()).toEqual(['/linked-run']);
     });
+
+    // Most sessions have no badges, and the filter actions still replace Blueprint's clear button.
+    it('clears the query and says "No results." without badges', async () => {
+        renderPicker(runsWithoutFingerprints(), runsWithoutFingerprints());
+        await openPicker();
+
+        typeQuery('matches-nothing');
+        await waitFor(() => expect(screen.getByText('No results.')).toBeInTheDocument(), WAIT_FOR_OPTIONS);
+
+        fireEvent.click(screen.getByLabelText(CLEAR_FILTER_QUERY_LABEL));
+        expect(screen.getByPlaceholderText('Filter...')).toHaveValue('');
+        await waitFor(() => expect(getRowLabels()).toHaveLength(folders.length), WAIT_FOR_OPTIONS);
+    });
+
+    it('says "No results." when nothing matches with the toggle off', async () => {
+        renderPicker();
+        await openPicker();
+
+        typeQuery('matches-nothing');
+        await waitFor(() => expect(screen.getByText('No results.')).toBeInTheDocument(), WAIT_FOR_OPTIONS);
+    });
+
+    // The filter must agree with the badge: a link to an earlier run (#2069) is not a link, and a
+    // synced copy is keyed by its synced name rather than its folder.
+    it('hides a folder linked only to an earlier run, and keeps a synced copy linked by its synced name', async () => {
+        render(
+            <TestProviders>
+                <LocalFolderPicker
+                    items={[
+                        { path: 'reused-run', reportName: 'reused-run', runFingerprint: 'v1:later' },
+                        { path: 'synced-copy', reportName: 'synced-copy', syncedName: 'remote-run' },
+                    ]}
+                    value={null}
+                    handleSelect={vi.fn()}
+                    linkedRuns={
+                        new Map([
+                            ['reused-run', 'v1:linked'],
+                            ['remote-run', undefined],
+                        ])
+                    }
+                    unlinkedRuns={runsWithoutFingerprints()}
+                />
+            </TestProviders>,
+        );
+        await openPicker();
+
+        fireEvent.click(screen.getByTestId(TEST_IDS.FOLDER_PICKER_LINKED_ONLY_TOGGLE));
+        await waitFor(() => expect(getRowLabels()).toEqual(['/synced-copy']), WAIT_FOR_OPTIONS);
+    });
 });

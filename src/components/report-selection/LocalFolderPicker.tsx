@@ -85,21 +85,20 @@ const LocalFolderPicker = ({
     const showLinkStatus = shouldShowFolderLinkStatus(linkedRuns, unlinkedRuns);
     const { isLinkedOnlyActive, selectProps: filterSelectProps } = useFolderPickerFilter(showLinkStatus);
 
+    // The badge and the linked-only filter both read this, so they cannot disagree about a row.
+    const getLinkState = (folder: ReportFolder) =>
+        getFolderLinkState(getFolderReportId(folder), folder.runFingerprint, linkedRuns, unlinkedRuns);
+
     // Rebuilt every render on purpose: QueryList refilters when the predicate's identity changes,
     // which is how a toggle or a new link verdict reaches the list.
     const itemPredicate: ItemPredicate<ReportFolder> = (query, folder) =>
         (!query || folder.path.toLowerCase().includes(query.toLowerCase())) &&
-        matchesLinkedOnlyFilter(
-            isLinkedOnlyActive,
-            getFolderLinkState(getFolderReportId(folder), folder.runFingerprint, linkedRuns, unlinkedRuns),
-        );
+        matchesLinkedOnlyFilter(isLinkedOnlyActive, getLinkState(folder));
 
     const renderItem: ItemRenderer<ReportFolder> = (folder, { handleClick, handleFocus, modifiers, query }) => {
         if (!modifiers.matchesPredicate) {
             return null;
         }
-
-        const folderId = getFolderReportId(folder);
 
         return (
             // MenuItem renders the <li role="option"> itself, so this layout wrapper can't be one
@@ -132,16 +131,7 @@ const LocalFolderPicker = ({
                     onFocus={handleFocus}
                     icon={folder.path === activePath ? IconNames.SAVED : IconNames.DOCUMENT}
                     labelElement={
-                        showLinkStatus ? (
-                            <FolderLinkStatusIcon
-                                linkState={getFolderLinkState(
-                                    folderId,
-                                    folder.runFingerprint,
-                                    linkedRuns,
-                                    unlinkedRuns,
-                                )}
-                            />
-                        ) : undefined
+                        showLinkStatus ? <FolderLinkStatusIcon linkState={getLinkState(folder)} /> : undefined
                     }
                 />
 

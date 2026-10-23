@@ -24,9 +24,9 @@ Some cases do not follow this order yet ([#2209](https://github.com/tenstorrent/
 - After you sync a single remote report, it keeps its place in the list until the list is fetched again.
 - On remote machines whose `stat` command is not the GNU version, such as macOS, every remote report gets the same time, so the list is not in date order.
 
-While a report of the other kind is active, each row carries a link badge: linked, failed to link, or not yet known. A graph report picker shows its badges against the active performance report, and a performance report picker shows them against the active graph report.
+Once the active report of the other kind has been linked, or has failed to link, with at least one report, each row carries a link badge: linked, failed to link, or not yet known. A memory report picker shows its badges against the active performance report, and a performance report picker shows them against the active memory report. An active report that has never been paired shows no badges.
 
-To list only the reports linked to the active one, press the link button in the picker's filter box. It works together with the text filter, and it appears only while the picker is showing badges.
+To list only the reports linked to the active one, press the link button in the picker's filter box. It works together with the text filter, and it appears only while the picker is showing badges. If the badges go away, the button turns off.
 
 ## Allocation failures in the performance view
 
