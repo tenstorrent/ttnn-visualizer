@@ -183,17 +183,20 @@ def _graphs(
     }
 
 
+def _parsed_graph(raw: str) -> Optional[List[object]]:
+    """A captured graph's nodes, or None when it is not a JSON list."""
+    try:
+        nodes = json.loads(raw)
+    except ValueError:
+        return None
+    return nodes if isinstance(nodes, list) else None
+
+
 def _graph_for(
     graphs: Dict[Tuple[int, int], str], operation: Operation
 ) -> List[object]:
     raw = rank_or_zero(graphs, operation.operation_id, operation.rank)
-    if not raw:
-        return []
-    try:
-        nodes = json.loads(raw)
-    except ValueError:
-        return []
-    return nodes if isinstance(nodes, list) else []
+    return (_parsed_graph(raw) or []) if raw else []
 
 
 def _allocation_failure(message: Optional[str]) -> Optional[Dict[str, object]]:
@@ -756,11 +759,17 @@ def operation_failure_fields(
         except GraphTooLargeError as error:
             withheld.append(f"circular_buffers is withheld: {error}")
         else:
-            if rank_or_zero(rows, operation.operation_id, operation.rank) is not None:
+            raw = rank_or_zero(rows, operation.operation_id, operation.rank)
+            nodes = _parsed_graph(raw) if raw is not None else None
+            if raw is not None and nodes is None:
+                # Read as empty, it would claim the operation allocated none.
+                withheld.append(
+                    "circular_buffers is withheld: the operation's captured graph "
+                    "is not a JSON list of nodes"
+                )
+            elif nodes is not None:
                 fields["circular_buffers"] = (
-                    circular_buffers.operation_circular_buffers(
-                        _graph_for(rows, operation)
-                    )
+                    circular_buffers.operation_circular_buffers(nodes)
                 )
     if all(
         queries.has_table(table) for table in TOOL_TABLES[McpToolName.DRAM_FALLBACKS]

@@ -216,6 +216,31 @@ describe('DeviceOperationsFullRender - per-device CB fan-out (#1844)', () => {
         expect([...rows].every((row) => /x 8 devices/.test(row.textContent ?? ''))).toBe(true);
     });
 
+    it("shows a DeviceOp's own CBs, not the previous one's, in capture order (#2185)", () => {
+        // Every capture frees before it allocates, so the second DeviceOp's free
+        // releases the first's CBs; the modal showed those as the second's.
+        const graph = [
+            captureStart(),
+            functionStart('Embeddings'),
+            cbDeallocateAll(),
+            cbAllocate(1024, 0x1000, 0),
+            functionEnd('Embeddings'),
+            functionStart('Embeddings'),
+            cbDeallocateAll(),
+            cbAllocate(2048, 0x2000, 1),
+            functionEnd('Embeddings'),
+        ];
+        renderGraph(graph);
+
+        const buttons = screen.getAllByRole('button', { name: /View per-core allocations/ });
+        expect(buttons).toHaveLength(2);
+        fireEvent.click(buttons[1]);
+
+        const rows = [...document.querySelectorAll('.cb-row')].map((row) => row.textContent ?? '');
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toMatch(/2 KiB/);
+    });
+
     it('counts devices per CB in the modal rather than applying one count to all', () => {
         // dev0 allocates both CBs, dev1 only the first, so a blanket count would
         // pass a homogeneous fixture but not this one.

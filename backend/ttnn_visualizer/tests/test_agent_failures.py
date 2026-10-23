@@ -26,6 +26,7 @@ from ttnn_visualizer.agent import (
 )
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
 from ttnn_visualizer.queries import DatabaseQueries
+from ttnn_visualizer.tests.captured_graphs import circular_buffer
 
 _SCHEMA = """
 CREATE TABLE operations (operation_id int UNIQUE, name text, duration float);
@@ -288,12 +289,13 @@ def _circular_buffer(
     core_range_set: Optional[str] = None,
     device_id: Optional[int] = None,
 ) -> Dict:
-    params = {"address": str(address), "size": str(size), "globally_allocated": "0"}
-    if core_range_set is not None:
-        params["core_range_set"] = core_range_set
-    if device_id is not None:
-        params["device_id"] = str(device_id)
-    return {"node_type": "circular_buffer_allocate", "params": params}
+    # As a capture writes them: strings, and no core range unless one is asked for.
+    return circular_buffer(
+        str(address),
+        str(size),
+        core_range_set,
+        None if device_id is None else str(device_id),
+    )
 
 
 class TestErrors:
@@ -1323,6 +1325,28 @@ class TestOperationDetail:
 
         assert "circular_buffers" not in detail
         assert "withheld" not in (detail.get("caveat") or "")
+
+    @pytest.mark.parametrize("raw", ["not json", '{"node_type": "function_start"}'])
+    def test_a_graph_that_is_not_a_list_withholds_the_circular_buffers(
+        self, tmp_path, raw
+    ):
+        """Read as empty, it would claim the operation allocated none."""
+        registry, handle = _report(
+            tmp_path, operations=[(1, "ttnn.add")], graphs=[(1, [])]
+        )
+        connection = sqlite3.connect(
+            Path(registry.get(handle).profiler_path) / "db.sqlite"
+        )
+        try:
+            connection.execute("UPDATE captured_graph SET captured_graph = ?", (raw,))
+            connection.commit()
+        finally:
+            connection.close()
+
+        detail = linking.operation_detail(registry, handle, operation_id=1)
+
+        assert "circular_buffers" not in detail
+        assert "circular_buffers is withheld" in detail["caveat"]
 
     def test_its_circular_buffers_are_read_from_the_rank_asked_for(self, tmp_path):
         registry, handle = _two_rank_report(

@@ -333,7 +333,12 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "perf_rows entry. When the operation recorded an error, error carries "
                 "it as the errors tool does, and dram_fallback says when it likely "
                 "fell back to DRAM; the first call reads every operation's tensors to "
-                "find those, and later calls reuse them."
+                "find those, and later calls reuse them. circular_buffers lists the "
+                "circular buffers each of its device operations allocated, read from "
+                "its captured graph: how many, each one's bytes per core, core range "
+                "and device count. allocations and memory_profile leave circular "
+                "buffers out. It is absent when the report has no graph for the "
+                "operation, and caveat says when it is withheld."
             ),
             "schema": {
                 "type": "object",
@@ -357,7 +362,8 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "device's L1 geometry. A floor, not the peak: the buffers table "
                 "records tensor allocations only, so circular buffers and tensors "
                 "allocated and freed inside one operation are absent -- for an "
-                "out-of-memory question read errors and l1_peak instead. Sizes are "
+                "out-of-memory question read errors and l1_peak instead, and "
+                "operation_detail for one operation's circular buffers. Sizes are "
                 "bytes per bank and are never "
                 "added across memory types, whose bank counts differ. Comparable to "
                 "l1_bank_size; a device-wide total cannot be derived from the "

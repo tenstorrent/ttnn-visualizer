@@ -33,6 +33,7 @@ from ttnn_visualizer.agent import (
 )
 from ttnn_visualizer.agent.scope_outcomes import failed_device_operation_names
 from ttnn_visualizer.models import Buffer, BufferType
+from ttnn_visualizer.tests.captured_graphs import CORE_RANGE_SET, CapturedGraph
 from ttnn_visualizer.utils import str_to_bool
 
 GOLDEN_PATH = (
@@ -800,7 +801,7 @@ def _top_operation_cases(rng: random.Random) -> List[Dict]:
 # Every `core_range_set` form a capture writes: legacy and current corners, a union of
 # rectangles, reversed corners, and the empty set.
 _CORE_RANGE_SETS = [
-    "{[(x=0,y=0) - (x=1,y=1)]}",
+    CORE_RANGE_SET,
     "{[0-0 - 1-1]}",
     "{[0-0 - 1-0], [1-0 - 1-1]}",
     "{[1-1 - 0-0]}",
@@ -808,54 +809,14 @@ _CORE_RANGE_SETS = [
 ]
 
 
-class _CbGraph:
-    """Builds a captured graph whose nodes carry the ids the app keys snapshots by.
-
-    Never `params: null`, an unparseable size or a missing `core_range_set`: the app
-    throws on each, and no capture writes one, so `test_agent_circular_buffers.py`
-    holds the port's reading of them instead.
-    """
-
-    def __init__(self) -> None:
-        self.nodes: List[Dict] = [{"id": 0, "node_type": "capture_start", "params": {}}]
-
-    def _add(self, node_type: str, params: Dict) -> "_CbGraph":
-        self.nodes.append(
-            {"id": len(self.nodes), "node_type": node_type, "params": params}
-        )
-        return self
-
-    def start(self, name: str) -> "_CbGraph":
-        return self._add("function_start", {"name": name})
-
-    def end(self) -> "_CbGraph":
-        return self._add("function_end", {})
-
-    def free_all(self) -> "_CbGraph":
-        return self._add("circular_buffer_deallocate_all", {})
-
-    def cb(
-        self, address: object = "100", size: object = "4096", **params
-    ) -> "_CbGraph":
-        params.setdefault("core_range_set", _CORE_RANGE_SETS[0])
-        params.setdefault("globally_allocated", "0")
-        return self._add(
-            "circular_buffer_allocate", {"address": address, "size": size, **params}
-        )
-
-    def tensor(self) -> "_CbGraph":
-        # Read by the app's tensor arm of the same loop; the port passes it over.
-        return self._add(
-            "buffer_allocate",
-            {"address": "900", "type": "L1", "size": "65536", "num_cores": "64"},
-        )
-
-
-def _curated_cb_graphs() -> List[List[Dict]]:
-    mesh = _CbGraph().start("ttnn::add").start("BinaryNg").free_all()
+# Never `params: null`, an unparseable size or a missing `core_range_set` below: the app
+# throws on each, and no capture writes one, so `test_agent_circular_buffers.py` holds
+# the port's reading of them instead.
+def _curated_cb_graphs() -> List[List[object]]:
+    mesh = CapturedGraph().start("ttnn::add").start("BinaryNg").free_all()
     for device in range(4):
         mesh.cb(device_id=device)
-    repeat = _CbGraph().start("Matmul").free_all()
+    repeat = CapturedGraph().start("Matmul").free_all()
     # The last is device 1 again, written as a capture that emits it as a string does.
     for device_id in (0, 1, 0, 1, "1"):
         repeat.cb(device_id=device_id)
@@ -864,11 +825,11 @@ def _curated_cb_graphs() -> List[List[Dict]]:
         mesh.end().end().nodes,
         repeat.end().nodes,
         # The order the app's free-all branch was written for.
-        _CbGraph().start("Tilize").cb().cb("200").free_all().end().nodes,
+        CapturedGraph().start("Tilize").cb().cb("200").free_all().end().nodes,
         # A second batch in one scope; the scope keeps the first.
-        _CbGraph().start("Conv").free_all().cb().free_all().cb("200").end().nodes,
+        CapturedGraph().start("Conv").free_all().cb().free_all().cb("200").end().nodes,
         # Each enclosing scope snapshots its child's buffers again.
-        _CbGraph()
+        CapturedGraph()
         .start("ttnn::to_layout")
         .start("ttnn::tilize")
         .start("Tilize")
@@ -879,7 +840,7 @@ def _curated_cb_graphs() -> List[List[Dict]]:
         .end()
         .nodes,
         # Globally allocated, every range form, and a tensor between them.
-        _CbGraph()
+        CapturedGraph()
         .start("Sharded")
         .free_all()
         .cb(globally_allocated="1")
@@ -893,7 +854,7 @@ def _curated_cb_graphs() -> List[List[Dict]]:
         .nodes,
         # Sibling device operations in every capture's order: each one's free releases
         # the last one's buffers, which must not be taken as its own. #2185
-        _CbGraph()
+        CapturedGraph()
         .start("ttnn::embedding")
         .start("Embeddings")
         .free_all()
@@ -906,12 +867,12 @@ def _curated_cb_graphs() -> List[List[Dict]]:
         .end()
         .nodes,
         # A buffer before any scope opens joins the next scope's snapshot.
-        _CbGraph().cb().start("Late").cb("200").end().nodes,
+        CapturedGraph().cb().start("Late").cb("200").end().nodes,
     ]
 
 
-def _cb_graph(rng: random.Random) -> List[Dict]:
-    graph = _CbGraph()
+def _cb_graph(rng: random.Random) -> List[object]:
+    graph = CapturedGraph()
     depth = 0
     for _ in range(rng.randint(1, 24)):
         kind = rng.choice(["start", "start", "end", "free", "cb", "cb", "cb", "tensor"])

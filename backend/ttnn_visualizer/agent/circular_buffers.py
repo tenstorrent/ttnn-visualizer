@@ -38,8 +38,10 @@ SIZE_UNIT = "bytes_per_core"
 
 CIRCULAR_BUFFERS_NOTE = (
     "From the operation's captured graph, as the app's per-core CB view reads it: one "
-    "entry per device operation that allocated circular buffers. Sizes are bytes per "
-    "core, not per bank, so they do not add to allocations. A mesh records each "
+    "entry per device operation that allocated circular buffers. Sizes are bytes on "
+    "each core of a buffer's range, the unit l1_peak sums them in as bytes per L1 bank, "
+    "since an L1 bank is one core's L1; allocations' L1 figures share the unit but "
+    "leave circular buffers out. A mesh records each "
     "circular buffer once per device; those copies are one row whose device_count "
     "says how many devices allocated it, and a device operation each device ran with "
     "the same buffers is one entry with its own device_count. So "
