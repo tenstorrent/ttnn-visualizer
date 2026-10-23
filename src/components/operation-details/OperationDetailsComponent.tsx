@@ -46,6 +46,7 @@ import useBufferFocus from '../../hooks/useBufferFocus';
 import useBufferFocusDismissal from '../../hooks/useBufferFocusDismissal';
 import { StackTraceLanguage } from '../../definitions/StackTrace';
 import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
+import { KEEPS_BUFFER_FOCUS_CLASS } from '../../definitions/BufferFocus';
 import MemoryPlotRenderer from './MemoryPlotRenderer';
 import { getMemoryAddress } from '../../functions/math';
 import {
@@ -376,8 +377,10 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
                                     )}
 
                                     <div
-                                        className='memory-zoom-range-label'
-                                        aria-disabled={!zoomedInViewMainMemory}
+                                        // Not a <label>: it would activate the reset button on any click (#2150).
+                                        className={classNames('memory-zoom-range-label', KEEPS_BUFFER_FOCUS_CLASS, {
+                                            disabled: !zoomedInViewMainMemory,
+                                        })}
                                     >
                                         L1 memory zoom range
                                         <Button

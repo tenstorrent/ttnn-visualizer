@@ -81,35 +81,106 @@ vi.mock('../src/components/OperationDetailsNavigation', () => ({ default: () => 
 
 afterEach(cleanup);
 
+const REQUIRES_BUFFER_ZOOM_HINT = '(Requires buffer zoom to be enabled)';
+
+function renderComponent() {
+    render(
+        <TestProviders>
+            <OperationDetailsComponent operationId={OPERATION_ID} />
+        </TestProviders>,
+    );
+
+    const [lowerHandle, upperHandle] = screen.getAllByRole('slider');
+
+    return {
+        resetButton: screen.getByRole('button', { name: 'Reset L1 memory zoom range' }),
+        // The text is a direct child of the range container, so this resolves to the container itself.
+        rangeLabel: screen.getByText(/L1 memory zoom range/),
+        lowerHandle,
+        upperHandle,
+    };
+}
+
+function enableBufferZoom() {
+    fireEvent.click(screen.getByLabelText('Buffer zoom'));
+}
+
 describe('OperationDetailsComponent L1 memory zoom range reset (#2150)', () => {
-    it('does not reset the narrowed range when clicking the label text, and resets when clicking the reset button', () => {
-        render(
-            <TestProviders>
-                <OperationDetailsComponent operationId={OPERATION_ID} />
-            </TestProviders>,
-        );
+    it('marks the range label disabled until buffer zoom is enabled', () => {
+        const { rangeLabel } = renderComponent();
 
-        const resetButton = screen.getByRole('button', { name: 'Reset L1 memory zoom range' });
+        expect(rangeLabel).toHaveClass('memory-zoom-range-label', 'disabled');
+        expect(rangeLabel).toHaveTextContent(REQUIRES_BUFFER_ZOOM_HINT);
+
+        enableBufferZoom();
+
+        expect(rangeLabel).not.toHaveClass('disabled');
+        expect(rangeLabel).not.toHaveTextContent(REQUIRES_BUFFER_ZOOM_HINT);
+    });
+
+    it('keeps reset disabled until buffer zoom is enabled and the range is narrowed', () => {
+        const { resetButton, lowerHandle } = renderComponent();
+
         expect(resetButton).toBeDisabled();
 
-        fireEvent.click(screen.getByLabelText('Buffer zoom'));
+        enableBufferZoom();
         expect(resetButton).toBeDisabled();
 
-        const [lowerHandle] = screen.getAllByRole('slider');
-        const initialMin = lowerHandle.getAttribute('aria-valuenow');
+        fireEvent.keyDown(lowerHandle, { key: 'ArrowRight' });
+        expect(resetButton).toBeEnabled();
+    });
+
+    it('does not reset the narrowed range when clicking the label text', () => {
+        const { resetButton, rangeLabel, lowerHandle } = renderComponent();
+
+        enableBufferZoom();
         fireEvent.keyDown(lowerHandle, { key: 'ArrowRight' });
         const narrowedMin = lowerHandle.getAttribute('aria-valuenow');
-        expect(narrowedMin).not.toBe(initialMin);
-        expect(resetButton).toBeEnabled();
 
-        // Clicking the label text must not activate the nested reset button.
-        fireEvent.click(screen.getByText(/L1 memory zoom range/));
+        fireEvent.click(rangeLabel);
+
         expect(lowerHandle).toHaveAttribute('aria-valuenow', narrowedMin);
         expect(resetButton).toBeEnabled();
+    });
 
-        // Clicking the reset button itself resets the range.
-        fireEvent.click(resetButton);
+    it('ignores clicks on the label text while buffer zoom is disabled', () => {
+        const { resetButton, rangeLabel, lowerHandle, upperHandle } = renderComponent();
+        const initialMin = lowerHandle.getAttribute('aria-valuenow');
+        const initialMax = upperHandle.getAttribute('aria-valuenow');
+
+        fireEvent.click(rangeLabel);
+
         expect(lowerHandle).toHaveAttribute('aria-valuenow', initialMin);
+        expect(upperHandle).toHaveAttribute('aria-valuenow', initialMax);
+        expect(resetButton).toBeDisabled();
+    });
+
+    it('restores the full range when the lower handle was narrowed', () => {
+        const { resetButton, lowerHandle } = renderComponent();
+        const initialMin = lowerHandle.getAttribute('aria-valuenow');
+
+        enableBufferZoom();
+        fireEvent.keyDown(lowerHandle, { key: 'ArrowRight' });
+        expect(lowerHandle).not.toHaveAttribute('aria-valuenow', initialMin);
+
+        fireEvent.click(resetButton);
+
+        expect(lowerHandle).toHaveAttribute('aria-valuenow', initialMin);
+        expect(resetButton).toBeDisabled();
+    });
+
+    it('restores the full range when the upper handle was narrowed', () => {
+        const { resetButton, upperHandle } = renderComponent();
+        const initialMax = upperHandle.getAttribute('aria-valuenow');
+
+        enableBufferZoom();
+        fireEvent.keyDown(upperHandle, { key: 'ArrowLeft' });
+        expect(upperHandle).not.toHaveAttribute('aria-valuenow', initialMax);
+        expect(resetButton).toBeEnabled();
+
+        fireEvent.click(resetButton);
+
+        expect(upperHandle).toHaveAttribute('aria-valuenow', initialMax);
         expect(resetButton).toBeDisabled();
     });
 });
