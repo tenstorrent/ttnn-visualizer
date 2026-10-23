@@ -11,9 +11,11 @@ import {
     getTopL1PeakOperations,
     resolveAddressLifetimes,
 } from '../src/functions/l1PeakDecomposition';
+import { processMemoryAllocations } from '../src/functions/processMemoryAllocations';
 import { AllocationFailure } from '../src/model/AllocationFailure';
 import { Buffer, Node, Operation, OperationDescription } from '../src/model/APIData';
 import { L1PeakDecomposition } from '../src/model/L1PeakDecomposition';
+import { CBPressureSnapshot } from '../src/model/MemoryAllocations';
 import golden from './data/agentFailureParity.json';
 
 // The agent's Python ports (#2154) wrote this golden, from test_agent_failure_parity.py; holding
@@ -29,6 +31,7 @@ it('the golden covers every function the agent restates', () => {
     expect(golden.addressLifetimes.length).toBeGreaterThan(0);
     expect(golden.l1Peak.length).toBeGreaterThan(0);
     expect(golden.topOperations.length).toBeGreaterThan(0);
+    expect(golden.circularBuffers.length).toBeGreaterThan(0);
 });
 
 describe('parseAllocationFailure and its diagnosis', () => {
@@ -134,5 +137,34 @@ describe('getTopL1PeakOperations', () => {
         expect(
             getTopL1PeakOperations(decompositions, count).map(({ entry, alsoAt }) => [entry.operationId, alsoAt]),
         ).toEqual(top);
+    });
+});
+
+describe('processMemoryAllocations circular-buffer snapshots', () => {
+    // The port keeps no `nodeId` or expanded `cores`; `numCores` and `coreRangeSet` pin the
+    // latter. An absent id or name is `undefined` here and `null` in JSON.
+    const projected = ({ byCore, maxBytes, unattributedBytes, allocations }: CBPressureSnapshot) => ({
+        byCore,
+        maxBytes,
+        unattributedBytes,
+        allocations: allocations.map((allocation) => ({
+            address: allocation.address,
+            size: allocation.size,
+            numCores: allocation.numCores,
+            coreRangeSet: allocation.coreRangeSet ?? null,
+            allocateOperationId: allocation.allocateOperationId ?? null,
+            allocateOperationName: allocation.allocateOperationName ?? null,
+            globallyAllocated: allocation.globallyAllocated,
+            deviceCount: allocation.deviceCount,
+        })),
+    });
+
+    it.each(indexedCases(golden.circularBuffers))('case %i matches the agent', (_, { nodes, snapshots }) => {
+        // Cloned because it writes the allocating operation onto each node's params.
+        const { cbPressureByOpId } = processMemoryAllocations(structuredClone(nodes) as Node[]);
+
+        expect([...cbPressureByOpId.entries()].map(([opId, snapshot]) => [opId, projected(snapshot)])).toEqual(
+            snapshots,
+        );
     });
 });

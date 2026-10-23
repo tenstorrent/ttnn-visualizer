@@ -282,15 +282,18 @@ def _free(address: int) -> Dict:
     }
 
 
-def _circular_buffer(address: int, size: int) -> Dict:
-    return {
-        "node_type": "circular_buffer_allocate",
-        "params": {
-            "address": str(address),
-            "size": str(size),
-            "globally_allocated": "0",
-        },
-    }
+def _circular_buffer(
+    address: int,
+    size: int,
+    core_range_set: Optional[str] = None,
+    device_id: Optional[int] = None,
+) -> Dict:
+    params = {"address": str(address), "size": str(size), "globally_allocated": "0"}
+    if core_range_set is not None:
+        params["core_range_set"] = core_range_set
+    if device_id is not None:
+        params["device_id"] = str(device_id)
+    return {"node_type": "circular_buffer_allocate", "params": params}
 
 
 class TestErrors:
@@ -985,7 +988,7 @@ class TestHowTheDatabaseIsRead:
             ):
                 failures.errors(registry, handle)
             with pytest.raises(
-                bounds.GraphTooLargeError, match="past the 10 an error lookup"
+                bounds.GraphTooLargeError, match="past the 10 operation_detail"
             ):
                 linking.operation_detail(registry, handle, operation_id=1)
 
@@ -1155,8 +1158,9 @@ class TestOperationDetail:
                 tool(registry, handle, rank=1)
 
     def test_no_errors_table_reads_no_graph_so_needs_no_graph_rank(self, tmp_path):
-        """Without an errors table no graph is read, so a `captured_graph` without
-        `rank` cannot misattribute anything; the answer says the table is missing."""
+        """Without an errors table no graph is read for an error, so a `captured_graph`
+        without `rank` cannot misattribute one; the answer says the table is missing.
+        The circular buffers do read the graph, so they alone are withheld."""
         registry, handle = _ranked_report(
             tmp_path,
             {rank: {"operations": [(1, "ttnn.add", 1.0)]} for rank in (0, 1)},
@@ -1169,7 +1173,9 @@ class TestOperationDetail:
 
         assert listed["errors"] == []
         assert "predates the errors table" in listed["caveat"]
-        assert "withheld" not in (detail.get("caveat") or "")
+        assert "error is withheld" not in detail["caveat"]
+        assert "circular_buffers is withheld" in detail["caveat"]
+        assert "circular_buffers" not in detail
 
     def test_an_empty_errors_table_needs_no_graph_rank_either(self, tmp_path):
         registry, handle = _ranked_report(
@@ -1182,7 +1188,8 @@ class TestOperationDetail:
         detail = linking.operation_detail(registry, handle, operation_id=1, rank=1)
 
         assert listed["errors"] == []
-        assert "withheld" not in (detail.get("caveat") or "")
+        assert "error is withheld" not in detail["caveat"]
+        assert "circular_buffers is withheld" in detail["caveat"]
 
     def test_a_listed_error_needs_its_graph_rank(self, tmp_path):
         """With `rank` on `errors` but not on `captured_graph`, the error's failed
@@ -1237,6 +1244,121 @@ class TestOperationDetail:
 
         assert detail["name"] == "ttnn.add"
         assert "dram_fallback" not in detail
+
+    def test_it_carries_the_circular_buffers_each_device_operation_allocated(
+        self, tmp_path
+    ):
+        """Read from an older capture's `counter` ids, with a mesh's copies folded and
+        the enclosing scope's repeat of them left out, as the app shows them."""
+        graph = [
+            {"node_type": "capture_start", "params": {}},
+            _start("ttnn::tilize"),
+            _start("TilizeDeviceOperation"),
+            {"node_type": "circular_buffer_deallocate_all", "params": {}},
+            *(
+                _circular_buffer(5000, 4096, "{[(x=0,y=0) - (x=7,y=7)]}", device)
+                for device in range(8)
+            ),
+            _end("TilizeDeviceOperation"),
+            _end("ttnn::tilize"),
+        ]
+        for counter, node in enumerate(graph):
+            node["counter"] = counter
+        registry, handle = _report(
+            tmp_path, operations=[(1, "ttnn.tilize")], graphs=[(1, graph)]
+        )
+
+        buffers = linking.operation_detail(registry, handle, operation_id=1)[
+            "circular_buffers"
+        ]
+
+        assert buffers["circular_buffer_count"] == 1
+        assert buffers["device_operation_count"] == 1
+        (device_operation,) = buffers["device_operations"]
+        assert device_operation["name"] == "TilizeDeviceOperation"
+        assert device_operation["max_bytes_per_core"] == 4096
+        assert device_operation["circular_buffers"] == [
+            {
+                "address": 5000,
+                "size_per_core": 4096,
+                "core_range_set": "{[(x=0,y=0) - (x=7,y=7)]}",
+                "core_count": 64,
+                "device_count": 8,
+                "globally_allocated": False,
+            }
+        ]
+
+    def test_an_operation_without_a_graph_row_has_no_circular_buffers_field(
+        self, tmp_path
+    ):
+        """No row says nothing about the operation's buffers; an empty graph says it
+        allocated none."""
+        registry, handle = _report(
+            tmp_path,
+            operations=[(1, "ttnn.add"), (2, "ttnn.add")],
+            graphs=[(2, [])],
+        )
+
+        unrecorded = linking.operation_detail(registry, handle, operation_id=1)
+        empty = linking.operation_detail(registry, handle, operation_id=2)
+
+        assert "circular_buffers" not in unrecorded
+        assert empty["circular_buffers"]["circular_buffer_count"] == 0
+        assert empty["circular_buffers"]["device_operations"] == []
+
+    def test_a_report_without_the_graph_table_has_no_circular_buffers_field(
+        self, tmp_path
+    ):
+        registry, handle = _report(tmp_path, operations=[(1, "ttnn.add")])
+        connection = sqlite3.connect(
+            Path(registry.get(handle).profiler_path) / "db.sqlite"
+        )
+        try:
+            connection.execute("DROP TABLE captured_graph")
+            connection.commit()
+        finally:
+            connection.close()
+
+        detail = linking.operation_detail(registry, handle, operation_id=1)
+
+        assert "circular_buffers" not in detail
+        assert "withheld" not in (detail.get("caveat") or "")
+
+    def test_its_circular_buffers_are_read_from_the_rank_asked_for(self, tmp_path):
+        registry, handle = _two_rank_report(
+            tmp_path,
+            errors_ranked=True,
+            graphs={
+                rank: [
+                    {"node_type": "capture_start", "params": {}},
+                    _start("Conv2d"),
+                    _circular_buffer(address, 1024, "{[0-0 - 0-0]}"),
+                    _end("Conv2d"),
+                ]
+                for rank, address in ((0, 100), (1, 200))
+            },
+        )
+
+        detail = linking.operation_detail(registry, handle, operation_id=1, rank=1)
+
+        (device_operation,) = detail["circular_buffers"]["device_operations"]
+        assert [row["address"] for row in device_operation["circular_buffers"]] == [200]
+
+    def test_a_graph_past_the_bound_withholds_only_the_circular_buffers(self, tmp_path):
+        """Without an error, the read the bound refuses is the circular buffers' alone,
+        so the rest of the detail still answers."""
+        registry, handle = _report(
+            tmp_path,
+            operations=[(1, "ttnn.add")],
+            graphs=[(1, [_start("Add"), _circular_buffer(100, 1024)])],
+        )
+
+        with patch.object(bounds, "MAX_CAPTURED_GRAPH_CHARS", 10):
+            detail = linking.operation_detail(registry, handle, operation_id=1)
+
+        assert detail["name"] == "ttnn.add"
+        assert "circular_buffers" not in detail
+        assert "circular_buffers is withheld" in detail["caveat"]
 
 
 class TestInventoryAndTransport:
