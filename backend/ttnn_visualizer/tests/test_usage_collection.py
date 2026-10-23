@@ -18,17 +18,25 @@ from types import SimpleNamespace
 import pytest
 from ttnn_visualizer import event_logging, usage_collection, usage_metrics
 from ttnn_visualizer.event_logging import (
+    _CONSTRAINED_STRING_DETAIL_FIELDS,
     _DETAIL_FIELD_ENUMS,
     CLIENT_EVENT_DETAIL_FIELDS,
+    COUNT_FIELD,
+    EVENT_DETAIL_FIELDS,
+    EVENT_FIELD,
     MAX_LOG_BYTES,
     RECORDING_DISABLED_ENV_VAR,
     RUN_ID_ENV_VAR,
+    RUN_ID_FIELD,
+    SCHEMA_VERSION_FIELD,
     SERVER_EVENT_DETAIL_FIELDS,
+    TIMESTAMP_FIELD,
     EventLogEvent,
     EventLogView,
     _compact,
     get_disabled_marker_path,
     get_event_log_path,
+    parse_logfmt_line,
     record_app_start,
     record_event,
 )
@@ -964,6 +972,126 @@ def test_payload_matches_the_privacy_reviewed_golden_output(tmp_path):
             }
         ]
     }
+
+
+def _attribute_values(point) -> dict[str, str]:
+    return {
+        attribute["key"]: attribute["value"]["stringValue"]
+        for attribute in point["attributes"]
+    }
+
+
+def test_exported_attributes_are_only_schema_fields_and_machine_id(
+    event_log_directory,
+):
+    _record_every_event()
+    log_path = get_event_log_path()
+    recorded_app_start = next(
+        fields
+        for fields in map(
+            parse_logfmt_line, log_path.read_text(encoding="utf-8").splitlines()
+        )
+        if fields and fields[EVENT_FIELD] == EventLogEvent.APP_START.value
+    )
+    machine_id = uuid.uuid4().hex
+    snapshot = collect_usage_metrics(
+        usage_collection.UsageCollectionConfig(enabled=True, machine_id=machine_id),
+        log_path=log_path,
+    )
+    assert snapshot is not None
+    payload = build_otlp_payload(snapshot, machine_id, time_ns=2)
+
+    event_by_metric_name = {
+        f"ttnn_visualizer_{event.value}_total": event for event in EventLogEvent
+    }
+    seen_events = set()
+    for metric in payload["resourceMetrics"][0]["scopeMetrics"][0]["metrics"]:
+        event = event_by_metric_name.get(metric["name"])
+        data = metric.get("sum") or metric["gauge"]
+        for point in data["dataPoints"]:
+            values = _attribute_values(point)
+            assert values.pop(usage_collection.MACHINE_ID_LABEL) == machine_id
+            for private_field in (
+                TIMESTAMP_FIELD,
+                RUN_ID_FIELD,
+                SCHEMA_VERSION_FIELD,
+                COUNT_FIELD,
+            ):
+                assert private_field not in values
+            if event is None:
+                # Collector health carries the identity and nothing else.
+                assert metric["name"].startswith("ttnn_visualizer_usage_collector_")
+                assert values == {}
+                continue
+
+            seen_events.add(event)
+            assert set(values) == set(EVENT_DETAIL_FIELDS[event])
+            for field_name, value in values.items():
+                enum_type = _DETAIL_FIELD_ENUMS.get(field_name)
+                if enum_type is not None:
+                    assert value in {member.value for member in enum_type}
+                else:
+                    # Checked against the line as written rather than through the
+                    # reader's own validator, so the test cannot agree by construction.
+                    assert field_name in _CONSTRAINED_STRING_DETAIL_FIELDS
+                    assert value == recorded_app_start[field_name]
+
+    assert seen_events == set(EventLogEvent)
+
+
+def test_field_order_does_not_split_a_series(tmp_path):
+    log_path = tmp_path / "events.log"
+    log_path.write_text(
+        "ts=2026-09-28T10:00:00Z event=report_loaded schema_version=1 "
+        "kind=profiler source=upload\n"
+        "source=upload kind=profiler schema_version=1 event=report_loaded "
+        "ts=2026-09-28T10:01:00Z\n"
+        "kind=profiler ts=2026-09-28T10:02:00Z source=upload event=report_loaded "
+        "schema_version=1\n",
+        encoding="utf-8",
+    )
+    machine_id = uuid.uuid4().hex
+
+    metrics = _exported_series(
+        usage_collection.UsageCollectionConfig(enabled=True, machine_id=machine_id),
+        log_path=log_path,
+    )
+
+    assert re.findall(r"^ttnn_visualizer_report_loaded_total\{.*$", metrics, re.M) == [
+        f'ttnn_visualizer_report_loaded_total{{kind="profiler",'
+        f'machine_id="{machine_id}",source="upload"}} 3'
+    ]
+    assert _health_value(metrics, "parse_errors_total") == 0
+
+
+def test_exporter_does_not_modify_the_event_log(tmp_path):
+    log_path = tmp_path / "events.log"
+    log_path.write_text(
+        "ts=2026-09-28T10:00:00Z event=view_opened schema_version=1 "
+        "view=operations count=3\n"
+        "not-logfmt\n",
+        encoding="utf-8",
+    )
+    contents = log_path.read_bytes()
+    status = log_path.stat()
+    listing = sorted(tmp_path.iterdir())
+    config = usage_collection.UsageCollectionConfig(
+        enabled=True, machine_id=uuid.uuid4().hex
+    )
+
+    for _ in range(2):
+        snapshot = collect_usage_metrics(config, log_path=log_path)
+        assert snapshot is not None
+        build_otlp_payload(snapshot, config.machine_id, time_ns=2)
+
+    after = log_path.stat()
+    assert log_path.read_bytes() == contents
+    assert (after.st_size, after.st_mtime_ns, after.st_ino) == (
+        status.st_size,
+        status.st_mtime_ns,
+        status.st_ino,
+    )
+    assert sorted(tmp_path.iterdir()) == listing
 
 
 def test_disabled_collection_has_no_snapshot():
