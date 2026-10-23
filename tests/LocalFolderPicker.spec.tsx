@@ -10,7 +10,7 @@ import { CONFIRM_DELETE_LABEL, ManagedEntity } from '../src/definitions/ManagedE
 import { ReportFolder } from '../src/definitions/Reports';
 import { ServerConfig } from '../src/definitions/ServerConfig';
 import { TEST_IDS } from '../src/definitions/TestIds';
-import { NO_LINKED_RESULTS_TEXT } from '../src/components/report-selection/FolderPickerFilterActions';
+import { CLEAR_FILTER_QUERY_LABEL, NO_LINKED_RESULTS_TEXT } from '../src/definitions/FolderLinkStatus';
 import { getDeleteActionLabel } from '../src/functions/managedEntityLabels';
 import testForPortal from './helpers/testForPortal';
 import { TestProviders } from './helpers/TestProviders';
@@ -350,7 +350,7 @@ describe('LocalFolderPicker linked-only filter', () => {
         typeQuery('unknown');
         await waitFor(() => expect(getRowLabels()).toEqual(['/unknown-run']), WAIT_FOR_OPTIONS);
 
-        fireEvent.click(screen.getByLabelText('Clear filter query'));
+        fireEvent.click(screen.getByLabelText(CLEAR_FILTER_QUERY_LABEL));
         expect(screen.getByPlaceholderText('Filter...')).toHaveValue('');
         await waitFor(() => expect(getRowLabels()).toHaveLength(folders.length), WAIT_FOR_OPTIONS);
     });
@@ -364,12 +364,12 @@ describe('LocalFolderPicker linked-only filter', () => {
         await waitFor(() => expect(input).toHaveFocus(), WAIT_FOR_OPTIONS);
 
         typeQuery('unknown');
-        const clearButton = screen.getByLabelText('Clear filter query');
+        const clearButton = screen.getByLabelText(CLEAR_FILTER_QUERY_LABEL);
         clearButton.focus();
         fireEvent.keyDown(clearButton, { key: 'Enter' });
         fireEvent.keyUp(clearButton, { key: 'Enter' });
 
-        expect(screen.queryByLabelText('Clear filter query')).toBeNull();
+        expect(screen.queryByLabelText(CLEAR_FILTER_QUERY_LABEL)).toBeNull();
         expect(input).toHaveValue('');
         expect(input).toHaveFocus();
     });

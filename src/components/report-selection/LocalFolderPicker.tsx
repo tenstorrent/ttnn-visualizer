@@ -2,17 +2,19 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { Button, ButtonVariant, MenuItem, Position, Tooltip } from '@blueprintjs/core';
 import { ItemPredicate, ItemRenderer, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
 import { useInstance } from '../../hooks/useAPI';
+import useFolderPickerFilter from '../../hooks/useFolderPickerFilter';
 import 'styles/components/FolderPicker.scss';
 import {
     getFolderLinkState,
     matchesLinkedOnlyFilter,
     shouldShowFolderLinkStatus,
 } from '../../functions/folderLinkStatus';
+import { NO_LINKED_RESULTS_TEXT } from '../../definitions/FolderLinkStatus';
 import { ReportLinkRunsById } from '../../definitions/ReportLinks';
 import { ReportFolder } from '../../definitions/Reports';
 import getServerConfig from '../../functions/getServerConfig';
@@ -24,7 +26,6 @@ import { TEST_IDS } from '../../definitions/TestIds';
 import ConfirmDeleteAlert from '../ConfirmDeleteAlert';
 import HighlightedText from '../HighlightedText';
 import FolderLinkStatusIcon from './FolderLinkStatusIcon';
-import FolderPickerFilterActions, { NO_LINKED_RESULTS_TEXT } from './FolderPickerFilterActions';
 import SelectRowActions from './SelectRowActions';
 
 interface LocalFolderPickerProps {
@@ -66,9 +67,6 @@ const LocalFolderPicker = ({
     const { data: instance } = useInstance();
 
     const [folderToDelete, setFolderToDelete] = useState<ReportFolder | null>(null);
-    const [filterQuery, setFilterQuery] = useState('');
-    const [isLinkedOnly, setIsLinkedOnly] = useState(false);
-    const filterInputRef = useRef<HTMLInputElement>(null);
 
     const isDisabled = disabled || loading || !items || items.length === 0 || !instance;
     const activePath = value;
@@ -85,15 +83,7 @@ const LocalFolderPicker = ({
     // direct-report mode.
     const isDeleteDisabled = loading;
     const showLinkStatus = shouldShowFolderLinkStatus(linkedRuns, unlinkedRuns);
-    // The clear button unmounts once the query is empty, taking focus with it; without this the
-    // popover's keyboard handling (arrows, Enter, typing) stops reaching the picker.
-    const handleClearQuery = () => {
-        setFilterQuery('');
-        filterInputRef.current?.focus();
-    };
-
-    // Without badges there is nothing to filter on, so a toggle left on must not hide rows.
-    const isLinkedOnlyActive = showLinkStatus && isLinkedOnly;
+    const { isLinkedOnlyActive, selectProps: filterSelectProps } = useFolderPickerFilter(showLinkStatus);
 
     // Rebuilt every render on purpose: QueryList refilters when the predicate's identity changes,
     // which is how a toggle or a new link verdict reaches the list.
@@ -174,20 +164,7 @@ const LocalFolderPicker = ({
                 items={items ?? []}
                 itemPredicate={itemPredicate}
                 itemRenderer={renderItem}
-                query={filterQuery}
-                onQueryChange={setFilterQuery}
-                inputProps={{
-                    inputRef: filterInputRef,
-                    rightElement: (
-                        <FolderPickerFilterActions
-                            query={filterQuery}
-                            onClearQuery={handleClearQuery}
-                            showLinkedOnlyToggle={showLinkStatus}
-                            isLinkedOnly={isLinkedOnly}
-                            onToggleLinkedOnly={() => setIsLinkedOnly((current) => !current)}
-                        />
-                    ),
-                }}
+                {...filterSelectProps}
                 noResults={
                     <MenuItem
                         disabled

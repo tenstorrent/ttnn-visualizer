@@ -5,22 +5,23 @@
 import { Button, MenuItem } from '@blueprintjs/core';
 import { IconName, IconNames } from '@blueprintjs/icons';
 import { type ItemPredicate, ItemRenderer, Select } from '@blueprintjs/select';
-import { type ReactNode, useRef, useState } from 'react';
+import { type ReactNode } from 'react';
 import 'styles/components/FolderPicker.scss';
 import {
     getFolderLinkState,
     matchesLinkedOnlyFilter,
     shouldShowFolderLinkStatus,
 } from '../../functions/folderLinkStatus';
+import { NO_LINKED_RESULTS_TEXT } from '../../definitions/FolderLinkStatus';
 import { ReportLinkRunsById } from '../../definitions/ReportLinks';
 import { RemoteConnection, RemoteFolder } from '../../model/RemoteConnection';
 import { TEST_IDS } from '../../definitions/TestIds';
 import { getReportId } from '../../functions/reportLinks';
 import { getRankedReportLabel } from '../../functions/reportRank';
+import useFolderPickerFilter from '../../hooks/useFolderPickerFilter';
 import useRemoteConnection from '../../hooks/useRemote';
 import HighlightedText from '../HighlightedText';
 import FolderLinkStatusIcon from './FolderLinkStatusIcon';
-import FolderPickerFilterActions, { NO_LINKED_RESULTS_TEXT } from './FolderPickerFilterActions';
 import { ReportKind } from '../../definitions/EventLogEvent';
 import { RemoteFolderType } from '../../definitions/Reports';
 
@@ -124,18 +125,7 @@ const RemoteFolderSelector = ({
     const { persistentState } = useRemoteConnection();
     const remoteConnection = persistentState.selectedConnection;
     const showLinkStatus = shouldShowFolderLinkStatus(linkedRuns, unlinkedRuns);
-    const [filterQuery, setFilterQuery] = useState('');
-    const [isLinkedOnly, setIsLinkedOnly] = useState(false);
-    const filterInputRef = useRef<HTMLInputElement>(null);
-    // The clear button unmounts once the query is empty, taking focus with it; without this the
-    // popover's keyboard handling (arrows, Enter, typing) stops reaching the picker.
-    const handleClearQuery = () => {
-        setFilterQuery('');
-        filterInputRef.current?.focus();
-    };
-
-    // Without badges there is nothing to filter on, so a toggle left on must not hide rows.
-    const isLinkedOnlyActive = showLinkStatus && isLinkedOnly;
+    const { isLinkedOnlyActive, selectProps: filterSelectProps } = useFolderPickerFilter(showLinkStatus);
 
     const isDisabled = loading || remoteFolderList?.length === 0 || disabled;
 
@@ -159,20 +149,7 @@ const RemoteFolderSelector = ({
                     linkedRuns,
                     unlinkedRuns,
                 })}
-                query={filterQuery}
-                onQueryChange={setFilterQuery}
-                inputProps={{
-                    inputRef: filterInputRef,
-                    rightElement: (
-                        <FolderPickerFilterActions
-                            query={filterQuery}
-                            onClearQuery={handleClearQuery}
-                            showLinkedOnlyToggle={showLinkStatus}
-                            isLinkedOnly={isLinkedOnly}
-                            onToggleLinkedOnly={() => setIsLinkedOnly((current) => !current)}
-                        />
-                    ),
-                }}
+                {...filterSelectProps}
                 noResults={
                     <MenuItem
                         disabled

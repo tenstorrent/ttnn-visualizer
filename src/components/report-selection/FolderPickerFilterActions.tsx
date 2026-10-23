@@ -5,12 +5,8 @@
 import { KeyboardEvent } from 'react';
 import { Button, ButtonVariant } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
+import { CLEAR_FILTER_QUERY_LABEL, LINKED_ONLY_LABEL } from '../../definitions/FolderLinkStatus';
 import { TEST_IDS } from '../../definitions/TestIds';
-
-export const LINKED_ONLY_LABEL = 'Show linked reports only';
-export const NO_LINKED_RESULTS_TEXT = 'No linked reports.';
-// Blueprint's own wording for the clear button these actions replace.
-const CLEAR_QUERY_LABEL = 'Clear filter query';
 
 // The picker's QueryList selects the active row on an Enter that reaches its popover content,
 // from any focused element in it. Pressing Enter on one of these buttons must only press it;
@@ -64,8 +60,8 @@ const FolderPickerFilterActions = ({
                 <Button
                     variant={ButtonVariant.MINIMAL}
                     icon={IconNames.CROSS}
-                    aria-label={CLEAR_QUERY_LABEL}
-                    title={CLEAR_QUERY_LABEL}
+                    aria-label={CLEAR_FILTER_QUERY_LABEL}
+                    title={CLEAR_FILTER_QUERY_LABEL}
                     onClick={onClearQuery}
                     onKeyDown={stopEnterPropagation}
                     onKeyUp={stopEnterPropagation}

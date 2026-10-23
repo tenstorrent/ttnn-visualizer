@@ -20,7 +20,7 @@ import { FETCH_REMOTE_FOLDERS_LABEL, REMOTE_MEMORY_PATH_LABEL } from '../src/def
 import { RemoteConnection, RemoteFolder } from '../src/model/RemoteConnection';
 import { SSH_HOST_LABEL, SSH_USERNAME_LABEL } from '../src/definitions/SshConnectionFields';
 import { TEST_IDS } from '../src/definitions/TestIds';
-import { NO_LINKED_RESULTS_TEXT } from '../src/components/report-selection/FolderPickerFilterActions';
+import { CLEAR_FILTER_QUERY_LABEL, NO_LINKED_RESULTS_TEXT } from '../src/definitions/FolderLinkStatus';
 import {
     LOCAL_STORAGE_KEY_CONNECTIONS,
     LOCAL_STORAGE_KEY_SELECTED,
@@ -1668,20 +1668,27 @@ const renderPerformanceSelector = async ({
 }: RenderRemoteFolderSelectorOptions) => {
     setupConnection(connectionList);
 
-    render(
+    const renderSelector = (linked?: ReportLinkRunsById, unlinked?: ReportLinkRunsById) => (
         <TestProviders>
             <RemoteFolderSelector
                 remoteFolderList={folderList}
                 onSelectFolder={onSelectFolder}
                 type={type}
-                linkedRuns={linkedRuns}
-                unlinkedRuns={unlinkedRuns}
+                linkedRuns={linked}
+                unlinkedRuns={unlinked}
             />
-        </TestProviders>,
+        </TestProviders>
     );
+
+    const { rerender } = render(renderSelector(linkedRuns, unlinkedRuns));
 
     getButtonWithText(NO_SELECTION).click();
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+
+    return {
+        rerenderWithRuns: (linked: ReportLinkRunsById, unlinked: ReportLinkRunsById) =>
+            rerender(renderSelector(linked, unlinked)),
+    };
 };
 
 const expectSuppliedOrder = async (type: RemoteFolderType) => {
@@ -1734,6 +1741,17 @@ it('shows only linked reports while the linked-only toggle is on', async () => {
     await waitFor(() => expect(getRemoteRowLabels()).toHaveLength(2), WAIT_FOR_OPTIONS);
 });
 
+it('stops hiding remote rows once the badges go away', async () => {
+    const { rerenderWithRuns } = await renderLinkedRankSelector();
+
+    fireEvent.click(screen.getByTestId(TEST_IDS.FOLDER_PICKER_LINKED_ONLY_TOGGLE));
+    await waitFor(() => expect(getRemoteRowLabels()).toHaveLength(1), WAIT_FOR_OPTIONS);
+
+    rerenderWithRuns(runsWithoutFingerprints(), runsWithoutFingerprints());
+    await waitFor(() => expect(getRemoteRowLabels()).toHaveLength(2), WAIT_FOR_OPTIONS);
+    expect(screen.queryByTestId(TEST_IDS.FOLDER_PICKER_LINKED_ONLY_TOGGLE)).toBeNull();
+});
+
 it('combines the linked-only toggle with a raw-path query', async () => {
     await renderLinkedRankSelector();
 
@@ -1765,7 +1783,7 @@ it('returns focus to the remote filter input when Enter clears the query', async
     await waitFor(() => expect(input).toHaveFocus(), WAIT_FOR_OPTIONS);
 
     fireEvent.change(input, { target: { value: 'rank0' } });
-    const clearButton = screen.getByLabelText('Clear filter query');
+    const clearButton = screen.getByLabelText(CLEAR_FILTER_QUERY_LABEL);
     clearButton.focus();
     fireEvent.keyDown(clearButton, { key: 'Enter' });
     fireEvent.keyUp(clearButton, { key: 'Enter' });
