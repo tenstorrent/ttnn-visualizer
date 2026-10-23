@@ -15,7 +15,7 @@ export const isMemoryReportLinked = <T>(
     opIdsMap: readonly unknown[],
 ): operations is T[] => !!operations?.length && opIdsMap.length > 0;
 
-// See `DeviceOperationEndParams.aborted`. `linking.py` reads it the same way.
+// See `DeviceOperationEndParams.aborted`. `scope_outcomes.py` reads it the same way.
 const ABORTED_PARAM_VALUE = 'true';
 
 // Graph params come straight from the capture, so `params` is guarded despite its type.
@@ -39,7 +39,8 @@ export interface ScopePairing {
  * Pairs each end with the latest open start of its name, which pairs nested and
  * sequential scopes alike and needs no node ids. The perf linking and
  * `getScopeOutcomes` both pair ends to starts this way; only the latter decides what
- * happens to the scopes no end closes.
+ * happens to the scopes no end closes. Mirrored as `scope_pairing` in
+ * `backend/ttnn_visualizer/agent/scope_outcomes.py`.
  */
 export const getScopePairing = (nodes: Node[]): ScopePairing => {
     const openStarts: { name: string | undefined; index: number }[] = [];

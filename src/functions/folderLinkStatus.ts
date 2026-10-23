@@ -38,3 +38,7 @@ export const shouldShowFolderLinkStatus = (
     linkedRuns?: ReportLinkRunsById | null,
     unlinkedRuns?: ReportLinkRunsById | null,
 ): boolean => Boolean(linkedRuns?.size || unlinkedRuns?.size);
+
+/** Whether a row passes the linked-only filter; with the filter off, every row does. */
+export const matchesLinkedOnlyFilter = (isLinkedOnly: boolean, linkState: FolderLinkState): boolean =>
+    !isLinkedOnly || linkState === FolderLinkState.LINKED;

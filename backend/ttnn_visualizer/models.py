@@ -31,6 +31,10 @@ class BufferType(enum.Enum):
     TRACE = 4
 
 
+# As `isL1BufferType` in the app: the kinds that occupy a core's L1.
+L1_BUFFER_TYPES = frozenset({BufferType.L1, BufferType.L1_SMALL})
+
+
 class ReportLocation(enum.Enum):
     LOCAL = "local"
     REMOTE = "remote"

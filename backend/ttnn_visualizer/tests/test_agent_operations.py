@@ -16,6 +16,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from ttnn_visualizer.agent import failures, linking
 from ttnn_visualizer.agent import operations as agent_operations
 from ttnn_visualizer.agent import server
 from ttnn_visualizer.agent.bounds import MAX_LIMIT
@@ -432,6 +433,23 @@ INSERT INTO buffers VALUES (1, 0, 100, 1000, 'L1', 0), (1, 0, 200, 9000, 'L1', 0
 INSERT INTO devices (
     device_id, worker_l1_size, l1_num_banks, l1_bank_size, num_compute_cores
 ) VALUES (0, 1499136, 64, 1370848, 64);
+"""
+
+# `_RANKED_REPORT_SQL`, whose tables all carry `rank`, with the three the failure tools
+# read beside them written before the column: each holds both ranks' rows.
+_UNATTRIBUTABLE_FAILURE_SQL = _RANKED_REPORT_SQL + """
+CREATE TABLE errors (
+    operation_id int, operation_name text, error_type text, error_message text,
+    stack_trace text, timestamp text
+);
+CREATE TABLE captured_graph (operation_id int, captured_graph text);
+CREATE TABLE operation_arguments (operation_id int, name text, value text);
+
+INSERT INTO errors VALUES
+    (1, 'op_on_rank_zero', 'TT_THROW', 'rank 0 failed', '', ''),
+    (1, 'op_on_rank_one', 'TT_THROW', 'rank 1 failed', '', '');
+INSERT INTO captured_graph VALUES (1, '[]'), (1, '[]');
+INSERT INTO operation_arguments VALUES (1, 'memory_config', NULL), (1, 'memory_config', NULL);
 """
 
 # DRAM on two devices, L1 on one, so a filtered call must not inherit the other
@@ -1520,6 +1538,33 @@ class TestRankScope:
                 "operations"
             ]
         ] == ["op_rank1"]
+
+    @pytest.mark.parametrize(
+        "tool", [failures.errors, failures.dram_fallbacks, failures.l1_peak]
+    )
+    def test_failure_rows_that_cannot_be_attributed_to_a_rank_are_refused(
+        self, loaded, tool
+    ):
+        """Each failure tool's figures come from `errors`, `captured_graph` or
+        `operation_arguments`, and here none of them can say which rank a row is."""
+        registry, handle = loaded(_UNATTRIBUTABLE_FAILURE_SQL, name="failures")
+
+        with pytest.raises(ValueError, match="cannot be attributed to rank 1"):
+            tool(registry, handle, rank=1)
+
+    def test_operation_detail_withholds_the_failure_fields_it_cannot_attribute(
+        self, loaded
+    ):
+        """Unlike the failure tools, the detail answers without them, and says why."""
+        registry, handle = loaded(_UNATTRIBUTABLE_FAILURE_SQL, name="failures")
+
+        detail = linking.operation_detail(registry, handle, 1, rank=1)
+
+        assert detail["name"] == "op_on_rank_one"
+        assert "error" not in detail
+        assert "dram_fallback" not in detail
+        assert "error is withheld" in detail["caveat"]
+        assert "dram_fallback is withheld" in detail["caveat"]
 
     def test_a_single_rank_report_with_the_same_mix_still_answers(self, loaded):
         """The mix cannot misattribute anything when there is only one rank, and no

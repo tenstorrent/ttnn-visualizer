@@ -15,7 +15,7 @@ import logging
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
-from ttnn_visualizer.agent import app_links, linking, operations, server
+from ttnn_visualizer.agent import app_links, failures, linking, operations, server
 from ttnn_visualizer.agent.app_links import (
     APP_URL_ENV_VAR,
     DEFAULT_APP_URL,
@@ -313,6 +313,9 @@ class TestToolsCarryLinks:
             ("tensor_flow", operations, "app_link_template"),
             ("top_ops", linking, "app_link_template"),
             ("program_cache", linking, "app_link_template"),
+            ("errors", failures, "app_link_template"),
+            ("dram_fallbacks", failures, "app_link_template"),
+            ("l1_peak", failures, "app_link_template"),
         ],
     )
     def test_each_tool_answers_with_its_link(
@@ -341,6 +344,9 @@ class TestToolsCarryLinks:
             "tensor_flow",
             "top_ops",
             "program_cache",
+            "errors",
+            "dram_fallbacks",
+            "l1_peak",
         ],
     )
     def test_a_call_without_a_handle_is_still_refused(self, event_log_directory, tool):
@@ -382,6 +388,9 @@ class TestRankGatingOnRealAnswers:
             ("tensor_flow", {"tensor_id": 1}, "app_link_template"),
             ("operation_detail", {"operation_id": 1}, "app_link"),
             ("operation_provenance", {"operation_id": 1}, "app_link"),
+            ("errors", {}, "app_link_template"),
+            ("dram_fallbacks", {}, "app_link_template"),
+            ("l1_peak", {}, "app_link_template"),
         ],
     )
     def test_a_link_at_rank_0_and_none_at_rank_1(self, ranked, tool, arguments, key):
