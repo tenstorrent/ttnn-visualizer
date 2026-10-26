@@ -14,7 +14,7 @@
   },
   "license": "Apache-2.0",
   "engines": {
-    "node": "24.15.0",
+    "node": "24.22.1",
     "pnpm": ">=11"
   },
   "packageManager": "pnpm@11.22.0",
