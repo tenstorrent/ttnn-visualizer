@@ -18,7 +18,7 @@ from types import SimpleNamespace
 import pytest
 from ttnn_visualizer import event_logging, usage_collection, usage_metrics
 from ttnn_visualizer.event_logging import (
-    _CONSTRAINED_STRING_DETAIL_FIELDS,
+    _CONSTRAINED_STRING_DETAIL_PATTERNS,
     _DETAIL_FIELD_ENUMS,
     CLIENT_EVENT_DETAIL_FIELDS,
     COUNT_FIELD,
@@ -58,24 +58,42 @@ def reset_usage_metrics_state(monkeypatch, event_log_directory):
     monkeypatch.setattr(usage_metrics, "_metrics_state", usage_metrics._MetricsState())
 
 
+# Skipped without curl only off CI, so a runner that loses it fails rather than
+# silently dropping every end-to-end push test.
+_requires_curl = pytest.mark.skipif(
+    shutil.which("curl") is None and not os.environ.get("CI"),
+    reason="curl is not installed",
+)
+
+
 def _write_config(path: Path, **values):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(values), encoding="utf-8")
 
 
-def _flatten(payload) -> str:
-    """The payload as ``name{attributes} value`` lines, the series a receiver stores."""
-    lines = []
+def _data_points(payload):
+    """Every ``(metric name, data point)`` in the payload, across all its blocks.
+
+    Shared so that no check reads only the first resource or scope block and misses a
+    metric the exporter puts in another.
+    """
     for resource_metrics in payload["resourceMetrics"]:
         for scope_metrics in resource_metrics["scopeMetrics"]:
             for metric in scope_metrics["metrics"]:
                 data = metric.get("sum") or metric["gauge"]
                 for point in data["dataPoints"]:
-                    labels = ",".join(
-                        f'{attribute["key"]}="{attribute["value"]["stringValue"]}"'
-                        for attribute in point["attributes"]
-                    )
-                    lines.append(f'{metric["name"]}{{{labels}}} {point["asInt"]}')
+                    yield metric["name"], point
+
+
+def _flatten(payload) -> str:
+    """The payload as ``name{attributes} value`` lines, the series a receiver stores."""
+    lines = []
+    for name, point in _data_points(payload):
+        labels = ",".join(
+            f'{attribute["key"]}="{attribute["value"]["stringValue"]}"'
+            for attribute in point["attributes"]
+        )
+        lines.append(f'{name}{{{labels}}} {point["asInt"]}')
     return "\n".join(lines) + "\n"
 
 
@@ -501,13 +519,26 @@ def test_metrics_skip_malformed_unknown_and_free_form_lines(tmp_path):
             "os=darwin python_version=3.10\n",
             "private_mode",
         ),
-        # `version` and `python_version` have no enum, so only the reader's safe-value
-        # check keeps a path, and the username in it, out of the export.
-        (
-            "ts=2026-09-28T10:00:00Z event=app_start schema_version=1 "
-            "version=0.104.0 deployment_mode=container launch_mode=source "
-            "os=darwin python_version=/Users/private_user/.venv\n",
-            "private_user",
+        # `version` and `python_version` have no enum, so only their shapes keep an
+        # identifier out of the export. Each value below fits `_SAFE_VALUE_PATTERN`
+        # except the paths, so these fail if the shapes fall back to it.
+        *(
+            (
+                "ts=2026-09-28T10:00:00Z event=app_start schema_version=1 "
+                f"version={version} deployment_mode=container launch_mode=source "
+                f"os=darwin python_version={python_version}\n",
+                private_value,
+            )
+            for version, python_version, private_value in (
+                ("0.104.0", "/Users/private_user/.venv", "private_user"),
+                ("0.104.0", "private_user", "private_user"),
+                ("0.104.0", "3.10.private_user", "private_user"),
+                ("/Users/private_user/.venv", "3.10", "private_user"),
+                ("private-host.corp.example.com", "3.10", "private-host"),
+                ("0.104.0+private-host", "3.10", "private-host"),
+                ("0.104.0.private_user", "3.10", "private_user"),
+                ("0.104.0.123456789", "3.10", "123456789"),
+            )
         ),
     ],
 )
@@ -991,8 +1022,8 @@ def _attribute_values(point) -> dict[str, str]:
 
 # The privacy-reviewed export shape, written out rather than read from
 # ``event_logging`` so that changing what is exported has to edit this test, and so
-# gets the privacy re-review that docs/src/event-logging.md asks for. ``None`` marks a
-# server-derived constrained string rather than a closed vocabulary.
+# gets the privacy re-review that docs/src/event-logging.md asks for. A string, rather
+# than a set, is the full-match pattern for a server-derived constrained string.
 _REVIEWED_REPORT_KINDS = frozenset(
     {"profiler", "performance", "npe", "mlir", "cluster_descriptor"}
 )
@@ -1011,13 +1042,16 @@ _REVIEWED_VIEWS = frozenset(
         "mcp",
     }
 )
-_PRIVACY_REVIEWED_ATTRIBUTES: dict[str, dict[str, frozenset[str] | None]] = {
+_PRIVACY_REVIEWED_ATTRIBUTES: dict[str, dict[str, frozenset[str] | str]] = {
     "ttnn_visualizer_app_start_total": {
-        "version": None,
+        "version": (
+            r"unknown|\d{1,4}(?:\.\d{1,4}){1,3}"
+            r"(?:(?:a|b|rc)\d{1,4})?(?:\.post\d{1,4})?(?:\.dev\d{1,4})?"
+        ),
         "deployment_mode": frozenset({"tt_metal_home", "container", "local_upload"}),
         "launch_mode": frozenset({"source", "wheel", "hosted"}),
         "os": frozenset({"darwin", "linux", "windows", "other"}),
-        "python_version": None,
+        "python_version": r"\d{1,2}\.\d{1,3}",
     },
     "ttnn_visualizer_mcp_tool_called_total": {
         "tool": frozenset(
@@ -1070,14 +1104,13 @@ def test_the_event_schema_matches_the_privacy_reviewed_shape():
             field_name: (
                 frozenset(member.value for member in _DETAIL_FIELD_ENUMS[field_name])
                 if field_name in _DETAIL_FIELD_ENUMS
-                else None
+                else _CONSTRAINED_STRING_DETAIL_PATTERNS[field_name].pattern
             )
             for field_name in fields
         }
         for event, fields in EVENT_DETAIL_FIELDS.items()
     }
     assert exported == _PRIVACY_REVIEWED_ATTRIBUTES
-    assert _CONSTRAINED_STRING_DETAIL_FIELDS == {"version", "python_version"}
 
 
 def test_exported_attributes_are_only_schema_fields_and_machine_id(
@@ -1101,35 +1134,35 @@ def test_exported_attributes_are_only_schema_fields_and_machine_id(
     payload = build_otlp_payload(snapshot, machine_id, time_ns=2)
 
     seen_metrics = set()
-    for metric in payload["resourceMetrics"][0]["scopeMetrics"][0]["metrics"]:
-        reviewed_fields = _PRIVACY_REVIEWED_ATTRIBUTES.get(metric["name"])
-        data = metric.get("sum") or metric["gauge"]
-        for point in data["dataPoints"]:
-            values = _attribute_values(point)
-            assert values.pop(usage_collection.MACHINE_ID_LABEL) == machine_id
-            for private_field in (
-                TIMESTAMP_FIELD,
-                RUN_ID_FIELD,
-                SCHEMA_VERSION_FIELD,
-                COUNT_FIELD,
-            ):
-                assert private_field not in values
-            if reviewed_fields is None:
-                # Collector health carries the identity and nothing else.
-                assert metric["name"].startswith("ttnn_visualizer_usage_collector_")
-                assert values == {}
-                continue
+    for name, point in _data_points(payload):
+        reviewed_fields = _PRIVACY_REVIEWED_ATTRIBUTES.get(name)
+        values = _attribute_values(point)
+        assert values.pop(usage_collection.MACHINE_ID_LABEL) == machine_id
+        for private_field in (
+            TIMESTAMP_FIELD,
+            RUN_ID_FIELD,
+            SCHEMA_VERSION_FIELD,
+            COUNT_FIELD,
+        ):
+            assert private_field not in values
+        if reviewed_fields is None:
+            # Collector health carries the identity and nothing else.
+            assert name.startswith("ttnn_visualizer_usage_collector_")
+            assert values == {}
+            continue
 
-            seen_metrics.add(metric["name"])
-            assert set(values) == set(reviewed_fields)
-            for field_name, value in values.items():
-                vocabulary = reviewed_fields[field_name]
-                if vocabulary is not None:
-                    assert value in vocabulary
-                else:
-                    # Checked against the line as written rather than through the
-                    # reader's own validator, so the test cannot agree by construction.
-                    assert value == recorded_app_start[field_name]
+        seen_metrics.add(name)
+        assert set(values) == set(reviewed_fields)
+        for field_name, value in values.items():
+            vocabulary = reviewed_fields[field_name]
+            if isinstance(vocabulary, str):
+                # Checked against the reviewed pattern and the line as written rather
+                # than through the reader's own validator, so the test cannot agree
+                # by construction.
+                assert re.fullmatch(vocabulary, value)
+                assert value == recorded_app_start[field_name]
+            else:
+                assert value in vocabulary
 
     assert seen_metrics == set(_PRIVACY_REVIEWED_ATTRIBUTES)
 
@@ -1155,11 +1188,11 @@ def test_field_order_does_not_split_a_series(tmp_path):
 
     # Compared as a dict, so this pins only that the line's field order is irrelevant;
     # the order attributes are exported in is pinned by the golden-output test.
-    (point,) = next(
-        metric["sum"]["dataPoints"]
-        for metric in payload["resourceMetrics"][0]["scopeMetrics"][0]["metrics"]
-        if metric["name"] == "ttnn_visualizer_report_loaded_total"
-    )
+    (point,) = [
+        point
+        for name, point in _data_points(payload)
+        if name == "ttnn_visualizer_report_loaded_total"
+    ]
     assert _attribute_values(point) == {
         "kind": "profiler",
         "source": "upload",
@@ -1169,14 +1202,18 @@ def test_field_order_does_not_split_a_series(tmp_path):
     assert _health_value(_flatten(payload), "parse_errors_total") == 0
 
 
+@_requires_curl
 def test_exporter_does_not_modify_the_event_log(
-    tmp_path, usage_collection_config_path, otlp_server
+    event_log_directory, usage_collection_config_path, otlp_server, monkeypatch
 ):
-    log_directory = tmp_path / "event-log"
-    log_directory.mkdir()
-    log_path = log_directory / "events.log"
-    # Repeated lines give compaction something to shrink, so a trim would rewrite the
+    # The real log path, so `compact_if_needed` would reach this file too.
+    log_path = get_event_log_path()
+    log_directory = log_path.parent
+    log_directory.mkdir(parents=True, exist_ok=True)
+    # Repeated lines, and a cap the file is over, give both `_compact` and the public
+    # `compact_if_needed` something to shrink, so a trim from either would rewrite the
     # file rather than return early; the mode matches what the writer creates.
+    monkeypatch.setattr(event_logging, "MAX_LOG_BYTES", 1)
     log_path.write_text(
         "ts=2026-09-28T10:00:00Z event=view_opened schema_version=1 "
         "view=operations\n" * 4 + "not-logfmt\n",
@@ -1219,14 +1256,6 @@ def test_disabled_collection_has_no_snapshot():
         collect_usage_metrics(usage_collection.UsageCollectionConfig(enabled=False))
         is None
     )
-
-
-# Skipped without curl only off CI, so a runner that loses it fails rather than
-# silently dropping every end-to-end push test.
-_requires_curl = pytest.mark.skipif(
-    shutil.which("curl") is None and not os.environ.get("CI"),
-    reason="curl is not installed",
-)
 
 
 class _OtlpServer:

@@ -404,8 +404,18 @@ _EXPECTED_DETAIL_FIELD_SETS: Mapping[EventLogEvent, FrozenSet[str]] = {
 # Application and Python versions are server-derived constrained strings rather than
 # closed enums; they are the only detail fields without an entry in
 # ``_DETAIL_FIELD_ENUMS``. A new ``app_start`` detail needs one or the other, or every
-# launch line is rejected when read back.
-_CONSTRAINED_STRING_DETAIL_FIELDS = frozenset((VERSION_FIELD, PYTHON_VERSION_FIELD))
+# launch line is rejected when read back. Each is held to its own shape, not just
+# ``_SAFE_VALUE_PATTERN``: the exporter sends them as attributes, and that pattern alone
+# admits a username or hostname. Public PEP 440 releases only, so a local segment such
+# as ``+build-host`` is refused too.
+_CONSTRAINED_STRING_DETAIL_PATTERNS: Mapping[str, re.Pattern[str]] = {
+    VERSION_FIELD: re.compile(
+        rf"{UNKNOWN_VALUE}|\d{{1,4}}(?:\.\d{{1,4}}){{1,3}}"
+        r"(?:(?:a|b|rc)\d{1,4})?(?:\.post\d{1,4})?(?:\.dev\d{1,4})?"
+    ),
+    PYTHON_VERSION_FIELD: re.compile(r"\d{1,2}\.\d{1,3}"),
+}
+_CONSTRAINED_STRING_DETAIL_FIELDS = frozenset(_CONSTRAINED_STRING_DETAIL_PATTERNS)
 
 
 def _is_valid_event_detail_value(field: str, value: str) -> bool:
@@ -418,7 +428,9 @@ def _is_valid_event_detail_value(field: str, value: str) -> bool:
             return False
         return True
 
-    return field in _CONSTRAINED_STRING_DETAIL_FIELDS and _is_safe_value(value)
+    pattern = _CONSTRAINED_STRING_DETAIL_PATTERNS.get(field)
+    # `fullmatch`, not `match`: the patterns are unanchored.
+    return pattern is not None and bool(pattern.fullmatch(value))
 
 
 class EventLogEventRejected(Exception):
@@ -1400,10 +1412,17 @@ def record_app_start(config: Any, server_mode: Optional[Any] = None) -> None:
         if not is_recording_enabled(server_mode):
             return
 
+        version = get_application_version()
         record_event(
             EventLogEvent.APP_START,
             server_mode=server_mode,
-            version=get_application_version(),
+            # Narrower than what `get_application_version` returns to its other callers;
+            # a version outside the reader's shape would cost the whole launch line.
+            version=(
+                version
+                if _is_valid_event_detail_value(VERSION_FIELD, version)
+                else UNKNOWN_VALUE
+            ),
             deployment_mode=get_deployment_mode(getattr(config, "TT_METAL_HOME", None)),
             launch_mode=get_launch_mode(server_mode),
             os=get_operating_system(),

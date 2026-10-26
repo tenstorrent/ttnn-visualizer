@@ -82,7 +82,7 @@ The fields below are the complete event-specific vocabulary. Every listed set of
 
 Recorded by the server once during a successful local launch.
 
-- `version`: the TT-NN Visualizer version, or `unknown` when it cannot be determined.
+- `version`: the TT-NN Visualizer version as a public release number, such as `0.108.1`, or `unknown` when it cannot be determined or has any other form, such as a local `+` build suffix.
 - `deployment_mode`: `tt_metal_home`, `container`, `local_upload`.
 - `launch_mode`: `source`, `wheel`, `hosted`.
 - `os`: `darwin`, `linux`, `windows`, `other`.
@@ -148,7 +148,7 @@ TT-NN Visualizer does not record:
 - search or filter text;
 - stack traces or error message bodies;
 - raw counts that could identify a specific workload;
-- client-supplied free-form event details. Client detail fields use closed enums; server-generated version fields are validated before they are written.
+- client-supplied free-form event details. Client detail fields use closed enums; server-generated version fields are held to a version shape when written and again when read, so they cannot carry a username, hostname, or path.
 
 ## Aggregate collection
 
