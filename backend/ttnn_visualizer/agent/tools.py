@@ -12,11 +12,12 @@ server-side windowing on the NPE view. #1995
 import contextlib
 import io
 import logging
+import statistics
 import sys
 from collections import defaultdict
 from dataclasses import asdict, dataclass
 from enum import Enum
-from typing import Dict, List, Optional, Sequence, Set, Union, cast
+from typing import Dict, List, Optional, Sequence, Set, Tuple, Union, cast
 
 from ttnn_visualizer.agent import perf_detail
 from ttnn_visualizer.agent.bounds import (
@@ -35,6 +36,7 @@ from ttnn_visualizer.agent.handles import (
 from ttnn_visualizer.csv_queries import (
     MAX_LISTED_SIGNPOSTS,
     SIGNPOST_OP_TYPE,
+    CoreSpan,
     DegradedPerformanceReport,
     DeviceLogProfilerQueries,
     OpsPerformanceQueries,
@@ -701,23 +703,218 @@ def zone_timings(
             "occurrences only."
         ),
     }
-    # A truncated capture leaves starts open and a capture that begins mid-zone
-    # leaves ends unmatched. Either way the totals describe only what paired,
-    # which is invisible from the totals themselves.
-    if any(pairing.values()):
-        caveat = (
-            f"{pairing['unmatched_starts']} zone starts and "
-            f"{pairing['unmatched_ends']} ends did not pair, so these totals "
-            "cover only the zones that did. A capture stopped mid-run is the "
-            "usual cause."
-        )
-        if pairing["dropped_starts"]:
-            caveat += (
-                f" A further {pairing['dropped_starts']} starts were dropped at "
-                "the open-zone ceiling, which a well-formed capture does not "
-                "reach — treat this log as malformed."
-            )
+    caveat = _pairing_caveat(pairing, "these totals")
+    if caveat:
         result["caveat"] = caveat
+    return result
+
+
+def _pairing_caveat(pairing: Dict[str, int], figures: str) -> Optional[str]:
+    """Say what did not pair, which is invisible from the paired figures themselves.
+
+    A truncated capture leaves starts open and a capture that begins mid-zone
+    leaves ends unmatched. Either way ``figures`` describe only what paired.
+    """
+    if not any(pairing.values()):
+        return None
+    caveat = (
+        f"{pairing['unmatched_starts']} zone starts and "
+        f"{pairing['unmatched_ends']} ends did not pair, so {figures} "
+        "cover only the zones that did. A capture stopped mid-run is the "
+        "usual cause."
+    )
+    if pairing["dropped_starts"]:
+        caveat += (
+            f" A further {pairing['dropped_starts']} starts were dropped at "
+            "the open-zone ceiling, which a well-formed capture does not "
+            "reach — treat this log as malformed."
+        )
+    return caveat
+
+
+CORE_SPREAD_NOTE = (
+    "A core's span runs from its first kernel start to its last kernel end across "
+    "its RISCs, which is how tt-metal measures per-core kernel duration; by_risc "
+    "gives each RISC's own kernel time. imbalance is max over median. Cores are "
+    "compared within the one device each op names, since device clocks are not "
+    "comparable: a merged row is the slowest device's, except an all-gather, "
+    "reduce-scatter or all-reduce, which is the first device's. per_core_*_us are "
+    "the performance CSV's own figures, where it has them. Times are microseconds."
+)
+
+# Enough to say where the stragglers sit without listing a 130-core grid.
+SLOWEST_CORES = 5
+
+_PERF_PER_CORE_FIELDS = ("per_core_min_us", "per_core_max_us", "per_core_avg_us")
+
+
+def _whole(value: object) -> Optional[int]:
+    number = finite_number(value)
+    return None if number is None else int(number)
+
+
+def _spread(durations_us: List[float]) -> Dict[str, Optional[float]]:
+    median = statistics.median(durations_us)
+    longest = max(durations_us)
+    return {
+        "min_us": _rounded(min(durations_us)),
+        "median_us": _rounded(median),
+        "max_us": _rounded(longest),
+        # Null rather than infinite: a median of zero cycles has no ratio.
+        "imbalance": round(longest / median, 3) if median else None,
+    }
+
+
+def _core_figures(cores: Dict[tuple, CoreSpan], clock_mhz: float) -> Dict[str, object]:
+    """One op's spread across its cores, and per RISC, in microseconds."""
+    # A megahertz clock ticks once per microsecond, so cycles over MHz is already
+    # microseconds.
+    core_us = {
+        core: (span.end - span.start) / clock_mhz for core, span in cores.items()
+    }
+    risc_us: Dict[str, List[float]] = defaultdict(list)
+    for span in cores.values():
+        for risc, cycles in span.risc_cycles.items():
+            risc_us[risc].append(cycles / clock_mhz)
+    slowest = sorted(core_us.items(), key=lambda item: item[1], reverse=True)
+    return {
+        "cores_in_log": len(cores),
+        "core_span": _spread(list(core_us.values())),
+        "by_risc": {risc: _spread(risc_us[risc]) for risc in sorted(risc_us)},
+        "slowest_cores": [
+            {"x": int(x), "y": int(y), "span_us": _rounded(duration)}
+            for (x, y), duration in slowest[:SLOWEST_CORES]
+        ],
+    }
+
+
+def _spread_rows(
+    rows: List[Dict], perf_id: Optional[str], limit: Optional[int]
+) -> List[Dict]:
+    """The one row asked for, or the costliest device ops by device time."""
+    if perf_id is None:
+        candidates = [
+            row
+            for row in rows
+            if not is_signpost_row(row)
+            and _whole(row.get("global_call_count")) is not None
+            and _whole(row.get("device")) is not None
+            and finite_number(row.get("device_time")) is not None
+        ]
+        return sorted(
+            candidates,
+            key=lambda row: finite_number(row.get("device_time")) or 0.0,
+            reverse=True,
+        )[: bounded(limit, MAX_DETAILED_LIMIT)]
+
+    row = next((row for row in rows if str(row.get("id")) == str(perf_id)), None)
+    if row is None:
+        raise ValueError(
+            f"no performance row has id {perf_id!r}; pass a top_ops row's id, "
+            "not an operation_id"
+        )
+    op_code = row.get("op_code") or row.get("raw_op_code")
+    if is_signpost_row(row):
+        raise ValueError(
+            f"row {perf_id} is the signpost {op_code!r}, which runs on no core"
+        )
+    if (
+        _whole(row.get("global_call_count")) is None
+        or _whole(row.get("device")) is None
+    ):
+        raise ValueError(
+            f"row {perf_id} ({op_code}) has no global call count or device, so it is "
+            "a host op with no zones in the device log"
+        )
+    return [row]
+
+
+def core_spread(
+    registry: ReportRegistry,
+    handle: str,
+    perf_id: Optional[str] = None,
+    limit: Optional[int] = None,
+) -> Dict[str, object]:
+    """How evenly one operation's kernel time fell across the cores that ran it.
+
+    A perf row times an op once, as its slowest core; whether every core took that
+    long or a few stragglers set it is in the device log. The row's global call
+    count is the log's `run host ID` and its device the log's `PCIe slot`, so
+    each op is read on the one device its row came from. #2173
+    """
+    _require_performance_report(registry, handle)
+    instance = registry.get(handle)
+    rows = _spread_rows(
+        canonical_report(registry, handle).get("report", []), perf_id, limit
+    )
+
+    metadata = DeviceLogProfilerQueries.read_capture_metadata(instance)
+    clock_mhz = finite_number(metadata.get("CHIP_FREQ[MHz]"))
+    if not clock_mhz:
+        raise ValueError(
+            f"{DeviceLogProfilerQueries.DEVICE_LOG_FILE} records no CHIP_FREQ[MHz] in "
+            "its first line, so its cycles cannot be read as time"
+        )
+
+    def run_of(row: Dict) -> Tuple[int, int]:
+        return (
+            cast(int, _whole(row.get("global_call_count"))),
+            cast(int, _whole(row.get("device"))),
+        )
+
+    with DeviceLogProfilerQueries(instance, stream=True) as queries:
+        spans, pairing = queries.query_core_spans({run_of(row) for row in rows})
+
+    ops: List[Dict[str, object]] = []
+    short = 0
+    for row in rows:
+        call_count, device = run_of(row)
+        cores = spans.get((call_count, device), {})
+        perf_cores = _whole(row.get("cores"))
+        detail = perf_detail.detail_fields(row, (perf_detail.DetailGroup.CORES,))
+        entry: Dict[str, object] = {
+            **project_row(row),
+            "device": device,
+            "global_call_count": call_count,
+            "in_log": bool(cores),
+            **{name: detail.get(name) for name in _PERF_PER_CORE_FIELDS},
+        }
+        if cores:
+            entry.update(_core_figures(cores, clock_mhz))
+            if perf_cores is not None and len(cores) < perf_cores:
+                short += 1
+        ops.append(entry)
+    absent = sum(1 for op in ops if not op["in_log"])
+
+    result: Dict[str, object] = {
+        "handle": handle,
+        "arch": metadata.get("ARCH"),
+        "clock_mhz": clock_mhz,
+        "returned": len(ops),
+        "ops": ops,
+        "projection": projection(None),
+        "note": CORE_SPREAD_NOTE,
+    }
+    caveats = []
+    if absent:
+        caveats.append(
+            f"{absent} of {len(ops)} operations have no kernel zones in the device "
+            "log for their call count and device (in_log is false): the log covers "
+            "other runs, or it stopped before them."
+        )
+    if short:
+        caveats.append(
+            f"{short} of {len(ops)} operations recorded kernel zones on fewer cores "
+            "than their row's cores, so their spread covers only the cores that did. "
+            "Dropped "
+            "markers or a truncated capture would cause it; tt-metal reports a full "
+            "profiler buffer only in its host log, never in the device log."
+        )
+    pairing_caveat = _pairing_caveat(pairing, "these spans")
+    if pairing_caveat:
+        caveats.append(pairing_caveat)
+    if caveats:
+        result["caveat"] = " ".join(caveats)
     return result
 
 
@@ -985,6 +1182,7 @@ __all__ = [
     "BREAKDOWN_GROUPINGS",
     "BreakdownGrouping",
     "CANONICAL_PROJECTION",
+    "CORE_SPREAD_NOTE",
     "DEFAULT_METRIC",
     "MAX_SIGNPOST_NAME_LENGTH",
     "OP_BREAKDOWN_NOTE",
@@ -994,6 +1192,7 @@ __all__ = [
     "canonical_report",
     "check_range",
     "is_ranged",
+    "core_spread",
     "countable_device_time",
     "diff_reports",
     "empty_detail_fields",

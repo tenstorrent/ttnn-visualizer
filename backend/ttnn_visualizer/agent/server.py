@@ -148,6 +148,13 @@ _OPERATION_ID_SCHEMA = {
         "operation_id gives it; never a top_ops row's id."
     ),
 }
+_PERF_ID_SCHEMA = {
+    "type": ["string", "integer"],
+    "description": (
+        "A performance row's id, as a top_ops row's id or any *_perf_id gives it; "
+        "never an operation_id. Omit it for the costliest ops by device time."
+    ),
+}
 _ADDITIVE_METRIC_SCHEMA = {
     "type": "string",
     "enum": sorted(tools.ADDITIVE_METRICS),
@@ -320,6 +327,31 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "required": ["handle"],
             },
             "handler": lambda arguments: tools.zone_timings(registry, **arguments),
+        },
+        McpToolName.CORE_SPREAD: {
+            "title": "Per-core kernel spread",
+            "description": (
+                "How evenly an op's kernel time fell across the cores that ran it, "
+                "from profile_log_device.csv: min, median and max per-core span and "
+                "per RISC, max over median as imbalance, and the slowest cores by "
+                "coordinate. Each op is read on the one device its row came from, "
+                "never pooled across devices. Takes one perf_id, or ranks the "
+                f"costliest ops by device time, capped at {MAX_DETAILED_LIMIT}. Each "
+                "call reads the whole device log."
+            ),
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "handle": {"type": "string"},
+                    "perf_id": _PERF_ID_SCHEMA,
+                    "limit": {
+                        "type": "integer",
+                        "description": f"Ops to return, capped at {MAX_DETAILED_LIMIT}.",
+                    },
+                },
+                "required": ["handle"],
+            },
+            "handler": lambda arguments: tools.core_spread(registry, **arguments),
         },
         McpToolName.DIFF_REPORTS: {
             "title": "Compare two reports",

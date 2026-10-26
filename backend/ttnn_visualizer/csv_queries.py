@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import (
     IO,
     Dict,
+    Iterator,
     List,
     Literal,
     Optional,
@@ -168,6 +169,24 @@ MAX_OPEN_ZONE_STARTS = 200_000
 # report is about 22 MB of JSON, so a worker can keep roughly 90 MB alive for its
 # lifetime. Each `group_by` value is its own entry with a full copy of the rows.
 MAX_CACHED_PERFORMANCE_REPORTS = 4
+
+
+@dataclass
+class CoreSpan:
+    """One core's kernel zones for one operation, in that core's cycles.
+
+    `start` and `end` bound every RISC's kernel on the core, which is how tt-metal
+    measures `DEVICE KERNEL DURATION PER CORE`.
+    """
+
+    start: int
+    end: int
+    risc_cycles: Dict[str, int]
+
+    def add(self, risc: str, start: int, end: int) -> None:
+        self.start = min(self.start, start)
+        self.end = max(self.end, end)
+        self.risc_cycles[risc] = self.risc_cycles.get(risc, 0) + end - start
 
 
 @dataclass(frozen=True)
@@ -604,6 +623,77 @@ class DeviceLogProfilerQueries:
                 metadata[key.strip()] = value.strip()
         return metadata
 
+    # `ZONE_SUMMARY_COLUMNS` in the order the zone queries index them.
+    _ZONE_COLUMNS = [
+        "zone name",
+        "RISC processor type",
+        "PCIe slot",
+        "core_x",
+        "core_y",
+        "run host ID",
+        "time[cycles since reset]",
+    ]
+
+    def _zone_phase(self, purpose: str) -> Tuple[Optional[str], str, str]:
+        """Check the columns the zone queries index, and pick the phase spelling.
+
+        Returns the column that marks a zone's start and end with its two tokens,
+        or `(None, "", "")` for a capture that marks neither.
+        """
+        if self.runner is None:
+            raise RuntimeError(
+                "DeviceLogProfilerQueries must be used as a context manager"
+            )
+
+        # Checked here rather than added to `REQUIRED_DEVICE_LOG_COLUMNS`: that
+        # list gates every route, and its comment records that gating on columns
+        # a query does not read rejects captures which work fine. These are the
+        # ones the zone queries index, so a capture missing one fails here with a
+        # reason instead of a `KeyError` mid-parse.
+        available = set(self.runner.df.columns if self.runner.df is not None else [])
+        missing = sorted(self.ZONE_SUMMARY_COLUMNS - available)
+        if missing:
+            raise DataFormatError(
+                f"{self.DEVICE_LOG_FILE} cannot be {purpose}; missing: "
+                f"{', '.join(missing)}"
+            )
+
+        # Two spellings of the same fact, neither required: a current capture
+        # marks boundaries in `type` as ZONE_START/ZONE_END, and a pre-rename one
+        # in `zone phase` as begin/end (`PRE_RENAME_HEADER` pins that shape).
+        # Reading only `type` counted a pre-rename begin *and* its end as two
+        # occurrences and discarded the duration between them -- one invocation
+        # reported as two, which is worse than reporting none.
+        if "type" in available:
+            return "type", "ZONE_START", "ZONE_END"
+        if "zone phase" in available:
+            return "zone phase", "begin", "end"
+        return None, "", ""
+
+    def _zone_chunks(self, columns: List[str]) -> Iterator[pd.DataFrame]:
+        """The log in `CSV_CHUNK_SIZE` chunks, holding only ``columns``.
+
+        A parse failure surfaces while iterating, so it is turned into the
+        runner's `DataFormatError` here rather than in each caller's loop.
+        """
+        runner = self.runner
+        assert runner is not None, "checked by `_zone_phase`"
+        wanted = set(columns)
+        try:
+            chunks = pd.read_csv(
+                runner.file_path,
+                skiprows=runner.offset,
+                chunksize=CSV_CHUNK_SIZE,
+                # The header carries a leading space on every field after the
+                # first, so the names are matched stripped.
+                usecols=lambda name: name.strip() in wanted,
+            )
+            for chunk in chunks:
+                chunk.columns = chunk.columns.str.strip()
+                yield chunk
+        except (pd.errors.EmptyDataError, pd.errors.ParserError) as error:
+            raise runner._unparseable(error) from error
+
     def query_zone_summary(
         self, limit: Optional[int] = None
     ) -> Tuple[List[Dict[str, object]], Dict[str, int]]:
@@ -631,23 +721,7 @@ class DeviceLogProfilerQueries:
         capture leaves starts open, which is invisible in a total that reports
         only what matched.
         """
-        if self.runner is None:
-            raise RuntimeError(
-                "DeviceLogProfilerQueries must be used as a context manager"
-            )
-
-        # Checked here rather than added to `REQUIRED_DEVICE_LOG_COLUMNS`: that
-        # list gates every route, and its comment records that gating on columns
-        # a query does not read rejects captures which work fine. These are the
-        # ones *this* query indexes, so a capture missing one fails here with a
-        # reason instead of a `KeyError` mid-parse.
-        available = set(self.runner.df.columns if self.runner.df is not None else [])
-        missing = sorted(self.ZONE_SUMMARY_COLUMNS - available)
-        if missing:
-            raise DataFormatError(
-                f"{self.DEVICE_LOG_FILE} cannot be summarised by zone; missing: "
-                f"{', '.join(missing)}"
-            )
+        phase_column, start_token, end_token = self._zone_phase("summarised by zone")
 
         occurrences: Dict[tuple, int] = defaultdict(int)
         cycle_totals: Dict[tuple, int] = defaultdict(int)
@@ -656,84 +730,52 @@ class DeviceLogProfilerQueries:
         open_starts: Dict[tuple, int] = {}
         unpaired_ends = 0
         dropped_starts = 0
-        # Two spellings of the same fact, neither required: a current capture
-        # marks boundaries in `type` as ZONE_START/ZONE_END, and a pre-rename one
-        # in `zone phase` as begin/end (`PRE_RENAME_HEADER` pins that shape).
-        # Reading only `type` counted a pre-rename begin *and* its end as two
-        # occurrences and discarded the duration between them -- one invocation
-        # reported as two, which is worse than reporting none.
-        phase_column, start_token, end_token = None, "", ""
-        if "type" in available:
-            phase_column, start_token, end_token = "type", "ZONE_START", "ZONE_END"
-        elif "zone phase" in available:
-            phase_column, start_token, end_token = "zone phase", "begin", "end"
 
-        columns = [
-            "zone name",
-            "RISC processor type",
-            "PCIe slot",
-            "core_x",
-            "core_y",
-            "run host ID",
-            "time[cycles since reset]",
-        ] + ([phase_column] if phase_column else [])
+        columns = self._ZONE_COLUMNS + ([phase_column] if phase_column else [])
 
-        try:
-            chunks = pd.read_csv(
-                self.runner.file_path,
-                skiprows=self.runner.offset,
-                chunksize=CSV_CHUNK_SIZE,
-                # Only the columns this aggregate reads. The header carries a
-                # leading space on every field after the first, so the names are
-                # matched stripped.
-                usecols=lambda name: name.strip() in set(columns),
-            )
-            for chunk in chunks:
-                chunk.columns = chunk.columns.str.strip()
-                # Zipped column-wise rather than `itertuples`, which renames any
-                # field that is not a valid identifier -- "zone name" arrives as
-                # `_1` and every lookup by name silently misses.
-                for values in zip(*(chunk[column] for column in columns)):
-                    zone = str(values[0]).strip()
-                    if not zone or zone == "nan":
-                        continue
-                    risc = str(values[1]).strip()
-                    cycles = values[6]
-                    phase = str(values[7]).strip() if phase_column else ""
+        for chunk in self._zone_chunks(columns):
+            # Zipped column-wise rather than `itertuples`, which renames any
+            # field that is not a valid identifier -- "zone name" arrives as
+            # `_1` and every lookup by name silently misses.
+            for values in zip(*(chunk[column] for column in columns)):
+                zone = str(values[0]).strip()
+                if not zone or zone == "nan":
+                    continue
+                risc = str(values[1]).strip()
+                cycles = values[6]
+                phase = str(values[7]).strip() if phase_column else ""
 
-                    zone_key = (zone, risc)
-                    if zone_key not in cores_seen:
-                        zone_keys.append(zone_key)
-                    # Slot included: coordinates repeat on every device.
-                    core = (values[2], values[3], values[4])
-                    cores_seen[zone_key].add(core)
+                zone_key = (zone, risc)
+                if zone_key not in cores_seen:
+                    zone_keys.append(zone_key)
+                # Slot included: coordinates repeat on every device.
+                core = (values[2], values[3], values[4])
+                cores_seen[zone_key].add(core)
 
-                    if not phase_column:
-                        occurrences[zone_key] += 1
-                        continue
-
-                    pair_key = (zone, risc, core, values[5])
-                    if phase == start_token:
-                        if (
-                            len(open_starts) >= MAX_OPEN_ZONE_STARTS
-                            and pair_key not in open_starts
-                        ):
-                            dropped_starts += 1
-                            continue
-                        open_starts[pair_key] = int(cycles)
-                        continue
-                    if phase != end_token:
-                        continue
-
-                    start = open_starts.pop(pair_key, None)
-                    if start is None:
-                        unpaired_ends += 1
-                        continue
-
+                if not phase_column:
                     occurrences[zone_key] += 1
-                    cycle_totals[zone_key] += int(cycles) - start
-        except (pd.errors.EmptyDataError, pd.errors.ParserError) as error:
-            raise self.runner._unparseable(error) from error
+                    continue
+
+                pair_key = (zone, risc, core, values[5])
+                if phase == start_token:
+                    if (
+                        len(open_starts) >= MAX_OPEN_ZONE_STARTS
+                        and pair_key not in open_starts
+                    ):
+                        dropped_starts += 1
+                        continue
+                    open_starts[pair_key] = int(cycles)
+                    continue
+                if phase != end_token:
+                    continue
+
+                start = open_starts.pop(pair_key, None)
+                if start is None:
+                    unpaired_ends += 1
+                    continue
+
+                occurrences[zone_key] += 1
+                cycle_totals[zone_key] += int(cycles) - start
 
         summary = []
         for zone, risc in zone_keys:
@@ -789,6 +831,83 @@ class DeviceLogProfilerQueries:
                 pairing["dropped_starts"],
             )
         return (summary[:limit] if limit is not None else summary), pairing
+
+    def query_core_spans(
+        self, runs: Set[Tuple[int, int]]
+    ) -> Tuple[Dict[Tuple[int, int], Dict[Tuple[int, int], CoreSpan]], Dict[str, int]]:
+        """Each core's kernel zones for the given `(run host ID, PCIe slot)` pairs.
+
+        A perf row's `GLOBAL CALL COUNT` is the `run host ID` of its zones, and its
+        `DEVICE ID` is their `PCIe slot`: on every local capture checked, each run
+        ID sits on one slot and each call count on one row. Keying on both keeps
+        one device's cores apart from another's, whose cycle counters are not
+        comparable.
+
+        Rows of other runs are dropped a chunk at a time before pairing, so the
+        open starts held are only the requested operations'. Returns the spans as
+        `{(run, slot): {(core_x, core_y): CoreSpan}}` and the same pairing counts
+        as `query_zone_summary`, counted over the requested runs only.
+        """
+        phase_column, start_token, end_token = self._zone_phase(
+            "split into per-core kernel spans"
+        )
+        # Spread is a spread of durations, and without a phase there are none.
+        if phase_column is None:
+            raise DataFormatError(
+                f"{self.DEVICE_LOG_FILE} marks no zone starts or ends (neither a "
+                "`type` nor a `zone phase` column), so it holds no kernel durations"
+            )
+
+        spans: Dict[Tuple[int, int], Dict[Tuple[int, int], CoreSpan]] = {
+            run: {} for run in runs
+        }
+        run_ids = {run_id for run_id, _ in runs}
+        open_starts: Dict[tuple, int] = {}
+        unpaired_ends = 0
+        dropped_starts = 0
+        columns = self._ZONE_COLUMNS + [phase_column]
+
+        for chunk in self._zone_chunks(columns):
+            # BRISC-, NCRISC- and TRISC-KERNEL: the firmware zones wrap them, and
+            # tt-metal's per-core figures read the kernels.
+            kernel = chunk["zone name"].astype(str).str.strip().str.endswith("-KERNEL")
+            chunk = chunk[kernel & chunk["run host ID"].isin(run_ids)]
+            for zone, risc, slot, x, y, run_id, cycles, phase in zip(
+                *(chunk[column] for column in columns)
+            ):
+                run = (run_id, slot)
+                if run not in spans:
+                    continue
+                zone = str(zone).strip()
+                risc = str(risc).strip()
+                phase = str(phase).strip()
+                pair_key = (zone, risc, slot, x, y, run_id)
+                if phase == start_token:
+                    if (
+                        len(open_starts) >= MAX_OPEN_ZONE_STARTS
+                        and pair_key not in open_starts
+                    ):
+                        dropped_starts += 1
+                        continue
+                    open_starts[pair_key] = int(cycles)
+                    continue
+                if phase != end_token:
+                    continue
+
+                start = open_starts.pop(pair_key, None)
+                if start is None:
+                    unpaired_ends += 1
+                    continue
+                end = int(cycles)
+                span = spans[run].setdefault((x, y), CoreSpan(start, end, {}))
+                span.add(risc, start, end)
+
+        pairing = {
+            "unmatched_starts": len(open_starts),
+            "unmatched_ends": unpaired_ends,
+            "dropped_starts": dropped_starts,
+        }
+        return spans, pairing
 
     @staticmethod
     def get_raw_csv(instance: Instance):

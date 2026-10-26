@@ -588,6 +588,27 @@ def _device_log_answerable(performance_path: Optional[str]) -> bool:
     return problem is None
 
 
+def _device_log_marks_phases(performance_path: Optional[str]) -> bool:
+    """Whether the device log marks zone starts and ends, which `core_spread` pairs.
+
+    Header only: `_device_log_answerable` has already read the whole file.
+    """
+    if performance_path is None:
+        return False
+    path = Path(performance_path, DeviceLogProfilerQueries.DEVICE_LOG_FILE)
+    try:
+        with path.open(encoding="utf-8", newline="") as source:
+            source.readline()
+            # Blank lines before the header skipped, as `_scan_csv` skips them.
+            row = next(
+                (row for row in csv.reader(source) if any(c.strip() for c in row)), []
+            )
+            header = {cell.strip() for cell in row}
+    except (OSError, UnicodeDecodeError, csv.Error):
+        return False
+    return bool({"type", "zone phase"} & header)
+
+
 def _inventory(instance: Instance, perf_csv: Optional[Path]) -> Dict[str, object]:
     """What this report can actually answer.
 
@@ -615,7 +636,13 @@ def _inventory(instance: Instance, perf_csv: Optional[Path]) -> Dict[str, object
 
     performance_path = instance.performance_path
     profiler_path = instance.profiler_path
-    record("zone_timings", _device_log_answerable(performance_path))
+    device_log_ready = _device_log_answerable(performance_path)
+    record("zone_timings", device_log_ready)
+    # Joins a perf row to its zones, so it needs both files, and durations to spread.
+    record(
+        "core_spread",
+        perf_ready and device_log_ready and _device_log_marks_phases(performance_path),
+    )
 
     # Per tool, against the tables it reads. A partial capture can answer
     # `find_operations` and none of the rest, and saying so is the whole point

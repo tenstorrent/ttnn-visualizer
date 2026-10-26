@@ -37,6 +37,7 @@ printf '%s\n' \
   '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
   '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"load_report","arguments":{"performance_path":"/path/to/report"}}}' \
   '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"zone_timings","arguments":{"handle":"report-1","limit":5}}}' \
+  '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"core_spread","arguments":{"handle":"report-1","limit":3}}}' \
   | uv run ttnn-visualizer-mcp
 ```
 
