@@ -1051,17 +1051,27 @@ def test_field_order_does_not_split_a_series(tmp_path):
         encoding="utf-8",
     )
     machine_id = uuid.uuid4().hex
-
-    metrics = _exported_series(
+    snapshot = collect_usage_metrics(
         usage_collection.UsageCollectionConfig(enabled=True, machine_id=machine_id),
         log_path=log_path,
     )
+    assert snapshot is not None
+    payload = build_otlp_payload(snapshot, machine_id, time_ns=2)
 
-    assert re.findall(r"^ttnn_visualizer_report_loaded_total\{.*$", metrics, re.M) == [
-        f'ttnn_visualizer_report_loaded_total{{kind="profiler",'
-        f'machine_id="{machine_id}",source="upload"}} 3'
-    ]
-    assert _health_value(metrics, "parse_errors_total") == 0
+    # Compared as a dict, so this pins only that the line's field order is irrelevant;
+    # the order attributes are exported in is pinned by the golden-output test.
+    (point,) = next(
+        metric["sum"]["dataPoints"]
+        for metric in payload["resourceMetrics"][0]["scopeMetrics"][0]["metrics"]
+        if metric["name"] == "ttnn_visualizer_report_loaded_total"
+    )
+    assert _attribute_values(point) == {
+        "kind": "profiler",
+        "source": "upload",
+        usage_collection.MACHINE_ID_LABEL: machine_id,
+    }
+    assert point["asInt"] == "3"
+    assert _health_value(_flatten(payload), "parse_errors_total") == 0
 
 
 def test_exporter_does_not_modify_the_event_log(tmp_path):
