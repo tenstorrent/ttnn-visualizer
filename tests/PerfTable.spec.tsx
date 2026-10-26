@@ -990,4 +990,18 @@ describe('PerfTable expected cache hits footer (#2169)', () => {
 
         expect(getCacheHitFooterCell().textContent).toBe('100% expected cache hits\n(1 unrecorded excluded)');
     });
+
+    it('still counts visible repeats as repeats when their first call is outside the shown rows', () => {
+        // First calls are marked over the whole report, so a range or filter that hides one leaves the
+        // later rows as repeats, while the footer counts only the rows shown.
+        const rows = enrichRowData(
+            [matmulCall('1', 'h1', false), matmulCall('2', 'h1', true), matmulCall('3', 'h1', false)],
+            [],
+            null,
+        );
+
+        renderTable(rows.slice(1));
+
+        expect(getCacheHitFooterCell().textContent).toBe('50% expected cache hits');
+    });
 });

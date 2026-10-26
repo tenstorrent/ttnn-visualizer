@@ -686,6 +686,8 @@ class TestProgramCache:
         assert result["repeat_hit_percent"] is None
         assert "2 of 2 repeat calls recorded no cache result" in result["caveat"]
         assert "there is no hit percentage." in result["caveat"]
+        # The table footer leaves them out too (#2169), so the caveat no longer contrasts it.
+        assert "counts them as misses" not in result["caveat"]
         # Nothing says these missed, so nothing says the cache was off.
         assert "program cache disabled" not in result["caveat"]
 

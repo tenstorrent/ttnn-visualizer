@@ -67,7 +67,8 @@ export const getRepeatCacheOutcome = (row: TypedPerfTableRow): RepeatCacheOutcom
         return null;
     }
 
-    if (row.cache_hit === null) {
+    // `== null` so a missing value reads as unrecorded too, as `program_cache` treats anything but True/False
+    if (row.cache_hit == null) {
         return RepeatCacheOutcome.UNRECORDED;
     }
 
