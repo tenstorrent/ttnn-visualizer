@@ -39,6 +39,8 @@ Starting with hot reload:
 pnpm run flask:start-debug
 ```
 
+This sets `DEBUG=true`, which runs gunicorn with `--reload` and logs at debug level. It does not turn on Flask's debug mode; that is `FLASK_DEBUG`.
+
 When both the frontend and backend are running you can access the app on [http://localhost:5173](http://localhost:5173), but an alternative local URI may be provided in the terminal when running `pnpm run dev`.
 
 ## CLI arguments

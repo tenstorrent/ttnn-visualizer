@@ -65,6 +65,7 @@ from ttnn_visualizer.tests.smoke_capture import (
 from ttnn_visualizer.tests.test_device_log_columns import (
     MODERN_HEADER,
     PREAMBLE,
+    _drop_column,
     write_device_log,
 )
 
@@ -155,7 +156,7 @@ class TestReportInventory:
         An agent told only "loaded" would spend a call each discovering that the
         operation questions have no input.
         """
-        write_device_log(tmp_path, MODERN_HEADER, [])
+        write_device_log(tmp_path, MODERN_HEADER, ZONED_ROWS)
         write_ops_perf(tmp_path, smoke_rows()).rename(
             tmp_path / "ops_perf_results_x.csv"
         )
@@ -261,6 +262,102 @@ class TestReportInventory:
         assert tool not in loaded["answerable"]
         assert tool in loaded["unanswerable"]
         assert loaded["performance_csv_problem"] == "empty"
+
+    def test_an_empty_device_log_is_not_answerable(self, tmp_path):
+        """#2184: and reads as a capture with no metadata, not a failed load."""
+        (tmp_path / DeviceLogProfilerQueries.DEVICE_LOG_FILE).write_text(
+            "", encoding="utf-8"
+        )
+
+        loaded = load_report(ReportRegistry(), performance_path=str(tmp_path))
+
+        assert "zone_timings" in loaded["unanswerable"]
+        assert loaded["capture"] == {}
+
+    @pytest.mark.parametrize(
+        ("header", "rows"),
+        [
+            pytest.param(MODERN_HEADER, [], id="header-only"),
+            pytest.param(MODERN_HEADER, ["", "   "], id="blank-rows-only"),
+            # One column from each half of ZONE_TIMINGS_COLUMNS.
+            pytest.param(
+                *_drop_column(MODERN_HEADER, ZONED_ROWS, "core_x"), id="no-core_x"
+            ),
+            pytest.param(
+                *_drop_column(MODERN_HEADER, ZONED_ROWS, "timer_id"), id="no-timer_id"
+            ),
+        ],
+    )
+    def test_a_device_log_zone_timings_would_refuse_is_not_answerable(
+        self, tmp_path, header, rows
+    ):
+        """#2184: listing it would only send an agent to a `DataFormatError` or an
+        empty answer."""
+        write_device_log(tmp_path, header, rows)
+
+        loaded = load_report(ReportRegistry(), performance_path=str(tmp_path))
+
+        assert "zone_timings" in loaded["unanswerable"]
+
+    def test_an_answerable_device_log_answers_zone_timings(self, tmp_path):
+        """The inventory and `query_zone_summary` read one column set, so a log
+        listed as answerable is one the tool can actually summarise."""
+        write_device_log(tmp_path, MODERN_HEADER, ZONED_ROWS)
+        registry = ReportRegistry()
+
+        loaded = load_report(registry, performance_path=str(tmp_path))
+
+        assert "zone_timings" in loaded["answerable"]
+        assert tools.zone_timings(registry, loaded["handle"])["zones"]
+
+    def test_a_non_utf8_device_log_does_not_break_load_report(self, tmp_path):
+        """A device log with non-UTF-8 bytes in the preamble, or in a row after the
+        first, is unanswerable for `zone_timings` without breaking `load_report`.
+        #2184"""
+        header_line = MODERN_HEADER + "\n"
+        row_lines = "".join(row + "\n" for row in ZONED_ROWS)
+        latin1_preamble = (PREAMBLE + ", Note: 5\xb5s\n").encode("latin-1")
+        (tmp_path / DeviceLogProfilerQueries.DEVICE_LOG_FILE).write_bytes(
+            latin1_preamble + (header_line + row_lines).encode("utf-8")
+        )
+        write_ops_perf(tmp_path, smoke_rows())
+
+        registry = ReportRegistry()
+        loaded = load_report(registry, performance_path=str(tmp_path))
+
+        assert loaded["capture"] == {}
+        assert "zone_timings" in loaded["unanswerable"]
+        assert "top_ops" in loaded["answerable"]
+
+        bad_15_field_row = (
+            b"1,1,1,BRISC,18952,14595968859092,0,1025,,,BRISC-FW,ZONE_START,433,"
+            b"/home/j\xf6rg/brisc.cc,\n"
+        )
+        early_bad_row = tmp_path / "early_bad_row"
+        early_bad_row.mkdir()
+        (early_bad_row / DeviceLogProfilerQueries.DEVICE_LOG_FILE).write_bytes(
+            (PREAMBLE + "\n" + header_line).encode("utf-8") + bad_15_field_row
+        )
+        loaded_early = load_report(
+            ReportRegistry(), performance_path=str(early_bad_row)
+        )
+        assert loaded_early["capture"]["ARCH"] == "wormhole_b0"
+        assert "zone_timings" in loaded_early["unanswerable"]
+
+        late_bad_byte = tmp_path / "late_bad_byte"
+        late_bad_byte.mkdir()
+        # Past the first 8 KB, so a check that only decodes the opening block of
+        # the file (one read buffer) would miss it.
+        valid_prefix = (PREAMBLE + "\n" + header_line + (row_lines * 120)).encode(
+            "utf-8"
+        )
+        assert len(valid_prefix) > 8192
+        (late_bad_byte / DeviceLogProfilerQueries.DEVICE_LOG_FILE).write_bytes(
+            valid_prefix + bad_15_field_row
+        )
+        loaded_late = load_report(ReportRegistry(), performance_path=str(late_bad_byte))
+        assert loaded_late["capture"]["ARCH"] == "wormhole_b0"
+        assert "zone_timings" in loaded_late["unanswerable"]
 
     def test_a_missing_directory_is_refused_with_the_path(self, tmp_path):
         with pytest.raises(ValueError, match="performance_path is not a directory"):
