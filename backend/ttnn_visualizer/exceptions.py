@@ -188,6 +188,21 @@ class DataFormatError(Exception):
     pass
 
 
+class PerfReportExit(DataFormatError):
+    """tt-perf-report exited on input it could not parse.
+
+    The exit code rides on the exception, so a caller that knows the CSV can name it
+    in a new message instead of parsing this one. #2183
+    """
+
+    def __init__(
+        self, exit_code: Optional[int] = None, subject: str = "performance report"
+    ):
+        self.exit_code = exit_code
+        suffix = f" (exit code {exit_code})" if exit_code is not None else ""
+        super().__init__(f"{subject} could not be parsed{suffix}")
+
+
 class InvalidSignpostRange(ValueError):
     """A signpost range the performance report cannot honour as asked."""
 

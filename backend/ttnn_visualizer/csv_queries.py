@@ -37,6 +37,7 @@ from ttnn_visualizer.exceptions import (
     DataFormatError,
     InvalidSignpostRange,
     PerformanceReportNotLoadedException,
+    PerfReportExit,
 )
 from ttnn_visualizer.models import Instance
 from ttnn_visualizer.utils import newest_ops_perf_file
@@ -1255,14 +1256,13 @@ class OpsPerformanceReportQueries:
                 ):
                     raise
                 logger.exception("tt-perf-report exited while loading report")
-                code_suffix = (
-                    f" (exit code {e.code})"
+                # Only a genuine int is echoed: `sys.exit("...")` carries free text.
+                exit_code = (
+                    e.code
                     if isinstance(e.code, int) and not isinstance(e.code, bool)
-                    else ""
+                    else None
                 )
-                raise DataFormatError(
-                    f"performance report could not be parsed{code_suffix}"
-                ) from e
+                raise PerfReportExit(exit_code) from e
             except Exception as e:
                 logger.error(f"Error loading report: {e}")
                 logger.error(f"Full traceback:\n{traceback.format_exc()}")
@@ -1610,14 +1610,10 @@ def _generate_performance_report(
     raw_csv = csv_path.read_text()
     try:
         return OpsPerformanceReportQueries._generate_report_uncached(raw_csv, options)
-    except DataFormatError as e:
-        prefix = "performance report could not be parsed"
-        msg = str(e)
-        if msg.startswith(prefix):
-            raise DataFormatError(
-                f"{csv_path.name} could not be parsed{msg[len(prefix):]}"
-            ) from e.__cause__
-        raise
+    except PerfReportExit as e:
+        # Named here, not in the cached generator, so its signature stays
+        # (raw_csv, options). The basename only: hosted error bodies reach users.
+        raise PerfReportExit(e.exit_code, subject=csv_path.name) from e.__cause__
 
 
 @lru_cache(maxsize=MAX_CACHED_PERFORMANCE_REPORTS)
