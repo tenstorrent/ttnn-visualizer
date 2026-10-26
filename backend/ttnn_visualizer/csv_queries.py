@@ -2,6 +2,7 @@
 #
 # SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+import argparse
 import csv
 import json
 import logging
@@ -27,6 +28,7 @@ from typing import (
     overload,
 )
 
+import _sitebuiltins
 import matplotlib
 import matplotlib.pyplot as plt
 import orjson
@@ -79,6 +81,31 @@ def _stacked_report_plot_skipped():
         yield
     finally:
         perf_report.HAS_MATPLOTLIB = has_matplotlib
+
+
+_PERF_REPORT_DIR = os.path.dirname(os.path.abspath(perf_report.__file__))
+
+# Stdlib frames that sit between a library's call and the `SystemExit`: the `exit()`
+# builtin and `ArgumentParser.error`. `sys.exit` is C, so it adds no frame.
+_EXIT_HELPER_FILES = frozenset(
+    os.path.abspath(module.__file__) for module in (_sitebuiltins, argparse)
+)
+
+
+def _raised_by_perf_report(error: BaseException) -> bool:
+    """Whether tt-perf-report's own code raised this `SystemExit`.
+
+    Decided by the innermost frame once the stdlib exit helpers are passed over, not
+    by tt-perf-report being anywhere on the stack: gunicorn's timeout handler
+    (`Worker.handle_abort`) exits from a frame of its own while tt-perf-report is
+    still running, and that exit must propagate. #2183
+    """
+    frames = traceback.extract_tb(error.__traceback__)
+    while frames and os.path.abspath(frames[-1].filename) in _EXIT_HELPER_FILES:
+        frames.pop()
+    return bool(frames) and (
+        os.path.dirname(os.path.abspath(frames[-1].filename)) == _PERF_REPORT_DIR
+    )
 
 
 # Cell values after NaN sanitization; matches LocalCSVQueryRunner.execute_query.
@@ -1247,13 +1274,7 @@ class OpsPerformanceReportQueries:
                 # tt-perf-report calls sys.exit(1) on unparseable inputs (e.g. missing
                 # DEVICE ID). Convert library exits so the MCP server stays up and the
                 # HTTP route returns 422, while letting worker aborts propagate. #2183
-                tb_frames = traceback.extract_tb(e.__traceback__)
-                perf_report_dir = os.path.dirname(os.path.abspath(perf_report.__file__))
-                if (
-                    not tb_frames
-                    or os.path.dirname(os.path.abspath(tb_frames[-1].filename))
-                    != perf_report_dir
-                ):
+                if not _raised_by_perf_report(e):
                     raise
                 logger.exception("tt-perf-report exited while loading report")
                 # Only a genuine int is echoed: `sys.exit("...")` carries free text.

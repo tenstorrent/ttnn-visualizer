@@ -42,12 +42,12 @@ def missing_device_id_instance(app, tmp_path):
     return INSTANCE_ID
 
 
-def _exit_from_library_frame(exit_arg):
-    """A stand-in for `generate_perf_report` that exits from a frame reporting
-    tt-perf-report's own file, since the conversion keys on the innermost frame."""
+def _exit_from_library_frame(exit_arg=None, how="raise SystemExit(exit_arg)"):
+    """A stand-in for `generate_perf_report` that runs `how` in a frame reporting
+    tt-perf-report's own file, since the conversion keys on that frame."""
     namespace = {"exit_arg": exit_arg}
     code = compile(
-        "def _exit(*args, **kwargs):\n    raise SystemExit(exit_arg)\n",
+        f"import argparse\ndef _exit(*args, **kwargs):\n    {how}\n",
         csv_queries.perf_report.__file__,
         "exec",
     )
@@ -94,3 +94,29 @@ def test_only_an_integer_exit_code_reaches_the_response(
     assert f"{CSV_NAME} could not be parsed{expected_suffix}" in body
     assert str(tmp_path) not in body
     assert "/secret/internal/path" not in body
+
+
+@pytest.mark.parametrize(
+    ("how", "expected_suffix"),
+    [
+        # Each adds a stdlib frame inside tt-perf-report's, unlike `sys.exit`.
+        ("exit(3)", " (exit code 3)"),
+        ("argparse.ArgumentParser().error('bad input')", " (exit code 2)"),
+    ],
+)
+def test_a_library_exit_through_a_stdlib_helper_is_unprocessable(
+    client, missing_device_id_instance, how, expected_suffix
+):
+    with patch.object(
+        csv_queries.perf_report,
+        "generate_perf_report",
+        side_effect=_exit_from_library_frame(how=how),
+    ):
+        response = client.get(
+            REPORT_ENDPOINT, query_string={"instanceId": missing_device_id_instance}
+        )
+
+    assert response.status_code == 422
+    assert f"{CSV_NAME} could not be parsed{expected_suffix}" in response.get_data(
+        as_text=True
+    )
