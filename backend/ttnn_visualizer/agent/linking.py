@@ -34,7 +34,7 @@ from functools import partial
 from typing import Dict, List, NamedTuple, Optional, Sequence, Set, Tuple
 
 from tt_perf_report.perf_report import HOST_OP_MARKER
-from ttnn_visualizer.agent import failures, operations, perf_detail, tools
+from ttnn_visualizer.agent import failures, operations, perf_detail, perf_flags, tools
 from ttnn_visualizer.agent.bounds import (
     MAX_LIMIT,
     GraphTooLargeError,
@@ -701,6 +701,7 @@ def operation_detail(
     if link.status is LinkStatus.LINKED:
         rows = link.perf_rows_by_operation.get(int(operation_id), [])
         empty = tools.empty_detail_fields(registry, handle, groups)
+        flag_inputs = tools.read_flag_inputs(registry, handle, groups)
         result["perf_rows"] = [
             {
                 **tools.project_row(row),
@@ -708,6 +709,7 @@ def operation_detail(
                     tools.countable_device_time(row), link.report_device_time_total
                 ),
                 **perf_detail.detail_fields(row, groups, empty),
+                **perf_flags.flag_fields(row, flag_inputs),
             }
             for row in rows[: tools.row_limit(MAX_LIMIT, groups)]
         ]
@@ -717,6 +719,10 @@ def operation_detail(
         result["device_time_unit"] = DEVICE_TIME_UNIT
         result["projection"] = tools.projection(None)
         result.update(perf_detail.summary(groups, empty))
+        flagged = perf_flags.flagged_rows(
+            rows, flag_inputs, key=("operation", link.rank, int(operation_id))
+        )
+        result.update(perf_flags.summary(flag_inputs, flagged))
         if rows:
             result.update(_device_time_summary(rows, link.report_device_time_total))
             result["report_device_time_total"] = round(link.report_device_time_total, 3)

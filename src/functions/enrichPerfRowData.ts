@@ -61,13 +61,13 @@ export const getOpIdByPerfId = (opIdsMap: { perfId?: string; opId: number }[]): 
 
 // A later row of a hashed program is a repeat call, and its cache result is unrecorded when the
 // capture has no PROGRAM CACHE HIT value. Hashless rows, such as comparison placeholders, are never
-// repeats. `program_cache` in `backend/ttnn_visualizer/agent/tools.py` restates this by hand. #2169
+// repeats. Mirrored as `repeat_cache_outcome` in `backend/ttnn_visualizer/agent/perf_flags.py`. #2169
 export const getRepeatCacheOutcome = (row: TypedPerfTableRow): RepeatCacheOutcome | null => {
     if (!row.hash || row.isFirstHashOccurrence) {
         return null;
     }
 
-    // `== null` so a missing value reads as unrecorded too, as `program_cache` treats anything but True/False
+    // `== null` so a missing value reads as unrecorded too, as the generated report's None does
     if (row.cache_hit == null) {
         return RepeatCacheOutcome.UNRECORDED;
     }
@@ -78,6 +78,7 @@ export const getRepeatCacheOutcome = (row: TypedPerfTableRow): RepeatCacheOutcom
 // Converts the raw string-based rows produced by tt-perf-report (via the backend CSV parse) into
 // the typed numeric rows the performance table renders. Keep the parsing here aligned with the
 // columns tt-perf-report emits so the table reflects the same data.
+// The fields the heuristic flags read are mirrored as `typed_row` in `backend/ttnn_visualizer/agent/perf_flags.py`.
 export const enrichRowData = (
     rows: PerfTableRow[],
     opIdsMap: { perfId?: string; opId: number }[],
@@ -139,6 +140,7 @@ export const enrichRowData = (
     });
 
     // Mark which rows are the first occurrence of each hash
+    // Mirrored as `program_calls` in `backend/ttnn_visualizer/agent/perf_flags.py`.
     const hashFirstOccurrence = new Map<string | null, boolean>();
     for (const row of typedRows) {
         if (row.hash && !hashFirstOccurrence.has(row.hash)) {

@@ -10,6 +10,7 @@ import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 // boundary is the router's root `errorElement`, which replaces the whole app shell. Treating
 // it as unresolved matches how an unrecognised arch already degrades — enrichment is lost,
 // placement and links are not. #1772
+// Mirrored as `architecture_of` in `backend/ttnn_visualizer/agent/perf_flags.py`.
 export const stringToArchitecture = (arch: unknown): DeviceArchitecture => {
     if (typeof arch !== 'string') {
         return DeviceArchitecture.UNKNOWN;

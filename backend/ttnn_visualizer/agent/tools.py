@@ -16,9 +16,9 @@ import sys
 from collections import defaultdict
 from dataclasses import asdict, dataclass
 from enum import Enum
-from typing import Dict, List, Optional, Sequence, Set, Union, cast
+from typing import Dict, List, Optional, Sequence, Union, cast
 
-from ttnn_visualizer.agent import perf_detail
+from ttnn_visualizer.agent import perf_detail, perf_flags
 from ttnn_visualizer.agent.bounds import (
     MAX_DETAILED_LIMIT,
     MAX_LIMIT,
@@ -36,6 +36,7 @@ from ttnn_visualizer.csv_queries import (
     MAX_LISTED_SIGNPOSTS,
     SIGNPOST_OP_TYPE,
     DegradedPerformanceReport,
+    DeviceLogMeta,
     DeviceLogProfilerQueries,
     OpsPerformanceQueries,
     OpsPerformanceReportQueries,
@@ -464,7 +465,7 @@ def empty_detail_fields(
     registry: ReportRegistry, handle: str, groups: Sequence[perf_detail.DetailGroup]
 ) -> perf_detail.EmptyFields:
     """The detail fields no row of the whole report carries, read once per handle."""
-    if not groups:
+    if not perf_detail.has_fields(groups):
         return {}
 
     def build(instance: Instance) -> perf_detail.EmptyFields:
@@ -479,6 +480,33 @@ def empty_detail_fields(
 
 def row_limit(limit: Optional[int], groups: Sequence[perf_detail.DetailGroup]) -> int:
     return bounded(limit, MAX_DETAILED_LIMIT if groups else MAX_LIMIT)
+
+
+def _device_meta(instance: Instance) -> Optional[DeviceLogMeta]:
+    """The device log's meta, or None where the view's request for it fails."""
+    try:
+        return DeviceLogProfilerQueries.read_device_meta(instance)
+    except OSError:
+        return None
+
+
+def read_flag_inputs(
+    registry: ReportRegistry, handle: str, groups: Sequence[perf_detail.DetailGroup]
+) -> Optional[perf_flags.FlagInputs]:
+    """What the flags read besides a row, when `include` asks for them; once per handle.
+
+    The whole report even for a ranged call: a program first called before a window
+    makes its calls inside it repeats, and a window does not change the device's cores.
+    """
+    if perf_detail.DetailGroup.FLAGS not in groups:
+        return None
+
+    def build(instance: Instance) -> perf_flags.FlagInputs:
+        return perf_flags.flag_inputs(
+            canonical_report(registry, handle)["report"], _device_meta(instance)
+        )
+
+    return registry.cached_report(handle, build, variant=CacheVariant.PERF_FLAG_INPUTS)
 
 
 def top_ops(
@@ -508,6 +536,8 @@ def top_ops(
 
     total: float = sum(finite_number(row.get(field)) or 0.0 for row in rows)
     empty = empty_detail_fields(registry, handle, groups)
+    flag_inputs = read_flag_inputs(registry, handle, groups)
+    ignored = bool(report.get("signpost_range_ignored"))
     ops = [
         {
             **project_row(row, by),
@@ -517,9 +547,14 @@ def top_ops(
             # tells a marker from an operation has to survive into the response.
             "op_type": row.get("op_type") or None,
             **perf_detail.detail_fields(row, groups, empty),
+            **perf_flags.flag_fields(row, flag_inputs),
         }
         for row in ranked
     ]
+    # Keyed by the range read, which a report with no signposts reads whole.
+    flagged = perf_flags.flagged_rows(
+        rows, flag_inputs, key=("range", None if ignored else signposts)
+    )
 
     result: Dict[str, object] = {
         "handle": handle,
@@ -527,8 +562,9 @@ def top_ops(
         "op_count": len(rows),
         "returned": len(ops),
         "ops": ops,
-        "projection": projection(signposts, bool(report.get("signpost_range_ignored"))),
+        "projection": projection(signposts, ignored),
         **perf_detail.summary(groups, empty),
+        **perf_flags.summary(flag_inputs, flagged),
     }
     if by in ADDITIVE_METRICS:
         result[f"{by}_total"] = round(total, 3)
@@ -567,33 +603,31 @@ def program_cache(
 ) -> Dict[str, object]:
     """How often each op code built a program again rather than reusing it.
 
-    The performance view's rule, by hand: a hash's first row in report order is a first
-    call, and a later row is a repeat that hit, missed or recorded nothing
-    (`getRepeatCacheOutcome` in `enrichPerfRowData.ts`). A miss is a recompute
-    candidate, and the table footer leaves unrecorded repeats out of its hit
-    percentage; mirror a change there. The whole report, since a program first called
+    A hash's first row in report order is a first call (`perf_flags.program_calls`),
+    and a later row is a repeat that hit, missed or recorded nothing
+    (`perf_flags.repeat_cache_outcome`, the port of `getRepeatCacheOutcome`). A miss is
+    the performance view's recompute candidate, and its table footer leaves unrecorded
+    repeats out of its hit percentage. The whole report, since a program first called
     before a window would read as a first call inside it.
     """
     count = bounded(limit)
     rows = canonical_report(registry, handle).get("report", [])
-    seen: Set[str] = set()
     calls_by_op_code: Dict[str, _ProgramCalls] = {}
-    for row in rows:
-        program = row.get("hash") or None
-        if program is None:
-            continue
+    for row, first in perf_flags.program_calls(rows):
         # The raw code: tt-perf-report adds a matmul's shape to `op_code`.
         op_code = str(row.get("raw_op_code") or row.get("op_code") or "").strip()
         entry = calls_by_op_code.setdefault(op_code, _ProgramCalls(op_code))
         entry.calls += 1
-        if program not in seen:
-            seen.add(program)
+        if first:
             entry.programs += 1
             continue
         entry.repeat_calls += 1
-        if row.get("cache_hit") is True:
+        outcome = perf_flags.repeat_cache_outcome(
+            row.get("hash"), first, row.get("cache_hit")
+        )
+        if outcome is perf_flags.RepeatCacheOutcome.HIT:
             entry.repeat_hits += 1
-        elif row.get("cache_hit") is False:
+        elif outcome is perf_flags.RepeatCacheOutcome.MISS:
             entry.repeat_misses += 1
             if entry.first_repeat_miss_perf_id is None:
                 entry.first_repeat_miss_perf_id = row.get("id")
@@ -646,12 +680,8 @@ def program_cache(
                 else "there is no hit percentage."
             )
         )
-    if recorded and repeat_misses == recorded:
-        caveats.append(
-            "Every repeat call that recorded a result missed the program cache, which "
-            "is what a run with the program cache disabled records. Check whether it "
-            "was before reading each repeat miss as a program built again."
-        )
+    if perf_flags.cache_looks_disabled(repeat_hits, repeat_misses):
+        caveats.append(perf_flags.CACHE_DISABLED_CAVEAT)
     if caveats:
         result["caveat"] = " ".join(caveats)
     return result
@@ -1004,6 +1034,7 @@ __all__ = [
     "project_row",
     "projection",
     "range_ignored",
+    "read_flag_inputs",
     "row_limit",
     "share_percent",
     "top_ops",
