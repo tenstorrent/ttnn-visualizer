@@ -70,6 +70,20 @@ class TestParseInt:
     def test_an_integer_stays_an_integer(self):
         assert isinstance(parse_int("4096"), int)
 
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            ("9" * 309, math.inf),
+            ("-" + "9" * 309, -math.inf),
+            # Past Python's limit on converting a long digit string to an int.
+            ("9" * 5000, math.inf),
+            # Rounded to the nearest float, as `parseInt` gives it.
+            ("9007199254740993", 9007199254740992),
+        ],
+    )
+    def test_it_reads_a_long_prefix_as_javascript_s_number_does(self, value, expected):
+        assert parse_int(value) == expected
+
 
 class TestParseFloat:
     @pytest.mark.parametrize(

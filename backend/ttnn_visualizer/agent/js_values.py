@@ -89,9 +89,17 @@ def js_template(value: object) -> str:
 
 
 def parse_int(value: object) -> Number:
-    """`parseInt(value, 10)`: the leading integer of its string form, else NaN."""
+    """`parseInt(value, 10)`: the leading integer of its string form, else NaN.
+
+    Read through a float, as JavaScript's number is: a prefix past the float range is
+    an infinity, not an `OverflowError` at the caller's `float()`, and one past 2**53
+    rounds as it does in the app.
+    """
     match = _JS_INT.match(js_template(value).lstrip(JS_WHITESPACE))
-    return int(match.group(0)) if match else math.nan
+    if not match:
+        return math.nan
+    number = float(match.group(0))
+    return int(number) if math.isfinite(number) else number
 
 
 def parse_float(value: object) -> float:
