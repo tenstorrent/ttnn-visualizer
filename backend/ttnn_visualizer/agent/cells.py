@@ -28,4 +28,14 @@ def finite_number(value: object) -> Optional[float]:
     return number if math.isfinite(number) else None
 
 
-__all__ = ["finite_number"]
+def whole_number(value: object) -> Optional[int]:
+    """A cell as an int, truncated, or None where `finite_number` gives None.
+
+    For cells that count or identify something: a core count, a call count, a
+    device id.
+    """
+    number = finite_number(value)
+    return None if number is None else int(number)
+
+
+__all__ = ["finite_number", "whole_number"]

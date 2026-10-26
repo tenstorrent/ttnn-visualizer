@@ -26,7 +26,7 @@ from ttnn_visualizer.agent.bounds import (
     bounded,
     require_choice,
 )
-from ttnn_visualizer.agent.cells import finite_number
+from ttnn_visualizer.agent.cells import finite_number, whole_number
 from ttnn_visualizer.agent.handles import (
     CacheVariant,
     ReportRegistry,
@@ -748,11 +748,6 @@ SLOWEST_CORES = 5
 _PERF_PER_CORE_FIELDS = ("per_core_min_us", "per_core_max_us", "per_core_avg_us")
 
 
-def _whole(value: object) -> Optional[int]:
-    number = finite_number(value)
-    return None if number is None else int(number)
-
-
 def _spread(durations_us: List[float]) -> Dict[str, Optional[float]]:
     median = statistics.median(durations_us)
     longest = max(durations_us)
@@ -797,8 +792,8 @@ def _spread_rows(
             row
             for row in rows
             if not is_signpost_row(row)
-            and _whole(row.get("global_call_count")) is not None
-            and _whole(row.get("device")) is not None
+            and whole_number(row.get("global_call_count")) is not None
+            and whole_number(row.get("device")) is not None
             and finite_number(row.get("device_time")) is not None
         ]
         return sorted(
@@ -819,8 +814,8 @@ def _spread_rows(
             f"row {perf_id} is the signpost {op_code!r}, which runs on no core"
         )
     if (
-        _whole(row.get("global_call_count")) is None
-        or _whole(row.get("device")) is None
+        whole_number(row.get("global_call_count")) is None
+        or whole_number(row.get("device")) is None
     ):
         raise ValueError(
             f"row {perf_id} ({op_code}) has no global call count or device, so it is "
@@ -858,8 +853,8 @@ def core_spread(
 
     def run_of(row: Dict) -> Tuple[int, int]:
         return (
-            cast(int, _whole(row.get("global_call_count"))),
-            cast(int, _whole(row.get("device"))),
+            cast(int, whole_number(row.get("global_call_count"))),
+            cast(int, whole_number(row.get("device"))),
         )
 
     with DeviceLogProfilerQueries(instance, stream=True) as queries:
@@ -870,7 +865,7 @@ def core_spread(
     for row in rows:
         call_count, device = run_of(row)
         cores = spans.get((call_count, device), {})
-        perf_cores = _whole(row.get("cores"))
+        perf_cores = whole_number(row.get("cores"))
         detail = perf_detail.detail_fields(row, (perf_detail.DetailGroup.CORES,))
         entry: Dict[str, object] = {
             **project_row(row),

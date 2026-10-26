@@ -2558,7 +2558,9 @@ class TestTransport:
         assert record.call_args.kwargs["outcome"] is McpToolOutcome.REFUSED
         generate.assert_not_called()
 
-    @pytest.mark.parametrize("tool", ["op_breakdown", "top_ops", "program_cache"])
+    @pytest.mark.parametrize(
+        "tool", ["op_breakdown", "top_ops", "program_cache", "core_spread"]
+    )
     def test_a_performance_tool_on_a_profiler_only_handle_says_why(
         self, tmp_path, tool
     ):

@@ -10,18 +10,27 @@ span read this way reproduced tt-metal's `DEVICE KERNEL DURATION PER CORE` colum
 the nanosecond, so the fixtures here build both files on that join. #2173
 """
 
+import json
 from unittest.mock import patch
 
 import pytest
-from ttnn_visualizer.agent import tools
+from ttnn_visualizer import csv_queries
+from ttnn_visualizer.agent import server, tools
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
 from ttnn_visualizer.csv_queries import DeviceLogProfilerQueries
+from ttnn_visualizer.event_logging import McpToolOutcome
 from ttnn_visualizer.exceptions import DataFormatError
-from ttnn_visualizer.tests.smoke_capture import SMOKE_CAPTURE_DIR
+from ttnn_visualizer.models import Instance
+from ttnn_visualizer.tests.smoke_capture import (
+    SMOKE_CAPTURE_DIR,
+    smoke_rows,
+    write_ops_perf,
+)
 from ttnn_visualizer.tests.test_agent_tools import UNTYPED_HEADER, _perf_report, _row
 from ttnn_visualizer.tests.test_device_log_columns import (
     MODERN_HEADER,
     PRE_RENAME_HEADER,
+    PREAMBLE,
     write_device_log,
 )
 
@@ -293,3 +302,206 @@ def test_the_smoke_capture_reads_end_to_end():
     assert in_log[0]["cores_in_log"] < in_log[0]["cores"]
     assert "have no kernel zones" in result["caveat"]
     assert "fewer cores" in result["caveat"]
+
+
+class TestPairing:
+    """The pairing `query_zone_summary` pins, held for `query_core_spans` too."""
+
+    def test_a_pair_split_across_chunks_still_matches(self, tmp_path, monkeypatch):
+        """Chunks are filtered before pairing, so a start and its end in different
+        chunks, with other runs' and firmware rows between them, must still pair."""
+        monkeypatch.setattr(csv_queries, "CSV_CHUNK_SIZE", 1)
+        start, end = _zone(0, 1, 1, "BRISC", 0, 1000)
+        between = [
+            *_zone(0, 1, 1, "BRISC", 100, 900, zone="BRISC-FW"),
+            *_zone(0, 9, 9, "BRISC", 0, 7000, run=RUN + 5),
+        ]
+        rows = [start, *between, end, *THREE_CORES[4:]]
+
+        result = _spread(tmp_path, rows, [_op()], perf_id="1")
+
+        # Core (1,1) runs BRISC 0-1000 and TRISC_0 100-1200, so its span is 1.2 us
+        # only if the split BRISC pair matched: unmatched, it would read 1.1.
+        assert result["ops"][0]["core_span"] == {
+            "min_us": 1.2,
+            "median_us": 2.0,
+            "max_us": 3.0,
+            "imbalance": 1.5,
+        }
+        assert "caveat" not in result
+
+    def test_starts_past_the_ceiling_say_the_log_is_malformed(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.setattr(csv_queries, "MAX_OPEN_ZONE_STARTS", 1)
+        never_closed = [
+            "0,4,1,BRISC,1,0,0,1024,,,BRISC-KERNEL,ZONE_START,1,k.cc,",
+            "0,5,1,BRISC,1,0,0,1024,,,BRISC-KERNEL,ZONE_START,1,k.cc,",
+        ]
+
+        result = _spread(tmp_path, THREE_CORES + never_closed, [_op()], perf_id="1")
+
+        assert "were dropped at the open-zone ceiling" in result["caveat"]
+        assert "malformed" in result["caveat"]
+
+    def test_an_end_without_a_start_is_caveated(self, tmp_path):
+        lone_end = "0,4,1,BRISC,2,900,0,1024,,,BRISC-KERNEL,ZONE_END,1,k.cc,"
+
+        result = _spread(tmp_path, [lone_end, *THREE_CORES], [_op()], perf_id="1")
+
+        assert "0 zone starts and 1 ends did not pair" in result["caveat"]
+
+    def test_a_repeated_kernel_on_one_core_widens_its_span(self, tmp_path):
+        rows = [
+            *_zone(0, 1, 1, "BRISC", 0, 1000),
+            *_zone(0, 1, 1, "BRISC", 2000, 2500),
+        ]
+
+        op = _spread(tmp_path, rows, [_op(cores="1")], perf_id="1")["ops"][0]
+
+        assert op["core_span"]["max_us"] == 2.5
+        assert op["by_risc"]["BRISC"]["max_us"] == 1.5
+
+    def test_a_zero_median_has_no_imbalance_and_stays_valid_json(self, tmp_path):
+        rows = [*_zone(0, 1, 1, "BRISC", 500, 500), *_zone(0, 2, 1, "BRISC", 0, 0)]
+
+        result = _spread(tmp_path, rows, [_op(cores="2")], perf_id="1")
+
+        assert result["ops"][0]["core_span"]["imbalance"] is None
+        json.dumps(result, allow_nan=False)
+
+
+@pytest.mark.parametrize(
+    "query", ["query_zone_summary", "query_core_spans"], ids=["summary", "spans"]
+)
+def test_a_ragged_row_mid_file_is_a_data_error_while_streaming(tmp_path, query):
+    """`stream=True` reads only the header up front, so a bad row surfaces while the
+    zone queries walk the chunks, and must still arrive as bad data, not a fault."""
+    # An unterminated quote: the zone queries read with `usecols`, under which
+    # pandas drops a row's surplus fields rather than refusing them.
+    rows = [*THREE_CORES[:2], '0,1,1,BRISC,1,"unterminated', *THREE_CORES[2:]]
+    write_device_log(tmp_path, MODERN_HEADER, rows)
+    instance = Instance(instance_id="pytest", performance_path=str(tmp_path))
+    arguments = {"runs": {(RUN, 0)}} if query == "query_core_spans" else {}
+
+    with DeviceLogProfilerQueries(instance, stream=True) as queries:
+        with pytest.raises(DataFormatError, match="could not be parsed"):
+            getattr(queries, query)(**arguments)
+
+
+class TestInventory:
+    def test_a_pre_rename_log_with_a_perf_csv_answers_core_spread(self, tmp_path):
+        """The inventory reads the same phase spellings `query_core_spans` pairs on."""
+        rows = [
+            "0,1,1,BRISC,1,0,0,0,1024,BRISC-KERNEL,begin,1,k.cc",
+            "0,1,1,BRISC,2,1500,0,0,1024,BRISC-KERNEL,end,1,k.cc",
+        ]
+        write_device_log(tmp_path, PRE_RENAME_HEADER, rows)
+        write_ops_perf(tmp_path, smoke_rows())
+
+        loaded = load_report(ReportRegistry(), performance_path=str(tmp_path))
+
+        assert "core_spread" in loaded["answerable"]
+
+    def test_blank_lines_before_the_header_are_skipped(self, tmp_path):
+        """As pandas and `_scan_csv` skip them, so the tool and the list agree."""
+        path = tmp_path / DeviceLogProfilerQueries.DEVICE_LOG_FILE
+        path.write_text(
+            "\n".join([PREAMBLE, "", MODERN_HEADER, *THREE_CORES]) + "\n",
+            encoding="utf-8",
+        )
+        write_ops_perf(tmp_path, smoke_rows())
+
+        loaded = load_report(ReportRegistry(), performance_path=str(tmp_path))
+
+        assert "core_spread" in loaded["answerable"]
+
+    def test_an_answerable_log_answers(self, tmp_path):
+        """Listed as answerable means the call returns rather than refuses."""
+        write_device_log(tmp_path, MODERN_HEADER, THREE_CORES)
+        write_ops_perf(tmp_path, smoke_rows())
+        registry = ReportRegistry()
+
+        loaded = load_report(registry, performance_path=str(tmp_path))
+
+        assert "core_spread" in loaded["answerable"]
+        assert "ops" in tools.core_spread(registry, loaded["handle"], limit=1)
+
+
+class TestThroughTheServer:
+    @pytest.fixture(autouse=True)
+    def _never_touch_the_real_event_log(self, event_log_directory):
+        """Every tools/call reaches the recorder; none may write outside tmp_path."""
+
+    def _call(self, tmp_path, log_rows, arguments, header=MODERN_HEADER):
+        registry = ReportRegistry()
+        write_device_log(tmp_path, header, log_rows)
+        load_report(registry, performance_path=str(tmp_path))
+        with (
+            patch.object(
+                tools, "_generate_canonical_report", return_value=_perf_report([_op()])
+            ),
+            patch.object(server, "record_event") as record,
+        ):
+            response = server.handle_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "core_spread",
+                        "arguments": {"handle": "report-1", **arguments},
+                    },
+                },
+                server._tool_table(registry),
+            )
+        return response["result"], record.call_args.kwargs["outcome"]
+
+    def test_an_integer_perf_id_answers(self, tmp_path):
+        """The schema takes a string or an integer; ids are matched as text."""
+        result, outcome = self._call(tmp_path, THREE_CORES, {"perf_id": 1})
+
+        assert not result.get("isError")
+        assert json.loads(result["content"][0]["text"])["ops"][0]["id"] == "1"
+        assert outcome is McpToolOutcome.OK
+
+    def test_a_log_without_phases_is_refused_with_why(self, tmp_path):
+        rows = ["0,1,1,BRISC,10,1000,0,1024,BRISC-KERNEL,1,brisc.cc"]
+
+        result, _outcome = self._call(
+            tmp_path, rows, {"perf_id": "1"}, header=UNTYPED_HEADER
+        )
+
+        assert result["isError"] is True
+        assert "no kernel durations" in result["content"][0]["text"]
+
+    def test_a_log_without_a_clock_is_refused(self, tmp_path):
+        write_device_log(tmp_path, MODERN_HEADER, THREE_CORES)
+        path = tmp_path / DeviceLogProfilerQueries.DEVICE_LOG_FILE
+        lines = path.read_text().splitlines()
+        path.write_text("\n".join(["ARCH: wormhole_b0", *lines[1:]]) + "\n")
+        registry = ReportRegistry()
+        load_report(registry, performance_path=str(tmp_path))
+
+        with (
+            patch.object(
+                tools, "_generate_canonical_report", return_value=_perf_report([_op()])
+            ),
+            patch.object(server, "record_event") as record,
+        ):
+            response = server.handle_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "core_spread",
+                        "arguments": {"handle": "report-1", "perf_id": "1"},
+                    },
+                },
+                server._tool_table(registry),
+            )
+
+        assert response["result"]["isError"] is True
+        assert "CHIP_FREQ" in response["result"]["content"][0]["text"]
+        assert record.call_args.kwargs["outcome"] is McpToolOutcome.REFUSED
