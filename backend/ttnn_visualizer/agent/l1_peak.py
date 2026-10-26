@@ -51,7 +51,7 @@ class Precision(str, Enum):
     UPPER_BOUND = "upper-bound"
 
 
-def _js_number(value: object) -> float:
+def js_number(value: object) -> float:
     """`Number(value)` as the app reads a graph param."""
     if value is None:
         return 0.0
@@ -86,7 +86,7 @@ def _address(params: Dict) -> Optional[float]:
     raw = params.get("address")
     if raw is None:
         return None
-    address = _js_number(raw)
+    address = js_number(raw)
     return address if math.isfinite(address) else None
 
 
@@ -117,12 +117,12 @@ def _is_l1_node(params: Dict) -> bool:
 
 def _param(params: Dict, key: str) -> float:
     """A param as the app reads it: missing is undefined, so NaN, while null is 0."""
-    return _js_number(params[key]) if key in params else math.nan
+    return js_number(params[key]) if key in params else math.nan
 
 
 def _per_bank_bytes(params: Dict, bank_count: int) -> float:
     if "max_size_per_bank" in params:
-        return _js_number(params["max_size_per_bank"])
+        return js_number(params["max_size_per_bank"])
     cores = _param(params, "num_cores")
     divisor = cores if cores and not math.isnan(cores) else float(bank_count)
     size = _param(params, "size")
@@ -547,6 +547,7 @@ __all__ = [
     "Resident",
     "ResidentKind",
     "build_l1_peak",
+    "js_number",
     "last_valid_consumer",
     "resolve_address_lifetimes",
     "top_compositions",

@@ -8,6 +8,8 @@
  * the pressure modal, #1844) and `collapseCbDeviceRows` (the L1 plot legend, #1879)
  * so the three surfaces cannot disagree about a CB's device count — they were
  * separate implementations agreeing only on the sentinel below.
+ *
+ * Mirrored in `backend/ttnn_visualizer/agent/circular_buffers.py`. #2185
  */
 
 // Keeps a graph with no device dimension accumulating into one bucket. #1844
