@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { BoundAnalysis, BoundType } from '../definitions/PerfTable';
+import { BoundAnalysis, BoundType, RepeatCacheOutcome } from '../definitions/PerfTable';
 import { TypedPerfTableRow } from '../model/PerfTable';
 import { PERF_HEURISTIC_THRESHOLDS, PerfHeuristicFlag } from '../definitions/PerfHeuristics';
 import { OpType } from '../definitions/Performance';
@@ -12,6 +12,7 @@ import { formatPercentage } from './math';
 import { isSlowDramDominant } from './perfBoundPredicates';
 import { getAllocationFailureSummary } from './parseAllocationFailure';
 import { getDramFallbackSummary } from './getDramFallbacks';
+import { getRepeatCacheOutcome } from './enrichPerfRowData';
 
 interface RowHeuristicEvaluation {
     flags: PerfHeuristicFlag[];
@@ -135,7 +136,7 @@ function evaluateRowHeuristics(row: TypedPerfTableRow, maxCores: number): RowHeu
         }
     }
 
-    if (row.hash != null && !row.isFirstHashOccurrence && row.cache_hit === false) {
+    if (getRepeatCacheOutcome(row) === RepeatCacheOutcome.MISS) {
         flags.push(PerfHeuristicFlag.RECOMPUTE_CANDIDATE);
         details[PerfHeuristicFlag.RECOMPUTE_CANDIDATE] = `Hash: ${row.hash}`;
     }
