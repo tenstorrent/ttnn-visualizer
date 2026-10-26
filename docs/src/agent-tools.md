@@ -181,24 +181,37 @@ per-bank allocation figure, and the response labels it `bytes_per_bank` accordin
 read `tensor_size_unit` rather than assuming the two figures are in different units.
 
 **`operation_detail`'s `circular_buffers` are bytes on each core, read from the captured
-graph.** An L1 bank is one core's L1, so that is the unit `l1_peak` sums circular buffers
-in as bytes per bank, and the unit of the L1 figures under `allocations`. `allocations`
+graph.** An L1 bank is one core's L1, so their `size_unit` is `bytes_per_bank`, the unit
+`l1_peak` sums circular buffers in and the unit of the L1 figures under `allocations`. `allocations`
 cannot show circular buffers, though: it reads the post-operation `buffers` table, which a
 circular buffer never enters. Each entry under `circular_buffers` is one device operation
 that allocated circular buffers, as the app's per-core view lists them, and each row gives
-a buffer's address, its size on each core, its raw `core_range_set` and how many distinct
-cores that covers. A mesh records every circular buffer once per device; those copies are
+a buffer's address, its size on each core, its `core_range_set` and how many distinct
+cores that covers. A `core_range_set` past 200 characters is cut, and
+`core_range_set_full_length` gives its length; `core_count` still counts all of it. A mesh records every circular buffer once per device; those copies are
 one row, and `device_count` says how many devices allocated it. Older mesh captures give
 each device its own device operation, which the app lists once per device; here those are
 one entry with its own `device_count`, so `circular_buffer_count` counts buffers rather than
 device copies. A device operation launched twice on the same device stays two entries. A
 `globally_allocated` buffer is a view onto an L1 tensor that is already counted, so it adds
 no L1. `max_bytes_per_core` is the largest circular-buffer total on any one core, and a
-buffer whose core range is empty is counted in `unattributed_bytes` instead.
+buffer whose core range is empty is counted in `unattributed_bytes` instead. At most 100
+rows are listed, or 25 when `include` is set, as for `perf_rows`; the counts cover them all.
+
+**A captured graph records a program's circular buffers only at its first launch.** A
+relaunch from the program cache frees circular buffers and allocates none in the graph, so
+on a warm capture most device operations show none. Those launches are counted, not
+dropped: `unrecorded_launch_count` says how many, `unrecorded_device_operations` names them
+with each name's launch and device counts, and `caveat` says their buffers are unknown
+rather than zero. A device operation with no circular buffers at all looks the same in the
+graph, so these are most likely, not certainly, cached relaunches.
 
 The field is absent when the report has no captured graph for the operation, and withheld
 when its graph cannot be read for the rank asked for, is past the size a tool will read, or
-does not parse; `caveat` then says which. An empty graph is a real zero.
+does not parse; `caveat` then says which. For an operation with an error, the same graph
+names `error.failed_device_operations`, which is withheld alike while the rest of the error
+still answers. A graph that launched no device operation, with no
+`unrecorded_launch_count`, is a real zero.
 
 **`memory_profile` reports a floor, not the peak.** It reads the `buffers` table, which
 records tensor allocations only. A circular buffer never appears there, and neither does a

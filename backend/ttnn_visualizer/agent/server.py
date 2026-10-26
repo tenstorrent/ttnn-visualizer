@@ -336,9 +336,12 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "find those, and later calls reuse them. circular_buffers lists the "
                 "circular buffers each of its device operations allocated, read from "
                 "its captured graph: how many, each one's bytes per core, core range "
-                "and device count. allocations and memory_profile leave circular "
-                "buffers out. It is absent when the report has no graph for the "
-                "operation, and caveat says when it is withheld."
+                "and device count. A graph records a program's circular buffers only "
+                "at its first launch, so unrecorded_device_operations counts the "
+                "launches it recorded none for, whose buffers are unknown, not zero. "
+                "allocations and memory_profile leave circular buffers out. It is "
+                "absent when the report has no graph for the operation, and caveat "
+                "says when it is withheld."
             ),
             "schema": {
                 "type": "object",

@@ -19,6 +19,7 @@ import pytest
 from ttnn_visualizer.agent import (
     allocation_failures,
     bounds,
+    captured_graph,
     failures,
     linking,
     operations,
@@ -720,7 +721,7 @@ class TestL1Peak:
             ],
         )
 
-        with patch.object(failures.json, "loads", wraps=json.loads) as parse:
+        with patch.object(captured_graph.json, "loads", wraps=json.loads) as parse:
             peak = failures.l1_peak(registry, handle)["peak"]
 
         assert parse.call_count == 2
@@ -989,10 +990,16 @@ class TestHowTheDatabaseIsRead:
                 bounds.GraphTooLargeError, match="past the 10 an error lookup"
             ):
                 failures.errors(registry, handle)
-            with pytest.raises(
-                bounds.GraphTooLargeError, match="past the 10 operation_detail"
-            ):
-                linking.operation_detail(registry, handle, operation_id=1)
+            detail = linking.operation_detail(registry, handle, operation_id=1)
+
+        # Only what the graph would give is withheld, the error's failed device
+        # operations as well as the circular buffers.
+        assert detail["error"]["error_type"] == "TT_THROW"
+        assert "failed_device_operations" not in detail["error"]
+        assert "circular_buffers" not in detail
+        assert "error.failed_device_operations is withheld" in detail["caveat"]
+        assert "circular_buffers is withheld" in detail["caveat"]
+        assert "past the 10 operation_detail" in detail["caveat"]
 
     def test_the_bound_counts_only_the_rank_the_tool_reads(self, tmp_path):
         """The graph read is rank-filtered in SQL, so a bound of exactly rank 0's size
@@ -1347,6 +1354,56 @@ class TestOperationDetail:
 
         assert "circular_buffers" not in detail
         assert "circular_buffers is withheld" in detail["caveat"]
+
+    def test_a_graph_that_is_not_a_list_withholds_the_error_s_failed_operations(
+        self, tmp_path
+    ):
+        """Read as empty, it would claim no device operation failed; the error itself
+        comes from the errors table and still answers."""
+        registry, handle = _report(
+            tmp_path,
+            operations=[(1, "ttnn.conv2d")],
+            errors=[(1, "ttnn.conv2d", "TT_THROW", _OUT_OF_MEMORY)],
+            graphs=[(1, [])],
+        )
+        connection = sqlite3.connect(
+            Path(registry.get(handle).profiler_path) / "db.sqlite"
+        )
+        try:
+            connection.execute("UPDATE captured_graph SET captured_graph = 'not json'")
+            connection.commit()
+        finally:
+            connection.close()
+
+        detail = linking.operation_detail(registry, handle, operation_id=1)
+
+        assert detail["error"]["error_type"] == "TT_THROW"
+        assert "failed_device_operations" not in detail["error"]
+        assert "error.failed_device_operations is withheld" in detail["caveat"]
+
+    def test_a_relaunch_that_recorded_no_buffers_is_named_in_the_caveat(self, tmp_path):
+        """A graph records a program's circular buffers only at its first launch, so a
+        cached relaunch's are unknown rather than zero."""
+        graph = [
+            {"node_type": "capture_start", "params": {}},
+            _start("MatmulDeviceOperation"),
+            {"node_type": "circular_buffer_deallocate_all", "params": {}},
+            _end("MatmulDeviceOperation"),
+        ]
+        registry, handle = _report(
+            tmp_path, operations=[(1, "ttnn.matmul")], graphs=[(1, graph)]
+        )
+
+        detail = linking.operation_detail(registry, handle, operation_id=1)
+
+        buffers = detail["circular_buffers"]
+        assert buffers["circular_buffer_count"] == 0
+        assert buffers["unrecorded_launch_count"] == 1
+        assert buffers["unrecorded_device_operations"] == [
+            {"name": "MatmulDeviceOperation", "launch_count": 1, "device_count": 1}
+        ]
+        assert "1 device operation launch whose" in detail["caveat"]
+        assert "unknown, not zero" in detail["caveat"]
 
     def test_its_circular_buffers_are_read_from_the_rank_asked_for(self, tmp_path):
         registry, handle = _two_rank_report(

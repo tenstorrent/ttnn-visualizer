@@ -23,7 +23,6 @@ This module sits above `tools` and `operations` and is the only one that reads b
 which is what keeps those two from importing each other.
 """
 
-import json
 import logging
 import re
 import sqlite3
@@ -41,6 +40,7 @@ from ttnn_visualizer.agent.bounds import (
     GraphTooLargeError,
     ensure_graph_readable,
 )
+from ttnn_visualizer.agent.captured_graph import UnreadableGraphError, parse_graph
 from ttnn_visualizer.agent.handles import CacheVariant, ReportRegistry
 from ttnn_visualizer.agent.scope_outcomes import is_device_operation, scope_pairing
 from ttnn_visualizer.csv_queries import SIGNPOST_OP_TYPE
@@ -239,10 +239,6 @@ def match_device_operations(
     )
 
 
-class UnreadableGraphError(ValueError):
-    """A captured graph that is not a JSON list of nodes."""
-
-
 def _redacted(error: Exception) -> str:
     """An error's text with the system temp directory masked.
 
@@ -271,12 +267,7 @@ def _device_operation_names(raw: Optional[str]) -> Dict[NodeOrder, List[str]]:
     names: Dict[NodeOrder, List[str]] = {order: [] for order in NodeOrder}
     if not raw:
         return names
-    try:
-        nodes = json.loads(raw)
-    except ValueError as error:
-        raise UnreadableGraphError(str(error)) from None
-    if not isinstance(nodes, list):
-        raise UnreadableGraphError("not a list of nodes")
+    nodes = parse_graph(raw)
 
     lifecycle: List[Tuple[NodeOrder, str, Dict]] = []
     for node in nodes:
@@ -695,7 +686,12 @@ def operation_detail(
         handle,
         operation_id=operation_id,
         rank=rank,
-        detail_fields=partial(failures.operation_failure_fields, registry, handle),
+        detail_fields=partial(
+            failures.operation_failure_fields,
+            registry,
+            handle,
+            circular_buffer_limit=tools.row_limit(MAX_LIMIT, groups),
+        ),
     )
     link = operation_link(registry, handle)
     if link.status is LinkStatus.LINKED and result.get("rank") != link.rank:

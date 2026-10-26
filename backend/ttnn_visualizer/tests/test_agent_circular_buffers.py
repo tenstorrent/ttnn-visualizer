@@ -6,16 +6,18 @@
 
 `test_agent_failure_parity.py` holds `summarise` to the app's `processMemoryAllocations`;
 these hold the parts the shared golden cannot: `select_read`, which stands for a lookup
-inline in a component, the response, and the `counter` ids the app renames before it
-reads a graph.
+inline in a component, the response, and the `counter` ids `parse_graph` renames as the
+app does before it reads a graph.
 """
 
+import json
 import math
 from typing import List
 
 import pytest
 from ttnn_visualizer.agent import circular_buffers
 from ttnn_visualizer.agent.bounds import MAX_LIMIT
+from ttnn_visualizer.agent.captured_graph import parse_graph
 from ttnn_visualizer.agent.circular_buffers import (
     _js_template,
     _parse_int,
@@ -131,10 +133,12 @@ class TestSummarise:
             if isinstance(node, dict)
         ]
 
-        assert summarise(with_counters) == summarise(with_ids)
-        assert [
-            snapshot.operation_id for snapshot in summarise(with_counters).snapshots
-        ] == [1]
+        parsed = parse_graph(json.dumps(with_counters))
+
+        assert summarise(parsed) == summarise(with_ids)
+        assert [snapshot.operation_id for snapshot in summarise(parsed).snapshots] == [
+            1
+        ]
 
     def test_a_graph_without_any_ids_still_folds_one_scope(self):
         graph = _device_operation().cb(device_id=0).cb(device_id=1).end()
@@ -295,7 +299,7 @@ def _per_device(
     """One scope per device, as older mesh captures write them; the last device
     allocates in the opposite order, as devices can."""
     for device in devices:
-        graph.start(name).free_all()
+        graph.start(name).free_all(device)
         order = addresses if device != devices[-1] else list(reversed(addresses))
         for address in order:
             graph.cb(address, device_id=device)
@@ -321,6 +325,19 @@ class TestFoldDevices:
         entries = fold_devices(select_read(summarise(nodes)))
 
         assert [entry.allocations[0].device_count for entry in entries] == [2, 2]
+
+    def test_a_device_major_order_folds_as_a_launch_major_one_does(self):
+        """A per-device `launch_op` wrapping several device operations writes each
+        device's launches together, so the next device's first launch must fold into
+        the earliest entry it fits, not the latest."""
+        graph = CapturedGraph()
+        for device in [0, 0, 1, 1]:
+            _per_device(graph, "Tilize", [device], [100])
+
+        entries = fold_devices(select_read(summarise(graph.nodes)))
+
+        assert [entry.allocations[0].device_count for entry in entries] == [2, 2]
+        assert operation_circular_buffers(graph.nodes)["circular_buffer_count"] == 2
 
     def test_one_device_s_repeated_launches_are_not_folded(self):
         nodes = _per_device(CapturedGraph(), "Tilize", [None, None], [100]).nodes
@@ -393,6 +410,72 @@ class TestSelectRead:
         ]
 
 
+class TestUnrecordedLaunches:
+    """A graph records a program's circular buffers only at its first launch."""
+
+    def test_a_relaunch_that_recorded_none_is_counted_not_dropped(self):
+        nodes = (
+            _device_operation("Matmul")
+            .cb()
+            .cb(200)
+            .end()
+            .start("Matmul")
+            .free_all()
+            .end()
+            .start("Matmul")
+            .free_all()
+            .end()
+            .nodes
+        )
+
+        response = operation_circular_buffers(nodes)
+
+        assert response["device_operation_count"] == 1
+        assert response["circular_buffer_count"] == 2
+        assert response["unrecorded_launch_count"] == 2
+        assert response["unrecorded_device_operations"] == [
+            {"name": "Matmul", "launch_count": 2, "device_count": 1}
+        ]
+
+    def test_a_mesh_s_per_device_relaunches_are_one_launch(self):
+        graph = CapturedGraph()
+        for device in [0, 1, 0, 1]:
+            graph.start("Untilize").free_all(device).end()
+
+        response = operation_circular_buffers(graph.nodes)
+
+        assert response["device_operation_count"] == 0
+        assert response["unrecorded_launch_count"] == 2
+        assert response["unrecorded_device_operations"] == [
+            {"name": "Untilize", "launch_count": 2, "device_count": 2}
+        ]
+
+    def test_an_enclosing_scope_is_not_a_launch(self):
+        nodes = (
+            CapturedGraph()
+            .start("ttnn::matmul")
+            .start("Matmul")
+            .free_all()
+            .cb()
+            .end()
+            .end()
+            .nodes
+        )
+
+        response = operation_circular_buffers(nodes)
+
+        assert response["unrecorded_launch_count"] == 0
+        assert response["unrecorded_device_operations"] == []
+
+    def test_a_graph_that_launched_nothing_is_a_real_zero(self):
+        nodes = CapturedGraph().start("ttnn::reshape").end().nodes
+
+        response = operation_circular_buffers(nodes)
+
+        assert response["circular_buffer_count"] == 0
+        assert response["unrecorded_launch_count"] == 0
+
+
 class TestResponse:
     def test_it_counts_rows_and_globally_allocated_ones(self):
         nodes = (
@@ -409,8 +492,26 @@ class TestResponse:
         assert response["circular_buffer_count"] == 2
         assert response["globally_allocated_count"] == 1
         assert response["device_operation_count"] == 1
-        assert response["size_unit"] == "bytes_per_core"
+        assert response["size_unit"] == "bytes_per_bank"
         assert "truncated" not in response
+
+    def test_a_long_core_range_is_cut_and_its_cores_still_counted(self):
+        # Every core its own rectangle, as Blackhole captures write them.
+        cores = [(x, y) for x in range(10) for y in range(8)]
+        long_range = (
+            "{" + ", ".join(f"[(x={x},y={y}) - (x={x},y={y})]" for x, y in cores) + "}"
+        )
+        nodes = _device_operation().cb(core_range_set=long_range).cb(200).end().nodes
+
+        long_row, short_row = operation_circular_buffers(nodes)["device_operations"][0][
+            "circular_buffers"
+        ]
+
+        limit = circular_buffers.MAX_CORE_RANGE_SET_CHARS
+        assert long_row["core_range_set"] == long_range[:limit]
+        assert long_row["core_range_set_full_length"] == len(long_range)
+        assert long_row["core_count"] == len(cores)
+        assert "core_range_set_full_length" not in short_row
 
     def test_rows_are_capped_across_device_operations_and_counted_in_full(self):
         per_operation = 30

@@ -57,11 +57,17 @@ class CapturedGraph:
     def start(self, name: str) -> "CapturedGraph":
         return self.add({"node_type": "function_start", "params": {"name": name}})
 
-    def end(self) -> "CapturedGraph":
-        return self.add({"node_type": "function_end", "params": {}})
+    def end(self, name: Optional[str] = None) -> "CapturedGraph":
+        """A `function_end`, named as a capture names it when the link will read it."""
+        params: Dict = {} if name is None else {"name": name}
+        return self.add({"node_type": "function_end", "params": params})
 
-    def free_all(self) -> "CapturedGraph":
-        return self.add({"node_type": "circular_buffer_deallocate_all", "params": {}})
+    def free_all(self, device_id: object = None) -> "CapturedGraph":
+        """A launch's free-all; a capture names its device, and a None one is left out."""
+        params: Dict = {} if device_id is None else {"device_id": device_id}
+        return self.add(
+            {"node_type": "circular_buffer_deallocate_all", "params": params}
+        )
 
     def cb(
         self,

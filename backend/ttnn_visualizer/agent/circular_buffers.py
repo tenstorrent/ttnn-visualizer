@@ -7,8 +7,8 @@
 A port of the circular-buffer half of `processMemoryAllocations`
 (`src/functions/processMemoryAllocations.ts`), with `createCbSlotKeys` and `cbDeviceKey`
 (`src/functions/cbDeviceSlots.ts`) and `getCoresInRangeList` (`src/functions/math.ts`);
-mirror a change there. `updateDeviceOperationId` (`src/hooks/useAPI.tsx`) renames an
-older capture's `counter` to `id` before the app reads a graph, so the port reads either.
+mirror a change there. It reads nodes as `captured_graph.parse_graph` gives them, with an
+older capture's `counter` already renamed to `id`, as the app's are by fetch time.
 """
 
 import math
@@ -24,24 +24,29 @@ from typing import (
     Sequence,
     Set,
     Tuple,
+    TypeVar,
     Union,
 )
 
-from ttnn_visualizer.agent.bounds import MAX_LIMIT
+from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_LIMIT
 from ttnn_visualizer.agent.l1_peak import js_number
+from ttnn_visualizer.agent.operations import BUFFER_SIZE_UNIT
 
 # `SINGLE_DEVICE_KEY`: a graph with no device dimension accumulates into one bucket.
 SINGLE_DEVICE_KEY = "single"
 # The bucket for circular buffers whose `core_range_set` resolves to no cores.
 UNATTRIBUTED_CORE = "?"
-SIZE_UNIT = "bytes_per_core"
+# A `core_range_set` listed past this is cut; `core_count` still counts the whole of it.
+# Blackhole captures list every core as its own rectangle, which runs to 1,300 characters
+# on a 32-device capture, and 100 rows of those would pass the answer budget.
+MAX_CORE_RANGE_SET_CHARS = 200
 
 CIRCULAR_BUFFERS_NOTE = (
     "From the operation's captured graph, as the app's per-core CB view reads it: one "
     "entry per device operation that allocated circular buffers. Sizes are bytes on "
-    "each core of a buffer's range, the unit l1_peak sums them in as bytes per L1 bank, "
-    "since an L1 bank is one core's L1; allocations' L1 figures share the unit but "
-    "leave circular buffers out. A mesh records each "
+    "each core of a buffer's range, in bytes_per_bank as l1_peak's and allocations' L1 "
+    "figures are, since an L1 bank is one core's L1; allocations leave circular "
+    "buffers out. A mesh records each "
     "circular buffer once per device; those copies are one row whose device_count "
     "says how many devices allocated it, and a device operation each device ran with "
     "the same buffers is one entry with its own device_count. So "
@@ -50,8 +55,14 @@ CIRCULAR_BUFFERS_NOTE = (
     "onto an L1 tensor already counted, so it adds no L1. max_bytes_per_core is the "
     "largest circular-buffer total on any one core; a circular buffer whose core range "
     "is empty is counted in unattributed_bytes instead. core_range_set lists inclusive "
-    "core rectangles and core_count counts the distinct cores they cover. At most "
-    f"{MAX_LIMIT} rows are listed; the counts cover them all."
+    "core rectangles and core_count counts the distinct cores they cover; past "
+    f"{MAX_CORE_RANGE_SET_CHARS} characters it is cut, and core_range_set_full_length "
+    "gives its length. A graph records a program's circular buffers only at its "
+    "first launch: a relaunch from the program cache frees and allocates none, so a "
+    "device operation that freed but recorded no buffers is counted under "
+    "unrecorded_device_operations, not as one that used none. At most "
+    f"{MAX_LIMIT} rows are listed, {MAX_DETAILED_LIMIT} when include is set; the "
+    "counts cover them all."
 )
 
 _FUNCTION_START = "function_start"
@@ -182,10 +193,7 @@ def _is_globally_allocated(value: object) -> bool:
 
 
 def _node_id(node: Dict) -> object:
-    """`id`, else the `counter` an older capture carries instead, else undefined."""
-    if "id" in node:
-        return node["id"]
-    return node.get("counter", _MISSING)
+    return node.get("id", _MISSING)
 
 
 def _defined(value: object) -> object:
@@ -224,12 +232,36 @@ class Snapshot:
 
 
 @dataclass
+class Launch:
+    """A device operation's scope that freed circular buffers, as a launch does first.
+
+    Not in the app, which has no row to show for one that then allocated none.
+    """
+
+    operation_id: object
+    name: object
+    # The devices its frees name, for folding a mesh's per-device scopes.
+    device_keys: Set[str] = field(default_factory=set)
+
+
+@dataclass
 class Summary:
     # In the order `cbPressureByOpId` holds them: first set, last value.
     snapshots: List[Snapshot] = field(default_factory=list)
     # The innermost `function_start` of every allocation, which is the snapshot the
     # app reads beside its rows.
     allocating_operation_ids: Set[object] = field(default_factory=set)
+    # In the order they first freed.
+    launches: List[Launch] = field(default_factory=list)
+
+    def unrecorded(self) -> List[Launch]:
+        """The launches that recorded no circular buffers: most are a cached program's
+        relaunch, which a graph records no buffers for."""
+        return [
+            launch
+            for launch in self.launches
+            if launch.operation_id not in self.allocating_operation_ids
+        ]
 
 
 @dataclass
@@ -252,6 +284,7 @@ def summarise(nodes: Sequence[object]) -> Summary:
     """
     snapshots: Dict[object, Snapshot] = {}
     allocating: Set[object] = set()
+    launches: Dict[object, Launch] = {}
     scopes: List[_Scope] = []
     bytes_by_device_core: Dict[str, Number] = {}
     unattributed_by_device: Dict[str, Number] = {}
@@ -361,6 +394,11 @@ def summarise(nodes: Sequence[object]) -> Summary:
                 live_by_slot[slot] = entry
 
         if node_type == _DEALLOCATE_ALL:
+            if current is not None:
+                launch = launches.setdefault(
+                    current.id, Launch(current.id, _defined(current.name))
+                )
+                launch.device_keys.add(_device_key(params.get("device_id", _MISSING)))
             # The innermost open scope's, when it allocated one: a capture frees before
             # it allocates, so otherwise these are the previous scope's, which its
             # `function_end` already snapshotted.
@@ -383,7 +421,7 @@ def summarise(nodes: Sequence[object]) -> Summary:
             if scopes:
                 scopes.pop()
 
-    return Summary(list(snapshots.values()), allocating)
+    return Summary(list(snapshots.values()), allocating, list(launches.values()))
 
 
 def select_read(summary: Summary) -> List[Snapshot]:
@@ -424,6 +462,33 @@ def _signature(snapshot: Snapshot) -> Tuple[object, ...]:
     return (snapshot.name, tuple(sorted(map(_row_key, snapshot.allocations))))
 
 
+_Item = TypeVar("_Item")
+
+
+def _first_fit(
+    items: Sequence[_Item],
+    key: Callable[[_Item], object],
+    devices: Callable[[_Item], FrozenSet[str]],
+) -> List[List[_Item]]:
+    """Group items of one key on disjoint devices, each into the earliest group that
+    has none of its devices, so launch-major and device-major orders group alike."""
+    groups: List[List[_Item]] = []
+    open_groups: Dict[object, List[Tuple[List[_Item], Set[str]]]] = {}
+    for item in items:
+        item_devices = devices(item)
+        candidates = open_groups.setdefault(key(item), [])
+        for group, taken in candidates:
+            if not taken & item_devices:
+                group.append(item)
+                taken |= item_devices
+                break
+        else:
+            group = [item]
+            groups.append(group)
+            candidates.append((group, set(item_devices)))
+    return groups
+
+
 def fold_devices(snapshots: Sequence[Snapshot]) -> List[Snapshot]:
     """One entry for a device operation each device of a mesh ran with the same buffers.
 
@@ -437,28 +502,57 @@ def fold_devices(snapshots: Sequence[Snapshot]) -> List[Snapshot]:
     entry, as one-device captures repeat a program inside one operation.
     """
     folded: List[Snapshot] = []
-    latest: Dict[Tuple[object, ...], Snapshot] = {}
-    for snapshot in snapshots:
-        key = _signature(snapshot)
-        entry = latest.get(key)
-        if entry is not None and not _devices(entry) & _devices(snapshot):
-            # Paired by key, in the entry's order; equal signatures make it one-to-one.
-            others = sorted(snapshot.allocations, key=_row_key)
-            merged = list(entry.allocations)
-            order = sorted(
-                range(len(merged)), key=lambda index: _row_key(merged[index])
-            )
-            for index, other in zip(order, others):
-                devices = merged[index].device_keys | other.device_keys
+    for first, *others in _first_fit(snapshots, _signature, _devices):
+        merged = list(first.allocations)
+        # Paired by key, in the entry's order; equal signatures make it one-to-one.
+        order = sorted(range(len(merged)), key=lambda index: _row_key(merged[index]))
+        for other in others:
+            for index, row in zip(order, sorted(other.allocations, key=_row_key)):
+                devices = merged[index].device_keys | row.device_keys
                 merged[index] = replace(
                     merged[index], device_keys=devices, device_count=len(devices)
                 )
-            entry.allocations = merged
-            continue
-        entry = replace(snapshot, allocations=list(snapshot.allocations))
-        folded.append(entry)
-        latest[key] = entry
+        folded.append(replace(first, allocations=merged))
     return folded
+
+
+def _unrecorded_by_name(
+    launches: Sequence[Launch],
+) -> Tuple[int, List[Dict[str, object]]]:
+    """How many unrecorded launches there are, and them by name: a mesh's per-device
+    scopes folded as `fold_devices` folds sections, in the order each name first
+    launched."""
+    launch_counts: Dict[str, int] = {}
+    devices_by_name: Dict[str, Set[str]] = {}
+    names: Dict[str, object] = {}
+    for group in _first_fit(
+        launches,
+        lambda launch: _js_template(launch.name),
+        lambda launch: frozenset(launch.device_keys),
+    ):
+        key = _js_template(group[0].name)
+        names.setdefault(key, group[0].name)
+        launch_counts[key] = launch_counts.get(key, 0) + 1
+        devices = devices_by_name.setdefault(key, set())
+        for launch in group:
+            devices |= launch.device_keys
+    return sum(launch_counts.values()), [
+        {
+            "name": name,
+            "launch_count": launch_counts[key],
+            "device_count": len(devices_by_name[key]),
+        }
+        for key, name in names.items()
+    ]
+
+
+def _core_range_set(value: object) -> Dict[str, object]:
+    if not isinstance(value, str) or len(value) <= MAX_CORE_RANGE_SET_CHARS:
+        return {"core_range_set": value}
+    return {
+        "core_range_set": value[:MAX_CORE_RANGE_SET_CHARS],
+        "core_range_set_full_length": len(value),
+    }
 
 
 def _figure(value: Number) -> Optional[Number]:
@@ -466,9 +560,13 @@ def _figure(value: Number) -> Optional[Number]:
     return value if math.isfinite(value) else None
 
 
-def response(snapshots: Sequence[Snapshot]) -> Dict[str, object]:
-    """`operation_detail`'s `circular_buffers`, with at most `MAX_LIMIT` rows listed."""
-    remaining = MAX_LIMIT
+def response(
+    snapshots: Sequence[Snapshot],
+    unrecorded: Sequence[Launch] = (),
+    limit: int = MAX_LIMIT,
+) -> Dict[str, object]:
+    """`operation_detail`'s `circular_buffers`, with at most `limit` rows listed."""
+    remaining = limit
     device_operations: List[Dict[str, object]] = []
     for snapshot in snapshots:
         if remaining <= 0:
@@ -486,7 +584,7 @@ def response(snapshots: Sequence[Snapshot]) -> Dict[str, object]:
                     {
                         "address": _figure(row.address),
                         "size_per_core": _figure(row.size),
-                        "core_range_set": row.core_range_set,
+                        **_core_range_set(row.core_range_set),
                         "core_count": row.core_count,
                         "device_count": row.device_count,
                         "globally_allocated": row.globally_allocated,
@@ -496,6 +594,7 @@ def response(snapshots: Sequence[Snapshot]) -> Dict[str, object]:
             }
         )
     rows_total = sum(len(snapshot.allocations) for snapshot in snapshots)
+    unrecorded_count, unrecorded_by_name = _unrecorded_by_name(unrecorded)
     result: Dict[str, object] = {
         "circular_buffer_count": rows_total,
         "globally_allocated_count": sum(
@@ -505,25 +604,31 @@ def response(snapshots: Sequence[Snapshot]) -> Dict[str, object]:
         ),
         "device_operation_count": len(snapshots),
         "device_operations": device_operations,
-        "size_unit": SIZE_UNIT,
+        "unrecorded_launch_count": unrecorded_count,
+        "unrecorded_device_operations": unrecorded_by_name[:MAX_LIMIT],
+        "size_unit": BUFFER_SIZE_UNIT,
         "note": CIRCULAR_BUFFERS_NOTE,
     }
-    if rows_total > MAX_LIMIT:
+    if rows_total > limit or len(unrecorded_by_name) > MAX_LIMIT:
         result["truncated"] = True
     return result
 
 
-def operation_circular_buffers(nodes: Sequence[object]) -> Dict[str, object]:
+def operation_circular_buffers(
+    nodes: Sequence[object], limit: int = MAX_LIMIT
+) -> Dict[str, object]:
     """The circular buffers an operation's captured graph allocated, as the app shows
-    them but with a mesh's per-device sections folded."""
-    return response(fold_devices(select_read(summarise(nodes))))
+    them but with a mesh's per-device sections folded, with at most `limit` listed."""
+    summary = summarise(nodes)
+    return response(fold_devices(select_read(summary)), summary.unrecorded(), limit)
 
 
 __all__ = [
     "CIRCULAR_BUFFERS_NOTE",
+    "MAX_CORE_RANGE_SET_CHARS",
     "SINGLE_DEVICE_KEY",
-    "SIZE_UNIT",
     "CircularBufferRow",
+    "Launch",
     "Snapshot",
     "Summary",
     "cores_in_range",

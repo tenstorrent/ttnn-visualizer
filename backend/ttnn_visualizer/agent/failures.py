@@ -8,7 +8,6 @@ Each answer reads the profiler database the way the app's routes do, so it agree
 what the app shows for the same report.
 """
 
-import json
 import math
 from collections import defaultdict
 from dataclasses import dataclass
@@ -30,10 +29,12 @@ from ttnn_visualizer.agent import allocation_failures, circular_buffers
 from ttnn_visualizer.agent import dram_fallbacks as fallback_rules
 from ttnn_visualizer.agent import l1_peak as peak_replay
 from ttnn_visualizer.agent.bounds import (
+    MAX_LIMIT,
     GraphTooLargeError,
     bounded,
     ensure_graph_readable,
 )
+from ttnn_visualizer.agent.captured_graph import UnreadableGraphError, parse_graph
 from ttnn_visualizer.agent.handles import TOOL_TABLES, CacheVariant, ReportRegistry
 from ttnn_visualizer.agent.operations import (
     BUFFER_SIZE_UNIT,
@@ -183,20 +184,18 @@ def _graphs(
     }
 
 
-def _parsed_graph(raw: str) -> Optional[List[object]]:
-    """A captured graph's nodes, or None when it is not a JSON list."""
-    try:
-        nodes = json.loads(raw)
-    except ValueError:
-        return None
-    return nodes if isinstance(nodes, list) else None
-
-
 def _graph_for(
     graphs: Dict[Tuple[int, int], str], operation: Operation
 ) -> List[object]:
+    """For `errors` and `l1_peak`, which read an unreadable graph as empty, where the
+    app would throw; `operation_detail` withholds what it would take from one."""
     raw = rank_or_zero(graphs, operation.operation_id, operation.rank)
-    return (_parsed_graph(raw) or []) if raw else []
+    if not raw:
+        return []
+    try:
+        return parse_graph(raw)
+    except UnreadableGraphError:
+        return []
 
 
 def _allocation_failure(message: Optional[str]) -> Optional[Dict[str, object]]:
@@ -220,18 +219,23 @@ def _allocation_fields(message: Optional[str]) -> Dict[str, object]:
     }
 
 
-def _error_entry(error: ErrorRecord, graph: List[object]) -> Dict[str, object]:
-    """One error as `errors` lists it and `operation_detail` carries it."""
-    failed = failed_device_operation_names(graph)
-    return {
+def _error_entry(
+    error: ErrorRecord, graph: Optional[List[object]]
+) -> Dict[str, object]:
+    """One error as `errors` lists it and `operation_detail` carries it; a None graph,
+    one that could not be read, leaves out the failed device operations it names."""
+    entry: Dict[str, object] = {
         "error_type": error.error_type,
         "timestamp": error.timestamp,
         **_truncated("error_message", error.error_message),
         **_truncated("stack_trace", error.stack_trace),
-        "failed_device_operations": failed[:MAX_FAILED_DEVICE_OPERATIONS],
-        "failed_device_operation_count": len(failed),
-        **_allocation_fields(error.error_message),
     }
+    if graph is not None:
+        failed = failed_device_operation_names(graph)
+        entry["failed_device_operations"] = failed[:MAX_FAILED_DEVICE_OPERATIONS]
+        entry["failed_device_operation_count"] = len(failed)
+    entry.update(_allocation_fields(error.error_message))
+    return entry
 
 
 def errors(
@@ -714,15 +718,35 @@ def _cached_dram_fallbacks(
     )
 
 
+def _operation_graph(
+    queries: DatabaseQueries, scope: RankScope, operation: Operation
+) -> Tuple[Optional[List[object]], Optional[str]]:
+    """The operation's nodes, else None and why they cannot be read; None with no
+    reason is a report with no graph for it."""
+    try:
+        rows = _graphs(queries, scope, "operation_detail", [operation.operation_id])
+    except GraphTooLargeError as error:
+        return None, str(error)
+    raw = rank_or_zero(rows, operation.operation_id, operation.rank)
+    if raw is None:
+        return None, None
+    try:
+        return parse_graph(raw), None
+    except UnreadableGraphError:
+        return None, "the operation's captured graph is not a JSON list of nodes"
+
+
 def operation_failure_fields(
     registry: ReportRegistry,
     handle: str,
     queries: DatabaseQueries,
     scope: RankScope,
     operation: Operation,
+    circular_buffer_limit: int = MAX_LIMIT,
 ) -> Tuple[Dict[str, object], Optional[str]]:
     """The error, likely DRAM fallback and circular buffers `operation_detail` adds for
-    one operation, as its `detail_fields`.
+    one operation, as its `detail_fields`. `circular_buffer_limit` caps the circular
+    buffers listed, as `include` caps the perf rows beside them.
 
     All are optional, unlike in `errors` and `dram_fallbacks`: the rest of the detail
     answers without them. So where their rows cannot be attributed to the rank, they
@@ -731,14 +755,13 @@ def operation_failure_fields(
     """
     fields: Dict[str, object] = {}
     withheld: List[str] = []
-    read: List[Dict[Tuple[int, int], str]] = []
+    # The error and the circular buffers read the same row, so it is read once and
+    # both withhold what they take from it alike.
+    read: List[Tuple[Optional[List[object]], Optional[str]]] = []
 
-    def graphs() -> Dict[Tuple[int, int], str]:
-        # The error and the circular buffers read the same row; read it once.
+    def graph() -> Tuple[Optional[List[object]], Optional[str]]:
         if not read:
-            read.append(
-                _graphs(queries, scope, "operation_detail", [operation.operation_id])
-            )
+            read.append(_operation_graph(queries, scope, operation))
         return read[0]
 
     if _attributable(queries, scope, ("errors",), withheld, "error"):
@@ -748,28 +771,37 @@ def operation_failure_fields(
         if error is not None and _attributable(
             queries, scope, ("captured_graph",), withheld, "error"
         ):
-            fields["error"] = _error_entry(error, _graph_for(graphs(), operation))
+            nodes, unreadable = graph()
+            if unreadable is not None:
+                # Read as empty, it would claim no device operation failed.
+                withheld.append(
+                    f"error.failed_device_operations is withheld: {unreadable}"
+                )
+                fields["error"] = _error_entry(error, None)
+            else:
+                fields["error"] = _error_entry(error, nodes or [])
     # A report without the table, or without a row for this operation, says nothing
     # about its circular buffers, which a count of zero would claim it did.
     if queries.has_table("captured_graph") and _attributable(
         queries, scope, ("captured_graph",), withheld, "circular_buffers"
     ):
-        try:
-            rows = graphs()
-        except GraphTooLargeError as error:
-            withheld.append(f"circular_buffers is withheld: {error}")
-        else:
-            raw = rank_or_zero(rows, operation.operation_id, operation.rank)
-            nodes = _parsed_graph(raw) if raw is not None else None
-            if raw is not None and nodes is None:
-                # Read as empty, it would claim the operation allocated none.
+        nodes, unreadable = graph()
+        if unreadable is not None:
+            # Read as empty, it would claim the operation allocated none.
+            withheld.append(f"circular_buffers is withheld: {unreadable}")
+        elif nodes is not None:
+            buffers = circular_buffers.operation_circular_buffers(
+                nodes, circular_buffer_limit
+            )
+            fields["circular_buffers"] = buffers
+            unrecorded = buffers["unrecorded_launch_count"]
+            if unrecorded:
+                launches = "launch" if unrecorded == 1 else "launches"
                 withheld.append(
-                    "circular_buffers is withheld: the operation's captured graph "
-                    "is not a JSON list of nodes"
-                )
-            elif nodes is not None:
-                fields["circular_buffers"] = (
-                    circular_buffers.operation_circular_buffers(nodes)
+                    f"circular_buffers has {unrecorded} device operation {launches} "
+                    "whose circular buffers the graph did not record, most likely a "
+                    "cached program relaunched; the graph records a program's "
+                    "buffers only at its first launch, so they are unknown, not zero"
                 )
     if all(
         queries.has_table(table) for table in TOOL_TABLES[McpToolName.DRAM_FALLBACKS]
