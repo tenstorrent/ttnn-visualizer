@@ -3241,7 +3241,7 @@ wheels = [
 
 [[package]]
 name = "ttnn-visualizer"
-version = "0.108.0"
+version = "0.108.1"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
