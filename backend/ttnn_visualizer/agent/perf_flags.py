@@ -16,7 +16,6 @@ and None is null, since which of the two a cell becomes decides some flags.
 """
 
 import math
-import re
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import (
@@ -35,6 +34,7 @@ from typing import (
     TypeGuard,
 )
 
+from ttnn_visualizer.agent.js_values import is_truthy, parse_float, parse_int
 from ttnn_visualizer.agent.perf_detail import is_unmodelled
 from ttnn_visualizer.csv_queries import SIGNPOST_OP_TYPE, DeviceLogMeta
 
@@ -126,56 +126,16 @@ _ARCHITECTURE_PREFIXES = (
 
 _BOUND_ANALYSES = frozenset(analysis.value for analysis in BoundAnalysis)
 
-# What `parseFloat` and `parseInt(…, 10)` read: the longest such prefix, after spaces.
-_JS_FLOAT = re.compile(
-    r"[+-]?(?:Infinity|(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][+-]?[0-9]+)?)"
-)
-_JS_INT = re.compile(r"[+-]?[0-9]+")
-_JS_WHITESPACE = (
-    "\t\n\v\f\r \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006"
-    "\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
-)
-
-
-def _js_text(value: object) -> str:
-    """`String(value)` for what a report cell holds: text, a flag, or null."""
-    if value is None:
-        return "null"
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    return str(value)
-
-
-def _parse_float(value: object) -> float:
-    match = _JS_FLOAT.match(_js_text(value).lstrip(_JS_WHITESPACE))
-    return float(match.group(0)) if match else math.nan
-
-
-def _parse_int(value: object) -> float:
-    match = _JS_INT.match(_js_text(value).lstrip(_JS_WHITESPACE))
-    return float(match.group(0)) if match else math.nan
-
-
-def _is_truthy(value: object) -> bool:
-    """JavaScript's truthiness, which `enrichRowData` tests some cells by first."""
-    if value is None:
-        return False
-    if isinstance(value, float):
-        return value != 0 and not math.isnan(value)
-    if isinstance(value, (bool, int, str)):
-        return bool(value)
-    return True
-
 
 def _parse_nullable_integer(value: object) -> Optional[float]:
     if value is None or value == "":
         return None
-    parsed = _parse_int(value)
-    return None if math.isnan(parsed) else parsed
+    parsed = parse_int(value)
+    return None if math.isnan(parsed) else float(parsed)
 
 
 def _parse_filled_float(value: object) -> Optional[float]:
-    return _parse_float(value) if _is_truthy(value) else None
+    return parse_float(value) if is_truthy(value) else None
 
 
 def _is_valid_number(value: object) -> TypeGuard[float]:
@@ -217,11 +177,11 @@ def repeat_cache_outcome(
     """`getRepeatCacheOutcome`: how a repeat call's cache result reads, None for a row that
     is no repeat. A miss is the view's recompute candidate; `program_cache` counts by it.
     """
-    if not _is_truthy(program) or is_first_call:
+    if not is_truthy(program) or is_first_call:
         return None
     if cache_hit is None:
         return RepeatCacheOutcome.UNRECORDED
-    return RepeatCacheOutcome.HIT if _is_truthy(cache_hit) else RepeatCacheOutcome.MISS
+    return RepeatCacheOutcome.HIT if is_truthy(cache_hit) else RepeatCacheOutcome.MISS
 
 
 def cache_looks_disabled(repeat_hits: int, repeat_misses: int) -> bool:
@@ -258,7 +218,7 @@ class FlagRow:
 
 def row_cores(row: Dict) -> float:
     """A row's core count as `enrichRowData` parses it, which `core_count` reads."""
-    return _parse_int(row.get("cores"))
+    return float(parse_int(row.get("cores")))
 
 
 def typed_row(row: Dict, is_first_hash_occurrence: bool = True) -> FlagRow:
@@ -269,8 +229,8 @@ def typed_row(row: Dict, is_first_hash_occurrence: bool = True) -> FlagRow:
     """
     bound_analysis = row.get("bound_analysis")
     return FlagRow(
-        total_percent=_parse_float(row.get("total_percent")),
-        device_time=_parse_float(row.get("device_time")),
+        total_percent=parse_float(row.get("total_percent")),
+        device_time=parse_float(row.get("device_time")),
         cores=row_cores(row),
         available_cores=_parse_nullable_integer(row.get("available_cores")),
         dram_percent=_parse_filled_float(row.get("dram_percent")),
@@ -312,7 +272,7 @@ def core_utilisation(row: FlagRow, max_cores: float) -> float:
 
 def _is_eligible(row: FlagRow) -> bool:
     return (
-        not _is_truthy(row.missing)
+        not is_truthy(row.missing)
         and row.op_type != SIGNPOST_OP_TYPE
         and row.bound != BoundType.HOST
     )

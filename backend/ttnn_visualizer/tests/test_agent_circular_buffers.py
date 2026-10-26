@@ -19,8 +19,6 @@ from ttnn_visualizer.agent import circular_buffers
 from ttnn_visualizer.agent.bounds import MAX_LIMIT
 from ttnn_visualizer.agent.captured_graph import parse_graph
 from ttnn_visualizer.agent.circular_buffers import (
-    _js_template,
-    _parse_int,
     cores_in_range,
     fold_devices,
     operation_circular_buffers,
@@ -79,46 +77,6 @@ class TestCoresInRange:
     def test_other_scripts_digits_are_not_coordinates(self):
         # JavaScript's `\d` is ASCII only, so neither side reads these.
         assert cores_in_range("{[١-١ - ٢-٢]}") == ()
-
-
-class TestJavaScriptReads:
-    @pytest.mark.parametrize(
-        ("value", "expected"),
-        [
-            ("4096", 4096),
-            (" 4096", 4096),
-            ("4096abc", 4096),
-            ("-12", -12),
-            (2048, 2048),
-            (2048.7, 2048),
-            ("0x10", 0),
-            ("٤", math.nan),
-            ("abc", math.nan),
-            ("", math.nan),
-            (None, math.nan),
-        ],
-    )
-    def test_parse_int_reads_as_parse_int_does(self, value, expected):
-        parsed = _parse_int(value)
-        if isinstance(expected, float) and math.isnan(expected):
-            assert math.isnan(parsed)
-        else:
-            assert parsed == expected
-
-    @pytest.mark.parametrize(
-        ("value", "expected"),
-        [
-            (12, "12"),
-            (12.0, "12"),
-            (math.nan, "NaN"),
-            (None, "null"),
-            (True, "true"),
-            ("{}", "{}"),
-            (circular_buffers._MISSING, "undefined"),
-        ],
-    )
-    def test_a_template_renders_as_javascript_does(self, value, expected):
-        assert _js_template(value) == expected
 
 
 class TestSummarise:

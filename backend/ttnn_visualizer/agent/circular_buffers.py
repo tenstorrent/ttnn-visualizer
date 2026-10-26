@@ -25,11 +25,18 @@ from typing import (
     Set,
     Tuple,
     TypeVar,
-    Union,
 )
 
 from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_LIMIT
-from ttnn_visualizer.agent.l1_peak import js_number
+from ttnn_visualizer.agent.js_values import (
+    MISSING,
+    Missing,
+    Number,
+    js_max,
+    js_number,
+    js_template,
+    parse_int,
+)
 from ttnn_visualizer.agent.operations import BUFFER_SIZE_UNIT
 
 # `SINGLE_DEVICE_KEY`: a graph with no device dimension accumulates into one bucket.
@@ -73,57 +80,6 @@ _DEALLOCATE_ALL = "circular_buffer_deallocate_all"
 # ASCII, as JavaScript's `\d` is; Python's would also match other scripts' digits.
 _CORE_RANGE_RECT_RE = re.compile(r"\[([^\]]+)\]")
 _CORE_COORD_RE = re.compile(r"\(x=(\d+),y=(\d+)\)|(\d+)-(\d+)", re.ASCII)
-_LEADING_INTEGER_RE = re.compile(r"[+-]?\d+", re.ASCII)
-
-
-class _Missing:
-    """A key absent from a node's params, which JavaScript reads as `undefined`."""
-
-
-_MISSING = _Missing()
-
-Number = Union[int, float]
-
-
-def _parse_int(value: object) -> Number:
-    """`parseInt(value, 10)`: the leading integer of its string form, else NaN."""
-    if isinstance(value, _Missing) or value is None:
-        return math.nan
-    if isinstance(value, bool):
-        text = "true" if value else "false"
-    elif isinstance(value, float):
-        if not math.isfinite(value):
-            return math.nan
-        text = str(int(value))
-    else:
-        text = str(value)
-    match = _LEADING_INTEGER_RE.match(text.lstrip())
-    return int(match.group(0)) if match else math.nan
-
-
-def _js_template(value: object) -> str:
-    """`${value}`: how a value renders inside the app's identity string."""
-    if isinstance(value, _Missing):
-        return "undefined"
-    if value is None:
-        return "null"
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    if isinstance(value, float):
-        if math.isnan(value):
-            return "NaN"
-        if math.isinf(value):
-            return "Infinity" if value > 0 else "-Infinity"
-        if value.is_integer():
-            return str(int(value))
-    return str(value)
-
-
-def _js_max(left: Number, right: Number) -> Number:
-    """`Math.max`, which is NaN when either side is."""
-    if math.isnan(left) or math.isnan(right):
-        return math.nan
-    return max(left, right)
 
 
 @lru_cache(maxsize=4096)
@@ -160,7 +116,7 @@ def cores_in_range(range_set: object) -> Tuple[Tuple[int, int], ...]:
 
 def _normalised_device_id(device_id: object) -> Optional[float]:
     """`normaliseDeviceId`: a finite `Number(device_id)`, else None."""
-    if isinstance(device_id, _Missing) or device_id is None or device_id == "":
+    if isinstance(device_id, Missing) or device_id is None or device_id == "":
         return None
     number = js_number(device_id)
     return number if math.isfinite(number) else None
@@ -169,7 +125,7 @@ def _normalised_device_id(device_id: object) -> Optional[float]:
 def _device_key(device_id: object) -> str:
     """`cbDeviceKey`."""
     normalised = _normalised_device_id(device_id)
-    return SINGLE_DEVICE_KEY if normalised is None else _js_template(normalised)
+    return SINGLE_DEVICE_KEY if normalised is None else js_template(normalised)
 
 
 def _slot_keys() -> Callable[[str, str], str]:
@@ -193,11 +149,11 @@ def _is_globally_allocated(value: object) -> bool:
 
 
 def _node_id(node: Dict) -> object:
-    return node.get("id", _MISSING)
+    return node.get("id", MISSING)
 
 
 def _defined(value: object) -> object:
-    return None if isinstance(value, _Missing) else value
+    return None if isinstance(value, Missing) else value
 
 
 @dataclass
@@ -299,13 +255,13 @@ def summarise(nodes: Sequence[object]) -> Summary:
         max_bytes: Number = 0
         for key, size in bytes_by_device_core.items():
             core = key[key.index("|") + 1 :]
-            per_core = _js_max(by_core.get(core, 0), size)
+            per_core = js_max(by_core.get(core, 0), size)
             by_core[core] = per_core
             if per_core > max_bytes:
                 max_bytes = per_core
         unattributed: Number = 0
         for size in unattributed_by_device.values():
-            unattributed = _js_max(unattributed, size)
+            unattributed = js_max(unattributed, size)
         if unattributed_by_device:
             by_core[UNATTRIBUTED_CORE] = unattributed
         # Copied, because a later device still bumps a live row's count.
@@ -330,19 +286,19 @@ def summarise(nodes: Sequence[object]) -> Summary:
         params: Dict = raw_params if isinstance(raw_params, dict) else {}
 
         if node_type == _FUNCTION_START:
-            scopes.append(_Scope(_node_id(node), params.get("name", _MISSING)))
+            scopes.append(_Scope(_node_id(node), params.get("name", MISSING)))
         current = scopes[-1] if scopes else None
 
         if node_type == _ALLOCATE and isinstance(raw_params, dict):
             if current is not None:
                 allocating.add(current.id)
-            size = _parse_int(params.get("size", _MISSING))
-            range_set = params.get("core_range_set", _MISSING)
+            size = parse_int(params.get("size", MISSING))
+            range_set = params.get("core_range_set", MISSING)
             cores = cores_in_range(range_set)
             globally_allocated = _is_globally_allocated(
                 params.get("globally_allocated")
             )
-            device_key = _device_key(params.get("device_id", _MISSING))
+            device_key = _device_key(params.get("device_id", MISSING))
             if not globally_allocated:
                 if not cores:
                     unattributed_by_device[device_key] = (
@@ -355,11 +311,11 @@ def summarise(nodes: Sequence[object]) -> Summary:
                             bytes_by_device_core.get(key, 0) + size
                         )
 
-            address = _parse_int(params.get("address", _MISSING))
+            address = parse_int(params.get("address", MISSING))
             identity = "|".join(
-                _js_template(part)
+                js_template(part)
                 for part in (
-                    current.id if current is not None else _MISSING,
+                    current.id if current is not None else MISSING,
                     address,
                     size,
                     range_set,
@@ -398,7 +354,7 @@ def summarise(nodes: Sequence[object]) -> Summary:
                 launch = launches.setdefault(
                     current.id, Launch(current.id, _defined(current.name))
                 )
-                launch.device_keys.add(_device_key(params.get("device_id", _MISSING)))
+                launch.device_keys.add(_device_key(params.get("device_id", MISSING)))
             # The innermost open scope's, when it allocated one: a capture frees before
             # it allocates, so otherwise these are the previous scope's, which its
             # `function_end` already snapshotted.
@@ -447,7 +403,7 @@ def _devices(snapshot: Snapshot) -> FrozenSet[str]:
 def _row_key(row: CircularBufferRow) -> Tuple[str, ...]:
     # Rendered, so rows of mixed types still sort.
     return tuple(
-        _js_template(part)
+        js_template(part)
         for part in (
             row.address,
             row.size,
@@ -527,10 +483,10 @@ def _unrecorded_by_name(
     names: Dict[str, object] = {}
     for group in _first_fit(
         launches,
-        lambda launch: _js_template(launch.name),
+        lambda launch: js_template(launch.name),
         lambda launch: frozenset(launch.device_keys),
     ):
-        key = _js_template(group[0].name)
+        key = js_template(group[0].name)
         names.setdefault(key, group[0].name)
         launch_counts[key] = launch_counts.get(key, 0) + 1
         devices = devices_by_name.setdefault(key, set())

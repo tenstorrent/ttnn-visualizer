@@ -25,6 +25,7 @@ from typing import (
     Tuple,
 )
 
+from ttnn_visualizer.agent.js_values import js_number
 from ttnn_visualizer.models import L1_BUFFER_TYPES, Buffer, BufferType
 
 # `L1_NUM_CORES`: the bank count a node without `max_size_per_bank` falls back to.
@@ -49,36 +50,6 @@ class Precision(str, Enum):
     EXACT = "exact"
     # A node never says which cores (#2027), so two residents may not share one.
     UPPER_BOUND = "upper-bound"
-
-
-def js_number(value: object) -> float:
-    """`Number(value)` as the app reads a graph param."""
-    if value is None:
-        return 0.0
-    if isinstance(value, bool):
-        return float(value)
-    if isinstance(value, (int, float)):
-        return float(value)
-    if not isinstance(value, str):
-        return math.nan
-    text = value.strip()
-    if text == "":
-        return 0.0
-    if text[:2].lower() in ("0x", "0o", "0b"):
-        try:
-            return float(int(text, 0))
-        except ValueError:
-            return math.nan
-    if "_" in text or text.lower().strip("+-") in ("inf", "infinity", "nan"):
-        return {
-            "Infinity": math.inf,
-            "+Infinity": math.inf,
-            "-Infinity": -math.inf,
-        }.get(text, math.nan)
-    try:
-        return float(text)
-    except ValueError:
-        return math.nan
 
 
 def _address(params: Dict) -> Optional[float]:
@@ -547,7 +518,6 @@ __all__ = [
     "Resident",
     "ResidentKind",
     "build_l1_peak",
-    "js_number",
     "last_valid_consumer",
     "resolve_address_lifetimes",
     "top_compositions",
