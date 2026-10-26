@@ -1,7 +1,7 @@
 {
   "name": "ttnn-visualizer",
   "private": true,
-  "version": "0.108.0",
+  "version": "0.108.1",
   "type": "module",
   "description": "A tool for visualizing the Tenstorrent Neural Network model (TT-NN)",
   "repository": {
@@ -14,7 +14,7 @@
   },
   "license": "Apache-2.0",
   "engines": {
-    "node": "24.15.0",
+    "node": "24.22.1",
     "pnpm": ">=11"
   },
   "packageManager": "pnpm@11.22.0",
