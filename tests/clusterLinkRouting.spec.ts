@@ -87,6 +87,20 @@ describe('planRoutes', () => {
         expect([...unrouted]).toEqual([`s${MAX_PORTS_PER_EDGE}`]);
     });
 
+    it('refuses a straight span when only one end’s facing edge is full', () => {
+        // Column routes fill chip 4's LEFT and then BOTTOM, leaving chip 8's TOP empty.
+        const nearFull = Array.from({ length: 2 * MAX_PORTS_PER_EDGE }, (_, i) => link(GROUPED, 4, 12, `n${i}`));
+        const near = planRoutes([...nearFull, link(GROUPED, 8, 4)], GROUPED, GROUPED_ROWS, 4);
+        expect(near.plans.get(`n${2 * MAX_PORTS_PER_EDGE - 1}`)).toMatchObject({ edgeA: BOTTOM });
+        expect([...near.unrouted]).toEqual(['8-4']);
+
+        // Column routes fill chip 8's LEFT and then TOP, leaving chip 4's BOTTOM empty.
+        const farFull = Array.from({ length: 2 * MAX_PORTS_PER_EDGE }, (_, i) => link(GROUPED, 8, 0, `f${i}`));
+        const far = planRoutes([...farFull, link(GROUPED, 8, 4)], GROUPED, GROUPED_ROWS, 4);
+        expect(far.plans.get(`f${2 * MAX_PORTS_PER_EDGE - 1}`)).toMatchObject({ edgeA: TOP });
+        expect([...far.unrouted]).toEqual(['8-4']);
+    });
+
     it('moves to the next edge once one holds its share of ports', () => {
         const links = Array.from({ length: MAX_PORTS_PER_EDGE + 1 }, (_, i) => link(GROUPED, 0, 8, `c${i}`));
         const { plans } = planRoutes(links, GROUPED, GROUPED_ROWS, 4);
@@ -122,6 +136,16 @@ describe('planRoutes', () => {
         const { plans: lowerPlans } = planRoutes(lower, GROUPED, GROUPED_ROWS, 4);
         expect(lowerPlans.get(`l${MAX_PORTS_PER_EDGE - 1}`)).toMatchObject({ edgeA: BOTTOM, freeRow: 4 });
         expect(lowerPlans.has(`l${MAX_PORTS_PER_EDGE}`)).toBe(false);
+    });
+
+    it('refuses a same-row span when only its far end’s edge is full', () => {
+        // Column routes from chip 2 to chip 10 fill chip 2's TOP, the only edge onto a blank
+        // row; chip 0's TOP stays empty.
+        const full = Array.from({ length: MAX_PORTS_PER_EDGE }, (_, i) => link(GROUPED, 2, 10, `c${i}`));
+        const { plans, unrouted } = planRoutes([...full, link(GROUPED, 0, 2)], GROUPED, GROUPED_ROWS, 4);
+
+        expect(plans.get(`c${MAX_PORTS_PER_EDGE - 1}`)).toMatchObject({ edgeA: TOP });
+        expect([...unrouted]).toEqual(['0-2']);
     });
 
     it('lists every link it offered no plan as unrouted, diagonals included', () => {
