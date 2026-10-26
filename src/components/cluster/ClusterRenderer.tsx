@@ -116,8 +116,9 @@ interface ClusterRenderModel {
     // Padding around the SVG link layer so outward-bowing curves and routed links'
     // outside lanes aren't clipped.
     svgPad: number;
-    // Room left and right of the grid for routed links' outside lanes; 0 in mesh mode.
-    routeMargin: number;
+    // Room left and right of the grid for routed links' outside lanes and any curve that
+    // bows past the grid's sides; 0 when nothing reaches outside it.
+    stageMargin: number;
     // Unscaled stage width, margins included. Fit-to-screen and the stage both size from
     // it: if they disagree, fit-to-screen clips the left lanes again. #1951
     stageWidth: number;
@@ -170,6 +171,29 @@ const hashLinkKey = (key: string): number => {
         hash = (Math.imul(hash, 31) + key.charCodeAt(i)) | 0;
     }
     return hash < 0 ? -hash : hash;
+};
+
+/** Lowest and highest value one axis of a cubic Bézier reaches, from its ends and turning points. */
+const cubicExtent = (p0: number, p1: number, p2: number, p3: number): [number, number] => {
+    // B'(t) / 3 = a t² + b t + c
+    const a = -p0 + 3 * p1 - 3 * p2 + p3;
+    const b = 2 * (p0 - 2 * p1 + p2);
+    const c = p1 - p0;
+    let roots: number[];
+    if (Math.abs(a) < 1e-9) {
+        roots = Math.abs(b) < 1e-9 ? [] : [-c / b];
+    } else {
+        const discriminant = b * b - 4 * a * c;
+        roots =
+            discriminant < 0
+                ? []
+                : [(-b + Math.sqrt(discriminant)) / (2 * a), (-b - Math.sqrt(discriminant)) / (2 * a)];
+    }
+    const values = [0, 1, ...roots.filter((t) => t > 0 && t < 1)].map((t) => {
+        const u = 1 - t;
+        return u ** 3 * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t ** 3 * p3;
+    });
+    return [Math.min(...values), Math.max(...values)];
 };
 
 const getEthGridPosition = (ethPosition: CLUSTER_ETH_POSITION, index: number) => {
@@ -447,7 +471,7 @@ function buildClusterRenderModel(
     //      outward perpendicular, else any outward edge; interior chips fall
     //      back to first empty perpendicular).
     // A port whose link was routed above skips pass 2's choice and takes the
-    // edge its route fixed. Within each edge ports are sorted by partner
+    // edge its route fixed. Within each edge direct ports come first, then by partner
     // perpendicular-axis coord then canonical link key; long-haul/inter-host
     // uids are tagged for step 4.
     const perpendicularEdges = (edge: CLUSTER_ETH_POSITION): CLUSTER_ETH_POSITION[] => {
@@ -495,6 +519,8 @@ function buildClusterRenderModel(
         const ethPosition = new Map<CLUSTER_ETH_POSITION, EthPort[]>();
         // Edges already claimed by direct neighbours — pass 2 avoids these.
         const directNeighbourEdges = new Set<CLUSTER_ETH_POSITION>();
+        // Ports placed in pass 1; the edge sort puts them first so they face their neighbour's.
+        const directUids = new Set<string>();
         // Long-haul/inter-host placements deferred until pass 2.
         const deferred: { port: EthPort; chord: CLUSTER_ETH_POSITION }[] = [];
 
@@ -522,6 +548,7 @@ function buildClusterRenderModel(
                 }
                 ethPosition.get(chord)!.push(port);
                 directNeighbourEdges.add(chord);
+                directUids.add(port.uid);
             } else {
                 deferred.push({ port, chord });
                 if (isSpanning(clusterChip, connectedChip)) {
@@ -579,8 +606,8 @@ function buildClusterRenderModel(
             ethPosition.get(chosen)!.push(port);
         }
 
-        // Order ports along each edge by partner perpendicular-axis coord
-        // (X for horizontal edges, Y for vertical), tiebroken by canonical
+        // Order ports along each edge direct neighbours first, then by partner
+        // perpendicular-axis coord (X for horizontal edges, Y for vertical), tiebroken by canonical
         // link key so both facing edges produce matching orderings.
         ethPosition.forEach((ports, position) => {
             const isVerticalEdge = position === CLUSTER_ETH_POSITION.LEFT || position === CLUSTER_ETH_POSITION.RIGHT;
@@ -595,6 +622,13 @@ function buildClusterRenderModel(
                     if (routedDelta !== 0) {
                         return routedDelta;
                     }
+                }
+                // A full edge can push another port onto an edge facing a direct neighbour.
+                // Sorted by partner alone it could take the neighbour's slots and slant the
+                // straight line between them, so direct ports go first. #1951
+                const directDelta = Number(directUids.has(portB.uid)) - Number(directUids.has(portA.uid));
+                if (directDelta !== 0) {
+                    return directDelta;
                 }
                 const partnerA = clusterChip.connectedChipsByEthId.get(portA.uid);
                 const partnerB = clusterChip.connectedChipsByEthId.get(portB.uid);
@@ -640,6 +674,8 @@ function buildClusterRenderModel(
                 return { x: 1, y: 0 };
         }
     };
+    // How far the curves reach left of the grid and right of it, so the stage can hold them.
+    let curveOverhang = 0;
     const swooshPath = (a: PortPixel, b: PortPixel): string => {
         const dx = b.x - a.x;
         const dy = b.y - a.y;
@@ -651,6 +687,8 @@ function buildClusterRenderModel(
         const cay = a.y + na.y * ctrl;
         const cbx = b.x + nb.x * ctrl;
         const cby = b.y + nb.y * ctrl;
+        const [left, right] = cubicExtent(a.x, cax, cbx, b.x);
+        curveOverhang = Math.max(curveOverhang, -left, right - contentWidth);
         return `M ${a.x} ${a.y} C ${cax} ${cay}, ${cbx} ${cby}, ${b.x} ${b.y}`;
     };
 
@@ -703,6 +741,9 @@ function buildClusterRenderModel(
         noteNeighbour(segment.chipKeyB, segment.chipKeyA);
     });
 
+    // Curves are drawn over the scroll container's edge like the outside lanes, so the stage
+    // has to make room for whichever reaches further. #1951
+    const stageMargin = Math.ceil(Math.max(routes.margin, curveOverhang));
     const idFontSize = clusterChipSize >= CLUSTER_CHIP_SIZE_MEDIUM ? 30 : 20;
 
     return {
@@ -722,10 +763,10 @@ function buildClusterRenderModel(
             isMultiHost,
             worldSize,
             // The outside lanes can reach further than a stride on a busy grid.
-            svgPad: Math.max(Math.round(stride), routes.margin),
-            routeMargin: routes.margin,
+            svgPad: Math.max(Math.round(stride), stageMargin),
+            stageMargin,
             hasUnroutedLink: linkSegments.some((segment) => segment.unrouted),
-            stageWidth: contentWidth + 2 * routes.margin,
+            stageWidth: contentWidth + 2 * stageMargin,
             layoutMode,
             isMeshAvailable,
             anyHostFellToIdOrder,
@@ -912,7 +953,7 @@ function ClusterRenderer() {
         idFontSize,
         // Padding lets outward-bowing curves and outside lanes render outside the grid bounds.
         svgPad,
-        routeMargin,
+        stageMargin,
         stageWidth,
         hasUnroutedLink,
         isMultiHost,
@@ -1048,7 +1089,7 @@ function ClusterRenderer() {
                 <div
                     className='cluster-stage'
                     style={{
-                        // Routed links' outside lanes sit in a margin either side of the grid,
+                        // Routed links' outside lanes and wide curves sit in a margin either side of the grid,
                         // inside the stage so the scroll container can reach the left one. #1951
                         width: `${stageWidth * zoom}px`,
                         height: `${contentHeight * zoom}px`,
@@ -1057,7 +1098,7 @@ function ClusterRenderer() {
                     <div
                         className={classNames('cluster', { 'is-dimmed': dimmed, 'is-multihost': isMultiHost })}
                         style={{
-                            marginLeft: `${routeMargin * zoom}px`,
+                            marginLeft: `${stageMargin * zoom}px`,
                             width: `${contentWidth}px`,
                             height: `${contentHeight}px`,
                             transform: `scale(${zoom})`,

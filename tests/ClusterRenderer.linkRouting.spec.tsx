@@ -165,7 +165,8 @@ const pointsOf = (element: Element): [number, number][] => {
     });
 };
 
-const INSET = 4;
+// Routes keep ROUTE_LANE_CLEARANCE from every chip, so any point inside one, even along its edge, is a crossing.
+const INSET = 0;
 const contains = (rect: Rect, [x, y]: [number, number], inset = 0) =>
     x > rect.left + inset && x < rect.right - inset && y > rect.top + inset && y < rect.bottom - inset;
 
@@ -186,6 +187,35 @@ const linkCrossings = () => {
 };
 
 type Crossing = ReturnType<typeof linkCrossings>[number];
+
+/** Routed paths turn only at right angles, and direct links run straight across, so neither slants. */
+const expectNoSlantedLinks = () => {
+    const routed = [...document.querySelectorAll('path.cluster-link')].filter(
+        (path) => !path.getAttribute('d')!.includes('C'),
+    );
+    routed.forEach((path) => {
+        const numbers = pathNumbers(path);
+        for (let i = 0; i + 3 < numbers.length; i += 2) {
+            const [x1, y1, x2, y2] = numbers.slice(i, i + 4);
+            expect(x1 === x2 || y1 === y2).toBe(true);
+        }
+    });
+    document.querySelectorAll('line.cluster-link').forEach((line) => {
+        const [x1, y1, x2, y2] = ['x1', 'y1', 'x2', 'y2'].map((name) => line.getAttribute(name));
+        expect(x1 === x2 || y1 === y2).toBe(true);
+    });
+};
+
+/** Checks every drawn link stays inside the stage's side margins, and returns them. */
+const expectLinksWithinStage = () => {
+    const contentWidth = parseFloat(document.querySelector<HTMLElement>('.cluster')!.style.width);
+    // Zoom stays at 1: the stubbed ResizeObserver never reports a container size.
+    const margin = (parseFloat(document.querySelector<HTMLElement>('.cluster-stage')!.style.width) - contentWidth) / 2;
+    const xs = linkCrossings().flatMap(({ points }) => points.map(([x]) => x));
+    expect(Math.min(...xs)).toBeGreaterThanOrEqual(-margin);
+    expect(Math.max(...xs)).toBeLessThanOrEqual(contentWidth + margin);
+    return { contentWidth, margin };
+};
 
 /** The one drawn link whose ends are these two chips. */
 const linkBetween = (crossings: Crossing[], first: string, second: string) =>
@@ -213,6 +243,8 @@ describe('cluster link routing', () => {
         ).toEqual([]);
         expect(document.querySelectorAll('.is-unrouted')).toHaveLength(0);
         expect(document.querySelector('.legend-line-unrouted')).toBeNull();
+        expect(document.querySelectorAll('path.cluster-link:not([d*="C"])').length).toBeGreaterThan(0);
+        expectNoSlantedLinks();
     });
 
     it('highlights only the hovered chip’s links, none of them over another chip', () => {
@@ -235,15 +267,9 @@ describe('cluster link routing', () => {
         topologyOverride = topologyOf({ chipCount: 32, links: UBB_LINKS, slots: true });
         render(<ClusterRenderer />);
 
-        const contentWidth = parseFloat(document.querySelector<HTMLElement>('.cluster')!.style.width);
-        // Zoom stays at 1: the stubbed ResizeObserver never reports a container size.
-        const margin =
-            (parseFloat(document.querySelector<HTMLElement>('.cluster-stage')!.style.width) - contentWidth) / 2;
-        const xs = linkCrossings().flatMap(({ points }) => points.map(([x]) => x));
+        const { contentWidth, margin } = expectLinksWithinStage();
 
         expect(margin).toBeGreaterThan(0);
-        expect(Math.min(...xs)).toBeGreaterThanOrEqual(-margin);
-        expect(Math.max(...xs)).toBeLessThanOrEqual(contentWidth + margin);
         // A lane is the x of a vertical run left of the grid; a link has one each.
         const leftLanes = new Set(
             [...document.querySelectorAll('path.cluster-link')].flatMap((path) =>
@@ -271,6 +297,16 @@ describe('cluster link routing', () => {
             const sorted = [...spans].sort(([startA], [startB]) => startA - startB);
             sorted.slice(1).forEach(([start], i) => expect(start - sorted[i][1]).toBeGreaterThan(stride / 2));
         });
+    });
+
+    it('widens the stage for a curve that reaches past the outside lanes', () => {
+        // The cross-host curve leaves chip 0's LEFT edge and bows further out than the routed
+        // links' lanes, so a stage sized from the lanes alone clips it.
+        topologyOverride = twoHostTopology();
+        render(<ClusterRenderer />);
+
+        expect(document.querySelectorAll('path.cluster-link.is-inter-host')).toHaveLength(1);
+        expectLinksWithinStage();
     });
 
     it('leaves mesh layouts on their curves, with no stage margin', () => {
@@ -398,6 +434,9 @@ describe('cluster link routing', () => {
 
         expect(misplacedPortCount()).toBe(0);
         expectPortsOnTheirChips(links.map(([a, b]) => [`0-${a}`, `0-${b}`]));
+        // Chip 25's unrouted ports to chip 1 move to LEFT, where chip 24's direct ports must
+        // still face their partners' rather than sort below them for chip 1 sitting higher.
+        expectNoSlantedLinks();
     });
 
     it('gives routed ports the first slots of an edge that overflows anyway', () => {
@@ -467,6 +506,7 @@ describe('cluster link routing', () => {
 
         expect(linkCrossings()).toHaveLength(2 * 8 * 2 + 16 * 2);
         expect(misplacedPortCount()).toBe(0);
+        expectNoSlantedLinks();
     });
 
     it('keeps cross-host ports off an edge that routed links have filled', () => {
