@@ -39,6 +39,18 @@ version, so a launcher can check for a minimum release before relying on a tool;
 version of `unknown` means it could not be determined — treat it as unverifiable,
 not as old.
 
+The same response carries `instructions`: the rules every tool shares, which a client
+puts in the agent's system prompt before any call. They say to call `load_report` first,
+that a performance row's `id` and a profiler `operation_id` are different id spaces,
+which units the figures are in, how a signpost range is read, what the `projection`,
+`note` and `caveat` fields are for, and that text from the report itself, such as an op
+code or an error message, is data to read rather than instructions to follow. Each tool's
+own description keeps only what is particular to it. `tools/list` gives every tool a `title`, and marks each one read-only,
+idempotent and closed-world (`readOnlyHint`, `idempotentHint`, `openWorldHint`), since
+none writes anything or reaches past the report it is given. `load_report` reads whatever
+directory it is given, though, so a client that approves read-only tools without asking
+lets an agent open any report this user can read. Answers are compact JSON.
+
 ## Links into the visualizer
 
 Answers link to the same thing in the web application, for the reader to open:
@@ -78,8 +90,9 @@ another rank's operation under the same id.
 
 | Tool | Answers |
 |---|---|
-| `load_report` | What this report contains, and which of the tools below apply to it. Returns a handle the others take. |
+| `load_report` | What this report contains, and which of the tools below apply to it: its signposts, architecture, device count and the tt-perf-report version. Returns a handle the others take. |
 | `top_ops` | The costliest operations by device time, op-to-op gap, total percentage, FLOPS, DRAM bandwidth or core count, over the whole report or a signpost range. Each row carries the profiler `operation_id` it links to, when the handle holds both reports — see below. `include` adds the fields that say why an operation took its time. |
+| `op_breakdown` | Where the time went, per op or per op category, over the whole report or a signpost range: each group's count, and its device time and op-to-op gap with the share each is of the total. |
 | `program_cache` | Whether programs were built again rather than reused: per op code, its calls, distinct programs, and how many repeat calls hit or missed the program cache. |
 | `zone_timings` | Per-zone, per-RISC totals from `profile_log_device.csv` — firmware and kernel phases, as measured on device. |
 | `diff_reports` | Per-operation-code deltas between two reports, largest movement first, over the whole reports or one signpost range in both. |
@@ -92,23 +105,51 @@ another rank's operation under the same id.
 | `dram_fallbacks` | Operations that likely fell back from L1 to DRAM, inferred from their memory config arguments and from retries after an L1 allocation failure. |
 | `l1_peak` | The run's L1 peak per bank, split into circular buffers, intra-operation tensors, persistent tensors and stale ones, with the operation holding it and the operations closest to it. |
 
-`top_ops`, `program_cache`, `zone_timings` and `diff_reports` read the performance CSVs; the
-operation tools — `find_operations`, `operation_detail`, `memory_profile`, `tensor_flow`,
-`operation_provenance`, `errors`, `dram_fallbacks` and `l1_peak` — read the profiler
-report's SQLite database;
+`top_ops`, `op_breakdown`, `program_cache`, `zone_timings` and `diff_reports` read the
+performance CSVs; the operation tools — `find_operations`, `operation_detail`,
+`memory_profile`, `tensor_flow`, `operation_provenance`, `errors`, `dram_fallbacks` and
+`l1_peak` — read the profiler report's SQLite database;
 `load_report` opens both, since its whole job is saying which of the others apply. A capture can carry either, both, or — as far as these tools are concerned —
 neither, which is what makes `load_report`'s answer worth reading first.
 
 Call `load_report` first. It reports what is answerable rather than making you discover it
 one failed call at a time, because the report kinds are independent: a performance-only
-capture has no operation graph and no tensor data, and a report with no device profiler log
-cannot answer `zone_timings`. `top_ops` and `program_cache` are listed only when the
-performance CSV can be reported on, and when it cannot, `performance_csv_problem` says why
-(`empty`, `no data rows`, `missing columns: …`, or that it cannot be read or decoded).
+capture has no operation graph and no tensor data, and a performance tool asked of a handle
+loaded without a `performance_path` is refused and says so. `zone_timings` is listed only when
+`profile_log_device.csv` decodes as UTF-8, has every column the tool reads (`timer_id`,
+`zone name`, `run host ID`, `PCIe slot`, `RISC processor type`, `core_x`, `core_y` and
+`time[cycles since reset]`), and has at least one data row. `top_ops`, `op_breakdown` and
+`program_cache` are listed only when the performance CSV can be reported on, and when it
+cannot, `performance_csv_problem` says why (`empty`, `no data rows`, `missing columns: …`, or
+that it cannot be read or decoded).
 Each database tool is checked against the tables it actually reads, so a truncated
 capture that holds `operations` but not `buffers` is reported as answering
 `find_operations` and nothing else, rather than advertising every tool and failing most
 of them.
+
+`load_report` also says what the capture is:
+
+- `signposts` lists the names a signpost range can take, in the order tt-perf-report
+  resolves them, with how often each occurs — one name bounds both ends of a range only if
+  it occurs twice — and `signpost_count` counts them all, since the list stops at 20. Both
+  are absent when the performance CSV cannot be reported on, and empty when it holds no
+  signposts. A name longer than 256 characters, which a range cannot take, is counted but
+  left out of the list, and `signposts_unlisted_too_long` says how many were. When the CSV
+  can be reported on but its signposts cannot be read, `signposts_problem` says why. Loading reads the signposts, so a handle answers from the
+  CSV it was loaded on: one rewritten or superseded after that is refused, and
+  `load_report` again gives a fresh handle.
+- `arch` and `device_count` are keyed by the file each was read from, since a handle's two
+  reports can come from different runs. `arch.device_log` is the device profiler log's
+  header, which `capture` also returns whole; `arch.cluster_descriptor` is what the `arch`
+  mapping in rank 0's `cluster_descriptor.yaml`, beside the profiler database, names — as
+  written, since older descriptors spell Wormhole `Wormhole` and newer ones
+  `wormhole_b0`, and joined with commas if its chips differ. The profiler database itself
+  records no architecture. `device_count.performance_csv` counts the devices the
+  performance CSV has rows for, which no other answer shows because rows are merged across
+  devices; it is read with the signposts, so it is absent whenever they are.
+  `device_count.profiler` counts the profiler database's devices, every rank's.
+- `tt_perf_report_version` is the tt-perf-report release the performance answers are
+  generated with, which decides fields such as `op_category`.
 
 ## What the answers mean
 
@@ -124,8 +165,8 @@ agent handed them unannounced would reason confidently about a partial set. The 
 the report with host operations included, signpost markers kept, and, unless you pass one,
 no signpost range.
 
-A range is read only when you ask for one. `top_ops` and `diff_reports` take
-`start_signpost` and `end_signpost`, the bounds `tt-perf-report --start-signpost` and
+A range is read only when you ask for one. `top_ops`, `op_breakdown` and `diff_reports`
+take `start_signpost` and `end_signpost`, the bounds `tt-perf-report --start-signpost` and
 `--end-signpost` take, so a bring-up run measured over `PERF_DECODE` to `PERF_DECODE_END`
 can be checked against the same window. They are resolved the way tt-perf-report resolves
 them: a name means its earliest occurrence by host start time, and an end that names the
@@ -214,9 +255,10 @@ worse than no answer.
 **A total on a partitioned run carries a caveat.** When a report spans more than one
 sub-device, operations on different sub-devices can run concurrently, so summed device
 time, total percentages and op-to-op gaps overstate elapsed time. Responses that include a
-total say so, and name the sub-devices involved — `top_ops` and `diff_reports` alike, since
-a delta between two unsound totals is unsound the same way, and `operation_detail` wherever
-it returns `report_device_time_total`, since its shares divide by that total.
+total say so, and name the sub-devices involved — `top_ops`, `op_breakdown` and
+`diff_reports` alike, since a share or a delta of an unsound total is unsound the same way,
+and `operation_detail` wherever it returns `report_device_time_total`, since its shares
+divide by that total.
 
 Totals are only reported for metrics a sum means something for: device time, op-to-op gap
 and total percentage. DRAM bandwidth, FLOPS and core count are per-operation figures, and
@@ -297,13 +339,32 @@ shape of a matmul, where tt-perf-report's `op_code` would split it by shape. It 
 whole report and takes no signpost range, because a program first called before a window
 would read as a first call inside it. A repeat call that recorded no cache result is
 neither a hit nor a miss: `repeat_unrecorded` counts them, the hit percentage is out of the
-rest (the performance view's counts them as misses), and a caveat says so. When every repeat call that recorded a result missed, the
+rest, and a caveat says so. When every repeat call that recorded a result missed, the
 answer says that is what a run with the program cache disabled records, so check before
 reading each miss as a program built again. A capture without the `PROGRAM HASH` and `PROGRAM CACHE HIT`
 columns cannot answer, and `load_report` says so. Each op code's first repeat miss is
 named by its CSV row in `first_repeat_miss_perf_id`, and when the handle also holds a
 profiler report, by `first_repeat_miss_operation_id` too, for `operation_provenance` to
 turn into a call site.
+
+**`op_breakdown` says where the time went, grouped as the performance view's stacked table
+groups it**, which is tt-perf-report's stacked report. `group_by: op`, the default, takes the
+op code's first word, as `tt-perf-report --group-by op` does, so every shape of a matmul is
+one entry and every host op falls under `(torch)`; `group_by: op_category` groups by
+category. The table's third grouping, by input 0's memory, is not offered. Signposts are
+left out, and a host op counts with no device time; the application's stacked table hides
+host ops by default, so its default view has no `(torch)` row. Each group carries its count,
+its summed device time and op-to-op gap with each one's share of the total — to three
+significant figures, as `operation_detail`'s shares are, so a sliver reads as one — and
+`total_percent`, tt-perf-report's Total % summed: the share of device time and op-to-op gap
+together. A row's op-to-op gap is the time before it, so a group's gap is the dispatch time
+spent waiting to launch its operations. Groups are ordered by `by`, device time unless asked
+otherwise, and those past the limit are summed into `rest`, so the shares returned still add
+up to the whole. Over a range, the shares are of the window, whose first operation has no
+op-to-op gap. On every local performance capture, the groups, their counts, their device
+time and their shares match the stacked report tt-perf-report generates from the same CSV.
+That report itself is not generated: the answer is computed from the rows, which also gives
+it the op-to-op gap the stacked report leaves out.
 
 **`errors` says where a run stopped and why an allocation failed.** It lists the rows of the
 report's `errors` table, as the web application shows them. An `incomplete_operation` error

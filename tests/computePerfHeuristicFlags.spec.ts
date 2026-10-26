@@ -194,6 +194,16 @@ describe('annotatePerfHeuristicFlags', () => {
         ).not.toContain(PerfHeuristicFlag.RECOMPUTE_CANDIDATE);
     });
 
+    it('does not flag recompute when a repeat call recorded no cache result', () => {
+        expect(
+            getFlags({
+                hash: 'abc123',
+                isFirstHashOccurrence: false,
+                cache_hit: null,
+            }),
+        ).not.toContain(PerfHeuristicFlag.RECOMPUTE_CANDIDATE);
+    });
+
     it('returns no flags for host ops', () => {
         expect(getFlags({ bound: BoundType.HOST, cores: 1, total_percent: 10 })).toEqual([]);
     });

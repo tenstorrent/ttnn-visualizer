@@ -22,9 +22,18 @@ export const useResetBufferFocus = () => {
         setSelectedTensorId(null);
         setSelectedAddress(null);
         setSelectedBufferColour(null);
-        setActiveToast(null);
-        // No id, so this closes every open toast rather than only the focused buffer's. #2149
-        dismissToast();
+        // Read inside the updater because the toast's own onClick/closeButton capture
+        // resetBufferFocus when they're created (before the returned toast id is stored),
+        // so a closure over `activeToast` would be stale. Jotai invokes the updater
+        // synchronously exactly once per state transition, so the dismiss call here
+        // fires deterministically before `null` is committed. #2149
+        setActiveToast((previousToast) => {
+            if (previousToast !== null) {
+                dismissToast(previousToast);
+            }
+
+            return null;
+        });
     }, [setActiveToast, setSelectedAddress, setSelectedBufferColour, setSelectedTensorId]);
 };
 

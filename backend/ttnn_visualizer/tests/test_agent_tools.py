@@ -13,15 +13,17 @@ and that a zone pairing survives the chunk boundary it is invisible across.
 See #1995.
 """
 
+import io
 import json
 import os
+import re
 import sqlite3
 import time
 from unittest.mock import patch
 
 import pytest
 from ttnn_visualizer import csv_queries
-from ttnn_visualizer.agent import server, tools
+from ttnn_visualizer.agent import handles, server, tools
 from ttnn_visualizer.agent.bounds import MAX_LIMIT
 from ttnn_visualizer.agent.handles import (
     MAX_SCOPED_REPORTS,
@@ -63,6 +65,7 @@ from ttnn_visualizer.tests.smoke_capture import (
 from ttnn_visualizer.tests.test_device_log_columns import (
     MODERN_HEADER,
     PREAMBLE,
+    _drop_column,
     write_device_log,
 )
 
@@ -153,7 +156,7 @@ class TestReportInventory:
         An agent told only "loaded" would spend a call each discovering that the
         operation questions have no input.
         """
-        write_device_log(tmp_path, MODERN_HEADER, [])
+        write_device_log(tmp_path, MODERN_HEADER, ZONED_ROWS)
         write_ops_perf(tmp_path, smoke_rows()).rename(
             tmp_path / "ops_perf_results_x.csv"
         )
@@ -161,7 +164,7 @@ class TestReportInventory:
         loaded = load_report(ReportRegistry(), performance_path=str(tmp_path))
 
         assert loaded["handle"] == "report-1"
-        assert set(loaded["answerable"]) == {"top_ops", "zone_timings"}
+        assert set(loaded["answerable"]) == {"top_ops", "op_breakdown", "zone_timings"}
         assert set(loaded["unanswerable"]) == {
             # The CSV here has no PROGRAM HASH or PROGRAM CACHE HIT column.
             "program_cache",
@@ -240,7 +243,8 @@ class TestReportInventory:
         assert loaded["answerable"] == []
         assert "find_operations" in loaded["unanswerable"]
 
-    def test_a_broken_newest_perf_csv_is_named_but_not_answerable(self, tmp_path):
+    @pytest.mark.parametrize("tool", ["top_ops", "op_breakdown"])
+    def test_a_broken_newest_perf_csv_is_named_but_not_answerable(self, tmp_path, tool):
         """#2170: When the newest `ops_perf_results*.csv` is unreadable or empty,
         the inventory judges the file `top_ops` actually selects rather than an
         older readable capture in the same directory."""
@@ -255,9 +259,105 @@ class TestReportInventory:
         loaded = load_report(ReportRegistry(), performance_path=str(tmp_path))
 
         assert loaded["performance_csv"] == "ops_perf_results_new.csv"
-        assert "top_ops" not in loaded["answerable"]
-        assert "top_ops" in loaded["unanswerable"]
+        assert tool not in loaded["answerable"]
+        assert tool in loaded["unanswerable"]
         assert loaded["performance_csv_problem"] == "empty"
+
+    def test_an_empty_device_log_is_not_answerable(self, tmp_path):
+        """#2184: and reads as a capture with no metadata, not a failed load."""
+        (tmp_path / DeviceLogProfilerQueries.DEVICE_LOG_FILE).write_text(
+            "", encoding="utf-8"
+        )
+
+        loaded = load_report(ReportRegistry(), performance_path=str(tmp_path))
+
+        assert "zone_timings" in loaded["unanswerable"]
+        assert loaded["capture"] == {}
+
+    @pytest.mark.parametrize(
+        ("header", "rows"),
+        [
+            pytest.param(MODERN_HEADER, [], id="header-only"),
+            pytest.param(MODERN_HEADER, ["", "   "], id="blank-rows-only"),
+            # One column from each half of ZONE_TIMINGS_COLUMNS.
+            pytest.param(
+                *_drop_column(MODERN_HEADER, ZONED_ROWS, "core_x"), id="no-core_x"
+            ),
+            pytest.param(
+                *_drop_column(MODERN_HEADER, ZONED_ROWS, "timer_id"), id="no-timer_id"
+            ),
+        ],
+    )
+    def test_a_device_log_zone_timings_would_refuse_is_not_answerable(
+        self, tmp_path, header, rows
+    ):
+        """#2184: listing it would only send an agent to a `DataFormatError` or an
+        empty answer."""
+        write_device_log(tmp_path, header, rows)
+
+        loaded = load_report(ReportRegistry(), performance_path=str(tmp_path))
+
+        assert "zone_timings" in loaded["unanswerable"]
+
+    def test_an_answerable_device_log_answers_zone_timings(self, tmp_path):
+        """The inventory and `query_zone_summary` read one column set, so a log
+        listed as answerable is one the tool can actually summarise."""
+        write_device_log(tmp_path, MODERN_HEADER, ZONED_ROWS)
+        registry = ReportRegistry()
+
+        loaded = load_report(registry, performance_path=str(tmp_path))
+
+        assert "zone_timings" in loaded["answerable"]
+        assert tools.zone_timings(registry, loaded["handle"])["zones"]
+
+    def test_a_non_utf8_device_log_does_not_break_load_report(self, tmp_path):
+        """A device log with non-UTF-8 bytes in the preamble, or in a row after the
+        first, is unanswerable for `zone_timings` without breaking `load_report`.
+        #2184"""
+        header_line = MODERN_HEADER + "\n"
+        row_lines = "".join(row + "\n" for row in ZONED_ROWS)
+        latin1_preamble = (PREAMBLE + ", Note: 5\xb5s\n").encode("latin-1")
+        (tmp_path / DeviceLogProfilerQueries.DEVICE_LOG_FILE).write_bytes(
+            latin1_preamble + (header_line + row_lines).encode("utf-8")
+        )
+        write_ops_perf(tmp_path, smoke_rows())
+
+        registry = ReportRegistry()
+        loaded = load_report(registry, performance_path=str(tmp_path))
+
+        assert loaded["capture"] == {}
+        assert "zone_timings" in loaded["unanswerable"]
+        assert "top_ops" in loaded["answerable"]
+
+        bad_15_field_row = (
+            b"1,1,1,BRISC,18952,14595968859092,0,1025,,,BRISC-FW,ZONE_START,433,"
+            b"/home/j\xf6rg/brisc.cc,\n"
+        )
+        early_bad_row = tmp_path / "early_bad_row"
+        early_bad_row.mkdir()
+        (early_bad_row / DeviceLogProfilerQueries.DEVICE_LOG_FILE).write_bytes(
+            (PREAMBLE + "\n" + header_line).encode("utf-8") + bad_15_field_row
+        )
+        loaded_early = load_report(
+            ReportRegistry(), performance_path=str(early_bad_row)
+        )
+        assert loaded_early["capture"]["ARCH"] == "wormhole_b0"
+        assert "zone_timings" in loaded_early["unanswerable"]
+
+        late_bad_byte = tmp_path / "late_bad_byte"
+        late_bad_byte.mkdir()
+        # Past the first 8 KB, so a check that only decodes the opening block of
+        # the file (one read buffer) would miss it.
+        valid_prefix = (PREAMBLE + "\n" + header_line + (row_lines * 120)).encode(
+            "utf-8"
+        )
+        assert len(valid_prefix) > 8192
+        (late_bad_byte / DeviceLogProfilerQueries.DEVICE_LOG_FILE).write_bytes(
+            valid_prefix + bad_15_field_row
+        )
+        loaded_late = load_report(ReportRegistry(), performance_path=str(late_bad_byte))
+        assert loaded_late["capture"]["ARCH"] == "wormhole_b0"
+        assert "zone_timings" in loaded_late["unanswerable"]
 
     def test_a_missing_directory_is_refused_with_the_path(self, tmp_path):
         with pytest.raises(ValueError, match="performance_path is not a directory"):
@@ -294,11 +394,682 @@ class TestReportInventory:
         )
 
 
+def _write_devices(directory, rows, ranked=True):
+    """A profiler database holding only `devices`, as `(device_id, rank)` rows."""
+    directory.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(directory / "db.sqlite")
+    try:
+        if ranked:
+            connection.execute("CREATE TABLE devices (device_id int, rank int)")
+            connection.executemany("INSERT INTO devices VALUES (?, ?)", rows)
+        else:
+            connection.execute("CREATE TABLE devices (device_id int)")
+            connection.executemany(
+                "INSERT INTO devices VALUES (?)", [(device,) for device, _ in rows]
+            )
+        connection.commit()
+    finally:
+        connection.close()
+    return directory
+
+
+def _write_descriptor(directory, arch, name="cluster_descriptor.yaml"):
+    directory.mkdir(parents=True, exist_ok=True)
+    lines = ["arch:", *(f"  {chip}: {chip_arch}" for chip, chip_arch in arch.items())]
+    (directory / name).write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+class TestReportFacts:
+    """What `load_report` says the capture is, beyond which tools apply (#2152)."""
+
+    def test_each_file_names_the_arch_it_records(self, tmp_path):
+        """Keyed by source: a handle's two reports can come from different runs."""
+        write_device_log(tmp_path, MODERN_HEADER, [])
+        profiler = _write_devices(tmp_path / "profiler", [(0, 0)])
+        _write_descriptor(profiler, {0: "blackhole", 1: "blackhole"})
+
+        loaded = load_report(
+            ReportRegistry(),
+            profiler_path=str(profiler),
+            performance_path=str(tmp_path),
+        )
+
+        assert loaded["arch"] == {
+            "device_log": "wormhole_b0",
+            "cluster_descriptor": "blackhole",
+        }
+
+    def test_a_profiler_only_report_takes_its_arch_from_the_descriptor(self, tmp_path):
+        """The database records no architecture, and `capture` is the device log's."""
+        profiler = _write_devices(tmp_path, [(0, 0)])
+        _write_descriptor(profiler, {0: "wormhole_b0"})
+
+        loaded = load_report(ReportRegistry(), profiler_path=str(profiler))
+
+        assert loaded["capture"] == {}
+        assert loaded["arch"] == {"cluster_descriptor": "wormhole_b0"}
+
+    def test_an_older_spelling_is_passed_through(self, tmp_path):
+        """2025 galaxy descriptors write `Wormhole`; no mapping is guessed."""
+        profiler = _write_devices(tmp_path, [(0, 0)])
+        _write_descriptor(profiler, {0: "Wormhole"})
+
+        loaded = load_report(ReportRegistry(), profiler_path=str(profiler))
+
+        assert loaded["arch"]["cluster_descriptor"] == "Wormhole"
+
+    def test_chips_of_different_architectures_are_joined(self, tmp_path):
+        """One type either way, so a reader never branches on the shape."""
+        profiler = _write_devices(tmp_path, [(0, 0)])
+        _write_descriptor(profiler, {0: "wormhole_b0", 1: "blackhole"})
+
+        loaded = load_report(ReportRegistry(), profiler_path=str(profiler))
+
+        assert loaded["arch"]["cluster_descriptor"] == "blackhole, wormhole_b0"
+
+    @pytest.mark.parametrize(
+        "content",
+        [
+            # Older tt-metal wrote the mapping in flow style across lines.
+            "arch: {\n  0: Wormhole,\n  1: Wormhole,\n}\n\nchips: {\n  0: [ 3,5,0,0 ],\n}\n",
+            "arch: {0: Wormhole, 1: Wormhole}\n",
+            "# written by tt-metal\narch:\n  0: 'Wormhole'\n  1: \"Wormhole\"\nchips:\n",
+        ],
+    )
+    def test_the_arch_is_read_in_every_style_tt_metal_writes(self, tmp_path, content):
+        profiler = _write_devices(tmp_path, [(0, 0)])
+        (profiler / "cluster_descriptor.yaml").write_text(content, encoding="utf-8")
+
+        loaded = load_report(ReportRegistry(), profiler_path=str(profiler))
+
+        assert loaded["arch"] == {"cluster_descriptor": "Wormhole"}
+
+    @pytest.mark.parametrize(
+        "content",
+        [
+            # A full YAML parse crashed or flooded the server on each of these.
+            "arch: " + "[" * 50_000 + "]" * 50_000 + "\n",
+            "a: &a [x, x]\nb: &b [*a, *a]\narch:\n  0: *b\n",
+            "arch:\n  0: {nested: [1, 2]}\n",
+            # One chip it cannot read could be another architecture.
+            "arch:\n  0: blackhole\n  1: *alias\n",
+            "arch:\n  0: " + "w" * 65 + "\n",
+            "build: 2024-02-30\narch:\n  0: [unclosed\n",
+        ],
+    )
+    def test_a_descriptor_it_cannot_read_plainly_is_left_out(self, tmp_path, content):
+        profiler = _write_devices(tmp_path, [(0, 0)])
+        (profiler / "cluster_descriptor.yaml").write_text(content, encoding="utf-8")
+
+        loaded = load_report(ReportRegistry(), profiler_path=str(profiler))
+
+        assert loaded["arch"] == {}
+        assert loaded["device_count"] == {"profiler": 1}
+
+    @pytest.mark.parametrize(
+        "content",
+        [
+            "arch:  # one per chip\n  0: blackhole  # n300\n  1: blackhole\n",
+            # A comment line inside the block, which YAML reads past.
+            "arch:\n# per chip\n  0: blackhole\n",
+        ],
+    )
+    def test_a_comment_is_not_part_of_the_arch(self, tmp_path, content):
+        profiler = _write_devices(tmp_path, [(0, 0)])
+        (profiler / "cluster_descriptor.yaml").write_text(content, encoding="utf-8")
+
+        loaded = load_report(ReportRegistry(), profiler_path=str(profiler))
+
+        assert loaded["arch"] == {"cluster_descriptor": "blackhole"}
+
+    def test_a_long_run_of_whitespace_is_scanned_in_linear_time(self, tmp_path):
+        """A whitespace-then-`#` regex backtracked over the run: 0.8 s at 40k spaces,
+        and minutes at this size, with every tool waiting behind it."""
+        profiler = _write_devices(tmp_path, [(0, 0)])
+        (profiler / "cluster_descriptor.yaml").write_text(
+            " " * (handles.MAX_DESCRIPTOR_CHARS - 1) + "\n", encoding="utf-8"
+        )
+
+        started = time.perf_counter()
+        loaded = load_report(ReportRegistry(), profiler_path=str(profiler))
+
+        assert time.perf_counter() - started < 1.0
+        assert loaded["arch"] == {}
+
+    def test_odd_content_beside_a_plain_arch_does_not_refuse_the_report(self, tmp_path):
+        """A YAML parse raised `ValueError` on an impossible date anywhere in the file."""
+        profiler = _write_devices(tmp_path, [(0, 0)])
+        (profiler / "cluster_descriptor.yaml").write_text(
+            "arch:\n  0: blackhole\nbuild: 2024-02-30\nsize: " + "9" * 5000 + "\n",
+            encoding="utf-8",
+        )
+
+        loaded = load_report(ReportRegistry(), profiler_path=str(profiler))
+
+        assert loaded["arch"] == {"cluster_descriptor": "blackhole"}
+
+    def test_a_descriptor_past_the_cap_is_left_out_rather_than_read_in_part(
+        self, tmp_path
+    ):
+        """A cut between two chips' entries read as a cluster of one architecture."""
+        content = "arch:\n  0: blackhole\n  1: wormhole_b0\nchips:\n"
+        profiler = _write_devices(tmp_path, [(0, 0)])
+        (profiler / "cluster_descriptor.yaml").write_text(content, encoding="utf-8")
+
+        with patch.object(handles, "MAX_DESCRIPTOR_CHARS", content.index("  1:")):
+            past = load_report(ReportRegistry(), profiler_path=str(profiler))
+        with patch.object(handles, "MAX_DESCRIPTOR_CHARS", len(content)):
+            within = load_report(ReportRegistry(), profiler_path=str(profiler))
+
+        assert past["arch"] == {}
+        assert within["arch"] == {"cluster_descriptor": "blackhole, wormhole_b0"}
+
+    def test_a_descriptor_that_is_not_utf8_is_left_out(self, tmp_path):
+        profiler = _write_devices(tmp_path, [(0, 0)])
+        (profiler / "cluster_descriptor.yaml").write_bytes(b"arch:\n  0: bl\xffack\n")
+
+        loaded = load_report(ReportRegistry(), profiler_path=str(profiler))
+
+        assert loaded["arch"] == {}
+
+    def test_a_ranked_descriptor_family_is_read_at_rank_0(self, tmp_path):
+        profiler = _write_devices(tmp_path, [(0, 0), (0, 1)])
+        _write_descriptor(profiler, {0: "blackhole"}, "cluster_descriptor_1_of_2.yaml")
+        _write_descriptor(
+            profiler, {0: "wormhole_b0"}, "cluster_descriptor_2_of_2.yaml"
+        )
+
+        loaded = load_report(ReportRegistry(), profiler_path=str(profiler))
+
+        assert loaded["arch"] == {"cluster_descriptor": "blackhole"}
+
+    @pytest.mark.parametrize(
+        "content", ["arch: [unclosed", "chips: {}\n", "- a list\n", "arch:\n  0:\n"]
+    )
+    def test_a_descriptor_that_names_no_arch_is_left_out(self, tmp_path, content):
+        profiler = _write_devices(tmp_path, [(0, 0)])
+        (profiler / "cluster_descriptor.yaml").write_text(content, encoding="utf-8")
+
+        loaded = load_report(ReportRegistry(), profiler_path=str(profiler))
+
+        assert loaded["arch"] == {}
+
+    def test_the_performance_csv_counts_the_devices_it_has_rows_for(self, tmp_path):
+        """Every answer merges a row's devices, so nothing else shows the count. Read
+        in the signposts' pass, so it comes with them."""
+        rows = smoke_rows()
+        rows.append({**rows[0], "DEVICE ID": ""})
+        write_ops_perf(tmp_path, rows)
+        registry = ReportRegistry()
+
+        loaded = tools.with_signposts(
+            registry, load_report(registry, performance_path=str(tmp_path))
+        )
+
+        assert {row["DEVICE ID"] for row in smoke_rows()} == {"0", "1"}
+        assert loaded["device_count"] == {"performance_csv": 2}
+
+    def test_each_report_counts_its_devices_under_its_own_key(self, tmp_path):
+        """The CSV's count is added beside the profiler's, never over it."""
+        performance = tmp_path / "performance"
+        write_ops_perf(performance, smoke_rows())
+        profiler = _write_devices(tmp_path / "profiler", [(0, 0), (1, 0), (2, 0)])
+        registry = ReportRegistry()
+
+        loaded = tools.with_signposts(
+            registry,
+            load_report(
+                registry,
+                profiler_path=str(profiler),
+                performance_path=str(performance),
+            ),
+        )
+
+        assert loaded["device_count"] == {"performance_csv": 2, "profiler": 3}
+
+    def test_the_newest_csv_is_the_one_counted(self, tmp_path):
+        older = write_ops_perf(tmp_path, smoke_rows()).rename(
+            tmp_path / "ops_perf_results_old.csv"
+        )
+        newer = write_ops_perf(
+            tmp_path, [{**row, "DEVICE ID": "0"} for row in smoke_rows()]
+        )
+        os.utime(older, (1000, 1000))
+        os.utime(newer, (2000, 2000))
+        registry = ReportRegistry()
+
+        loaded = tools.with_signposts(
+            registry, load_report(registry, performance_path=str(tmp_path))
+        )
+
+        assert loaded["device_count"] == {"performance_csv": 1}
+
+    def test_a_csv_pandas_cannot_parse_gives_no_count_and_still_loads(
+        self, tmp_path, event_log_directory
+    ):
+        write_ops_perf(tmp_path, smoke_rows())
+        with (tmp_path / "ops_perf_results.csv").open("a") as out:
+            out.write('"unclosed,row\n')
+
+        response = server.handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": "load_report",
+                    "arguments": {"performance_path": str(tmp_path)},
+                },
+            },
+            server._tool_table(ReportRegistry()),
+        )
+
+        assert "isError" not in response["result"]
+        loaded = json.loads(response["result"]["content"][0]["text"])
+        assert loaded["device_count"] == {}
+        assert "signposts_problem" in loaded
+
+    @pytest.mark.parametrize(
+        "schema",
+        [
+            None,
+            "CREATE TABLE operations (operation_id int)",
+            "CREATE TABLE devices (rank int)",
+        ],
+    )
+    def test_a_database_without_device_ids_gives_no_count(self, tmp_path, schema):
+        """A file that is not SQLite, no `devices` table, or one without `device_id`."""
+        profiler = tmp_path / "profiler"
+        profiler.mkdir()
+        if schema is None:
+            (profiler / "db.sqlite").write_bytes(b"not a database, just bytes")
+        else:
+            connection = sqlite3.connect(profiler / "db.sqlite")
+            connection.execute(schema)
+            connection.commit()
+            connection.close()
+
+        loaded = load_report(ReportRegistry(), profiler_path=str(profiler))
+
+        assert loaded["device_count"] == {}
+
+    def test_a_missing_tt_perf_report_gives_a_null_version(self, tmp_path):
+        write_ops_perf(tmp_path, smoke_rows())
+        handles._tt_perf_report_version.cache_clear()
+        try:
+            with patch.object(
+                handles,
+                "distribution_version",
+                side_effect=handles.PackageNotFoundError,
+            ):
+                loaded = load_report(ReportRegistry(), performance_path=str(tmp_path))
+        finally:
+            handles._tt_perf_report_version.cache_clear()
+
+        assert loaded["tt_perf_report_version"] is None
+
+    def test_a_csv_without_a_device_column_gives_no_count(self, tmp_path):
+        (tmp_path / "ops_perf_results.csv").write_text("OP CODE\nMatmul\n")
+
+        loaded = load_report(ReportRegistry(), performance_path=str(tmp_path))
+
+        assert loaded["device_count"] == {}
+
+    def test_the_profiler_counts_every_ranks_devices_once(self, tmp_path):
+        """Ids restart per rank, and some captures write a device's row twice."""
+        profiler = _write_devices(tmp_path, [(0, 0), (1, 0), (0, 1), (1, 1), (1, 1)])
+
+        loaded = load_report(ReportRegistry(), profiler_path=str(profiler))
+
+        assert loaded["device_count"] == {"profiler": 4}
+
+    def test_a_profiler_without_rank_counts_distinct_devices(self, tmp_path):
+        profiler = _write_devices(tmp_path, [(0, 0), (0, 0), (1, 0)], ranked=False)
+
+        loaded = load_report(ReportRegistry(), profiler_path=str(profiler))
+
+        assert loaded["device_count"] == {"profiler": 2}
+
+    def test_a_folder_named_with_a_hash_or_question_mark_is_read_where_it_is(
+        self, tmp_path
+    ):
+        """A `#` or `?` ended the database URI early: SQLite opened a different path
+        read-write, created an empty file there, and found no tables."""
+        from ttnn_visualizer.agent import operations
+
+        profiler = _write_devices(tmp_path / "run#1?x", [(0, 0), (1, 0)])
+        connection = sqlite3.connect(profiler / "db.sqlite")
+        connection.execute(
+            "CREATE TABLE operations (operation_id int, name text, duration float)"
+        )
+        connection.execute("INSERT INTO operations VALUES (1, 'ttnn.add', 0.1)")
+        connection.commit()
+        connection.close()
+        registry = ReportRegistry()
+
+        loaded = load_report(registry, profiler_path=str(profiler))
+        found = operations.find_operations(registry, loaded["handle"])
+
+        assert "find_operations" in loaded["answerable"]
+        assert loaded["device_count"] == {"profiler": 2}
+        assert [operation["name"] for operation in found["operations"]] == ["ttnn.add"]
+        assert sorted(path.name for path in tmp_path.iterdir()) == ["run#1?x"]
+
+    def test_the_tt_perf_report_version_comes_with_a_performance_csv(self, tmp_path):
+        from importlib.metadata import version
+
+        performance = tmp_path / "performance"
+        write_ops_perf(performance, smoke_rows())
+        profiler = _write_devices(tmp_path / "profiler", [(0, 0)])
+        registry = ReportRegistry()
+
+        with_csv = load_report(registry, performance_path=str(performance))
+        without = load_report(registry, profiler_path=str(profiler))
+
+        assert with_csv["tt_perf_report_version"] == version("tt-perf-report")
+        assert "tt_perf_report_version" not in without
+
+
+class TestLoadReportSignposts:
+    """The names a range can take, listed up front rather than learnt from a refusal."""
+
+    def _loaded(self, registry, tmp_path, rows):
+        write_ops_perf(tmp_path, rows)
+        return tools.with_signposts(
+            registry, load_report(registry, performance_path=str(tmp_path))
+        )
+
+    def test_the_signposts_are_listed_in_the_order_a_bound_resolves_them(
+        self, tmp_path
+    ):
+        loaded = self._loaded(ReportRegistry(), tmp_path, signposted_rows())
+
+        assert loaded["signpost_count"] == 2
+        assert loaded["signposts"] == [
+            {"name": "PERF_START", "occurrences": 1},
+            {"name": "PERF_END", "occurrences": 1},
+        ]
+
+    def test_a_name_that_can_bound_both_ends_says_it_occurs_twice(self, tmp_path):
+        rows = smoke_rows()
+        rows.insert(2, signpost("LAYER", rows[2]))
+        rows.insert(9, signpost("LAYER", rows[9]))
+
+        loaded = self._loaded(ReportRegistry(), tmp_path, rows)
+
+        assert loaded["signposts"] == [{"name": "LAYER", "occurrences": 2}]
+
+    def test_the_list_stops_at_the_cap_and_the_count_does_not(self, tmp_path):
+        rows = smoke_rows()
+        for index in range(csv_queries.MAX_LISTED_SIGNPOSTS + 5):
+            rows.insert(index, signpost(f"S{index:02d}", rows[index]))
+
+        loaded = self._loaded(ReportRegistry(), tmp_path, rows)
+
+        assert loaded["signpost_count"] == csv_queries.MAX_LISTED_SIGNPOSTS + 5
+        assert len(loaded["signposts"]) == csv_queries.MAX_LISTED_SIGNPOSTS
+        assert loaded["signposts"][0]["name"] == "S00"
+
+    def test_a_report_without_signposts_says_so(self, tmp_path):
+        loaded = self._loaded(ReportRegistry(), tmp_path, smoke_rows())
+
+        assert (loaded["signpost_count"], loaded["signposts"]) == (0, [])
+
+    def test_a_csv_no_tool_can_read_lists_none(self, tmp_path):
+        """Even when its signposts could be read: no tool would take the range."""
+        rows = [
+            {key: value for key, value in row.items() if key != "DEVICE ID"}
+            for row in signposted_rows()
+        ]
+
+        loaded = self._loaded(ReportRegistry(), tmp_path, rows)
+
+        assert loaded["performance_csv_problem"] == "missing columns: DEVICE ID"
+        assert "signposts" not in loaded
+        assert "signposts_problem" not in loaded
+
+    def test_signposts_that_cannot_be_read_say_why(self, tmp_path):
+        """A quote left open passes the line scan behind performance_csv_problem."""
+        write_ops_perf(tmp_path, smoke_rows())
+        with (tmp_path / "ops_perf_results.csv").open("a") as out:
+            out.write('"unclosed,signpost\n')
+        registry = ReportRegistry()
+
+        loaded = tools.with_signposts(
+            registry, load_report(registry, performance_path=str(tmp_path))
+        )
+
+        assert loaded["performance_csv_problem"] is None
+        assert "signposts" not in loaded
+        assert "could not read the report's signposts" in loaded["signposts_problem"]
+
+    def test_signposts_that_cannot_be_read_are_parsed_once_per_capture(self, tmp_path):
+        """Loading the capture again, or asking it a range, parsed to the failure again."""
+        write_ops_perf(tmp_path, smoke_rows())
+        with (tmp_path / "ops_perf_results.csv").open("a") as out:
+            out.write('"unclosed,signpost\n')
+        registry = ReportRegistry()
+
+        with patch.object(
+            tools, "_resolve_signposts", wraps=tools._resolve_signposts
+        ) as resolve:
+            answers = [
+                tools.with_signposts(
+                    registry, load_report(registry, performance_path=str(tmp_path))
+                )
+                for _ in range(2)
+            ]
+            with pytest.raises(DataFormatError, match="could not read"):
+                tools.top_ops(registry, answers[0]["handle"], start_signpost="A")
+
+        resolve.assert_called_once()
+        assert answers[0]["signposts_problem"] == answers[1]["signposts_problem"]
+
+    def test_the_read_is_shared_by_every_handle_on_one_capture(self, tmp_path):
+        """`load_report` again, as a refusal asks, should not read the CSV again."""
+        write_ops_perf(tmp_path, signposted_rows())
+        registry = ReportRegistry()
+        with patch.object(
+            tools, "_resolve_signposts", wraps=tools._resolve_signposts
+        ) as resolve:
+            for _ in range(2):
+                tools.with_signposts(
+                    registry, load_report(registry, performance_path=str(tmp_path))
+                )
+
+        resolve.assert_called_once()
+
+    def test_a_name_too_long_to_pass_back_is_counted_but_not_listed(self, tmp_path):
+        """The capture's text, which an agent could not pass back as a bound."""
+        rows = smoke_rows()
+        long_name = "x" * (tools.MAX_SIGNPOST_NAME_LENGTH + 1)
+        rows.insert(2, signpost(long_name, rows[2]))
+        rows.insert(4, signpost("PERF_START", rows[4]))
+
+        loaded = self._loaded(ReportRegistry(), tmp_path, rows)
+
+        assert loaded["signpost_count"] == 2
+        assert loaded["signposts"] == [{"name": "PERF_START", "occurrences": 1}]
+        assert loaded["signposts_unlisted_too_long"] == 1
+
+    def test_a_host_time_a_chunk_types_apart_still_loads(
+        self, tmp_path, event_log_directory
+    ):
+        """One non-numeric host time past pandas' first chunk raised `TypeError`, which
+        refused the whole `load_report` on a capture that loaded before."""
+        template = smoke_rows()[0]
+        filler = {f"F{index}": "" for index in range(60)}
+        rows = []
+        for index in range(12_000):
+            row = {**template, **filler, "HOST START TS": str(index)}
+            if index in (10, 11_990):
+                row.update({"OP TYPE": "signpost", "OP CODE": f"MARK_{index}"})
+            rows.append(row)
+        rows[11_900]["HOST START TS"] = "oops"
+        write_ops_perf(tmp_path, rows)
+
+        response = server.handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": "load_report",
+                    "arguments": {"performance_path": str(tmp_path)},
+                },
+            },
+            server._tool_table(ReportRegistry()),
+        )
+
+        assert "isError" not in response["result"]
+        loaded = json.loads(response["result"]["content"][0]["text"])
+        assert [entry["name"] for entry in loaded["signposts"]] == [
+            "MARK_10",
+            "MARK_11990",
+        ]
+        assert {"top_ops", "op_breakdown"} <= set(loaded["answerable"])
+
+    @pytest.mark.parametrize(
+        "error", [TypeError("'<' not supported"), DataFormatError("ragged")]
+    )
+    def test_a_signpost_read_that_fails_never_refuses_the_report(self, tmp_path, error):
+        """The signposts describe the capture; failing to read them is said, not raised."""
+        registry = ReportRegistry()
+        with patch.object(tools, "_resolve_signposts", side_effect=error):
+            loaded = self._loaded(registry, tmp_path, signposted_rows())
+
+        assert loaded["signposts_problem"] == str(error)
+        assert "signposts" not in loaded
+
+    def test_a_capture_rewritten_after_loading_is_refused(self, tmp_path):
+        """The listing pins the capture at load, so a handle never mixes two."""
+        registry = ReportRegistry()
+        loaded = self._loaded(registry, tmp_path, signposted_rows())
+        write_ops_perf(tmp_path, smoke_rows())
+
+        with pytest.raises(ValueError, match="Call load_report again"):
+            tools.op_breakdown(registry, loaded["handle"])
+
+    def test_the_csv_is_parsed_in_chunks(self, tmp_path):
+        """A whole-file parse peaked at five times the CSV's size."""
+        registry = ReportRegistry()
+        with patch.object(tools, "read_signposts", wraps=tools.read_signposts) as read:
+            self._loaded(registry, tmp_path, signposted_rows())
+
+        assert read.call_args.kwargs == {"low_memory": True}
+
+    def test_a_profiler_only_report_lists_none(self, tmp_path):
+        profiler = _write_devices(tmp_path, [(0, 0)])
+        registry = ReportRegistry()
+
+        loaded = tools.with_signposts(
+            registry, load_report(registry, profiler_path=str(profiler))
+        )
+
+        assert "signposts" not in loaded
+
+    def test_a_later_range_is_checked_without_reading_the_csv_again(self, tmp_path):
+        registry = ReportRegistry()
+        with patch.object(
+            tools, "_resolve_signposts", wraps=tools._resolve_signposts
+        ) as resolve:
+            loaded = self._loaded(registry, tmp_path, signposted_rows())
+            with pytest.raises(InvalidSignpostRange):
+                tools.top_ops(registry, loaded["handle"], start_signpost="TYPO")
+
+        resolve.assert_called_once()
+
+    def test_the_server_lists_them_in_load_reports_answer(
+        self, tmp_path, event_log_directory
+    ):
+        write_ops_perf(tmp_path, signposted_rows())
+
+        response = server.handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": "load_report",
+                    "arguments": {"performance_path": str(tmp_path)},
+                },
+            },
+            server._tool_table(ReportRegistry()),
+        )
+
+        answer = json.loads(response["result"]["content"][0]["text"])
+        assert [entry["name"] for entry in answer["signposts"]] == [
+            "PERF_START",
+            "PERF_END",
+        ]
+
+
 class TestTopOps:
     @pytest.fixture(autouse=True)
     def signposted(self):
         with _signposts_in("report-1"):
             yield
+
+    def test_a_csv_missing_device_id_converts_perf_report_exit_naming_the_csv(
+        self, tmp_path, event_log_directory
+    ):
+        """A CSV missing `DEVICE ID` triggers `tt-perf-report`'s `sys.exit(1)`, which
+        is converted into `DataFormatError` naming only the file (never `tmp_path`) so
+        the MCP server stays up. #2183"""
+        csv_path = tmp_path / "ops_perf_results_no_device.csv"
+        csv_path.write_text(
+            "OP CODE,OP TYPE,GLOBAL CALL COUNT\nMatmul,tt_dnn_device,1\n",
+            encoding="utf-8",
+        )
+        registry = ReportRegistry()
+        handle = load_report(registry, performance_path=str(tmp_path))["handle"]
+
+        with pytest.raises(
+            DataFormatError,
+            match=r"ops_perf_results_no_device\.csv could not be parsed \(exit code 1\)",
+        ) as exc_info:
+            tools.top_ops(registry, handle)
+        assert isinstance(exc_info.value.__cause__, SystemExit)
+        assert str(tmp_path) not in str(exc_info.value)
+
+        response = server.handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": "top_ops",
+                    "arguments": {"handle": handle},
+                },
+            },
+            server._tool_table(registry),
+        )
+        error_text = response["result"]["content"][0]["text"]
+        assert response["result"]["isError"] is True
+        assert (
+            "ops_perf_results_no_device.csv could not be parsed (exit code 1)"
+            in error_text
+        )
+        assert str(tmp_path) not in error_text
+
+    def test_a_worker_abort_mid_perf_report_still_propagates(self, tmp_path):
+        """A `SystemExit` raised from a non-library frame while `tt-perf-report` is on
+        the call stack (e.g. gunicorn's SIGABRT timeout handler) must propagate. #2183
+        """
+        write_ops_perf(tmp_path, smoke_rows())
+        registry = ReportRegistry()
+        handle = load_report(registry, performance_path=str(tmp_path))["handle"]
+
+        def _worker_abort(*args, **kwargs):
+            raise SystemExit(1)
+
+        with patch.object(
+            csv_queries.perf_report,
+            "merge_device_rows",
+            side_effect=_worker_abort,
+        ):
+            with pytest.raises(SystemExit):
+                tools.top_ops(registry, handle)
 
     def _registry(self, tmp_path):
         registry = ReportRegistry()
@@ -1475,6 +2246,7 @@ class TestTransport:
         assert advertised == {
             "load_report",
             "top_ops",
+            "op_breakdown",
             "program_cache",
             "zone_timings",
             "diff_reports",
@@ -1547,7 +2319,7 @@ class TestTransport:
         # Refused from the argument the server passed through, not a stubbed raise.
         generate.assert_not_called()
 
-    @pytest.mark.parametrize("tool", ["top_ops", "diff_reports"])
+    @pytest.mark.parametrize("tool", ["top_ops", "op_breakdown", "diff_reports"])
     def test_the_signpost_arguments_are_advertised(self, tool):
         """A client sends only what the schema declares; a range missing from it
         would be invisible to agents however well the tool handled one."""
@@ -1647,6 +2419,279 @@ class TestTransport:
         assert response["result"]["capabilities"] == {"tools": {}}
         assert response["result"]["serverInfo"]["name"] == "ttnn-visualizer"
         assert response["result"]["serverInfo"]["version"] == get_application_version()
+
+    def test_every_tool_has_a_title_and_says_it_only_reads(self):
+        """A client that honours the hints can call these without asking first."""
+        response = server.handle_message(
+            {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, self._table()
+        )
+
+        for tool in response["result"]["tools"]:
+            assert tool["title"].strip(), tool["name"]
+            assert tool["annotations"] == {
+                "readOnlyHint": True,
+                "idempotentHint": True,
+                "openWorldHint": False,
+            }
+
+    def test_initialize_gives_the_rules_every_tool_shares(self):
+        """Clients put `instructions` in the system prompt, ahead of any call, so the
+        rules a wrong call would break are read before one is made."""
+        response = server.handle_message(
+            {"jsonrpc": "2.0", "id": 4, "method": "initialize", "params": {}},
+            self._table(),
+        )
+
+        instructions = response["result"]["instructions"]
+        assert instructions == server.INSTRUCTIONS
+        assert "Call load_report first" in instructions
+        assert "Two id spaces overlap" in instructions
+        assert "operation_id" in instructions
+        # Long instructions get cut by clients, and the system prompt is every turn's.
+        assert len(instructions) <= 2000
+
+    def test_the_instructions_name_only_registered_tools(self):
+        """A tool renamed or removed must not live on in the system prompt."""
+        fields = {
+            "app_link",
+            "app_link_template",
+            "end_signpost",
+            "operation_id",
+            "ops_perf_results",
+            "perf_id",
+            "perf_rows",
+            "profile_log_device",
+            "signpost_range_ignored",
+            "start_signpost",
+            "tensor_size_unit",
+        }
+        named = set(re.findall(r"\b[a-z]+(?:_[a-z]+)+\b", server.INSTRUCTIONS))
+        registered = {member.value for member in McpToolName}
+
+        assert named - fields <= registered
+        assert {"load_report", "top_ops", "operation_provenance"} <= named
+
+    def test_the_operation_id_argument_says_which_id_it_takes(self):
+        """Where a client that drops `instructions` still reads it."""
+        response = server.handle_message(
+            {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, self._table()
+        )
+        schemas = {
+            tool["name"]: tool["inputSchema"]["properties"]
+            for tool in response["result"]["tools"]
+        }
+
+        for tool in ("operation_detail", "operation_provenance"):
+            assert (
+                "never a top_ops row's id"
+                in schemas[tool]["operation_id"]["description"]
+            )
+
+    def test_op_breakdown_advertises_its_groupings_and_counts_groups(self):
+        response = server.handle_message(
+            {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, self._table()
+        )
+        schema = next(
+            tool["inputSchema"]["properties"]
+            for tool in response["result"]["tools"]
+            if tool["name"] == "op_breakdown"
+        )
+
+        assert schema["group_by"]["enum"] == ["op", "op_category"]
+        assert schema["by"]["enum"] == sorted(tools.ADDITIVE_METRICS)
+        assert schema["limit"]["description"].startswith("Groups to return")
+
+    def test_op_breakdown_refuses_a_range_the_report_cannot_honour(self, tmp_path):
+        registry = ReportRegistry()
+        write_device_log(tmp_path, MODERN_HEADER, [])
+        load_report(registry, performance_path=str(tmp_path))
+        with (
+            _signposts_in("report-1"),
+            patch.object(tools, "_generate_canonical_report") as generate,
+            patch.object(server, "record_event") as record,
+        ):
+            response = server.handle_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "op_breakdown",
+                        "arguments": {"handle": "report-1", "start_signpost": "TYPO"},
+                    },
+                },
+                server._tool_table(registry),
+            )
+
+        assert response["result"]["isError"] is True
+        text = response["result"]["content"][0]["text"]
+        assert "no signpost named 'TYPO'" in text and "'PERF_DECODE'" in text
+        assert record.call_args.kwargs["outcome"] is McpToolOutcome.REFUSED
+        generate.assert_not_called()
+
+    @pytest.mark.parametrize("tool", ["op_breakdown", "top_ops", "program_cache"])
+    def test_a_performance_tool_on_a_profiler_only_handle_says_why(
+        self, tmp_path, tool
+    ):
+        """It said `failed: No performance report loaded for this instance`, an
+        error in the app's words, where it is the agent's to fix."""
+        profiler = _write_devices(tmp_path / "profiler", [(0, 0)])
+        registry = ReportRegistry()
+        load_report(registry, profiler_path=str(profiler))
+
+        with patch.object(server, "record_event") as record:
+            response = server.handle_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {"name": tool, "arguments": {"handle": "report-1"}},
+                },
+                server._tool_table(registry),
+            )
+
+        assert response["result"]["isError"] is True
+        assert "loaded without a performance_path" in (
+            response["result"]["content"][0]["text"]
+        )
+        assert record.call_args.kwargs["outcome"] is McpToolOutcome.REFUSED
+
+    def test_op_breakdown_answers_through_the_server(self, tmp_path):
+        registry = ReportRegistry()
+        write_device_log(tmp_path, MODERN_HEADER, [])
+        load_report(registry, performance_path=str(tmp_path))
+        rows = [_row(op_code="MatmulDeviceOperation 32 x 64", op_category="Compute")]
+        with (
+            _signposts_in("report-1"),
+            patch.object(
+                tools, "_generate_canonical_report", return_value=_perf_report(rows)
+            ),
+            patch.object(server, "record_event"),
+        ):
+            response = server.handle_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "op_breakdown",
+                        "arguments": {"handle": "report-1", "group_by": "op"},
+                    },
+                },
+                server._tool_table(registry),
+            )
+
+        answer = json.loads(response["result"]["content"][0]["text"])
+        assert answer["grouped_by"] == "op"
+        assert answer["groups"][0]["op"] == "MatmulDeviceOperation"
+
+    def test_a_figure_that_is_not_finite_reads_as_null(self):
+        """Bare `NaN` and `Infinity` are not JSON, and a client would refuse the frame."""
+        text = server._answer_text(
+            {"total": float("inf"), "rows": [{"share": float("nan")}, 1.5]}
+        )
+
+        assert json.loads(text) == {"total": None, "rows": [{"share": None}, 1.5]}
+
+    def test_a_lone_surrogate_is_escaped_rather_than_sent_bare(self):
+        """What a non-UTF-8 file name decodes to; strict parsers refuse it bare."""
+        import orjson
+
+        registry = ReportRegistry()
+        out = io.StringIO()
+        frames = [
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": name, "arguments": {}},
+            }
+            for name in ("load_report", "top_ops")
+        ]
+
+        def refuse(arguments):
+            raise ValueError("no CSV named caf\udce9.csv")
+
+        table = {
+            "load_report": {
+                **server._tool_table(registry)["load_report"],
+                "handler": lambda arguments: {"csv": "caf\udce9.csv", "note": "a — b"},
+            },
+            "top_ops": {**server._tool_table(registry)["top_ops"], "handler": refuse},
+        }
+        with (
+            patch.object(server, "_tool_table", return_value=table),
+            patch.object(server, "record_event"),
+        ):
+            server.serve(
+                io.StringIO("".join(json.dumps(frame) + "\n" for frame in frames)),
+                out,
+                registry,
+            )
+
+        answer, refusal = [orjson.loads(line) for line in out.getvalue().splitlines()]
+        text = answer["result"]["content"][0]["text"]
+        # Escaped in the text, as before compact answers, and every other character
+        # kept as written.
+        assert '"csv":"caf\\udce9.csv"' in text
+        assert '"note":"a — b"' in text
+        text.encode("utf-8")
+        assert refusal["result"]["content"][0]["text"] == (
+            "no CSV named caf\\udce9.csv"
+        )
+
+    def test_an_answer_is_compact_json_with_its_text_as_written(self):
+        table = self._table()
+        table["load_report"]["handler"] = lambda arguments: {
+            "note": "Wormhole — 8 devices",
+            "ids": [1, 2],
+        }
+
+        with patch.object(server, "record_event"):
+            response = server.handle_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {"name": "load_report", "arguments": {}},
+                },
+                table,
+            )
+
+        text = response["result"]["content"][0]["text"]
+        assert text == '{"note":"Wormhole — 8 devices","ids":[1,2]}'
+
+    def test_the_frame_on_the_wire_stays_ascii(self):
+        """The answer keeps its non-ASCII text, but stdout may not be UTF-8, so the
+        frame around it escapes it, and the client reads it back unchanged."""
+        registry = ReportRegistry()
+        out = io.StringIO()
+        frame = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "load_report", "arguments": {}},
+        }
+
+        with (
+            patch.object(
+                server,
+                "_tool_table",
+                return_value={
+                    "load_report": {
+                        **server._tool_table(registry)["load_report"],
+                        "handler": lambda arguments: {"note": "a — b"},
+                    }
+                },
+            ),
+            patch.object(server, "record_event"),
+        ):
+            server.serve(io.StringIO(json.dumps(frame) + "\n"), out, registry)
+
+        line = out.getvalue()
+        assert line.isascii()
+        answer = json.loads(json.loads(line)["result"]["content"][0]["text"])
+        assert answer == {"note": "a — b"}
 
     def test_initialize_reports_the_package_version(self):
         # Equality with the real helper alone would pass if both sides were
