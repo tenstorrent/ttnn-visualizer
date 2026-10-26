@@ -13,13 +13,9 @@ change on either side then fails a test instead of drifting.
     pnpm run agent:parity-golden    <- regenerates tests/data/agentFailureParity.json
 """
 
-import json
 import math
-import os
 import random
-import re
 from functools import partial
-from pathlib import Path
 from types import SimpleNamespace
 from typing import Callable, Dict, List, Optional, Tuple
 
@@ -27,11 +23,9 @@ import pytest
 from ttnn_visualizer.agent import allocation_failures, dram_fallbacks, l1_peak
 from ttnn_visualizer.agent.scope_outcomes import failed_device_operation_names
 from ttnn_visualizer.models import Buffer, BufferType
-from ttnn_visualizer.utils import str_to_bool
+from ttnn_visualizer.tests.parity_golden import Golden, round_trip
 
-GOLDEN_PATH = (
-    Path(__file__).resolve().parents[3] / "tests" / "data" / "agentFailureParity.json"
-)
+GOLDEN = Golden("agentFailureParity")
 _SEED = 2154
 
 
@@ -808,25 +802,8 @@ def _generate_golden() -> Dict:
     }
 
 
-def _round_trip(value: object) -> object:
-    return json.loads(json.dumps(value))
-
-
 def test_the_ports_reproduce_the_golden():
-    generated = _round_trip(_generate_golden())
-
-    if str_to_bool(os.environ.get("UPDATE_AGENT_PARITY_GOLDEN", "false")):
-        GOLDEN_PATH.write_text(json.dumps(generated, separators=(",", ":")) + "\n")
-
-    assert GOLDEN_PATH.exists(), (
-        f"Golden file missing: {GOLDEN_PATH}. Generate it with "
-        "pnpm run agent:parity-golden."
-    )
-    committed = json.loads(GOLDEN_PATH.read_text())
-    assert generated == committed, (
-        "A port's answers changed. If the app's function changed too, regenerate with "
-        "pnpm run agent:parity-golden and check tests/agentFailureParity.spec.ts passes."
-    )
+    GOLDEN.check(_generate_golden())
 
 
 def test_the_golden_exercises_every_branch():
@@ -906,9 +883,9 @@ def test_the_tool_s_replay_differs_only_in_the_residents_it_keeps():
                 else []
             )
             assert kept.contributors == expected
-            assert _round_trip(
+            assert round_trip(
                 {**_app_decomposition(kept), "contributors": []}
-            ) == _round_trip({**_app_decomposition(entry), "contributors": []})
+            ) == round_trip({**_app_decomposition(entry), "contributors": []})
         assert (trimmed.peak and trimmed.peak.operation_id) == (
             full.peak and full.peak.operation_id
         )
@@ -931,8 +908,4 @@ def test_a_graph_that_is_not_a_list_names_no_failure(nodes):
 
 
 def test_the_ts_spec_reads_this_golden():
-    spec = (
-        Path(__file__).resolve().parents[3] / "tests" / "agentFailureParity.spec.ts"
-    ).read_text()
-
-    assert re.search(r"from '\./data/agentFailureParity\.json'", spec)
+    GOLDEN.check_spec_reads_it()

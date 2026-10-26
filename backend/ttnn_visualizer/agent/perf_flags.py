@@ -17,11 +17,13 @@ and None is null, since which of the two a cell becomes decides some flags.
 
 import math
 import re
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import (
+    Callable,
     Dict,
     FrozenSet,
+    Hashable,
     Iterable,
     Iterator,
     List,
@@ -62,6 +64,8 @@ class MaxCoresSource(str, Enum):
 
 
 class DeviceArchitecture(str, Enum):
+    """`DeviceArchitecture` in `src/definitions/DeviceArchitecture.ts`."""
+
     UNKNOWN = ""
     GRAYSKULL = "grayskull"
     WORMHOLE = "wormhole_b0"
@@ -345,7 +349,32 @@ def _whole(value: object) -> object:
     return int(value) if isinstance(value, float) and value.is_integer() else value
 
 
-def _dram_bound(row: FlagRow) -> Dict[str, object]:
+def flag_names(row: FlagRow, max_cores: float) -> List[PerfHeuristicFlag]:
+    """Which of `annotatePerfHeuristicFlags`' flags apply to a row, in its order.
+
+    `max_cores` is the device's, as `resolve_max_cores` finds it.
+    """
+    if not _is_eligible(row):
+        return []
+    names: List[PerfHeuristicFlag] = []
+    has_min_impact = _meets_min_impact(row)
+    if has_min_impact and (row.bound == BoundType.DRAM or _is_slow_dram_dominant(row)):
+        names.append(PerfHeuristicFlag.DRAM_BOUND)
+    # `core_utilisation` is 0 wherever the view's own guard on its three inputs refuses.
+    utilisation = core_utilisation(row, max_cores) if has_min_impact else 0
+    if 0 < utilisation < LOW_CORE_UTILISATION_RATIO:
+        names.append(PerfHeuristicFlag.LOW_UTILISATION)
+    if has_min_impact and _is_underutilised_cores(row, max_cores):
+        names.append(PerfHeuristicFlag.UNDERUTILISED_CORES)
+    outcome = repeat_cache_outcome(
+        row.hash, row.is_first_hash_occurrence, row.cache_hit
+    )
+    if outcome is RepeatCacheOutcome.MISS:
+        names.append(PerfHeuristicFlag.RECOMPUTE_CANDIDATE)
+    return names
+
+
+def _dram_bound(row: FlagRow, max_cores: float) -> Dict[str, object]:
     reason = (
         DramBoundReason.SLOW_DRAM_ABOVE_FLOPS
         if _is_slow_dram_dominant(row)
@@ -359,7 +388,8 @@ def _dram_bound(row: FlagRow) -> Dict[str, object]:
     }
 
 
-def _low_utilisation(row: FlagRow, utilisation: float) -> Dict[str, object]:
+def _low_utilisation(row: FlagRow, max_cores: float) -> Dict[str, object]:
+    utilisation = core_utilisation(row, max_cores)
     return {
         "flag": PerfHeuristicFlag.LOW_UTILISATION.value,
         # Cut, not rounded, so a figure under the threshold never reads as at it.
@@ -385,36 +415,25 @@ def _underutilised_cores(row: FlagRow, max_cores: float) -> Dict[str, object]:
     }
 
 
-def heuristic_flags(row: FlagRow, max_cores: float) -> List[Dict[str, object]]:
-    """`annotatePerfHeuristicFlags`' flags for a row, in its order, with their evidence.
+def _recompute_candidate(row: FlagRow, max_cores: float) -> Dict[str, object]:
+    return {"flag": PerfHeuristicFlag.RECOMPUTE_CANDIDATE.value}
 
-    `max_cores` is the device's, as `resolve_max_cores` finds it. No entry repeats a
-    field the row carries: the cores used are its `cores`, and a recompute candidate's
-    program is the `cache` group's `program_hash`.
+
+_EVIDENCE: Dict[PerfHeuristicFlag, Callable[[FlagRow, float], Dict[str, object]]] = {
+    PerfHeuristicFlag.DRAM_BOUND: _dram_bound,
+    PerfHeuristicFlag.LOW_UTILISATION: _low_utilisation,
+    PerfHeuristicFlag.UNDERUTILISED_CORES: _underutilised_cores,
+    PerfHeuristicFlag.RECOMPUTE_CANDIDATE: _recompute_candidate,
+}
+
+
+def heuristic_flags(row: FlagRow, max_cores: float) -> List[Dict[str, object]]:
+    """`flag_names`, each with the figures it fired on.
+
+    No entry repeats a field the row carries: the cores used are its `cores`, and a
+    recompute candidate's program is the `cache` group's `program_hash`.
     """
-    if not _is_eligible(row):
-        return []
-    flags: List[Dict[str, object]] = []
-    has_min_impact = _meets_min_impact(row)
-    if has_min_impact and (row.bound == BoundType.DRAM or _is_slow_dram_dominant(row)):
-        flags.append(_dram_bound(row))
-    if (
-        has_min_impact
-        and _is_valid_number(row.pm_ideal_ns)
-        and _is_valid_number(row.device_time)
-        and _is_valid_number(row.cores)
-    ):
-        utilisation = core_utilisation(row, max_cores)
-        if 0 < utilisation < LOW_CORE_UTILISATION_RATIO:
-            flags.append(_low_utilisation(row, utilisation))
-    if has_min_impact and _is_underutilised_cores(row, max_cores):
-        flags.append(_underutilised_cores(row, max_cores))
-    outcome = repeat_cache_outcome(
-        row.hash, row.is_first_hash_occurrence, row.cache_hit
-    )
-    if outcome is RepeatCacheOutcome.MISS:
-        flags.append({"flag": PerfHeuristicFlag.RECOMPUTE_CANDIDATE.value})
-    return flags
+    return [_EVIDENCE[name](row, max_cores) for name in flag_names(row, max_cores)]
 
 
 def architecture_of(name: object) -> DeviceArchitecture:
@@ -432,20 +451,22 @@ def _architecture_default(architecture: DeviceArchitecture) -> int:
     return _CORE_COUNT.get(architecture, DEFAULT_MAX_CORES)
 
 
-def core_count(architecture: DeviceArchitecture, cores: Iterable[float]) -> float:
+class MaxCores(NamedTuple):
+    cores: float
+    source: MaxCoresSource
+
+
+def core_count(architecture: DeviceArchitecture, cores: Iterable[float]) -> MaxCores:
     """`getCoreCount`, over the rows' `row_cores`: the architecture's cores, or the most
-    a row used if more."""
+    a row used if more, and which of the two it is."""
     default = _architecture_default(architecture)
     highest: float = 0
     for count in cores:
         if not math.isnan(count) and count > highest:
             highest = count
-    return highest if highest > default else default
-
-
-class MaxCores(NamedTuple):
-    cores: float
-    source: MaxCoresSource
+    if highest > default:
+        return MaxCores(highest, MaxCoresSource.REPORT_ROWS)
+    return MaxCores(default, MaxCoresSource.ARCHITECTURE_DEFAULT)
 
 
 def resolve_max_cores(
@@ -459,15 +480,7 @@ def resolve_max_cores(
     if meta is not None and meta.max_cores is not None:
         resolved = MaxCores(meta.max_cores, MaxCoresSource.DEVICE_LOG)
     else:
-        count = core_count(architecture, cores)
-        resolved = MaxCores(
-            count,
-            (
-                MaxCoresSource.REPORT_ROWS
-                if count > _architecture_default(architecture)
-                else MaxCoresSource.ARCHITECTURE_DEFAULT
-            ),
-        )
+        resolved = core_count(architecture, cores)
     if resolved.cores > 0:
         return resolved
     return MaxCores(DEFAULT_MAX_CORES, MaxCoresSource.FALLBACK_DEFAULT)
@@ -483,6 +496,10 @@ class FlagInputs:
     first_call_ids: FrozenSet[str]
     repeat_hits: int
     repeat_misses: int
+    # `flagged_rows`' counts by the caller's key, kept as long as the inputs are.
+    _counts: Dict[Hashable, Dict[str, int]] = field(
+        default_factory=dict, compare=False, repr=False
+    )
 
     def is_first_call(self, row: Dict) -> bool:
         # A row without a program is never a repeat, as the view reads it.
@@ -509,35 +526,55 @@ def flag_inputs(rows: Sequence[Dict], meta: Optional[DeviceLogMeta]) -> FlagInpu
     )
 
 
-def _agent_flags(row: Dict, inputs: FlagInputs) -> Tuple[FlagRow, List[Dict]]:
+def _agent_row(row: Dict, inputs: FlagInputs) -> FlagRow:
     typed = typed_row(row, inputs.is_first_call(row))
     # The view reads tt-metal's 1 ns placeholder as a modelled ideal time (#2162).
     if is_unmodelled(row.get("pm_ideal_ns")):
         typed = replace(typed, pm_ideal_ns=None)
-    return typed, heuristic_flags(typed, inputs.max_cores.cores)
+    return typed
 
 
 def flag_fields(row: Dict, inputs: Optional[FlagInputs]) -> Dict[str, object]:
     """A row's `flags`, when asked for, and the `total_percent` that gates them."""
     if inputs is None:
         return {}
-    typed, flags = _agent_flags(row, inputs)
-    return {"total_percent": _figure(typed.total_percent), "flags": flags}
+    typed = _agent_row(row, inputs)
+    return {
+        "total_percent": _figure(typed.total_percent),
+        "flags": heuristic_flags(typed, inputs.max_cores.cores),
+    }
 
 
-def flagged_rows(rows: Iterable[Dict], inputs: FlagInputs) -> Dict[str, int]:
-    """How many of `rows` carry each flag, so an answer says what lies past its cap."""
+def count_flags(rows: Iterable[Dict], inputs: FlagInputs) -> Dict[str, int]:
+    """How many of `rows` carry each flag."""
     counts = {flag.value: 0 for flag in PerfHeuristicFlag}
     for row in rows:
-        for entry in _agent_flags(row, inputs)[1]:
-            counts[str(entry["flag"])] += 1
+        for name in flag_names(_agent_row(row, inputs), inputs.max_cores.cores):
+            counts[name.value] += 1
     return counts
+
+
+def flagged_rows(
+    rows: Iterable[Dict], inputs: Optional[FlagInputs], key: Hashable = None
+) -> Optional[Dict[str, int]]:
+    """`count_flags`, so an answer says what lies past its cap; None without flags.
+
+    Kept by `key` when given one, since every row is read: about a second on 200,000.
+    """
+    if inputs is None:
+        return None
+    if key is None:
+        return count_flags(rows, inputs)
+    if key not in inputs._counts:
+        inputs._counts[key] = count_flags(rows, inputs)
+    return inputs._counts[key]
 
 
 FLAGS_NOTE = (
     "Flags are the performance view's, except that tt-metal's 1 ns perf-model "
-    "placeholder never flags low_utilisation (#2162). flagged_rows counts every row "
-    "read, not only those returned."
+    "placeholder never flags low_utilisation (#2162), and that over a signpost range "
+    "first calls and the report_rows max-core fallback still read the whole report. "
+    "flagged_rows counts every row read, not only those returned."
 )
 
 
@@ -581,7 +618,9 @@ __all__ = [
     "cache_looks_disabled",
     "core_count",
     "core_utilisation",
+    "count_flags",
     "flag_fields",
+    "flag_names",
     "flag_inputs",
     "flagged_rows",
     "heuristic_flags",

@@ -302,7 +302,8 @@ any of these groups:
 - `advice`: tt-perf-report's advice for the operation, which today covers matmuls.
 - `flags`: the performance view's heuristic flags for the operation — `dram_bound`,
   `low_utilisation`, `underutilised_cores` and `recompute_candidate` — each with the figures
-  it fired on. See below.
+  it fired on. See below. It adds no CSV columns, so `include: ["flags"]` alone brings no
+  `included`, `empty_in_report` or `detail_note`.
 
 Times in these groups are microseconds, like `device_time`, although the CSV records most
 of them in nanoseconds. They come from the same merged row as the rest of it: for an
@@ -352,8 +353,8 @@ already carries:
   which is the row's own available cores (`core_capacity_from` `available_cores`) or, for a
   row without them, the device's (`max_cores`).
 - `recompute_candidate`: a repeat call of a program that missed the program cache — a
-  repeat miss, as `program_cache` counts one. The `cache` group's `program_hash` names the
-  program.
+  repeat miss, as `program_cache` counts one, though `program_cache` also counts the ones on
+  rows no flag applies to, below. The `cache` group's `program_hash` names the program.
 
 The first three apply only to an operation whose `total_percent` is at least 0.5, so they
 move with a signpost range, over which tt-perf-report recomputes `total_percent`, as the
@@ -368,7 +369,8 @@ report or the signpost range for `top_ops`, every row of the operation for
 in the report that recorded a cache result missed, `flag_basis.caveat` carries the caveat
 `program_cache` gives: that is what a run with the program cache disabled records, so
 check whether it was before reading each recompute candidate as a program built again.
-`flag_basis.note` repeats the one difference from the view, below.
+`flag_basis.note` repeats the two ways the flags read the report differently from the
+view, below.
 
 `flag_basis.max_cores` is the device's core count, read where the web application reads it,
 through the same reader as `/api/performance/device-log/meta`: `Max Compute Cores` on the
@@ -379,12 +381,14 @@ of the report used (`report_rows`). A count of 0 falls back to Wormhole's
 (`fallback_default`). The rows that fallback reads are the whole report's even for a ranged
 read, since a window does not change the device, where the view reads the rows it shows.
 
-One flag deliberately differs from the view's. The view reads tt-metal's 1 ns ideal-time
-placeholder, described above, as a modelled time, which against an operation's real
-duration gives a utilisation near zero, so it flags low utilisation on operations the
-model never modelled ([#2162](https://github.com/tenstorrent/ttnn-visualizer/issues/2162)):
-across ten local and demo captures, 166 of its 239 low-utilisation flags. Here a 1 ns ideal
-time never flags `low_utilisation`. Every other flag on those captures is the view's.
+The flags read the report differently from the view in two deliberate ways. Over a
+signpost range, first calls and the `report_rows` fallback read the whole report, as above.
+And the view reads tt-metal's 1 ns ideal-time placeholder, described above, as a modelled
+time, which against an operation's real duration gives a utilisation near zero, so it flags
+low utilisation on operations the model never modelled
+([#2162](https://github.com/tenstorrent/ttnn-visualizer/issues/2162)): across ten local and
+demo captures, 166 of its 239 low-utilisation flags. Here a 1 ns ideal time never flags
+`low_utilisation`. Every other flag those captures carry unranged is the view's.
 
 The view's other two flags are not in the list, because other tools answer them in more
 detail: an allocation failure is `errors`' (and `operation_detail`'s `error`), and a likely

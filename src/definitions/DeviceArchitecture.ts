@@ -2,6 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+// Mirrored as `DeviceArchitecture` in `backend/ttnn_visualizer/agent/perf_flags.py`.
 export enum DeviceArchitecture {
     UNKNOWN = '',
     GRAYSKULL = 'grayskull',

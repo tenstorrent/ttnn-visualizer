@@ -723,7 +723,9 @@ def operation_detail(
         result["device_time_unit"] = DEVICE_TIME_UNIT
         result["projection"] = tools.projection(None)
         result.update(perf_detail.summary(groups, empty))
-        flagged = perf_flags.flagged_rows(rows, flag_inputs) if flag_inputs else None
+        flagged = perf_flags.flagged_rows(
+            rows, flag_inputs, key=("operation", link.rank, int(operation_id))
+        )
         result.update(perf_flags.summary(flag_inputs, flagged))
         if rows:
             result.update(_device_time_summary(rows, link.report_device_time_total))

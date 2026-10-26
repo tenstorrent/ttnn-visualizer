@@ -16,8 +16,7 @@ import sys
 from collections import defaultdict
 from dataclasses import asdict, dataclass
 from enum import Enum
-from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Set, Union, cast
+from typing import Dict, List, Optional, Sequence, Union, cast
 
 from ttnn_visualizer.agent import perf_detail, perf_flags
 from ttnn_visualizer.agent.bounds import (
@@ -485,12 +484,6 @@ def row_limit(limit: Optional[int], groups: Sequence[perf_detail.DetailGroup]) -
 
 def _device_meta(instance: Instance) -> Optional[DeviceLogMeta]:
     """The device log's meta, or None where the view's request for it fails."""
-    if not instance.performance_path or not (
-        Path(
-            instance.performance_path, DeviceLogProfilerQueries.DEVICE_LOG_FILE
-        ).exists()
-    ):
-        return None
     try:
         return DeviceLogProfilerQueries.read_device_meta(instance)
     except OSError:
@@ -514,34 +507,6 @@ def read_flag_inputs(
         )
 
     return registry.cached_report(handle, build, variant=CacheVariant.PERF_FLAG_INPUTS)
-
-
-FlaggedRowsByScope = Dict[Optional[SignpostRange], Dict[str, int]]
-
-
-def _flagged_rows(
-    registry: ReportRegistry,
-    handle: str,
-    scope: Optional[SignpostRange],
-    rows: List[Dict],
-    flag_inputs: Optional[perf_flags.FlagInputs],
-) -> Optional[Dict[str, int]]:
-    """Each flag's count over the rows a call read, once per handle and range.
-
-    Every row's flags are read for it, about a second on 200,000 rows.
-    """
-    if flag_inputs is None:
-        return None
-
-    def build(instance: Instance) -> FlaggedRowsByScope:
-        return {}
-
-    counts_by_scope = registry.cached_report(
-        handle, build, variant=CacheVariant.FLAGGED_ROWS
-    )
-    if scope not in counts_by_scope:
-        counts_by_scope[scope] = perf_flags.flagged_rows(rows, flag_inputs)
-    return counts_by_scope[scope]
 
 
 def top_ops(
@@ -586,8 +551,9 @@ def top_ops(
         }
         for row in ranked
     ]
-    flagged = _flagged_rows(
-        registry, handle, None if ignored else signposts, rows, flag_inputs
+    # Keyed by the range read, which a report with no signposts reads whole.
+    flagged = perf_flags.flagged_rows(
+        rows, flag_inputs, key=("range", None if ignored else signposts)
     )
 
     result: Dict[str, object] = {

@@ -13,27 +13,22 @@ generated report's, so the golden holds the parse and the first-call rule as wel
     pnpm run agent:parity-golden    <- regenerates tests/data/agentPerfFlagsParity.json
 """
 
-import json
 import math
-import os
 import random
-import re
-from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from ttnn_visualizer.agent import perf_flags
 from ttnn_visualizer.csv_queries import DeviceLogMeta
-from ttnn_visualizer.utils import str_to_bool
+from ttnn_visualizer.tests.parity_golden import Golden
 
-GOLDEN_PATH = (
-    Path(__file__).resolve().parents[3] / "tests" / "data" / "agentPerfFlagsParity.json"
-)
+GOLDEN = Golden("agentPerfFlagsParity")
 _SEED = 2193
 
-_ROW_DEFAULTS: Dict[str, object] = {
+# A generated report row's cells, which `test_agent_perf_flags.py` builds rows from too.
+REPORT_ROW_DEFAULTS: Dict[str, object] = {
     "op_code": "Matmul",
     "op_type": "tt_dnn_device",
-    "bound": None,
+    "bound": "",
     "total_percent": "5.0",
     "device_time": "10.0",
     "cores": "64",
@@ -50,7 +45,7 @@ _ROW_DEFAULTS: Dict[str, object] = {
 def _rows(*overrides: Mapping[str, object]) -> List[Dict[str, object]]:
     """Report rows as the generator writes them: cells are text, ids CSV positions."""
     return [
-        {"id": str(index + 2), **_ROW_DEFAULTS, **fields}
+        {"id": str(index + 2), **REPORT_ROW_DEFAULTS, **fields}
         for index, fields in enumerate(overrides)
     ]
 
@@ -381,28 +376,8 @@ def _generate_golden() -> Dict:
     }
 
 
-def _round_trip(value: object) -> object:
-    return json.loads(json.dumps(value))
-
-
 def test_the_port_reproduces_the_golden():
-    generated = _round_trip(_generate_golden())
-    text = json.dumps(generated, separators=(",", ":")) + "\n"
-
-    if str_to_bool(os.environ.get("UPDATE_AGENT_PARITY_GOLDEN", "false")):
-        GOLDEN_PATH.write_text(text)
-
-    assert GOLDEN_PATH.exists(), (
-        f"Golden file missing: {GOLDEN_PATH}. Generate it with "
-        "pnpm run agent:parity-golden."
-    )
-    changed = (
-        "The port's answers changed. If the app's functions changed too, regenerate with "
-        "pnpm run agent:parity-golden and check tests/agentPerfFlagsParity.spec.ts passes."
-    )
-    assert generated == json.loads(GOLDEN_PATH.read_text()), changed
-    # As text too: a negative zero equals zero, and the app's spec tells them apart.
-    assert text == GOLDEN_PATH.read_text(), changed
+    GOLDEN.check(_generate_golden())
 
 
 def _entries(golden: Dict) -> List[Dict]:
@@ -457,8 +432,4 @@ def test_the_max_core_cases_reach_every_source():
 
 
 def test_the_ts_spec_reads_this_golden():
-    spec = (
-        Path(__file__).resolve().parents[3] / "tests" / "agentPerfFlagsParity.spec.ts"
-    ).read_text()
-
-    assert re.search(r"from '\./data/agentPerfFlagsParity\.json'", spec)
+    GOLDEN.check_spec_reads_it()

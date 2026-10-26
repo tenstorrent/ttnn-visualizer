@@ -120,6 +120,69 @@ def test_the_shared_reader_reads_what_the_route_serves(device_log, content, expe
     )
 
 
+# Where the shared reader bounds what the route read before: a count too long to be one
+# was an int of any length, or a 500 past 4,300 digits; a first line was read whole.
+BOUNDED = [
+    pytest.param(
+        b"ARCH: blackhole, Max Compute Cores: 123456789\n",
+        {"architecture": "blackhole", "frequency": None, "max_cores": 123456789},
+        id="nine-digits",
+    ),
+    pytest.param(
+        b"ARCH: blackhole, Max Compute Cores: 1234567890\n",
+        {"architecture": "blackhole", "frequency": None, "max_cores": None},
+        id="ten-digits",
+    ),
+    pytest.param(
+        b"ARCH: blackhole, CHIP_FREQ[MHz]: "
+        + b"9" * 5000
+        + b", Max Compute Cores: "
+        + b"9" * 5000
+        + b"\n",
+        {"architecture": "blackhole", "frequency": None, "max_cores": None},
+        id="past-int-parsing",
+    ),
+    pytest.param(
+        b"x" * 70_000 + b" ARCH: blackhole\n",
+        {"architecture": None, "frequency": None, "max_cores": None},
+        id="first-line-past-64-kib",
+    ),
+]
+
+
+@pytest.mark.parametrize(("content", "expected"), BOUNDED)
+def test_the_route_reads_a_bounded_first_line(
+    client, mounted, device_log, content, expected
+):
+    """Rather than refuse, the route then answers the count as none, and the agent
+    falls back to the architecture's default."""
+    directory = device_log(content)
+
+    response = client.get(META_ENDPOINT, query_string={"instanceId": mounted})
+    meta = DeviceLogProfilerQueries.read_device_meta(
+        Instance(instance_id="device-log-meta", performance_path=str(directory))
+    )
+
+    assert response.status_code == HTTPStatus.OK
+    assert response.get_json() == expected
+    assert meta == DeviceLogMeta(**expected)
+
+
+def test_a_directory_named_as_the_device_log_is_no_device_log(
+    client, mounted, tmp_path
+):
+    """One `device_log_path` for the route, the agent and `load_report`: the route gave
+    a 500 for it before, and now gives the 404 it gives for no log."""
+    (tmp_path / DeviceLogProfilerQueries.DEVICE_LOG_FILE).mkdir()
+    instance = Instance(instance_id="device-log-meta", performance_path=str(tmp_path))
+
+    response = client.get(META_ENDPOINT, query_string={"instanceId": mounted})
+
+    assert response.status_code == HTTPStatus.NOT_FOUND
+    assert DeviceLogProfilerQueries.device_log_path(instance) is None
+    assert DeviceLogProfilerQueries.read_device_meta(instance) is None
+
+
 def test_a_value_is_found_anywhere_on_the_line():
     assert parse_device_meta(
         "RUN_ID: x, Max Compute Cores: 72 cores, ARCH:wormhole_b0 (n300)"

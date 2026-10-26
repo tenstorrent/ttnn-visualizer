@@ -1421,20 +1421,15 @@ def get_performance_device_meta(instance: Instance):
 
     _apply_requested_performance_name(instance)
 
-    file_path = Path(
-        instance.performance_path,
-        DeviceLogProfilerQueries.DEVICE_LOG_FILE,
-    )
-
-    if not file_path.exists():
-        return response_not_found()
-
     try:
-        return jsonify(DeviceLogProfilerQueries.read_device_meta(instance)._asdict())
-
+        meta = DeviceLogProfilerQueries.read_device_meta(instance)
     except Exception as e:
         logger.exception("Failed to parse device meta")
         return response_internal_server_error(str(e))
+
+    if meta is None:
+        return response_not_found()
+    return jsonify(meta._asdict())
 
 
 @api.route("/performance/npe/manifest", methods=["GET"])

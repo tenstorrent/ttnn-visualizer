@@ -418,10 +418,13 @@ class DeviceLogMeta(NamedTuple):
     max_cores: Optional[int] = None
 
 
-# Searched for anywhere on the line, so a missing comma or a leading BOM still reads.
+# Searched for anywhere on the line, so a missing comma or a leading BOM still reads. A
+# number of ten digits or more is no count, rather than an int too long to parse.
 _META_ARCHITECTURE = re.compile(r"ARCH:\s*([\w\d_]+)")
-_META_FREQUENCY = re.compile(r"CHIP_FREQ\[MHz\]:\s*(\d+)")
-_META_MAX_CORES = re.compile(r"Max Compute Cores:\s*(\d+)")
+_META_FREQUENCY = re.compile(r"CHIP_FREQ\[MHz\]:\s*(\d{1,9})(?!\d)")
+_META_MAX_CORES = re.compile(r"Max Compute Cores:\s*(\d{1,9})(?!\d)")
+# The meta reads only the first line, and a log with no newline must not be read whole.
+_META_LINE_LIMIT = 65536
 
 
 def parse_device_meta(line: str) -> DeviceLogMeta:
@@ -634,18 +637,27 @@ class DeviceLogProfilerQueries:
         return metadata
 
     @classmethod
-    def read_device_meta(cls, instance: Instance) -> DeviceLogMeta:
-        """The device log's first line as `/api/performance/device-log/meta` reads it.
+    def device_log_path(cls, instance: Instance) -> Optional[Path]:
+        """The report's device log, or None where it has none: a directory is none."""
+        if not instance.performance_path:
+            return None
+        path = Path(instance.performance_path, cls.DEVICE_LOG_FILE)
+        return path if path.is_file() else None
+
+    @classmethod
+    def read_device_meta(cls, instance: Instance) -> Optional[DeviceLogMeta]:
+        """The device log's first line as `/api/performance/device-log/meta` reads it,
+        or None where the report has no device log.
 
         The route and the agent's flags read the device's core count through this one
         reader, so they cannot disagree about a device. Decoded leniently: a stray byte
         anywhere in the first block of the file must not cost the line.
         """
-        if not instance.performance_path:
-            raise PerformanceReportNotLoadedException()
-        path = Path(instance.performance_path, cls.DEVICE_LOG_FILE)
+        path = cls.device_log_path(instance)
+        if path is None:
+            return None
         with open(path, "r", encoding="utf-8", errors="ignore") as handle:
-            return parse_device_meta(handle.readline().strip())
+            return parse_device_meta(handle.readline(_META_LINE_LIMIT).strip())
 
     def query_zone_summary(
         self, limit: Optional[int] = None

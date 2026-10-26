@@ -1227,8 +1227,8 @@ class TestAnswerSize:
     def dense(self, tmp_path):
         """Rows as long and as flagged as a real report's: the budget's worst case.
 
-        On the real linked pair (`2026_08_19_16_47_08` with `bge_m3_aug19_1645`) the
-        flags once took `top_ops` past the budget; this table did too.
+        Indented, the real linked pair (`2026_08_19_16_47_08` with `bge_m3_aug19_1645`)
+        once went past the budget with flags, and so did this table.
         """
         return _linked_table(tmp_path, _dense_rows())
 
@@ -1275,6 +1275,11 @@ class TestAnswerSize:
 
         assert result["perf_row_count"] > MAX_DETAILED_LIMIT
         self._assert_dense(result["perf_rows"])
+        # Every row of the operation carries it, past the cap as well as within it.
+        assert (
+            result["flag_basis"]["flagged_rows"]["low_utilisation"]
+            == result["perf_row_count"]
+        )
 
     def test_program_cache_fits_the_budget_and_names_the_missing_operation(self, table):
         result = self._call(table, "program_cache", {"limit": MAX_LIMIT})

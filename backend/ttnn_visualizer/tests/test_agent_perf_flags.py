@@ -31,6 +31,7 @@ from ttnn_visualizer.tests.smoke_capture import (
     write_ops_perf,
 )
 from ttnn_visualizer.tests.test_agent_linking import _graph, _write_profiler
+from ttnn_visualizer.tests.test_agent_perf_flags_parity import REPORT_ROW_DEFAULTS
 from ttnn_visualizer.tests.test_agent_tools import _perf_report
 from ttnn_visualizer.tests.test_device_log_columns import MODERN_HEADER
 
@@ -46,21 +47,7 @@ def _write_device_log(directory: Path, first_line: str) -> None:
 
 
 def _row(row_id, **fields):
-    return {
-        "id": str(row_id),
-        "op_code": "Matmul",
-        "op_type": "tt_dnn_device",
-        "total_percent": "5.0",
-        "device_time": "10.0",
-        "cores": "64",
-        "available_cores": "64",
-        "bound": "",
-        "bound_analysis": "full",
-        "pm_ideal_ns": "",
-        "hash": None,
-        "cache_hit": None,
-        **fields,
-    }
+    return {"id": str(row_id), **REPORT_ROW_DEFAULTS, **fields}
 
 
 # 0.03 of the device time on all its cores: 3% utilisation, well under the threshold.
@@ -251,7 +238,14 @@ class TestFlagFields:
 
     def test_nothing_is_added_unless_flags_were_asked_for(self):
         assert perf_flags.flag_fields(_row(1, **_LOW), None) == {}
+        assert perf_flags.flagged_rows([_row(1, **_LOW)], None) is None
         assert perf_flags.summary(None) == {}
+
+    def test_the_note_names_both_ways_the_flags_differ_from_the_view(self):
+        """An agent reads the note, not the docs page."""
+        assert "#2162" in perf_flags.FLAGS_NOTE
+        assert "signpost range" in perf_flags.FLAGS_NOTE
+        assert "report_rows" in perf_flags.FLAGS_NOTE
 
     def test_a_row_flags_nothing_with_an_empty_list_and_its_gate(self):
         assert perf_flags.flag_fields(_row(1), self._INPUTS) == {
@@ -446,12 +440,51 @@ class TestTopOpsFlags:
         registry, handle = handle_with([_row(1, **_LOW)])
 
         with patch.object(
-            perf_flags, "flagged_rows", wraps=perf_flags.flagged_rows
+            perf_flags, "count_flags", wraps=perf_flags.count_flags
         ) as counted:
             tools.top_ops(registry, handle, include=_FLAGS)
             tools.top_ops(registry, handle, by="cores", include=_FLAGS)
 
         counted.assert_called_once()
+
+    def test_a_range_a_report_without_signposts_ignores_counts_as_the_whole(
+        self, handle_with
+    ):
+        """tt-perf-report reads the whole file for it, so its counts are the whole's."""
+        registry, handle = handle_with([_row(1, **_LOW)])
+
+        with (
+            patch.object(
+                tools, "_resolve_signposts", return_value=ResolvedSignposts({}, True)
+            ),
+            patch.object(
+                perf_flags, "count_flags", wraps=perf_flags.count_flags
+            ) as counted,
+        ):
+            whole = tools.top_ops(registry, handle, include=_FLAGS)
+            ranged = tools.top_ops(
+                registry, handle, start_signpost="START", include=_FLAGS
+            )
+
+        assert ranged["projection"]["signpost_range_ignored"] is True
+        assert (
+            ranged["flag_basis"]["flagged_rows"] == whole["flag_basis"]["flagged_rows"]
+        )
+        counted.assert_called_once()
+
+    def test_program_cache_and_the_flags_count_a_repeat_miss_alike_but_for_the_gate(
+        self, handle_with
+    ):
+        """One rule classifies a repeat; the flags still leave out a host op's, as the
+        view does."""
+        misses = [_row(index, hash="h", cache_hit=False) for index in (2, 3, 4)]
+        alike = handle_with(misses)
+        gated = handle_with([*misses, _row(5, hash="h", cache_hit=False, bound="HOST")])
+
+        for (registry, handle), cached, flagged in ((alike, 2, 2), (gated, 3, 2)):
+            counts = tools.top_ops(registry, handle, include=_FLAGS)["flag_basis"]
+            assert tools.program_cache(registry, handle)["repeat_misses"] == cached
+            assert counts["flagged_rows"]["recompute_candidate"] == flagged
 
     @pytest.mark.parametrize(
         ("cache_hits", "caveat"),
@@ -560,9 +593,10 @@ class TestTopOpsFlags:
         assert op["id"] == "3"
         assert _flag_names(op) == ["recompute_candidate"]
 
-    def test_a_ranged_call_reads_the_window_and_the_whole_report(self, tmp_path):
-        """The window's total_percent gates the flags; the whole report's first calls
-        decide a repeat, as `program_cache` counts them."""
+    @pytest.fixture
+    def ranged(self, tmp_path):
+        """A handle whose report holds a `START` signpost, and whose window after it
+        recomputes the last row's total_percent from 0.1 to 60."""
         rows = [
             _row(2, hash="h", cache_hit=False, total_percent="40.0"),
             _row(3, op_code="START", op_type="signpost", total_percent=""),
@@ -584,19 +618,38 @@ class TestTopOpsFlags:
                 return_value=ResolvedSignposts({"START": [1]}, True),
             ),
         ):
-            whole = tools.top_ops(registry, handle, include=_FLAGS)
-            ranged = tools.top_ops(
-                registry, handle, start_signpost="START", include=_FLAGS
-            )
+            yield registry, handle
+
+    def test_a_ranged_call_reads_the_window_and_the_whole_report(self, ranged):
+        """The window's total_percent gates the flags; the whole report's first calls
+        decide a repeat, as `program_cache` counts them."""
+        registry, handle = ranged
+
+        whole = tools.top_ops(registry, handle, include=_FLAGS)
+        ranged_answer = tools.top_ops(
+            registry, handle, start_signpost="START", include=_FLAGS
+        )
 
         whole_flags = {op["id"]: _flag_names(op) for op in whole["ops"]}
         assert whole_flags["4"] == ["recompute_candidate"]
-        assert [_flag_names(op) for op in ranged["ops"]] == [
+        assert [_flag_names(op) for op in ranged_answer["ops"]] == [
             ["low_utilisation", "recompute_candidate"]
         ]
-        assert ranged["ops"][0]["total_percent"] == 60.0
-        assert ranged["flag_basis"]["flagged_rows"]["low_utilisation"] == 1
+        assert ranged_answer["ops"][0]["total_percent"] == 60.0
+        assert ranged_answer["flag_basis"]["flagged_rows"]["low_utilisation"] == 1
         assert whole["flag_basis"]["flagged_rows"]["low_utilisation"] == 0
+
+    def test_flagged_rows_are_counted_once_for_each_range(self, ranged):
+        registry, handle = ranged
+
+        with patch.object(
+            perf_flags, "count_flags", wraps=perf_flags.count_flags
+        ) as counted:
+            tools.top_ops(registry, handle, include=_FLAGS)
+            for _ in range(2):
+                tools.top_ops(registry, handle, start_signpost="START", include=_FLAGS)
+
+        assert counted.call_count == 2
 
     def test_the_inputs_are_read_once_per_handle(self, handle_with):
         registry, handle = handle_with([_row(1)])
@@ -731,50 +784,119 @@ class TestEndToEnd:
         assert called_before
 
 
+def _linked_handle(tmp_path, graphs_of):
+    """A handle on the smoke capture, every repeat a cache miss, and a profiler report
+    whose operations `graphs_of(launched)` gives, from the device ops the rows name."""
+    rows = smoke_rows()
+    for row in rows:
+        row[PROGRAM_HASH_COLUMN] = row["OP CODE"]
+        row[PROGRAM_CACHE_HIT_COLUMN] = "False"
+    write_ops_perf(tmp_path / "perf", rows)
+    _write_device_log(tmp_path / "perf", _WORMHOLE_64)
+    performance_only = ReportRegistry()
+    handle = load_report(performance_only, performance_path=str(tmp_path / "perf"))
+    launched = [
+        row["raw_op_code"]
+        for row in tools.canonical_report(performance_only, handle["handle"])["report"]
+    ]
+    graphs, operations = graphs_of(launched)
+    profiler_path = _write_profiler(
+        tmp_path / "profiler", graphs, operations=operations
+    )
+    registry = ReportRegistry()
+    loaded = load_report(
+        registry, performance_path=str(tmp_path / "perf"), profiler_path=profiler_path
+    )
+    return registry, loaded["handle"]
+
+
+def _flag_counts(rows):
+    counts = {flag.value: 0 for flag in perf_flags.PerfHeuristicFlag}
+    for row in rows:
+        for name in _flag_names(row):
+            counts[name] += 1
+    return counts
+
+
 class TestOperationDetail:
     @pytest.fixture
     def linked(self, tmp_path):
-        rows = smoke_rows()
-        for row in rows:
-            row[PROGRAM_HASH_COLUMN] = row["OP CODE"]
-            row[PROGRAM_CACHE_HIT_COLUMN] = "False"
-        write_ops_perf(tmp_path / "perf", rows)
-        _write_device_log(tmp_path / "perf", _WORMHOLE_64)
-        performance_only = ReportRegistry()
-        handle = load_report(performance_only, performance_path=str(tmp_path / "perf"))
-        launched = [
-            row["raw_op_code"]
-            for row in tools.canonical_report(performance_only, handle["handle"])[
-                "report"
-            ]
-        ]
-        profiler_path = _write_profiler(
-            tmp_path / "profiler",
-            {1: _graph("ttnn.model", *launched, nested=False)},
-            operations=[(1, "ttnn.model")],
-        )
-        registry = ReportRegistry()
-        loaded = load_report(
-            registry,
-            performance_path=str(tmp_path / "perf"),
-            profiler_path=profiler_path,
-        )
-        return registry, loaded["handle"]
+        """Two operations, each launching half the smoke capture's rows."""
+
+        def graphs_of(launched):
+            half = len(launched) // 2
+            return (
+                {
+                    1: _graph("ttnn.first", *launched[:half], nested=False),
+                    2: _graph("ttnn.second", *launched[half:], nested=False),
+                },
+                [(1, "ttnn.first"), (2, "ttnn.second")],
+            )
+
+        return _linked_handle(tmp_path, graphs_of)
 
     def test_each_perf_row_carries_the_flags_top_ops_gives_it(self, linked):
         registry, handle = linked
 
-        detail = linking.operation_detail(registry, handle, 1, include=_FLAGS)
         ranked = linking.top_ops(registry, handle, limit=25, include=_FLAGS)
-
-        assert detail["operation_link"]["status"] == "linked"
-        assert detail["flag_basis"] == ranked["flag_basis"]
         top_flags = {op["id"]: op["flags"] for op in ranked["ops"]}
-        assert detail["perf_rows"]
-        for row in detail["perf_rows"]:
-            if row["id"] in top_flags:
-                assert row["flags"] == top_flags[row["id"]]
-        assert any(row["flags"] for row in detail["perf_rows"])
+        for operation_id in (1, 2):
+            detail = linking.operation_detail(
+                registry, handle, operation_id, include=_FLAGS
+            )
+
+            assert detail["operation_link"]["status"] == "linked"
+            ids = {row["id"] for row in detail["perf_rows"]}
+            assert ids and ids <= set(top_flags)
+            assert all(
+                row["flags"] == top_flags[row["id"]] for row in detail["perf_rows"]
+            )
+
+    def test_the_basis_is_the_report_s_and_the_counts_the_operation_s(self, linked):
+        """The device, its log and the cache read the same for both tools; the counts
+        cover the rows each answer read."""
+        registry, handle = linked
+
+        ranked = linking.top_ops(registry, handle, limit=25, include=_FLAGS)
+        details = [
+            linking.operation_detail(registry, handle, operation_id, include=_FLAGS)
+            for operation_id in (1, 2)
+        ]
+
+        shared = ("max_cores", "max_cores_source", "architecture", "caveat")
+        for detail in details:
+            assert all(
+                detail["flag_basis"].get(key) == ranked["flag_basis"].get(key)
+                for key in shared
+            )
+            assert detail["perf_row_count"] == len(detail["perf_rows"])
+            assert detail["flag_basis"]["flagged_rows"] == _flag_counts(
+                detail["perf_rows"]
+            )
+        assert details[0]["flag_basis"]["flagged_rows"] != (
+            ranked["flag_basis"]["flagged_rows"]
+        )
+        assert ranked["flag_basis"]["flagged_rows"] == _flag_counts(ranked["ops"])
+
+    def test_an_unlinked_operation_reads_no_flags(self, tmp_path):
+        """No perf_rows to flag, so the flags' inputs are never read."""
+        registry, handle = _linked_handle(
+            tmp_path,
+            lambda launched: (
+                {1: _graph("ttnn.other", "NotARowDeviceOperation", nested=False)},
+                [(1, "ttnn.other")],
+            ),
+        )
+
+        with patch.object(
+            perf_flags, "resolve_max_cores", wraps=perf_flags.resolve_max_cores
+        ) as resolve:
+            detail = linking.operation_detail(registry, handle, 1, include=_FLAGS)
+
+        assert detail["operation_link"]["status"] != "linked"
+        assert "flag_basis" not in detail
+        assert all("flags" not in row for row in detail.get("perf_rows", []))
+        resolve.assert_not_called()
 
     def test_without_include_a_perf_row_has_no_flags(self, linked):
         registry, handle = linked
