@@ -8,7 +8,7 @@ import { cleanup, fireEvent, render, renderHook, screen } from '@testing-library
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import useBufferFocusDismissal from '../src/hooks/useBufferFocusDismissal';
 import { dismissToast } from '../src/functions/createToastNotification';
-import { selectedAddressAtom, selectedBufferColourAtom, selectedTensorIdAtom } from '../src/store/app';
+import { activeToastAtom, selectedAddressAtom, selectedBufferColourAtom, selectedTensorIdAtom } from '../src/store/app';
 import { TestProviders } from './helpers/TestProviders';
 import { BufferFocusProbe } from './helpers/BufferFocusProbe';
 import { getBufferFocusProbe, pressAndRelease, selectContents } from './helpers/bufferFocus';
@@ -27,6 +27,7 @@ const DISMISSAL_EVENTS = ['click', 'pointercancel', 'pointerdown'];
 
 const renderFocused = (
     focus: AtomProviderInitialValues = [
+        [activeToastAtom, 'buffer-toast'],
         [selectedAddressAtom, ADDRESS],
         [selectedTensorIdAtom, TENSOR_ID],
         [selectedBufferColourAtom, COLOUR],
@@ -57,7 +58,7 @@ describe('useBufferFocusDismissal', () => {
         pressAndRelease(screen.getByRole('heading', { name: 'L1' }));
 
         expect(getBufferFocusProbe()).toHaveTextContent('dismissed');
-        expect(dismissToast).toHaveBeenCalledExactlyOnceWith();
+        expect(dismissToast).toHaveBeenCalledExactlyOnceWith('buffer-toast');
     });
 
     it('keeps it through a click on a control', () => {

@@ -2,8 +2,8 @@
 #
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-"""The bounds the tool surface enforces: result caps, and how much captured graph a
-tool reads at once.
+"""The bounds the tool surface enforces: result caps, the choices an argument takes,
+and how much captured graph a tool reads at once.
 
 Shared rather than declared per module: `server` quotes the caps to an agent in every
 limit schema, so a second copy would eventually promise one cap and enforce another.
@@ -11,7 +11,7 @@ limit schema, so a second copy would eventually promise one cap and enforce anot
 column.
 """
 
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Iterable, Optional
 
 if TYPE_CHECKING:
     from ttnn_visualizer.queries import DatabaseQueries
@@ -65,6 +65,14 @@ def bounded(limit: Optional[int], maximum: int = MAX_LIMIT) -> int:
     return max(1, min(requested, maximum))
 
 
+def require_choice(kind: str, value: str, allowed: Iterable[str]) -> None:
+    """Refuse `value` unless it is one of `allowed`, naming every choice."""
+    if value not in allowed:
+        raise ValueError(
+            f"unknown {kind} {value!r}; expected one of {', '.join(sorted(allowed))}"
+        )
+
+
 __all__ = [
     "DEFAULT_LIMIT",
     "GraphTooLargeError",
@@ -73,4 +81,5 @@ __all__ = [
     "MAX_LIMIT",
     "bounded",
     "ensure_graph_readable",
+    "require_choice",
 ]

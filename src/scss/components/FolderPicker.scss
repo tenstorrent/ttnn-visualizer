@@ -42,3 +42,8 @@ $folder-text-size: 15px;
         opacity: 0.2;
     }
 }
+
+// Buttons in the picker's filter input: the linked-only toggle and the query clear
+.folder-picker-filter-actions {
+    display: flex;
+}

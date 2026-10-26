@@ -7,12 +7,18 @@ import { IconName, IconNames } from '@blueprintjs/icons';
 import { type ItemPredicate, ItemRenderer, Select } from '@blueprintjs/select';
 import { type ReactNode } from 'react';
 import 'styles/components/FolderPicker.scss';
-import { getFolderLinkState, shouldShowFolderLinkStatus } from '../../functions/folderLinkStatus';
+import {
+    getFolderLinkState,
+    matchesLinkedOnlyFilter,
+    shouldShowFolderLinkStatus,
+} from '../../functions/folderLinkStatus';
+import { FolderLinkState, NO_LINKED_RESULTS_TEXT } from '../../definitions/FolderLinkStatus';
 import { ReportLinkRunsById } from '../../definitions/ReportLinks';
 import { RemoteConnection, RemoteFolder } from '../../model/RemoteConnection';
 import { TEST_IDS } from '../../definitions/TestIds';
 import { getReportId } from '../../functions/reportLinks';
 import { getRankedReportLabel } from '../../functions/reportRank';
+import useFolderPickerFilter from '../../hooks/useFolderPickerFilter';
 import useRemoteConnection from '../../hooks/useRemote';
 import HighlightedText from '../HighlightedText';
 import FolderLinkStatusIcon from './FolderLinkStatusIcon';
@@ -25,8 +31,7 @@ interface RemoteFolderRendererOptions {
     connection?: RemoteConnection;
     showReportName?: boolean;
     showLinkStatus?: boolean;
-    linkedRuns?: ReportLinkRunsById | null;
-    unlinkedRuns?: ReportLinkRunsById | null;
+    getLinkState: (folder: RemoteFolder) => FolderLinkState;
 }
 
 const remoteFolderRenderer =
@@ -36,8 +41,7 @@ const remoteFolderRenderer =
         connection,
         showReportName,
         showLinkStatus,
-        linkedRuns,
-        unlinkedRuns,
+        getLinkState,
     }: RemoteFolderRendererOptions): ItemRenderer<RemoteFolder> =>
     (folder, { handleClick, modifiers, query }) => {
         if (!modifiers.matchesPredicate) {
@@ -45,7 +49,6 @@ const remoteFolderRenderer =
         }
 
         const { lastSynced, lastModified, reportName, remotePath } = folder;
-        const folderId = getRemoteFolderId(folder);
 
         return (
             <div
@@ -67,16 +70,7 @@ const remoteFolderRenderer =
                     }
                     icon={selectedFolder?.remotePath === remotePath ? IconNames.SAVED : IconNames.DOCUMENT}
                     labelElement={
-                        showLinkStatus ? (
-                            <FolderLinkStatusIcon
-                                linkState={getFolderLinkState(
-                                    folderId,
-                                    folder.runFingerprint,
-                                    linkedRuns,
-                                    unlinkedRuns,
-                                )}
-                            />
-                        ) : undefined
+                        showLinkStatus ? <FolderLinkStatusIcon linkState={getLinkState(folder)} /> : undefined
                     }
                 />
             </div>
@@ -85,7 +79,10 @@ const remoteFolderRenderer =
 
 interface RemoteFolderSelectorProps {
     remoteFolder?: RemoteFolder;
-    /** Folders render in the supplied order; link-status badges do not reorder them. */
+    /**
+     * Folders render in the supplied order (newest first from the backend); link-status badges do
+     * not reorder them, and the linked-only toggle only hides rows.
+     */
     remoteFolderList?: RemoteFolder[];
     loading?: boolean;
     disabled?: boolean;
@@ -116,6 +113,11 @@ const RemoteFolderSelector = ({
     const { persistentState } = useRemoteConnection();
     const remoteConnection = persistentState.selectedConnection;
     const showLinkStatus = shouldShowFolderLinkStatus(linkedRuns, unlinkedRuns);
+    const { isLinkedOnlyActive, selectProps: filterSelectProps } = useFolderPickerFilter(showLinkStatus);
+
+    // The badge and the linked-only filter both read this, so they cannot disagree about a row.
+    const getLinkState = (folder: RemoteFolder) =>
+        getFolderLinkState(getRemoteFolderId(folder), folder.runFingerprint, linkedRuns, unlinkedRuns);
 
     const isDisabled = loading || remoteFolderList?.length === 0 || disabled;
 
@@ -130,15 +132,15 @@ const RemoteFolderSelector = ({
                     connection: remoteConnection,
                     showReportName,
                     showLinkStatus,
-                    linkedRuns,
-                    unlinkedRuns,
+                    getLinkState,
                 })}
                 filterable
-                itemPredicate={filterFolders(type, remoteConnection)}
+                itemPredicate={filterFolders(type, remoteConnection, isLinkedOnlyActive, getLinkState)}
+                {...filterSelectProps}
                 noResults={
                     <MenuItem
                         disabled
-                        text='No results'
+                        text={isLinkedOnlyActive ? NO_LINKED_RESULTS_TEXT : 'No results'}
                         roleStructure='listoption'
                     />
                 }
@@ -199,16 +201,25 @@ const formatRemoteFolderPath = (
     return formattedPath.startsWith('/') ? formattedPath : `/${formattedPath}`;
 };
 
+// Built afresh on every render on purpose: QueryList refilters when the predicate's identity
+// changes, which is how a toggle or a new link verdict reaches the list.
 const filterFolders =
-    (type: RemoteFolderType, connection?: RemoteConnection): ItemPredicate<RemoteFolder> =>
+    (
+        type: RemoteFolderType,
+        connection: RemoteConnection | undefined,
+        isLinkedOnly: boolean,
+        getLinkState: (folder: RemoteFolder) => FolderLinkState,
+    ): ItemPredicate<RemoteFolder> =>
     (query, folder) => {
         const normalisedQuery = query.toLowerCase();
 
         // Match the raw path too, so a query like `rank0` still finds a folder
         // labelled `Rank 0: ...`.
-        return [formatRemoteFolderPath(folder, type, connection), folder.remotePath].some((value) =>
+        const matchesQuery = [formatRemoteFolderPath(folder, type, connection), folder.remotePath].some((value) =>
             value.toLowerCase().includes(normalisedQuery),
         );
+
+        return matchesQuery && matchesLinkedOnlyFilter(isLinkedOnly, getLinkState(folder));
     };
 
 export default RemoteFolderSelector;

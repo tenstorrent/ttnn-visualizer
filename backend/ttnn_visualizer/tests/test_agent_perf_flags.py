@@ -127,18 +127,22 @@ class TestDeviceMeta:
         assert (basis["architecture"], basis["max_cores"]) == expected
         assert basis["max_cores_source"] == "device_log"
 
-    def test_a_byte_that_is_not_utf_8_on_line_two_costs_nothing(self, tmp_path):
-        """`load_report` cannot open such a log yet; the view reads it, as does this."""
-        (tmp_path / DeviceLogProfilerQueries.DEVICE_LOG_FILE).write_bytes(
+    def test_a_byte_that_is_not_utf_8_on_line_two_costs_nothing(self, handle_with):
+        """The view reads such a log, and so do `load_report` (#2184) and the flags."""
+        registry, handle = handle_with([_row(1)], None)
+        directory = Path(registry.get(handle).performance_path)
+        (directory / DeviceLogProfilerQueries.DEVICE_LOG_FILE).write_bytes(
             b"ARCH: blackhole, CHIP_FREQ[MHz]: 1350, Max Compute Cores: 120\n"
             b"PCIe slot, core_x \xff\n"
         )
 
-        meta = tools._device_meta(
-            Instance(instance_id="non-utf-8", performance_path=str(tmp_path))
-        )
+        reloaded = load_report(registry, performance_path=str(directory))["handle"]
+        basis = tools.top_ops(registry, reloaded, include=_FLAGS)["flag_basis"]
 
-        assert meta == DeviceLogMeta("blackhole", 1350, 120)
+        assert (basis["max_cores"], basis["max_cores_source"]) == (120, "device_log")
+        assert tools._device_meta(
+            Instance(instance_id="non-utf-8", performance_path=str(directory))
+        ) == DeviceLogMeta("blackhole", 1350, 120)
 
 
 class TestResolveMaxCores:
@@ -347,19 +351,23 @@ class TestProgramCalls:
         ]
 
     @pytest.mark.parametrize(
-        ("program", "first", "cache_hit", "missed"),
+        ("program", "first", "cache_hit", "outcome"),
         [
-            ("a", False, False, True),
-            ("a", True, False, False),
-            ("a", False, True, False),
-            ("a", False, None, False),
-            (None, False, False, False),
+            ("a", False, False, "miss"),
+            ("a", False, True, "hit"),
+            ("a", False, None, "unrecorded"),
+            ("a", True, False, None),
+            (None, False, False, None),
+            ("", False, False, None),
         ],
     )
-    def test_a_repeat_miss_is_a_repeat_that_recorded_a_miss(
-        self, program, first, cache_hit, missed
+    def test_a_repeat_reads_as_the_view_reads_it(
+        self, program, first, cache_hit, outcome
     ):
-        assert perf_flags.is_repeat_miss(program, first, cache_hit) is missed
+        """`getRepeatCacheOutcome`: no program, or a first call, is no repeat at all."""
+        read = perf_flags.repeat_cache_outcome(program, first, cache_hit)
+
+        assert (read and read.value) == outcome
 
 
 class TestTopOpsFlags:

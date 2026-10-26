@@ -7,7 +7,7 @@ import classNames from 'classnames';
 import { Classes, Icon, Intent, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { Link } from 'react-router';
-import { BoundType, ColumnDefinition, ColumnKeys } from '../definitions/PerfTable';
+import { BoundType, ColumnDefinition, ColumnKeys, RepeatCacheOutcome } from '../definitions/PerfTable';
 import { TypedPerfTableRow } from '../model/PerfTable';
 import { isFlagEnabled } from './getServerConfig';
 import { MIN_TOTAL_PERCENT } from '../definitions/PerfHeuristics';
@@ -26,6 +26,7 @@ import { MathFidelity } from '../definitions/MathFidelity';
 import { CellColour, DEFAULT_CELL_COLOUR, FALLBACK_CELL_COLOUR, WARNING_CELL_COLOUR } from '../definitions/CellColour';
 import { isHighDispatchGap, isSlowDramDominant } from './perfBoundPredicates';
 import { NOT_ANALYSED_LABEL, getNotAnalysedReason, getSlowBoundExplanation } from './perfBoundAnalysis';
+import { getRepeatCacheOutcome } from './enrichPerfRowData';
 
 const OPERATION_COLOURS: { [key: string]: CellColour } = {
     '(torch)': CellColour.Red,
@@ -133,31 +134,29 @@ export const formatCell = (
     }
 
     if (key === ColumnKeys.CacheHit) {
-        if (typeof value !== 'boolean') {
+        const repeatCacheOutcome = getRepeatCacheOutcome(row);
+
+        // Only a repeat call that recorded a result gets an icon, as the footer counts it
+        if (repeatCacheOutcome === null || repeatCacheOutcome === RepeatCacheOutcome.UNRECORDED) {
             return '';
         }
 
-        // Only show icon if this is not the first occurrence of the hash
-        if (row.isFirstHashOccurrence) {
-            return '';
-        }
+        const isHit = repeatCacheOutcome === RepeatCacheOutcome.HIT;
+        const tooltipMessage = isHit ? (
+            <>
+                Operation result reused from cache
+                <br />
+                <strong>Hash:</strong> {row[ColumnKeys.Hash]}
+            </>
+        ) : (
+            <>
+                Operation result was recomputed
+                <br />
+                <strong>Hash:</strong> {row[ColumnKeys.Hash]}
+            </>
+        );
 
-        const tooltipMessage =
-            value === true ? (
-                <>
-                    Operation result reused from cache
-                    <br />
-                    <strong>Hash:</strong> {row[ColumnKeys.Hash]}
-                </>
-            ) : (
-                <>
-                    Operation result was recomputed
-                    <br />
-                    <strong>Hash:</strong> {row[ColumnKeys.Hash]}
-                </>
-            );
-
-        return value === true ? (
+        return isHit ? (
             <Tooltip content={tooltipMessage}>
                 <Icon
                     intent={Intent.SUCCESS}

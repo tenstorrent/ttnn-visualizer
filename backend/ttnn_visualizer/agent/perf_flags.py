@@ -80,6 +80,14 @@ class BoundType(str, Enum):
     HOST = "HOST"
 
 
+class RepeatCacheOutcome(str, Enum):
+    """How a repeat call's cache result reads, as `RepeatCacheOutcome` in `PerfTable.ts`."""
+
+    HIT = "hit"
+    MISS = "miss"
+    UNRECORDED = "unrecorded"
+
+
 class BoundAnalysis(str, Enum):
     """Which roofline model tt-perf-report ran, as `BoundAnalysis` in `PerfTable.ts`."""
 
@@ -199,9 +207,17 @@ def program_calls(rows: Iterable[Dict]) -> Iterator[Tuple[Dict, bool]]:
         seen.add(program)
 
 
-def is_repeat_miss(program: object, is_first_call: bool, cache_hit: object) -> bool:
-    """The view's recompute candidate: a repeat call that missed the program cache."""
-    return program is not None and not is_first_call and cache_hit is False
+def repeat_cache_outcome(
+    program: object, is_first_call: bool, cache_hit: object
+) -> Optional[RepeatCacheOutcome]:
+    """`getRepeatCacheOutcome`: how a repeat call's cache result reads, None for a row that
+    is no repeat. A miss is the view's recompute candidate; `program_cache` counts by it.
+    """
+    if not _is_truthy(program) or is_first_call:
+        return None
+    if cache_hit is None:
+        return RepeatCacheOutcome.UNRECORDED
+    return RepeatCacheOutcome.HIT if _is_truthy(cache_hit) else RepeatCacheOutcome.MISS
 
 
 def cache_looks_disabled(repeat_hits: int, repeat_misses: int) -> bool:
@@ -393,7 +409,10 @@ def heuristic_flags(row: FlagRow, max_cores: float) -> List[Dict[str, object]]:
             flags.append(_low_utilisation(row, utilisation))
     if has_min_impact and _is_underutilised_cores(row, max_cores):
         flags.append(_underutilised_cores(row, max_cores))
-    if is_repeat_miss(row.hash, row.is_first_hash_occurrence, row.cache_hit):
+    outcome = repeat_cache_outcome(
+        row.hash, row.is_first_hash_occurrence, row.cache_hit
+    )
+    if outcome is RepeatCacheOutcome.MISS:
         flags.append({"flag": PerfHeuristicFlag.RECOMPUTE_CANDIDATE.value})
     return flags
 
@@ -477,10 +496,10 @@ def flag_inputs(rows: Sequence[Dict], meta: Optional[DeviceLogMeta]) -> FlagInpu
     for row, first in program_calls(rows):
         if first:
             first_call_ids.add(str(row.get("id")))
-        elif row.get("cache_hit") is True:
-            repeat_hits += 1
-        elif is_repeat_miss(row.get("hash"), first, row.get("cache_hit")):
-            repeat_misses += 1
+            continue
+        outcome = repeat_cache_outcome(row.get("hash"), first, row.get("cache_hit"))
+        repeat_hits += outcome is RepeatCacheOutcome.HIT
+        repeat_misses += outcome is RepeatCacheOutcome.MISS
     return FlagInputs(
         meta=meta,
         max_cores=resolve_max_cores(meta, (row_cores(row) for row in rows)),
@@ -557,6 +576,7 @@ __all__ = [
     "MaxCores",
     "MaxCoresSource",
     "PerfHeuristicFlag",
+    "RepeatCacheOutcome",
     "architecture_of",
     "cache_looks_disabled",
     "core_count",
@@ -565,7 +585,7 @@ __all__ = [
     "flag_inputs",
     "flagged_rows",
     "heuristic_flags",
-    "is_repeat_miss",
+    "repeat_cache_outcome",
     "program_calls",
     "resolve_max_cores",
     "row_cores",
