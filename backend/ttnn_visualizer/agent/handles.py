@@ -13,11 +13,25 @@ answer; that is the capture, not the app's session.) #1995
 """
 
 import csv
+import functools
+import re
 import sqlite3
 from collections import OrderedDict
 from enum import Enum
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as distribution_version
 from pathlib import Path
-from typing import Callable, Dict, Hashable, List, Optional, Tuple, TypeVar, cast
+from typing import (
+    Callable,
+    Dict,
+    Hashable,
+    Iterable,
+    List,
+    Optional,
+    Tuple,
+    TypeVar,
+    cast,
+)
 
 from ttnn_visualizer.csv_queries import (
     PROGRAM_CACHE_HIT_COLUMN,
@@ -26,6 +40,7 @@ from ttnn_visualizer.csv_queries import (
     OpsPerformanceQueries,
 )
 from ttnn_visualizer.models import Instance
+from ttnn_visualizer.utils import pick_cluster_descriptor_path
 
 # The SQLite database a profiler report carries. Named here rather than imported
 # because the agent surface once read no tables; its presence is what makes the
@@ -34,6 +49,7 @@ from ttnn_visualizer.models import Instance
 PROFILER_DB_FILE = "db.sqlite"
 
 Cached = TypeVar("Cached")
+Answer = TypeVar("Answer")
 
 
 class CacheVariant(str, Enum):
@@ -256,6 +272,42 @@ TOOL_TABLES: Dict[str, frozenset] = {
 }
 
 
+def read_only_connection(db_file: Path) -> sqlite3.Connection:
+    """Open a SQLite file read-only.
+
+    Percent-encoded: a `#` or `?` in a folder name otherwise ends the path early, and
+    SQLite opens a different file, read-write, creating it when it is missing.
+    """
+    return sqlite3.connect(f"{db_file.absolute().as_uri()}?mode=ro", uri=True)
+
+
+def _read_profiler_db(
+    profiler_path: Optional[str],
+    read: Callable[[sqlite3.Connection], Answer],
+    default: Answer,
+) -> Answer:
+    """`read` on the profiler database, or `default` when there is none to read.
+
+    A truncated or non-SQLite file is a broken capture, and `default` is the honest
+    answer for it, as for a missing one.
+    """
+    if profiler_path is None:
+        return default
+    db_file = Path(profiler_path, PROFILER_DB_FILE)
+    if not db_file.is_file():
+        return default
+    try:
+        connection = read_only_connection(db_file)
+    except sqlite3.Error:
+        return default
+    try:
+        return read(connection)
+    except sqlite3.Error:
+        return default
+    finally:
+        connection.close()
+
+
 def _readable_tables(profiler_path: Optional[str]) -> frozenset:
     """The tables a profiler database actually holds, or nothing.
 
@@ -267,28 +319,16 @@ def _readable_tables(profiler_path: Optional[str]) -> frozenset:
     answers for every tool and is cheaper than the calls an agent would
     otherwise spend finding out.
     """
-    if profiler_path is None:
-        return frozenset()
-    db_file = Path(profiler_path, PROFILER_DB_FILE)
-    if not db_file.is_file():
-        return frozenset()
-    try:
-        connection = sqlite3.connect(f"file:{db_file}?mode=ro", uri=True)
-    except sqlite3.Error:
-        return frozenset()
-    try:
-        return frozenset(
+    return _read_profiler_db(
+        profiler_path,
+        lambda connection: frozenset(
             name
             for (name,) in connection.execute(
                 "SELECT name FROM sqlite_master WHERE type = 'table'"
             )
-        )
-    except sqlite3.Error:
-        # A truncated or non-SQLite file reaching this point is a broken capture,
-        # and "cannot answer" is the honest inventory entry for it.
-        return frozenset()
-    finally:
-        connection.close()
+        ),
+        frozenset(),
+    )
 
 
 # Columns tt-perf-report requires before it can produce a report without exiting.
@@ -306,22 +346,43 @@ def _csv_columns(path: Optional[Path]) -> frozenset:
         return frozenset()
 
 
-def _perf_csv_problem(path: Optional[Path]) -> Optional[str]:
-    """Why tt-perf-report cannot report on this CSV, or None when it can.
+def _scan_csv(
+    path: Path, encoding: Optional[str], skip_preamble: bool
+) -> Tuple[List[str], bool]:
+    """The header row, and whether any non-blank line follows it."""
+    with path.open(encoding=encoding, newline="") as source:
+        if skip_preamble:
+            source.readline()
+        # Blank lines before the header are skipped, as pandas skips them.
+        header = next(
+            (row for row in csv.reader(source) if any(c.strip() for c in row)), []
+        )
+        # Read to the end rather than stopping at the first row: the tools
+        # decode the whole file, so a bad byte anywhere has to be found here.
+        # Line by line, so a large capture is never held in memory.
+        has_data_row = False
+        for line in source:
+            has_data_row = has_data_row or bool(line.strip())
+    return header, has_data_row
 
-    None too when there is no CSV, which `performance_csv` being null already says.
+
+def _csv_problem(
+    path: Path,
+    required: frozenset,
+    *,
+    encoding: Optional[str] = None,
+    skip_preamble: bool = False,
+    strip_header: bool = False,
+) -> Optional[str]:
+    """Why the tool reading this CSV would fail on it, or None when it would not.
+
+    The keywords mirror how that tool reads the file, so the check refuses
+    exactly what the read would: `encoding` is what it decodes with (None is the
+    locale's), `skip_preamble` drops a first line it skips, and `strip_header`
+    strips header cells it strips.
     """
-    if path is None:
-        return None
     try:
-        with path.open(newline="") as source:
-            header = next(csv.reader(source), [])
-            # Read to the end rather than stopping at the first row: `top_ops`
-            # decodes the whole file, so a bad byte anywhere has to be found here.
-            # Line by line, so a large capture is never held in memory.
-            has_data_row = False
-            for line in source:
-                has_data_row = has_data_row or bool(line.strip())
+        header, has_data_row = _scan_csv(path, encoding, skip_preamble)
     except OSError as error:
         return f"unreadable: {error.strerror or error}"
     except UnicodeDecodeError as error:
@@ -329,14 +390,26 @@ def _perf_csv_problem(path: Optional[Path]) -> Optional[str]:
     except csv.Error as error:
         return f"malformed header: {error}"
 
-    if not any(cell.strip() for cell in header):
+    if not header:
         return "empty"
-    absent = TOP_OPS_REQUIRED_COLUMNS - set(header)
+    if strip_header:
+        header = [cell.strip() for cell in header]
+    absent = required - set(header)
     if absent:
         return f"missing columns: {', '.join(sorted(absent))}"
     if not has_data_row:
         return "no data rows"
     return None
+
+
+def _perf_csv_problem(path: Optional[Path]) -> Optional[str]:
+    """Why tt-perf-report cannot report on this CSV, or None when it can.
+
+    None too when there is no CSV, which `performance_csv` being null already says.
+    """
+    if path is None:
+        return None
+    return _csv_problem(path, TOP_OPS_REQUIRED_COLUMNS)
 
 
 def _perf_csv(instance: Instance) -> Optional[Path]:
@@ -358,7 +431,164 @@ def perf_csv_columns(instance: Instance) -> frozenset:
     return _csv_columns(_perf_csv(instance))
 
 
-def _inventory(instance: Instance) -> Dict[str, object]:
+# Its release decides derived values, such as which `op_category` names exist.
+_TT_PERF_REPORT_DISTRIBUTION = "tt-perf-report"
+# The largest real cluster descriptor is 28 KB; one past this is not read at all.
+MAX_DESCRIPTOR_CHARS = 1_000_000
+# One chip's entry in the descriptor's `arch` mapping, as tt-metal names architectures.
+_ARCH_ENTRY = re.compile(r"""\d+\s*:\s*(['"]?)([A-Za-z][A-Za-z0-9_]{0,63})\1""")
+
+
+def _distinct_devices(connection: sqlite3.Connection) -> Optional[int]:
+    columns = {row[1] for row in connection.execute("PRAGMA table_info(devices)")}
+    if "device_id" not in columns:
+        return None
+    key = "device_id, rank" if "rank" in columns else "device_id"
+    (count,) = connection.execute(
+        f"SELECT COUNT(*) FROM (SELECT DISTINCT {key} FROM devices)"
+    ).fetchone()
+    return int(count)
+
+
+def _profiler_device_count(profiler_path: Optional[str]) -> Optional[int]:
+    """Devices in the profiler database, each rank's counted, or None without them.
+
+    Distinct, since some captures write a device's row more than once.
+    """
+    return _read_profiler_db(profiler_path, _distinct_devices, None)
+
+
+def _without_comment(line: str) -> str:
+    """`line` before a YAML comment: a `#` that starts it or follows whitespace.
+
+    Found with `find`, since a regex for whitespace then `#` backtracks
+    quadratically over a long run of whitespace that no `#` ends.
+    """
+    start = line.find("#")
+    while start > 0 and not line[start - 1].isspace():
+        start = line.find("#", start + 1)
+    return line if start < 0 else line[:start].rstrip()
+
+
+def _arch_names(entries: Iterable[str]) -> List[str]:
+    names = []
+    for entry in entries:
+        match = _ARCH_ENTRY.fullmatch(entry.strip())
+        if match is None:
+            return []
+        names.append(match.group(2))
+    return sorted(set(names))
+
+
+def _descriptor_arch_names(text: str) -> List[str]:
+    """The names in a cluster descriptor's top-level `arch` mapping, or none.
+
+    Read as text rather than parsed as YAML: a capture's file can nest or alias its
+    way to a crash or a flood, and only these names are wanted. tt-metal writes the
+    mapping as a block, and older releases as a flow mapping across lines.
+    """
+    lines = (_without_comment(line) for line in text.splitlines())
+    for line in lines:
+        header = line.rstrip()
+        if header in ("arch:", "arch: {"):
+            break
+        if header.startswith("arch: {") and header.endswith("}"):
+            return _arch_names(
+                entry for entry in header[len("arch: {") : -1].split(",") if entry
+            )
+    else:
+        return []
+    flow = header.endswith("{")
+    entries: List[str] = []
+    for line in lines:
+        if flow and line.strip() == "}":
+            return _arch_names(entries)
+        if not flow and line.strip() and not line[0].isspace():
+            break
+        if line.strip():
+            entries.append(line.strip().rstrip(",") if flow else line)
+    return [] if flow else _arch_names(entries)
+
+
+def _cluster_descriptor_arch(profiler_path: Optional[str]) -> Optional[str]:
+    """The chip architecture rank 0's cluster descriptor names, as it spells it.
+
+    The profiler database records no architecture; tt-metal writes this file beside
+    it. Older descriptors spell Wormhole `Wormhole`, so the name is passed through
+    rather than normalised, and chips that differ are joined with commas.
+    """
+    if profiler_path is None:
+        return None
+    try:
+        path, _ = pick_cluster_descriptor_path(Path(profiler_path), 0)
+        if path is None:
+            return None
+        with path.open(encoding="utf-8", errors="replace") as source:
+            text = source.read(MAX_DESCRIPTOR_CHARS + 1)
+    except OSError:
+        return None
+    # A cut could fall inside the `arch` block, and part of it would read as all.
+    if len(text) > MAX_DESCRIPTOR_CHARS:
+        return None
+    return ", ".join(_descriptor_arch_names(text)) or None
+
+
+@functools.lru_cache(maxsize=None)
+def _tt_perf_report_version() -> Optional[str]:
+    try:
+        return distribution_version(_TT_PERF_REPORT_DISTRIBUTION)
+    except PackageNotFoundError:
+        return None
+
+
+def _hardware(
+    instance: Instance, capture: Dict[str, str], perf_csv: Optional[Path]
+) -> Dict[str, object]:
+    """Which architecture and how many devices, keyed by where each figure is read.
+
+    Keyed rather than merged because a handle's two reports can come from different
+    runs, and a mismatch between them is worth seeing.
+    """
+    arch: Dict[str, object] = {}
+    if capture.get("ARCH"):
+        arch["device_log"] = capture["ARCH"]
+    descriptor_arch = _cluster_descriptor_arch(instance.profiler_path)
+    if descriptor_arch is not None:
+        arch["cluster_descriptor"] = descriptor_arch
+
+    # The performance CSV's count is added with its signposts, read in the same pass.
+    device_count: Dict[str, int] = {}
+    profiler_devices = _profiler_device_count(instance.profiler_path)
+    if profiler_devices is not None:
+        device_count["profiler"] = profiler_devices
+
+    result: Dict[str, object] = {"arch": arch, "device_count": device_count}
+    if perf_csv is not None:
+        result["tt_perf_report_version"] = _tt_perf_report_version()
+    return result
+
+
+def _device_log_answerable(performance_path: Optional[str]) -> bool:
+    """Whether `profile_log_device.csv` decodes cleanly, has the columns `zone_timings`
+    reads, and holds at least one data row. #2184"""
+    if performance_path is None:
+        return False
+    path = Path(performance_path, DeviceLogProfilerQueries.DEVICE_LOG_FILE)
+    if not path.is_file():
+        return False
+    # pandas decodes it as UTF-8, `__enter__` skips the `ARCH: …` line, and the
+    # header's leading spaces are stripped before any column is looked up.
+    problem = _csv_problem(
+        path,
+        DeviceLogProfilerQueries.ZONE_TIMINGS_COLUMNS,
+        encoding="utf-8",
+        skip_preamble=True,
+        strip_header=True,
+    )
+    return problem is None
+
+
+def _inventory(instance: Instance, perf_csv: Optional[Path]) -> Dict[str, object]:
     """What this report can actually answer.
 
     Reported up front because the three report kinds are independent: a Blaze-style
@@ -371,12 +601,12 @@ def _inventory(instance: Instance) -> Dict[str, object]:
     def record(name: str, present: bool) -> None:
         (available if present else missing).append(name)
 
-    perf_csv = _perf_csv(instance)
     perf_columns = _csv_columns(perf_csv)
-    # Both tools run tt-perf-report, which needs its key columns and a data row.
+    # These tools run tt-perf-report, which needs its key columns and a data row.
     perf_csv_problem = _perf_csv_problem(perf_csv)
     perf_ready = perf_csv is not None and perf_csv_problem is None
     record("top_ops", perf_ready)
+    record("op_breakdown", perf_ready)
     # Older captures carry neither column, and every count would then be zero.
     record(
         "program_cache",
@@ -385,11 +615,7 @@ def _inventory(instance: Instance) -> Dict[str, object]:
 
     performance_path = instance.performance_path
     profiler_path = instance.profiler_path
-    record(
-        "zone_timings",
-        performance_path is not None
-        and Path(performance_path, DeviceLogProfilerQueries.DEVICE_LOG_FILE).is_file(),
-    )
+    record("zone_timings", _device_log_answerable(performance_path))
 
     # Per tool, against the tables it reads. A partial capture can answer
     # `find_operations` and none of the rest, and saying so is the whole point
@@ -405,7 +631,7 @@ def _inventory(instance: Instance) -> Dict[str, object]:
         "answerable": available,
         "unanswerable": missing,
         "performance_csv": perf_csv.name if perf_csv else None,
-        # Why `top_ops` and `program_cache` are unanswerable when a CSV is present,
+        # Why the tools that read it are unanswerable when a CSV is present,
         # so an agent can tell an empty capture from a corrupt one.
         "performance_csv_problem": perf_csv_problem,
         # Kept as a key, and now empty: the database questions have tools. What
@@ -438,12 +664,15 @@ def load_report(
     ):
         metadata = DeviceLogProfilerQueries.read_capture_metadata(instance)
 
+    # Found once: the newest CSV is picked by scanning the directory.
+    perf_csv = _perf_csv(instance)
     return {
         "handle": handle,
         "profiler_path": profiler,
         "performance_path": performance,
         "capture": metadata,
-        **_inventory(instance),
+        **_hardware(instance, metadata, perf_csv),
+        **_inventory(instance, perf_csv),
     }
 
 

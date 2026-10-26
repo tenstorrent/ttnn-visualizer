@@ -10,11 +10,18 @@ import { Fragment, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import 'styles/components/PerfReport.scss';
 import { OpType, PATTERN_COUNT } from '../../definitions/Performance';
-import { ColumnDefinition, ColumnKeys, PerfTableFilters, comparisonKeys } from '../../definitions/PerfTable';
+import {
+    ColumnDefinition,
+    ColumnKeys,
+    PerfTableFilters,
+    RepeatCacheOutcome,
+    comparisonKeys,
+} from '../../definitions/PerfTable';
 import { TypedPerfTableRow } from '../../model/PerfTable';
 import ROUTES from '../../definitions/Routes';
 import { TEST_IDS } from '../../definitions/TestIds';
 import isValidNumber from '../../functions/isValidNumber';
+import { getRepeatCacheOutcome } from '../../functions/enrichPerfRowData';
 import { formatPercentage, formatSize } from '../../functions/math';
 import { formatCell, isHostOp } from '../../functions/perfFunctions';
 import { getEligiblePerfColumns, getFooterColumns, getVisiblePerfColumns } from '../../functions/perfTableColumns';
@@ -457,7 +464,8 @@ const PerformanceTable = ({
                                     <td
                                         key={header.key}
                                         className={classNames({
-                                            'pre-wrap': header.key === ColumnKeys.OpCode,
+                                            'pre-wrap':
+                                                header.key === ColumnKeys.OpCode || header.key === ColumnKeys.CacheHit,
                                         })}
                                         colSpan={header.footerSpan ?? undefined}
                                     >
@@ -503,12 +511,29 @@ const PerformanceTable = ({
     );
 };
 
+const getCacheHitSummary = (cacheHits: number, recorded: number, unrecorded: number): string => {
+    // A 0% would read as every repeat missing, so say there is nothing to divide instead.
+    if (recorded === 0) {
+        return unrecorded > 0 ? `No cache results recorded\n(${unrecorded} unrecorded)` : 'No repeat calls';
+    }
+
+    const cacheHitPercent = (cacheHits / recorded) * 100;
+    const baseSummary = `${formatPercentage(cacheHitPercent)} expected cache hits`;
+
+    if (unrecorded > 0) {
+        return `${baseSummary}\n(${unrecorded} unrecorded excluded)`;
+    }
+
+    return baseSummary;
+};
+
 const computeFooterTotals = (data: TypedPerfTableRow[], hideHostOps: boolean): Partial<Record<ColumnKeys, string>> => {
     const rows = data ?? [];
     let deviceTimeSum = 0;
     let opToOpGapSum = 0;
     let hostOpsCount = 0;
-    let nonUniqueOpsCount = 0;
+    let recordedRepeatOpsCount = 0;
+    let unrecordedRepeatOpsCount = 0;
     let cacheHits = 0;
 
     for (const row of rows) {
@@ -519,17 +544,23 @@ const computeFooterTotals = (data: TypedPerfTableRow[], hideHostOps: boolean): P
             hostOpsCount++;
         }
 
-        if (!row.isFirstHashOccurrence) {
-            nonUniqueOpsCount++;
+        // The hit percentage is out of the repeats that recorded a result, as in `program_cache`
+        // (`backend/ttnn_visualizer/agent/tools.py`). Unlike that tool, which reads the whole report,
+        // this counts the rows the table shows: the selected range after any active filters. #2169
+        const repeatCacheOutcome = getRepeatCacheOutcome(row);
 
-            if (row.cache_hit) {
+        if (repeatCacheOutcome === RepeatCacheOutcome.UNRECORDED) {
+            unrecordedRepeatOpsCount++;
+        } else if (repeatCacheOutcome !== null) {
+            recordedRepeatOpsCount++;
+
+            if (repeatCacheOutcome === RepeatCacheOutcome.HIT) {
                 cacheHits++;
             }
         }
     }
 
     const deviceOpsCount = rows.length - hostOpsCount;
-    const cacheHitPercent = nonUniqueOpsCount > 0 ? (cacheHits / nonUniqueOpsCount) * 100 : 0;
 
     return {
         [ColumnKeys.TotalPercent]: '100%',
@@ -538,7 +569,7 @@ const computeFooterTotals = (data: TypedPerfTableRow[], hideHostOps: boolean): P
             ? `${deviceOpsCount} device ops`
             : `${rows.length} ops\n(${deviceOpsCount} device ops + ${hostOpsCount} host ops)`,
         [ColumnKeys.OpToOpGap]: `${formatSize(opToOpGapSum, 2)} µs`,
-        [ColumnKeys.CacheHit]: `${formatPercentage(cacheHitPercent).toString()} expected cache hits`,
+        [ColumnKeys.CacheHit]: getCacheHitSummary(cacheHits, recordedRepeatOpsCount, unrecordedRepeatOpsCount),
     };
 };
 

@@ -885,3 +885,123 @@ describe('PerfTable high dispatch highlight', () => {
         expect(screen.queryByRole('columnheader', { name: /Slow/ })).toBeNull();
     });
 });
+
+describe('PerfTable expected cache hits footer (#2169)', () => {
+    const matmulCall = (id: string, hash: string, cacheHit: boolean | null) =>
+        makeRawPerfRow({ id, op_code: 'Matmul', raw_op_code: 'Matmul', hash, cache_hit: cacheHit });
+
+    // Footer cells carry no column key, so find this one by the summaries it can show.
+    const getCacheHitFooterCell = () => {
+        const footer = screen.getByRole('table').querySelector('tfoot')!;
+        const cell = Array.from(footer.querySelectorAll('td')).find((td) =>
+            /expected cache hits|No cache results recorded|No repeat calls/.test(td.textContent ?? ''),
+        );
+        expect(cell).toBeDefined();
+        return cell!;
+    };
+
+    it('excludes unrecorded repeat calls from the hit percentage and reports the excluded count', () => {
+        renderTable(
+            enrichRowData(
+                [
+                    matmulCall('1', 'h1', false),
+                    matmulCall('2', 'h1', true),
+                    matmulCall('3', 'h1', false),
+                    matmulCall('4', 'h1', null),
+                    matmulCall('5', 'h1', null),
+                ],
+                [],
+                null,
+            ),
+        );
+
+        const cell = getCacheHitFooterCell();
+        expect(cell).toHaveClass('pre-wrap');
+        expect(cell.textContent).toBe('50% expected cache hits\n(2 unrecorded excluded)');
+    });
+
+    it('reports when all repeat calls have no recorded cache results and ignores hashless placeholders', () => {
+        const rows = enrichRowData(
+            [
+                matmulCall('1', 'h1', false),
+                matmulCall('2', 'h1', null),
+                matmulCall('3', 'h1', null),
+                matmulCall('4', 'h1', null),
+            ],
+            [],
+            null,
+        );
+        const placeholder = baseRow({
+            id: 99,
+            raw_op_code: 'Reshape MISSING',
+            hash: null,
+            cache_hit: null,
+            isFirstHashOccurrence: false,
+        });
+
+        renderTable([...rows, placeholder]);
+
+        expect(getCacheHitFooterCell().textContent).toBe('No cache results recorded\n(3 unrecorded)');
+    });
+
+    it('shows a bare percentage when every repeat call recorded a result', () => {
+        renderTable(
+            enrichRowData(
+                [
+                    matmulCall('1', 'h1', false),
+                    matmulCall('2', 'h1', true),
+                    matmulCall('3', 'h1', true),
+                    matmulCall('4', 'h1', true),
+                    matmulCall('5', 'h1', false),
+                ],
+                [],
+                null,
+            ),
+        );
+
+        expect(getCacheHitFooterCell().textContent).toBe('75% expected cache hits');
+    });
+
+    it('says there are no repeat calls rather than 0% when every program runs once', () => {
+        renderTable(enrichRowData([matmulCall('1', 'h1', false), matmulCall('2', 'h2', true)], [], null));
+
+        expect(getCacheHitFooterCell().textContent).toBe('No repeat calls');
+    });
+
+    it('ignores an unrecorded first call', () => {
+        renderTable(enrichRowData([matmulCall('1', 'h1', null), matmulCall('2', 'h1', true)], [], null));
+
+        expect(getCacheHitFooterCell().textContent).toBe('100% expected cache hits');
+    });
+
+    it('tracks the first call of each hash separately', () => {
+        renderTable(
+            enrichRowData(
+                [
+                    matmulCall('1', 'h1', false),
+                    matmulCall('2', 'h2', false),
+                    matmulCall('3', 'h1', true),
+                    matmulCall('4', 'h2', null),
+                ],
+                [],
+                null,
+            ),
+        );
+
+        expect(getCacheHitFooterCell().textContent).toBe('100% expected cache hits\n(1 unrecorded excluded)');
+    });
+
+    it('still counts visible repeats as repeats when their first call is outside the shown rows', () => {
+        // First calls are marked over the whole report, so a range or filter that hides one leaves the
+        // later rows as repeats, while the footer counts only the rows shown.
+        const rows = enrichRowData(
+            [matmulCall('1', 'h1', false), matmulCall('2', 'h1', true), matmulCall('3', 'h1', false)],
+            [],
+            null,
+        );
+
+        renderTable(rows.slice(1));
+
+        expect(getCacheHitFooterCell().textContent).toBe('50% expected cache hits');
+    });
+});
