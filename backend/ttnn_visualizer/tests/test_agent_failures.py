@@ -27,7 +27,7 @@ from ttnn_visualizer.agent import (
 )
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
 from ttnn_visualizer.queries import DatabaseQueries
-from ttnn_visualizer.tests.captured_graphs import circular_buffer
+from ttnn_visualizer.tests.captured_graphs import CapturedGraph, circular_buffer
 
 _SCHEMA = """
 CREATE TABLE operations (operation_id int UNIQUE, name text, duration float);
@@ -1402,6 +1402,44 @@ class TestOperationDetail:
         ]
         assert "1 device operation launch whose" in detail["caveat"]
         assert "unknown, not zero" in detail["caveat"]
+
+    def test_a_failed_launch_left_open_has_its_buffers_counted_in_the_caveat(
+        self, tmp_path
+    ):
+        """A capture written before tt-metal #53041 leaves the failed scope open, so its
+        buffers are not listed; the error names it and the caveat counts them. #2218"""
+        graph = (
+            CapturedGraph()
+            .start("ttnn::matmul")
+            .start("TilizeDeviceOperation")
+            .free_all()
+            .cb()
+            .end("TilizeDeviceOperation")
+            .start("MatmulDeviceOperation")
+            .free_all()
+            .cb(200)
+            .cb(300)
+            .nodes
+        )
+        registry, handle = _report(
+            tmp_path,
+            operations=[(1, "ttnn.matmul")],
+            errors=[(1, "ttnn.matmul", "TT_THROW", _OUT_OF_MEMORY)],
+            graphs=[(1, graph)],
+        )
+
+        detail = linking.operation_detail(registry, handle, operation_id=1)
+
+        assert detail["error"]["failed_device_operations"] == ["MatmulDeviceOperation"]
+        buffers = detail["circular_buffers"]
+        assert buffers["circular_buffer_count"] == 1
+        assert buffers["unclosed_circular_buffer_count"] == 2
+        assert buffers["unclosed_device_operations"] == [
+            {"name": "MatmulDeviceOperation", "circular_buffer_count": 2}
+        ]
+        assert "leaves out 2 circular buffers" in detail["caveat"]
+        assert "undercount" in detail["caveat"]
+        assert "unknown, not zero" not in detail["caveat"]
 
     def test_its_circular_buffers_are_read_from_the_rank_asked_for(self, tmp_path):
         registry, handle = _two_rank_report(

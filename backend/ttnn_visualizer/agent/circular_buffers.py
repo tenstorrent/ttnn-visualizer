@@ -60,7 +60,9 @@ CIRCULAR_BUFFERS_NOTE = (
     "gives its length. A graph records a program's circular buffers only at its "
     "first launch: a relaunch from the program cache frees and allocates none, so a "
     "device operation that freed but recorded no buffers is counted under "
-    "unrecorded_device_operations, not as one that used none. At most "
+    "unrecorded_device_operations, not as one that used none. An older capture leaves "
+    "a failed launch's scope open, and its circular buffers are counted under "
+    "unclosed_device_operations rather than listed. At most "
     f"{MAX_LIMIT} rows are listed, {MAX_DETAILED_LIMIT} when include is set; the "
     "counts cover them all."
 )
@@ -245,6 +247,20 @@ class Launch:
 
 
 @dataclass
+class Unclosed:
+    """A device operation whose circular buffers were dropped without a snapshot of its
+    scope, as happens when a capture written before tt-metal #53041 leaves a failed
+    launch's scope open. #2218
+
+    Not in the app, which drops them alike.
+    """
+
+    operation_id: object
+    name: object
+    circular_buffer_count: int = 0
+
+
+@dataclass
 class Summary:
     # In the order `cbPressureByOpId` holds them: first set, last value.
     snapshots: List[Snapshot] = field(default_factory=list)
@@ -253,6 +269,8 @@ class Summary:
     allocating_operation_ids: Set[object] = field(default_factory=set)
     # In the order they first freed.
     launches: List[Launch] = field(default_factory=list)
+    # In the order their buffers were first dropped.
+    unclosed: List[Unclosed] = field(default_factory=list)
 
     def unrecorded(self) -> List[Launch]:
         """The launches that recorded no circular buffers: most are a cached program's
@@ -285,6 +303,7 @@ def summarise(nodes: Sequence[object]) -> Summary:
     snapshots: Dict[object, Snapshot] = {}
     allocating: Set[object] = set()
     launches: Dict[object, Launch] = {}
+    unclosed: Dict[object, Unclosed] = {}
     scopes: List[_Scope] = []
     bytes_by_device_core: Dict[str, Number] = {}
     unattributed_by_device: Dict[str, Number] = {}
@@ -320,6 +339,22 @@ def summarise(nodes: Sequence[object]) -> Summary:
                 for entry in live
             ],
         )
+
+    def count_unsnapshotted() -> None:
+        # Called as `live` is dropped. A scope a launch failed in is left open by an
+        # older capture, so neither its `function_end` nor, once the next launch's
+        # free-all is the one that clears them, its own free-all snapshots its buffers.
+        # The app drops them too; they are counted rather than listed, so the snapshots
+        # stay the app's. Rows hold `_defined` ids where `snapshots` keys raw ones.
+        snapshotted = {_defined(key) for key in snapshots}
+        for entry in live:
+            owner = entry.row.allocate_operation_id
+            if owner is None or owner in snapshotted:
+                continue
+            lost = unclosed.setdefault(
+                owner, Unclosed(owner, entry.row.allocate_operation_name)
+            )
+            lost.circular_buffer_count += 1
 
     # The app's loop starts past the first node, which a capture makes `capture_start`.
     for node in nodes[1:]:
@@ -407,6 +442,7 @@ def summarise(nodes: Sequence[object]) -> Summary:
                 for entry in live
             ):
                 snapshot(current)
+            count_unsnapshotted()
             bytes_by_device_core.clear()
             unattributed_by_device.clear()
             live = []
@@ -421,7 +457,13 @@ def summarise(nodes: Sequence[object]) -> Summary:
             if scopes:
                 scopes.pop()
 
-    return Summary(list(snapshots.values()), allocating, list(launches.values()))
+    count_unsnapshotted()
+    return Summary(
+        list(snapshots.values()),
+        allocating,
+        list(launches.values()),
+        list(unclosed.values()),
+    )
 
 
 def select_read(summary: Summary) -> List[Snapshot]:
@@ -564,6 +606,7 @@ def response(
     snapshots: Sequence[Snapshot],
     unrecorded: Sequence[Launch] = (),
     limit: int = MAX_LIMIT,
+    unclosed: Sequence[Unclosed] = (),
 ) -> Dict[str, object]:
     """`operation_detail`'s `circular_buffers`, with at most `limit` rows listed."""
     remaining = limit
@@ -606,10 +649,21 @@ def response(
         "device_operations": device_operations,
         "unrecorded_launch_count": unrecorded_count,
         "unrecorded_device_operations": unrecorded_by_name[:MAX_LIMIT],
+        "unclosed_circular_buffer_count": sum(
+            lost.circular_buffer_count for lost in unclosed
+        ),
+        "unclosed_device_operations": [
+            {"name": lost.name, "circular_buffer_count": lost.circular_buffer_count}
+            for lost in unclosed[:MAX_LIMIT]
+        ],
         "size_unit": BUFFER_SIZE_UNIT,
         "note": CIRCULAR_BUFFERS_NOTE,
     }
-    if rows_total > limit or len(unrecorded_by_name) > MAX_LIMIT:
+    if (
+        rows_total > limit
+        or len(unrecorded_by_name) > MAX_LIMIT
+        or len(unclosed) > MAX_LIMIT
+    ):
         result["truncated"] = True
     return result
 
@@ -620,7 +674,12 @@ def operation_circular_buffers(
     """The circular buffers an operation's captured graph allocated, as the app shows
     them but with a mesh's per-device sections folded, with at most `limit` listed."""
     summary = summarise(nodes)
-    return response(fold_devices(select_read(summary)), summary.unrecorded(), limit)
+    return response(
+        fold_devices(select_read(summary)),
+        summary.unrecorded(),
+        limit,
+        summary.unclosed,
+    )
 
 
 __all__ = [
@@ -631,6 +690,7 @@ __all__ = [
     "Launch",
     "Snapshot",
     "Summary",
+    "Unclosed",
     "cores_in_range",
     "fold_devices",
     "operation_circular_buffers",

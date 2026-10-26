@@ -160,6 +160,14 @@ def test_the_page_carries_the_program_cache_caveats():
     assert "program cache disabled" in page
 
 
+def test_the_page_carries_the_unclosed_scope_caveat():
+    """A failed launch's circular buffers are counted, not listed, in an older capture."""
+    page = " ".join(_read(_AGENT_DOCS).split())
+
+    assert "leaves a failed launch's scope open" in page
+    assert "`unclosed_device_operations`" in page
+
+
 def test_the_detailed_row_cap_the_page_states_is_the_enforced_one():
     """The page states both caps as numbers, so nothing else ties them to the code."""
     page = " ".join(_read(_AGENT_DOCS).split())

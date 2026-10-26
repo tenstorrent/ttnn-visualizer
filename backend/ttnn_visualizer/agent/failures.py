@@ -803,6 +803,16 @@ def operation_failure_fields(
                     "cached program relaunched; the graph records a program's "
                     "buffers only at its first launch, so they are unknown, not zero"
                 )
+            lost = buffers["unclosed_circular_buffer_count"]
+            if lost:
+                lost_buffers = "buffer" if lost == 1 else "buffers"
+                withheld.append(
+                    f"circular_buffers leaves out {lost} circular {lost_buffers} of "
+                    "the device operations in unclosed_device_operations, whose scope "
+                    "the graph never closed, as an older capture leaves a failed "
+                    "launch; they were allocated, so circular_buffer_count and "
+                    "max_bytes_per_core undercount"
+                )
     if all(
         queries.has_table(table) for table in TOOL_TABLES[McpToolName.DRAM_FALLBACKS]
     ) and _attributable(queries, scope, _FALLBACK_TABLES, withheld, "dram_fallback"):
