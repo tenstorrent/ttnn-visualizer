@@ -209,6 +209,7 @@ Applies on touch to views that draw data-proportional visuals (NPE chip cluster 
 
 - **`event_logging.py` owns the vocabulary; `src/definitions/EventLogEvent.ts` is a copy.** Keep them in sync; `test_event_logging_frontend_parity.py` enforces the contract.
 - **`docs/src/event-logging.md` is the user-facing copy of the event schema.** Every new event must name the Q1–Q5 decision from #1819 that it informs; update the documentation in the same commit. `test_event_logging_docs_parity.py` enforces the contract.
+- **A new event, field or vocabulary member changes the exported usage metrics, which need a privacy re-review.** `_PRIVACY_REVIEWED_ATTRIBUTES` in `tests/test_usage_collection.py` pins the exported shape literally, so the schema change fails until that literal is edited too; flag the edit for privacy review rather than only updating it.
 - **`MAX_BUFFERED_EVENTS` must equal `MAX_EVENT_LOG_BATCH_EVENTS`**, which bounds write atomicity rather than merely an HTTP body.
 - **The unload beacon must send a `Blob` typed `application/json`** — that content type is what keeps the request non-simple, and a bare-string beacon goes as `text/plain` and is refused.
 - **Failures are silent and batches are never re-buffered.** The only diagnostic is a `console.warn` under `import.meta.env.DEV` carrying the status, never a response body.

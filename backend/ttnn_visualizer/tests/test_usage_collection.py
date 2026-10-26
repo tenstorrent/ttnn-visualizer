@@ -501,6 +501,14 @@ def test_metrics_skip_malformed_unknown_and_free_form_lines(tmp_path):
             "os=darwin python_version=3.10\n",
             "private_mode",
         ),
+        # `version` and `python_version` have no enum, so only the reader's safe-value
+        # check keeps a path, and the username in it, out of the export.
+        (
+            "ts=2026-09-28T10:00:00Z event=app_start schema_version=1 "
+            "version=0.104.0 deployment_mode=container launch_mode=source "
+            "os=darwin python_version=/Users/private_user/.venv\n",
+            "private_user",
+        ),
     ],
 )
 def test_metrics_refuse_values_outside_the_event_schema(tmp_path, line, private_value):
@@ -981,6 +989,97 @@ def _attribute_values(point) -> dict[str, str]:
     }
 
 
+# The privacy-reviewed export shape, written out rather than read from
+# ``event_logging`` so that changing what is exported has to edit this test, and so
+# gets the privacy re-review that docs/src/event-logging.md asks for. ``None`` marks a
+# server-derived constrained string rather than a closed vocabulary.
+_REVIEWED_REPORT_KINDS = frozenset(
+    {"profiler", "performance", "npe", "mlir", "cluster_descriptor"}
+)
+_REVIEWED_VIEWS = frozenset(
+    {
+        "reports",
+        "operations",
+        "operation_details",
+        "tensors",
+        "buffers",
+        "graph",
+        "performance",
+        "npe",
+        "mlir",
+        "topology",
+        "mcp",
+    }
+)
+_PRIVACY_REVIEWED_ATTRIBUTES: dict[str, dict[str, frozenset[str] | None]] = {
+    "ttnn_visualizer_app_start_total": {
+        "version": None,
+        "deployment_mode": frozenset({"tt_metal_home", "container", "local_upload"}),
+        "launch_mode": frozenset({"source", "wheel", "hosted"}),
+        "os": frozenset({"darwin", "linux", "windows", "other"}),
+        "python_version": None,
+    },
+    "ttnn_visualizer_mcp_tool_called_total": {
+        "tool": frozenset(
+            {
+                "load_report",
+                "top_ops",
+                "op_breakdown",
+                "program_cache",
+                "zone_timings",
+                "diff_reports",
+                "find_operations",
+                "operation_detail",
+                "memory_profile",
+                "tensor_flow",
+                "operation_provenance",
+                "errors",
+                "dram_fallbacks",
+                "l1_peak",
+            }
+        ),
+        "outcome": frozenset({"ok", "refused", "error"}),
+    },
+    "ttnn_visualizer_report_loaded_total": {
+        "kind": _REVIEWED_REPORT_KINDS,
+        "source": frozenset({"upload", "remote_sync", "local_tt_metal", "demo"}),
+    },
+    "ttnn_visualizer_report_load_failed_total": {
+        "kind": _REVIEWED_REPORT_KINDS,
+        "reason_class": frozenset(
+            {
+                "unsupported_version",
+                "missing_file",
+                "parse_error",
+                "too_large",
+                "permission",
+                "other",
+            }
+        ),
+    },
+    "ttnn_visualizer_view_opened_total": {"view": _REVIEWED_VIEWS},
+    "ttnn_visualizer_view_engaged_total": {"view": _REVIEWED_VIEWS},
+}
+
+
+def test_the_event_schema_matches_the_privacy_reviewed_shape():
+    # Covers vocabulary members no recorded event happens to use, which the payload
+    # check below cannot see.
+    exported = {
+        f"ttnn_visualizer_{event.value}_total": {
+            field_name: (
+                frozenset(member.value for member in _DETAIL_FIELD_ENUMS[field_name])
+                if field_name in _DETAIL_FIELD_ENUMS
+                else None
+            )
+            for field_name in fields
+        }
+        for event, fields in EVENT_DETAIL_FIELDS.items()
+    }
+    assert exported == _PRIVACY_REVIEWED_ATTRIBUTES
+    assert _CONSTRAINED_STRING_DETAIL_FIELDS == {"version", "python_version"}
+
+
 def test_exported_attributes_are_only_schema_fields_and_machine_id(
     event_log_directory,
 ):
@@ -1001,12 +1100,9 @@ def test_exported_attributes_are_only_schema_fields_and_machine_id(
     assert snapshot is not None
     payload = build_otlp_payload(snapshot, machine_id, time_ns=2)
 
-    event_by_metric_name = {
-        f"ttnn_visualizer_{event.value}_total": event for event in EventLogEvent
-    }
-    seen_events = set()
+    seen_metrics = set()
     for metric in payload["resourceMetrics"][0]["scopeMetrics"][0]["metrics"]:
-        event = event_by_metric_name.get(metric["name"])
+        reviewed_fields = _PRIVACY_REVIEWED_ATTRIBUTES.get(metric["name"])
         data = metric.get("sum") or metric["gauge"]
         for point in data["dataPoints"]:
             values = _attribute_values(point)
@@ -1018,25 +1114,24 @@ def test_exported_attributes_are_only_schema_fields_and_machine_id(
                 COUNT_FIELD,
             ):
                 assert private_field not in values
-            if event is None:
+            if reviewed_fields is None:
                 # Collector health carries the identity and nothing else.
                 assert metric["name"].startswith("ttnn_visualizer_usage_collector_")
                 assert values == {}
                 continue
 
-            seen_events.add(event)
-            assert set(values) == set(EVENT_DETAIL_FIELDS[event])
+            seen_metrics.add(metric["name"])
+            assert set(values) == set(reviewed_fields)
             for field_name, value in values.items():
-                enum_type = _DETAIL_FIELD_ENUMS.get(field_name)
-                if enum_type is not None:
-                    assert value in {member.value for member in enum_type}
+                vocabulary = reviewed_fields[field_name]
+                if vocabulary is not None:
+                    assert value in vocabulary
                 else:
                     # Checked against the line as written rather than through the
                     # reader's own validator, so the test cannot agree by construction.
-                    assert field_name in _CONSTRAINED_STRING_DETAIL_FIELDS
                     assert value == recorded_app_start[field_name]
 
-    assert seen_events == set(EventLogEvent)
+    assert seen_metrics == set(_PRIVACY_REVIEWED_ATTRIBUTES)
 
 
 def test_field_order_does_not_split_a_series(tmp_path):
@@ -1074,34 +1169,49 @@ def test_field_order_does_not_split_a_series(tmp_path):
     assert _health_value(_flatten(payload), "parse_errors_total") == 0
 
 
-def test_exporter_does_not_modify_the_event_log(tmp_path):
-    log_path = tmp_path / "events.log"
+def test_exporter_does_not_modify_the_event_log(
+    tmp_path, usage_collection_config_path, otlp_server
+):
+    log_directory = tmp_path / "event-log"
+    log_directory.mkdir()
+    log_path = log_directory / "events.log"
+    # Repeated lines give compaction something to shrink, so a trim would rewrite the
+    # file rather than return early; the mode matches what the writer creates.
     log_path.write_text(
         "ts=2026-09-28T10:00:00Z event=view_opened schema_version=1 "
-        "view=operations count=3\n"
-        "not-logfmt\n",
+        "view=operations\n" * 4 + "not-logfmt\n",
         encoding="utf-8",
     )
+    os.chmod(log_path, 0o600)
     contents = log_path.read_bytes()
     status = log_path.stat()
-    listing = sorted(tmp_path.iterdir())
-    config = usage_collection.UsageCollectionConfig(
-        enabled=True, machine_id=uuid.uuid4().hex
+    listing = sorted(log_directory.iterdir())
+    config = _opt_in(
+        usage_collection_config_path, remote_write_endpoint=otlp_server.endpoint
     )
 
     for _ in range(2):
         snapshot = collect_usage_metrics(config, log_path=log_path)
         assert snapshot is not None
         build_otlp_payload(snapshot, config.machine_id, time_ns=2)
+        assert push_usage_metrics(log_path=log_path) is True
 
     after = log_path.stat()
     assert log_path.read_bytes() == contents
-    assert (after.st_size, after.st_mtime_ns, after.st_ino) == (
+    assert (
+        after.st_size,
+        after.st_mode,
+        after.st_mtime_ns,
+        after.st_ctime_ns,
+        after.st_ino,
+    ) == (
         status.st_size,
+        status.st_mode,
         status.st_mtime_ns,
+        status.st_ctime_ns,
         status.st_ino,
     )
-    assert sorted(tmp_path.iterdir()) == listing
+    assert sorted(log_directory.iterdir()) == listing
 
 
 def test_disabled_collection_has_no_snapshot():
