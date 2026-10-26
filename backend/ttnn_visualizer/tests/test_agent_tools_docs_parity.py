@@ -148,6 +148,7 @@ def test_the_page_carries_the_core_spread_caveats():
     assert "never pooling devices" in page
     assert "`in_log` false and no figures rather than zeros" in page
     assert "host log only, never in the device log" in page
+    assert "`device_time` is the mean across devices" in page
 
 
 def test_the_detailed_row_cap_the_page_states_is_the_enforced_one():

@@ -158,6 +158,19 @@ class TestDevicesNeverPool:
         assert [(op["id"], op["device"]) for op in ops] == [("2", 1), ("1", 0)]
         assert ops[0]["core_span"]["max_us"] == 9.0
 
+    def test_a_collectives_spans_need_not_match_its_mean_device_time(self, tmp_path):
+        """tt-perf-report keeps device 0's all-gather row but averages its duration
+        over every device, so the spans are one device's and device_time is not."""
+        perf = _op(op_code="AllGatherAsync", device_time="5.0")
+
+        result = _spread(tmp_path, THREE_CORES, [perf], perf_id="1")
+
+        op = result["ops"][0]
+        assert op["device"] == 0
+        assert op["core_span"]["max_us"] == 3.0
+        assert op["device_time"] != op["core_span"]["max_us"]
+        assert "device_time is the mean across devices" in result["note"]
+
 
 class TestRefusals:
     def test_an_unknown_perf_id_is_refused(self, tmp_path):
@@ -193,7 +206,7 @@ class TestRefusals:
     def test_a_log_without_phases_has_no_durations_to_spread(self, tmp_path):
         rows = ["0,1,1,BRISC,10,1000,0,1024,BRISC-KERNEL,1,brisc.cc"]
 
-        with pytest.raises(DataFormatError, match="no kernel durations"):
+        with pytest.raises(ValueError, match="no kernel durations"):
             _spread(tmp_path, rows, [_op()], header=UNTYPED_HEADER, perf_id="1")
 
 
@@ -416,6 +429,19 @@ class TestInventory:
 
         assert "core_spread" in loaded["answerable"]
 
+    def test_a_log_without_a_clock_is_not_listed(self, tmp_path):
+        """The tool refuses a log with no CHIP_FREQ, so the list must not offer it."""
+        write_device_log(tmp_path, MODERN_HEADER, THREE_CORES)
+        path = tmp_path / DeviceLogProfilerQueries.DEVICE_LOG_FILE
+        lines = path.read_text().splitlines()
+        path.write_text("\n".join(["ARCH: wormhole_b0", *lines[1:]]) + "\n")
+        write_ops_perf(tmp_path, smoke_rows())
+
+        loaded = load_report(ReportRegistry(), performance_path=str(tmp_path))
+
+        assert "zone_timings" in loaded["answerable"]
+        assert "core_spread" in loaded["unanswerable"]
+
     def test_an_answerable_log_answers(self, tmp_path):
         """Listed as answerable means the call returns rather than refuses."""
         write_device_log(tmp_path, MODERN_HEADER, THREE_CORES)
@@ -468,12 +494,14 @@ class TestThroughTheServer:
     def test_a_log_without_phases_is_refused_with_why(self, tmp_path):
         rows = ["0,1,1,BRISC,10,1000,0,1024,BRISC-KERNEL,1,brisc.cc"]
 
-        result, _outcome = self._call(
+        result, outcome = self._call(
             tmp_path, rows, {"perf_id": "1"}, header=UNTYPED_HEADER
         )
 
         assert result["isError"] is True
         assert "no kernel durations" in result["content"][0]["text"]
+        # A deliberate refusal, not an unexpected failure. #1819
+        assert outcome is McpToolOutcome.REFUSED
 
     def test_a_log_without_a_clock_is_refused(self, tmp_path):
         write_device_log(tmp_path, MODERN_HEADER, THREE_CORES)

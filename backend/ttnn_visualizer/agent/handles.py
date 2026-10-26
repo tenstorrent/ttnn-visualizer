@@ -33,6 +33,7 @@ from typing import (
     cast,
 )
 
+from ttnn_visualizer.agent.cells import finite_number
 from ttnn_visualizer.csv_queries import (
     PROGRAM_CACHE_HIT_COLUMN,
     PROGRAM_HASH_COLUMN,
@@ -599,7 +600,9 @@ def _answerable_device_log_columns(
     return columns if problem is None else None
 
 
-def _inventory(instance: Instance, perf_csv: Optional[Path]) -> Dict[str, object]:
+def _inventory(
+    instance: Instance, perf_csv: Optional[Path], metadata: Dict[str, str]
+) -> Dict[str, object]:
     """What this report can actually answer.
 
     Reported up front because the three report kinds are independent: a Blaze-style
@@ -628,15 +631,15 @@ def _inventory(instance: Instance, perf_csv: Optional[Path]) -> Dict[str, object
     profiler_path = instance.profiler_path
     device_log_columns = _answerable_device_log_columns(performance_path)
     record("zone_timings", device_log_columns is not None)
-    # Joins a perf row to its zones, so it needs both files, and durations to
-    # spread: a phase column `query_core_spans` would pair on.
+    # Joins a perf row to its zones, so it needs both files, durations to spread
+    # (a phase column `query_core_spans` would pair on) and a clock to read their
+    # cycles as time.
     record(
         "core_spread",
         perf_ready
         and device_log_columns is not None
-        and bool(
-            DeviceLogProfilerQueries.ZONE_PHASE_TOKENS.keys() & device_log_columns
-        ),
+        and bool(DeviceLogProfilerQueries.ZONE_PHASE_TOKENS.keys() & device_log_columns)
+        and bool(finite_number(metadata.get("CHIP_FREQ[MHz]"))),
     )
 
     # Per tool, against the tables it reads. A partial capture can answer
@@ -694,7 +697,7 @@ def load_report(
         "performance_path": performance,
         "capture": metadata,
         **_hardware(instance, metadata, perf_csv),
-        **_inventory(instance, perf_csv),
+        **_inventory(instance, perf_csv, metadata),
     }
 
 

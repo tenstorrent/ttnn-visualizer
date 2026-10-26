@@ -738,8 +738,10 @@ CORE_SPREAD_NOTE = (
     "gives each RISC's own kernel time. imbalance is max over median. Cores are "
     "compared within the one device each op names, since device clocks are not "
     "comparable: a merged row is the slowest device's, except an all-gather, "
-    "reduce-scatter or all-reduce, which is the first device's. per_core_*_us are "
-    "the performance CSV's own figures, where it has them. Times are microseconds."
+    "reduce-scatter or all-reduce, whose row is the first device's but whose "
+    "device_time is the mean across devices, so its core spans need not match it. "
+    "per_core_*_us are the performance CSV's own figures, where it has them. Times "
+    "are microseconds."
 )
 
 # Enough to say where the stragglers sit without listing a 130-core grid.
@@ -857,8 +859,13 @@ def core_spread(
             cast(int, whole_number(row.get("device"))),
         )
 
-    with DeviceLogProfilerQueries(instance, stream=True) as queries:
-        spans, pairing = queries.query_core_spans({run_of(row) for row in rows})
+    try:
+        with DeviceLogProfilerQueries(instance, stream=True) as queries:
+            spans, pairing = queries.query_core_spans({run_of(row) for row in rows})
+    except DataFormatError as error:
+        # A log without phases is a deliberate refusal, not an unexpected failure,
+        # and the server records only a ValueError as one.
+        raise ValueError(str(error)) from error
 
     ops: List[Dict[str, object]] = []
     short = 0

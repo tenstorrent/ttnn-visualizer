@@ -420,7 +420,8 @@ and ends failed to pair so a partial total does not read as a complete one.
 runs its own clock. A performance row's global call count is the device log's `run host ID`
 and its device is the log's `PCIe slot`, which held one-to-one on every local capture we
 checked. On a multi-device report a row is the slowest device's, except an all-gather,
-reduce-scatter or all-reduce, where it is the first device's; each operation names its
+reduce-scatter or all-reduce, where it is the first device's but its `device_time` is the
+mean across devices, so its core spans need not match it; each operation names its
 `device`. A core's span runs from its first kernel start to its last kernel end across its
 RISCs, which is how tt-metal measures `DEVICE KERNEL DURATION PER CORE`, and the
 performance CSV's own minimum, maximum and average are returned beside it where the capture

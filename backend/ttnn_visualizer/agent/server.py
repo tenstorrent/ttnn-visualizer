@@ -346,7 +346,10 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                     "perf_id": _PERF_ID_SCHEMA,
                     "limit": {
                         "type": "integer",
-                        "description": f"Ops to return, capped at {MAX_DETAILED_LIMIT}.",
+                        "description": (
+                            f"Ops to return, capped at {MAX_DETAILED_LIMIT}. Applies "
+                            "only when perf_id is omitted."
+                        ),
                     },
                 },
                 "required": ["handle"],
