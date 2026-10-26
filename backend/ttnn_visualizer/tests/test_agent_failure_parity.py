@@ -5,7 +5,8 @@
 """Parity between the agent's ports and the app's TypeScript they restate. #2154
 
 The agent restates `parseAllocationFailure.ts`, `scopeOutcomes.ts`, `getDramFallbacks.ts`,
-`resolveAddressLifetimes` and `l1PeakDecomposition.ts` in Python. This test feeds the ports
+`resolveAddressLifetimes`, `l1PeakDecomposition.ts` and the circular-buffer half of
+`processMemoryAllocations.ts` (#2185) in Python. This test feeds the ports
 a seeded matrix of inputs and writes their answers to a golden file, and
 `tests/agentFailureParity.spec.ts` asserts the app's functions give the same answers. A
 change on either side then fails a test instead of drifting.
@@ -20,9 +21,15 @@ from types import SimpleNamespace
 from typing import Callable, Dict, List, Optional, Tuple
 
 import pytest
-from ttnn_visualizer.agent import allocation_failures, dram_fallbacks, l1_peak
+from ttnn_visualizer.agent import (
+    allocation_failures,
+    circular_buffers,
+    dram_fallbacks,
+    l1_peak,
+)
 from ttnn_visualizer.agent.scope_outcomes import failed_device_operation_names
 from ttnn_visualizer.models import Buffer, BufferType
+from ttnn_visualizer.tests.captured_graphs import CORE_RANGE_SET, CapturedGraph
 from ttnn_visualizer.tests.parity_golden import Golden, round_trip
 
 GOLDEN = Golden("agentFailureParity")
@@ -785,6 +792,154 @@ def _top_operation_cases(rng: random.Random) -> List[Dict]:
     return cases
 
 
+# Every `core_range_set` form a capture writes: legacy and current corners, a union of
+# rectangles, reversed corners, and the empty set.
+_CORE_RANGE_SETS = [
+    CORE_RANGE_SET,
+    "{[0-0 - 1-1]}",
+    "{[0-0 - 1-0], [1-0 - 1-1]}",
+    "{[1-1 - 0-0]}",
+    "{}",
+]
+
+
+# Never `params: null`, an unparseable size or a missing `core_range_set` below: the app
+# throws on each, and no capture writes one, so `test_agent_circular_buffers.py` holds
+# the port's reading of them instead.
+def _curated_cb_graphs() -> List[List[object]]:
+    mesh = CapturedGraph().start("ttnn::add").start("BinaryNg").free_all()
+    for device in range(4):
+        mesh.cb(device_id=device)
+    repeat = CapturedGraph().start("Matmul").free_all()
+    # The last is device 1 again, written as a capture that emits it as a string does.
+    for device_id in (0, 1, 0, 1, "1"):
+        repeat.cb(device_id=device_id)
+    return [
+        # Every local capture's order: free all, allocate, end.
+        mesh.end().end().nodes,
+        repeat.end().nodes,
+        # The order the app's free-all branch was written for.
+        CapturedGraph().start("Tilize").cb().cb("200").free_all().end().nodes,
+        # A second batch in one scope; the scope keeps the first.
+        CapturedGraph().start("Conv").free_all().cb().free_all().cb("200").end().nodes,
+        # Each enclosing scope snapshots its child's buffers again.
+        CapturedGraph()
+        .start("ttnn::to_layout")
+        .start("ttnn::tilize")
+        .start("Tilize")
+        .free_all()
+        .cb()
+        .end()
+        .end()
+        .end()
+        .nodes,
+        # Globally allocated, every range form, and a tensor between them.
+        CapturedGraph()
+        .start("Sharded")
+        .free_all()
+        .cb(globally_allocated="1")
+        .cb(globally_allocated=1)
+        .tensor()
+        .cb(core_range_set=_CORE_RANGE_SETS[1], size=2048)
+        .cb(core_range_set=_CORE_RANGE_SETS[2], size="1024abc")
+        .cb(core_range_set=_CORE_RANGE_SETS[3], address=300)
+        .cb(core_range_set=_CORE_RANGE_SETS[4], device_id="abc")
+        .end()
+        .nodes,
+        # Sibling device operations in every capture's order: each one's free releases
+        # the last one's buffers, which must not be taken as its own. #2185
+        CapturedGraph()
+        .start("ttnn::embedding")
+        .start("Embeddings")
+        .free_all()
+        .cb(device_id=0)
+        .end()
+        .start("Embeddings")
+        .free_all()
+        .cb("200", device_id=1)
+        .end()
+        .end()
+        .nodes,
+        # A buffer before any scope opens joins the next scope's snapshot.
+        CapturedGraph().cb().start("Late").cb("200").end().nodes,
+    ]
+
+
+def _cb_graph(rng: random.Random) -> List[object]:
+    graph = CapturedGraph()
+    depth = 0
+    for _ in range(rng.randint(1, 24)):
+        kind = rng.choice(["start", "start", "end", "free", "cb", "cb", "cb", "tensor"])
+        if kind == "start":
+            graph.start(rng.choice(["Tilize", "Matmul", "ttnn::add"]))
+            depth += 1
+        elif kind == "end" and depth:
+            graph.end()
+            depth -= 1
+        elif kind == "free":
+            graph.free_all()
+        elif kind == "tensor":
+            graph.tensor()
+        elif kind == "cb":
+            params: Dict = {
+                "core_range_set": rng.choice(_CORE_RANGE_SETS),
+                "globally_allocated": rng.choice(["0", "1", 0, 1]),
+            }
+            device = rng.choice([0, 1, "1", "", None])
+            if device is not None:
+                params["device_id"] = device
+            graph.cb(
+                rng.choice(["100", "200", 300]),
+                rng.choice(["4096", 2048, "1024abc"]),
+                **params,
+            )
+    for _ in range(depth):
+        graph.end()
+    return graph.nodes
+
+
+def _app_snapshot(snapshot: circular_buffers.Snapshot) -> Dict:
+    """`CBPressureSnapshot`, less each row's expanded `cores` and its `nodeId`."""
+    figures = [
+        snapshot.max_bytes,
+        snapshot.unattributed_bytes,
+        *snapshot.by_core.values(),
+    ]
+    assert all(math.isfinite(value) for value in figures), "a size the app reads as NaN"
+    return {
+        "byCore": snapshot.by_core,
+        "maxBytes": snapshot.max_bytes,
+        "unattributedBytes": snapshot.unattributed_bytes,
+        "allocations": [
+            {
+                "address": row.address,
+                "size": row.size,
+                "numCores": row.core_count,
+                "coreRangeSet": row.core_range_set,
+                "allocateOperationId": row.allocate_operation_id,
+                "allocateOperationName": row.allocate_operation_name,
+                "globallyAllocated": row.globally_allocated,
+                "deviceCount": row.device_count,
+            }
+            for row in snapshot.allocations
+        ],
+    }
+
+
+def _circular_buffer_cases(rng: random.Random) -> List[Dict]:
+    graphs = _curated_cb_graphs() + [_cb_graph(rng) for _ in range(40)]
+    return [
+        {
+            "nodes": nodes,
+            "snapshots": [
+                [snapshot.operation_id, _app_snapshot(snapshot)]
+                for snapshot in circular_buffers.summarise(nodes).snapshots
+            ],
+        }
+        for nodes in graphs
+    ]
+
+
 def _generate_golden() -> Dict:
     rng = random.Random(_SEED)
     return {
@@ -799,6 +954,7 @@ def _generate_golden() -> Dict:
         "addressLifetimes": _address_lifetime_cases(rng),
         "l1Peak": _l1_peak_cases(rng),
         "topOperations": _top_operation_cases(rng),
+        "circularBuffers": _circular_buffer_cases(rng),
     }
 
 
@@ -856,6 +1012,58 @@ def test_the_golden_exercises_every_branch():
     assert any(
         len(case["top"]) < len(case["entries"]) for case in golden["topOperations"]
     )
+    rows = [
+        row
+        for case in golden["circularBuffers"]
+        for _, snapshot in case["snapshots"]
+        for row in snapshot["allocations"]
+    ]
+    assert any(row["deviceCount"] > 1 for row in rows)
+    assert any(row["globallyAllocated"] for row in rows)
+    assert any(row["numCores"] == 0 for row in rows)
+    assert any(row["allocateOperationId"] is None for row in rows)
+    assert any(
+        snapshot["unattributedBytes"]
+        for case in golden["circularBuffers"]
+        for _, snapshot in case["snapshots"]
+    )
+    # A repeat on one device: two rows of one identity in one snapshot.
+    assert any(
+        len(identities) > len(set(identities))
+        for case in golden["circularBuffers"]
+        for identities in (
+            [
+                (row["address"], row["size"], row["coreRangeSet"])
+                for _, snapshot in case["snapshots"]
+                for row in snapshot["allocations"]
+            ],
+        )
+    )
+    # Snapshots taken at a free-all and at a scope's end, and a graph with several.
+    taken_at = {
+        case["nodes"][next_id]["node_type"]
+        for case in golden["circularBuffers"]
+        for next_id in _snapshot_triggers(case["nodes"])
+    }
+    assert taken_at == {"circular_buffer_deallocate_all", "function_end"}
+    assert any(len(case["snapshots"]) > 1 for case in golden["circularBuffers"])
+
+
+def _snapshot_triggers(nodes: List[Dict]) -> List[int]:
+    """The index of the node at which each snapshot of `nodes` is taken."""
+    triggers = []
+    for index in range(1, len(nodes)):
+        before = {
+            snapshot.operation_id: snapshot
+            for snapshot in circular_buffers.summarise(nodes[:index]).snapshots
+        }
+        after = {
+            snapshot.operation_id: snapshot
+            for snapshot in circular_buffers.summarise(nodes[: index + 1]).snapshots
+        }
+        if before != after:
+            triggers.append(index)
+    return triggers
 
 
 def test_the_tool_s_replay_differs_only_in_the_residents_it_keeps():

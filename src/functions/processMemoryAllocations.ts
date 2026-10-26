@@ -14,6 +14,8 @@ import { getCoresInRangeList } from './math';
 // so the two cannot disagree about a CB's device count. #1879
 export { SINGLE_DEVICE_KEY } from './cbDeviceSlots';
 
+// The circular-buffer half is mirrored as `summarise` in
+// `backend/ttnn_visualizer/agent/circular_buffers.py`. #2185
 export function processMemoryAllocations(
     graph: Node[],
     // _inputs: { id: number; size: number | null }[],
@@ -187,8 +189,16 @@ export function processMemoryAllocations(
             // Snapshot before clearing so the modal can recreate the pressure
             // state seen by the just-completed kernel. Attribute to the
             // innermost open function_start — that's the DeviceOp whose CBs
-            // are being released.
-            if (currentOp) {
+            // are being released — but only when it allocated one of them.
+            // In raw capture order a DeviceOp frees before it allocates, so its
+            // free releases the previous DeviceOp's CBs, which that one's
+            // `function_end` already snapshotted; taken here, they would be
+            // attributed to this DeviceOp and keep its own from being
+            // snapshotted. The modal passes nodes sorted by
+            // `sortDeviceOperationsByBufferDeallocation`, which puts each free
+            // after its CBs, so this matters to raw-order callers such as the
+            // agent parity golden. #2185
+            if (currentOp && liveCBs.some((cb) => cb.allocateOperationId === currentOp.id)) {
                 snapshotCBPressure(currentOp.id);
             }
             cbBytesByDeviceCore.clear();

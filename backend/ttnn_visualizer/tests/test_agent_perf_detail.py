@@ -24,6 +24,7 @@ from ttnn_visualizer.csv_queries import (
     OpsPerformanceReportQueries,
     ResolvedSignposts,
 )
+from ttnn_visualizer.tests.captured_graphs import CapturedGraph
 from ttnn_visualizer.tests.smoke_capture import smoke_rows, write_ops_perf
 from ttnn_visualizer.tests.test_agent_linking import _graph, _write_profiler
 from ttnn_visualizer.tests.test_agent_tools import _perf_report
@@ -1178,8 +1179,9 @@ def _dense_rows():
     return rows
 
 
-def _linked_table(tmp_path, rows):
-    """A tool table over `rows` and one profiler operation that launched all of them."""
+def _linked_table(tmp_path, rows, graph_of=None):
+    """A tool table over `rows` and one profiler operation that launched all of them,
+    whose graph is `graph_of` the launched op codes."""
     write_ops_perf(tmp_path / "perf", rows)
     performance_only = ReportRegistry()
     handle = load_report(performance_only, performance_path=str(tmp_path / "perf"))
@@ -1189,7 +1191,13 @@ def _linked_table(tmp_path, rows):
     ]
     profiler_path = _write_profiler(
         tmp_path / "profiler",
-        {1: _graph("ttnn.model", *launched, nested=False)},
+        {
+            1: (
+                graph_of(launched)
+                if graph_of
+                else _graph("ttnn.model", *launched, nested=False)
+            )
+        },
         operations=[(1, "ttnn.model")],
     )
     registry = ReportRegistry()
@@ -1210,6 +1218,10 @@ class TestAnswerSize:
     def table(self, tmp_path):
         """Five smoke runs, one profiler operation launching all of them, and one
         repeat call that missed the program cache."""
+        return self._table(tmp_path)
+
+    @staticmethod
+    def _table(tmp_path, graph_of=None):
         rows = [dict(row) for _ in range(5) for row in smoke_rows()]
         seen = set()
         for row in rows:
@@ -1221,7 +1233,7 @@ class TestAnswerSize:
         first_repeat = len(rows) // 5
         for row in rows[first_repeat : first_repeat + 2]:
             row[PROGRAM_CACHE_HIT_COLUMN] = "False"
-        return _linked_table(tmp_path, rows)
+        return _linked_table(tmp_path, rows, graph_of)
 
     @pytest.fixture
     def dense(self, tmp_path):
@@ -1279,6 +1291,45 @@ class TestAnswerSize:
         assert (
             result["flag_basis"]["flagged_rows"]["low_utilisation"]
             == result["perf_row_count"]
+        )
+
+    def test_operation_detail_with_long_circular_buffer_ranges_fits_the_budget(
+        self, tmp_path
+    ):
+        """Every core its own rectangle, as Blackhole captures write a range, on more
+        circular buffers than the row cap lists."""
+        long_range = (
+            "{"
+            + ", ".join(
+                f"[(x={x},y={y}) - (x={x},y={y})]" for x in range(13) for y in range(10)
+            )
+            + "}"
+        )
+
+        def graph_of(launched):
+            graph = CapturedGraph().start("ttnn.model")
+            for name in launched:
+                graph.start(name).free_all()
+                for address in range(4):
+                    graph.cb(1000 + address, core_range_set=long_range)
+                graph.end(name)
+            return json.dumps(graph.end("ttnn.model").nodes)
+
+        table = self._table(tmp_path, graph_of)
+
+        result = self._call(
+            table, "operation_detail", {"operation_id": 1, "include": ALL_GROUPS}
+        )
+
+        buffers = result["circular_buffers"]
+        assert len(result["perf_rows"]) == MAX_DETAILED_LIMIT
+        assert buffers["truncated"] is True
+        assert buffers["circular_buffer_count"] > MAX_DETAILED_LIMIT
+        assert (
+            sum(
+                len(entry["circular_buffers"]) for entry in buffers["device_operations"]
+            )
+            == MAX_DETAILED_LIMIT
         )
 
     def test_program_cache_fits_the_budget_and_names_the_missing_operation(self, table):

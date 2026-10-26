@@ -3,6 +3,9 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 export const CLUSTER_NODE_GRID_SIZE = 6;
+/** Ports an edge holds cleanly: `getEthGridPosition` lays them out between the edge's two
+ * corner cells, so a port past this lands on a corner cell or off the chip. #1951 */
+export const MAX_PORTS_PER_EDGE = CLUSTER_NODE_GRID_SIZE - 2;
 export const CHIP_PADDING = 2; // keep in sync with ClusterView.scss `.chip { padding: 2px; }`
 export const CHIP_GAP = 5;
 export const PCIE_BADGE_SIZE = 26; // Not too large but readable
