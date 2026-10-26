@@ -48,7 +48,8 @@ describe('.claude/launch.json', () => {
 
     it('starts the backend the way the dev pairing documents', () => {
         // AGENTS.md pairs `pnpm dev` with `flask:start-debug`, not `flask:start` —
-        // the difference is the backend logs you want while working on the UI.
+        // the difference is the debug-level backend logs and gunicorn reload you want
+        // while working on the UI.
         const command = configuration('backend').runtimeArgs.join(' ');
         const script = packageJson.scripts['flask:start-debug'];
         expect(script).toBeDefined();

@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-// Mirrored as `is_device_operation` in `backend/ttnn_visualizer/agent/linking.py`.
+// Mirrored as `is_device_operation` in `backend/ttnn_visualizer/agent/scope_outcomes.py`.
 export const isDeviceOperation = (name: string): boolean =>
     !name.includes('(torch)') && !name.includes('::') && !name.includes('ttnn.') && name !== '';
 

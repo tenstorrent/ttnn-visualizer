@@ -23,7 +23,7 @@ import { BufferType, BufferTypeLabel } from '../model/BufferType';
 import L1FullnessBar from '../components/performance/L1FullnessBar';
 import PerfHeuristicFlags from '../components/performance/PerfHeuristicFlags';
 import { MathFidelity } from '../definitions/MathFidelity';
-import { CellColour } from '../definitions/CellColour';
+import { CellColour, DEFAULT_CELL_COLOUR, FALLBACK_CELL_COLOUR, WARNING_CELL_COLOUR } from '../definitions/CellColour';
 import { isHighDispatchGap, isSlowDramDominant } from './perfBoundPredicates';
 import { NOT_ANALYSED_LABEL, getNotAnalysedReason, getSlowBoundExplanation } from './perfBoundAnalysis';
 
@@ -41,10 +41,6 @@ const OPERATION_COLOURS: { [key: string]: CellColour } = {
     OptimizedConvNew: CellColour.Orange, // Deprecated - Conv2d is the new name for this operation
     Conv2d: CellColour.Orange,
 };
-
-const DEFAULT_COLOUR = CellColour.White;
-const FALLBACK_COLOUR = CellColour.Grey;
-const WARNING_COLOUR = CellColour.Yellow;
 
 // Per-RISC kernel durations run concurrently, so the device kernel duration is gated by whichever
 // RISC runs longest. Highlight the RISC(s) on that critical path so the user can see where the
@@ -105,7 +101,7 @@ export const formatCell = (
         return row?.high_dispatch ? (
             <Tooltip content={tooltipMessage}>
                 <Icon
-                    className={WARNING_COLOUR}
+                    className={WARNING_CELL_COLOUR}
                     icon={IconNames.WARNING_SIGN}
                     title={tooltipMessage}
                 />
@@ -327,7 +323,7 @@ export const describePlainCell = (row: TypedPerfTableRow, column: ColumnDefiniti
 // row has up to five of these cells, so a stateful popover per cell scales badly on large reports.
 const getNotAnalysedMarkup = (reason: string) => (
     <span
-        className={classNames(FALLBACK_COLOUR, Classes.TOOLTIP_INDICATOR)}
+        className={classNames(FALLBACK_CELL_COLOUR, Classes.TOOLTIP_INDICATOR)}
         title={reason}
     >
         {NOT_ANALYSED_LABEL}
@@ -386,11 +382,11 @@ export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColo
     // keeps coloured (perf_report.py color_row() + is_host_op()). raw_op_code is a required string
     // on every row type (device ops, placeholders, signposts), so reading it here is always safe.
     if (percentage != null && percentage < MIN_TOTAL_PERCENT && !row.raw_op_code.includes('(torch)')) {
-        return FALLBACK_COLOUR;
+        return FALLBACK_CELL_COLOUR;
     }
 
     if (row.op_type === OpType.SIGNPOST) {
-        return DEFAULT_COLOUR;
+        return DEFAULT_CELL_COLOUR;
     }
 
     if (
@@ -400,7 +396,7 @@ export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColo
         key === ColumnKeys.DeviceTime ||
         key === ColumnKeys.DeviceKernelDuration
     ) {
-        return DEFAULT_COLOUR;
+        return DEFAULT_CELL_COLOUR;
     }
 
     if (key === ColumnKeys.Bound) {
@@ -422,7 +418,7 @@ export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColo
 
         // tt-perf-report only colours the Bound cell for DRAM/FLOP/SLOW/HOST; anything else
         // (BOTH, empty, unrecognised) stays neutral (perf_report.py color_row()).
-        return DEFAULT_COLOUR;
+        return DEFAULT_CELL_COLOUR;
     }
 
     if (
@@ -456,7 +452,7 @@ export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColo
             }
         }
 
-        return DEFAULT_COLOUR;
+        return DEFAULT_CELL_COLOUR;
     }
 
     if (key === ColumnKeys.Cores && keyValue != null) {
@@ -466,7 +462,7 @@ export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColo
     if (key === ColumnKeys.OpCode) {
         const match = Object.keys(OPERATION_COLOURS).find((opCodeKey) => row.raw_op_code.includes(opCodeKey));
 
-        return match ? OPERATION_COLOURS[match] : DEFAULT_COLOUR;
+        return match ? OPERATION_COLOURS[match] : DEFAULT_CELL_COLOUR;
     }
 
     if (key === ColumnKeys.Hash) {
@@ -482,7 +478,7 @@ export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColo
             row.raw_op_code.includes('Matmul') || row.raw_op_code.includes('OptimizedConvNew');
 
         if (!isFidelityEvaluatedOp || keyValue === '') {
-            return DEFAULT_COLOUR;
+            return DEFAULT_CELL_COLOUR;
         }
 
         const parts = keyValue.split(' ');
@@ -504,22 +500,22 @@ export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColo
             return CellColour.Cyan;
         }
 
-        return DEFAULT_COLOUR;
+        return DEFAULT_CELL_COLOUR;
     }
 
     if (key === ColumnKeys.OpToOpGap) {
         // tt-perf-report only ever colours this cell red (gap > 6.5µs); a missing gap stays neutral (perf_report.py:1052).
-        return typeof keyValue === 'number' ? getOpToOpGapColour(keyValue) : DEFAULT_COLOUR;
+        return typeof keyValue === 'number' ? getOpToOpGapColour(keyValue) : DEFAULT_CELL_COLOUR;
     }
 
     if (KERNEL_RISC_KEYS.includes(key)) {
         return typeof keyValue === 'number'
             ? getKernelRiscColour(keyValue, row.device_kernel_duration)
-            : FALLBACK_COLOUR;
+            : FALLBACK_CELL_COLOUR;
     }
 
     // Shouldn't get to this point but need to return something
-    return FALLBACK_COLOUR;
+    return FALLBACK_CELL_COLOUR;
 };
 
 // Accent the RISC(s) on the op's critical path (≈ the device kernel duration); the rest keep the
@@ -527,12 +523,12 @@ export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColo
 // critical path identifies where the time goes, it does not imply the op is unhealthy.
 export const getKernelRiscColour = (riscUs: number, deviceKernelUs: number | null): CellColour => {
     if (!deviceKernelUs || deviceKernelUs <= 0) {
-        return DEFAULT_COLOUR;
+        return DEFAULT_CELL_COLOUR;
     }
 
     const share = riscUs / deviceKernelUs;
 
-    return share >= KERNEL_CRITICAL_PATH_SHARE ? CellColour.Blue : DEFAULT_COLOUR;
+    return share >= KERNEL_CRITICAL_PATH_SHARE ? CellColour.Blue : DEFAULT_CELL_COLOUR;
 };
 
 export const getCoreColour = (
@@ -563,11 +559,11 @@ export const getCoreColour = (
         }
     }
 
-    return DEFAULT_COLOUR;
+    return DEFAULT_CELL_COLOUR;
 };
 
 export const getOpToOpGapColour = (value: number): CellColour => {
-    return isHighDispatchGap(value) ? CellColour.Red : DEFAULT_COLOUR;
+    return isHighDispatchGap(value) ? CellColour.Red : DEFAULT_CELL_COLOUR;
 };
 
 // device_time is parseFloat'd, so a missing value arrives as NaN rather than null.

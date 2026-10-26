@@ -189,8 +189,9 @@ export interface PerfChartChrome {
 }
 
 /**
- * Read on use rather than captured at import: these resolve against the stylesheet, which
- * is not guaranteed to have applied when this module first evaluates. In-plot controls must
+ * Read on use rather than captured at import: these resolve against the stylesheet, and this
+ * module is also evaluated outside the app tree, by tests that set the properties on `:root`
+ * before reading them (`tests/PlotConfigurations.spec.ts`). In-plot controls must
  * match the axes they sit against, so both come from here.
  */
 export const getPerfChartChrome = (): PerfChartChrome => ({

@@ -48,6 +48,10 @@ class CacheVariant(str, Enum):
     SOURCE = "source"
     # The detail fields no row of the whole report carries, read once per handle.
     EMPTY_DETAIL_FIELDS = "empty_detail_fields"
+    # Likely DRAM fallbacks by rank, which every `operation_detail` call reads.
+    DRAM_FALLBACKS = "dram_fallbacks"
+    # The L1 peak replay by rank, which reads every operation and captured graph.
+    L1_PEAK = "l1_peak"
 
 
 # Snapshots narrowed by a scope -- a signpost range -- kept at once, across every
@@ -225,6 +229,30 @@ TOOL_TABLES: Dict[str, frozenset] = {
     # where `query_stack_traces` now guards like its neighbours rather than letting
     # SQLite's `no such table` reach the agent. #2021
     "operation_provenance": frozenset({"operations", "operation_arguments"}),
+    # The errors table is optional: a report that predates it is answered with a caveat.
+    "errors": frozenset({"operations"}),
+    # `buffers` as the app needs it: `/api/operations` joins it for a tensor's size.
+    "dram_fallbacks": frozenset(
+        {
+            "operations",
+            "operation_arguments",
+            "buffers",
+            "tensors",
+            "input_tensors",
+            "output_tensors",
+        }
+    ),
+    "l1_peak": frozenset(
+        {
+            "operations",
+            "captured_graph",
+            "buffers",
+            "devices",
+            "tensors",
+            "input_tensors",
+            "output_tensors",
+        }
+    ),
 }
 
 
@@ -278,22 +306,43 @@ def _csv_columns(path: Optional[Path]) -> frozenset:
         return frozenset()
 
 
-def _perf_csv_problem(path: Optional[Path]) -> Optional[str]:
-    """Why tt-perf-report cannot report on this CSV, or None when it can.
+def _scan_csv(
+    path: Path, encoding: Optional[str], skip_preamble: bool
+) -> Tuple[List[str], bool]:
+    """The header row, and whether any non-blank line follows it."""
+    with path.open(encoding=encoding, newline="") as source:
+        if skip_preamble:
+            source.readline()
+        # Blank lines before the header are skipped, as pandas skips them.
+        header = next(
+            (row for row in csv.reader(source) if any(c.strip() for c in row)), []
+        )
+        # Read to the end rather than stopping at the first row: the tools
+        # decode the whole file, so a bad byte anywhere has to be found here.
+        # Line by line, so a large capture is never held in memory.
+        has_data_row = False
+        for line in source:
+            has_data_row = has_data_row or bool(line.strip())
+    return header, has_data_row
 
-    None too when there is no CSV, which `performance_csv` being null already says.
+
+def _csv_problem(
+    path: Path,
+    required: frozenset,
+    *,
+    encoding: Optional[str] = None,
+    skip_preamble: bool = False,
+    strip_header: bool = False,
+) -> Optional[str]:
+    """Why the tool reading this CSV would fail on it, or None when it would not.
+
+    The keywords mirror how that tool reads the file, so the check refuses
+    exactly what the read would: `encoding` is what it decodes with (None is the
+    locale's), `skip_preamble` drops a first line it skips, and `strip_header`
+    strips header cells it strips.
     """
-    if path is None:
-        return None
     try:
-        with path.open(newline="") as source:
-            header = next(csv.reader(source), [])
-            # Read to the end rather than stopping at the first row: `top_ops`
-            # decodes the whole file, so a bad byte anywhere has to be found here.
-            # Line by line, so a large capture is never held in memory.
-            has_data_row = False
-            for line in source:
-                has_data_row = has_data_row or bool(line.strip())
+        header, has_data_row = _scan_csv(path, encoding, skip_preamble)
     except OSError as error:
         return f"unreadable: {error.strerror or error}"
     except UnicodeDecodeError as error:
@@ -301,14 +350,26 @@ def _perf_csv_problem(path: Optional[Path]) -> Optional[str]:
     except csv.Error as error:
         return f"malformed header: {error}"
 
-    if not any(cell.strip() for cell in header):
+    if not header:
         return "empty"
-    absent = TOP_OPS_REQUIRED_COLUMNS - set(header)
+    if strip_header:
+        header = [cell.strip() for cell in header]
+    absent = required - set(header)
     if absent:
         return f"missing columns: {', '.join(sorted(absent))}"
     if not has_data_row:
         return "no data rows"
     return None
+
+
+def _perf_csv_problem(path: Optional[Path]) -> Optional[str]:
+    """Why tt-perf-report cannot report on this CSV, or None when it can.
+
+    None too when there is no CSV, which `performance_csv` being null already says.
+    """
+    if path is None:
+        return None
+    return _csv_problem(path, TOP_OPS_REQUIRED_COLUMNS)
 
 
 def _perf_csv(instance: Instance) -> Optional[Path]:
@@ -328,6 +389,26 @@ def _perf_csv(instance: Instance) -> Optional[Path]:
 def perf_csv_columns(instance: Instance) -> frozenset:
     """The header of the ops perf CSV the tools read, or nothing without one."""
     return _csv_columns(_perf_csv(instance))
+
+
+def _device_log_answerable(performance_path: Optional[str]) -> bool:
+    """Whether `profile_log_device.csv` decodes cleanly, has the columns `zone_timings`
+    reads, and holds at least one data row. #2184"""
+    if performance_path is None:
+        return False
+    path = Path(performance_path, DeviceLogProfilerQueries.DEVICE_LOG_FILE)
+    if not path.is_file():
+        return False
+    # pandas decodes it as UTF-8, `__enter__` skips the `ARCH: …` line, and the
+    # header's leading spaces are stripped before any column is looked up.
+    problem = _csv_problem(
+        path,
+        DeviceLogProfilerQueries.ZONE_TIMINGS_COLUMNS,
+        encoding="utf-8",
+        skip_preamble=True,
+        strip_header=True,
+    )
+    return problem is None
 
 
 def _inventory(instance: Instance) -> Dict[str, object]:
@@ -357,11 +438,7 @@ def _inventory(instance: Instance) -> Dict[str, object]:
 
     performance_path = instance.performance_path
     profiler_path = instance.profiler_path
-    record(
-        "zone_timings",
-        performance_path is not None
-        and Path(performance_path, DeviceLogProfilerQueries.DEVICE_LOG_FILE).is_file(),
-    )
+    record("zone_timings", _device_log_answerable(performance_path))
 
     # Per tool, against the tables it reads. A partial capture can answer
     # `find_operations` and none of the rest, and saying so is the whole point

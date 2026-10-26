@@ -4,80 +4,13 @@
 
 import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
-import { buildL1PeakDecomposition } from '../functions/l1PeakDecomposition';
-import { NO_CONSUMER_OPERATION_ID, getLastValidConsumer } from '../functions/lateDeallocation';
+import { buildL1PeakDecomposition, resolveAddressLifetimes } from '../functions/l1PeakDecomposition';
 import { L1PeakStatus } from '../definitions/L1PeakDecomposition';
 import { L1PeakDecompositionState } from '../model/L1PeakDecomposition';
-import { Buffer, OperationDescription, Tensor } from '../model/APIData';
-import { BufferType, isL1BufferType } from '../model/BufferType';
+import { Buffer } from '../model/APIData';
+import { BufferType } from '../model/BufferType';
 import { activeProfilerReportAtom } from '../store/app';
 import { useBuffers, useDevices, useOperationsList } from './useAPI';
-
-interface AddressLifetimes {
-    lastUseByAddress: Map<number, number>;
-    unattributableStaleAddressCount: number;
-}
-
-/**
- * Last real use per address, for the addresses where that question has one answer.
- *
- * An address outlives the tensor that used it — resnet50 reuses 1,413,632 across 40 tensors —
- * so for a shared address there is no way to say which lifetime the resident belongs to.
- * Collapsing them (this previously took the maximum) does not hide the problem, it picks a
- * side: the maximum silently reclassifies genuinely stale residents as persistent, masking
- * 478 operation-slots on resnet50 against the 9 it reports. Leaving a shared address
- * unclassified makes the stale figure a floor instead, which is a claim the data supports.
- * #2029
- */
-const resolveAddressLifetimes = (operations: readonly OperationDescription[]): AddressLifetimes => {
-    const operationNamesById = new Map<number, string>(operations.map((operation) => [operation.id, operation.name]));
-    const lastUseByTensorId = new Map<number, { address: number; lastUse: number }>();
-
-    const consider = (tensor: Tensor) => {
-        if (tensor.address === null || !isL1BufferType(tensor.buffer_type)) {
-            return;
-        }
-        // Same definition of "a real use" as the late-deallocation overlay, so the two views
-        // cannot disagree about what counts as a use — only, per the above, about attribution.
-        const { lastConsumerOperationId } = getLastValidConsumer(tensor.consumers, operationNamesById);
-
-        lastUseByTensorId.set(tensor.id, { address: tensor.address, lastUse: lastConsumerOperationId });
-    };
-
-    operations.forEach((operation) => {
-        operation.inputs?.forEach(consider);
-        operation.outputs?.forEach(consider);
-    });
-
-    const byAddress = new Map<number, number[]>();
-
-    lastUseByTensorId.forEach(({ address, lastUse }) => {
-        const existing = byAddress.get(address);
-
-        if (existing) {
-            existing.push(lastUse);
-        } else {
-            byAddress.set(address, [lastUse]);
-        }
-    });
-
-    const lastUseByAddress = new Map<number, number>();
-    let unattributableStaleAddressCount = 0;
-
-    byAddress.forEach((lastUses, address) => {
-        // A tensor whose only consumers are deallocate calls has no last use to be late
-        // relative to, and contributes no lifetime rather than an early one.
-        const real = lastUses.filter((lastUse) => lastUse > NO_CONSUMER_OPERATION_ID);
-
-        if (real.length === 1) {
-            lastUseByAddress.set(address, real[0]);
-        } else if (real.length > 1) {
-            unattributableStaleAddressCount += 1;
-        }
-    });
-
-    return { lastUseByAddress, unattributableStaleAddressCount };
-};
 
 /**
  * Replays the run's captured graphs into a per-operation L1 peak decomposition.

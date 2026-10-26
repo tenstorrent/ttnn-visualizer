@@ -363,8 +363,9 @@ def test_production_testing_is_not_enabled_by_the_string_false(monkeypatch):
     assert config.TESTING is False
 
 
-def test_the_logging_debug_variable_does_not_enable_flask_debug(monkeypatch):
-    # ``DEBUG=true`` is what ``pnpm flask:start-debug`` sets to raise the log level.
+def test_the_dev_debug_variable_does_not_enable_flask_debug(monkeypatch):
+    # ``DEBUG=true`` is the development knob ``pnpm flask:start-debug`` sets: debug-level
+    # logging plus gunicorn ``--reload``, read by ``_is_dev_debug_requested()``.
     # Matching it to the ``DEBUG`` *attribute* would hand Flask debug mode to anyone
     # who wanted verbose logs, and ``Flask.debug`` returning truthy suppresses the
     # catch-all error handler — tracebacks in responses, under SERVER_MODE too.
@@ -398,6 +399,82 @@ def test_flask_debug_applies_after_the_class_body_has_been_evaluated(monkeypatch
     assert config.DEBUG is True
 
 
+@pytest.mark.parametrize("env_value", ["true", "1"])
+@pytest.mark.parametrize(
+    "env_name, expected",
+    [("DEBUG", True), ("FLASK_DEBUG", False)],
+)
+def test_only_the_bare_debug_variable_requests_the_dev_knob(
+    env_name, expected, env_value, monkeypatch
+):
+    # The mirror of the alias tests above: ``FLASK_DEBUG`` must not switch on verbose
+    # logging and gunicorn ``--reload`` either. Both are cleared first so a developer
+    # running under ``pnpm flask:start-debug`` can't decide the outcome. ``"1"`` keeps
+    # a helper that only accepted the literal ``"true"`` from passing. #1922
+    monkeypatch.delenv("DEBUG", raising=False)
+    monkeypatch.delenv("FLASK_DEBUG", raising=False)
+    monkeypatch.setenv(env_name, env_value)
+
+    assert app_module._is_dev_debug_requested() is expected
+
+
+@pytest.mark.parametrize("env_value", [None, "false", "0", "yes"])
+def test_the_dev_knob_is_off_for_unset_false_and_unrecognised_values(
+    env_value, monkeypatch, caplog
+):
+    # ``"yes"`` pins the helper's documented contract: an unrecognised value means off
+    # and stays quiet, unlike config booleans, which warn. Moving it onto the config
+    # parsers would change that, and this is what notices.
+    monkeypatch.delenv("DEBUG", raising=False)
+    monkeypatch.delenv("FLASK_DEBUG", raising=False)
+    if env_value is not None:
+        monkeypatch.setenv("DEBUG", env_value)
+
+    with caplog.at_level(logging.WARNING):
+        assert app_module._is_dev_debug_requested() is False
+
+    assert not caplog.records
+
+
+@pytest.mark.parametrize(
+    "debug, flask_debug, expected",
+    [
+        ("true", None, logging.DEBUG),
+        ("false", None, logging.INFO),
+        ("false", "true", logging.INFO),
+    ],
+)
+def test_the_dev_knob_sets_the_root_log_level(
+    debug, flask_debug, expected, monkeypatch, tmp_path
+):
+    # The helper tests above can't see the call site: this is what notices
+    # ``create_app`` reading ``FLASK_DEBUG`` or an inline variable again. ``DEBUG`` is
+    # set to ``"false"`` rather than deleted so a local ``backend/.env`` can't flip the
+    # off cases, since ``load_dotenv`` doesn't override what is already set. #1922
+    monkeypatch.setenv("DEBUG", debug)
+    if flask_debug is None:
+        monkeypatch.delenv("FLASK_DEBUG", raising=False)
+    else:
+        monkeypatch.setenv("FLASK_DEBUG", flask_debug)
+
+    # ``create_app`` sets the root logger and every handler's level process-wide, so
+    # leaving them changed would make later ``caplog`` tests order-dependent.
+    root_logger = logging.getLogger()
+    original_level = root_logger.level
+    original_handlers = {handler: handler.level for handler in root_logger.handlers}
+    try:
+        create_app(settings_override=base_test_settings(str(tmp_path)))
+
+        assert root_logger.level == expected
+    finally:
+        root_logger.setLevel(original_level)
+        for handler in list(root_logger.handlers):
+            if handler in original_handlers:
+                handler.setLevel(original_handlers[handler])
+            else:
+                root_logger.removeHandler(handler)
+
+
 ENV_SAMPLE_PATH = Path(__file__).parents[3] / ".env.sample"
 COMMENTED_SETTING_PATTERN = re.compile(r"^#\s*([A-Z][A-Z0-9_]*)=(.*)$")
 
@@ -410,7 +487,8 @@ def _documented_boolean_defaults():
 
     Yields ``(env_name, attribute, value)`` triples, since the two names need not
     match: ``FLASK_DEBUG`` is what feeds ``DEBUG``, so the file's bare ``DEBUG`` line
-    is the log-level knob and no config attribute's variable at all.
+    is the development knob ``_is_dev_debug_requested`` reads, and no config attribute's
+    variable at all.
     """
     if not ENV_SAMPLE_PATH.exists():
         pytest.skip(f"{ENV_SAMPLE_PATH.name} is not part of the installed package")
@@ -734,7 +812,8 @@ def test_every_strict_boolean_names_a_real_boolean_setting():
 
 def test_every_env_alias_names_a_real_setting():
     # Same string-keyed hazard, with a worse failure: a dead alias sends the loop back
-    # to the attribute name, which for ``DEBUG`` is the log-level variable.
+    # to the attribute name, which for ``DEBUG`` is the development knob
+    # ``_is_dev_debug_requested()`` reads.
     assert set(_ENV_ALIASES) <= set(vars(DefaultConfig))
 
     # An alias pointing at a name that is also an attribute would have the loop write
