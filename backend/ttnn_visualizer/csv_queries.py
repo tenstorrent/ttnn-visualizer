@@ -88,7 +88,9 @@ _PERF_REPORT_DIR = os.path.dirname(os.path.abspath(perf_report.__file__))
 # Stdlib frames that sit between a library's call and the `SystemExit`: the `exit()`
 # builtin and `ArgumentParser.error`. `sys.exit` is C, so it adds no frame.
 _EXIT_HELPER_FILES = frozenset(
-    os.path.abspath(module.__file__) for module in (_sitebuiltins, argparse)
+    os.path.abspath(path)
+    for path in (_sitebuiltins.__file__, argparse.__file__)
+    if path is not None
 )
 
 
