@@ -217,8 +217,9 @@ describe('DeviceOperationsFullRender - per-device CB fan-out (#1844)', () => {
     });
 
     it("shows a DeviceOp's own CBs, not the previous one's, in capture order (#2185)", () => {
-        // Every capture frees before it allocates, so the second DeviceOp's free
-        // releases the first's CBs; the modal showed those as the second's.
+        // In raw capture order a DeviceOp frees before it allocates, so the second
+        // DeviceOp's free releases the first's CBs. The app sorts each free after
+        // its CBs before rendering; this pins the raw order the port reads.
         const graph = [
             captureStart(),
             functionStart('Embeddings'),

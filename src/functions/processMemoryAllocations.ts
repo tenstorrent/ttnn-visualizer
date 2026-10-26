@@ -190,10 +190,14 @@ export function processMemoryAllocations(
             // state seen by the just-completed kernel. Attribute to the
             // innermost open function_start — that's the DeviceOp whose CBs
             // are being released — but only when it allocated one of them.
-            // Captures free before they allocate, so a DeviceOp's own free
-            // releases the previous DeviceOp's CBs, which that one's
-            // `function_end` already snapshotted; taken here, they showed as
-            // this DeviceOp's and kept its own from ever being snapshotted. #2185
+            // In raw capture order a DeviceOp frees before it allocates, so its
+            // free releases the previous DeviceOp's CBs, which that one's
+            // `function_end` already snapshotted; taken here, they would be
+            // attributed to this DeviceOp and keep its own from being
+            // snapshotted. The modal passes nodes sorted by
+            // `sortDeviceOperationsByBufferDeallocation`, which puts each free
+            // after its CBs, so this matters to raw-order callers such as the
+            // agent parity golden. #2185
             if (currentOp && liveCBs.some((cb) => cb.allocateOperationId === currentOp.id)) {
                 snapshotCBPressure(currentOp.id);
             }
