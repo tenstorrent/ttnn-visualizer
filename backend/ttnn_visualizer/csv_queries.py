@@ -2,6 +2,7 @@
 #
 # SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+import argparse
 import csv
 import json
 import logging
@@ -27,6 +28,7 @@ from typing import (
     overload,
 )
 
+import _sitebuiltins
 import matplotlib
 import matplotlib.pyplot as plt
 import orjson
@@ -37,6 +39,7 @@ from ttnn_visualizer.exceptions import (
     DataFormatError,
     InvalidSignpostRange,
     PerformanceReportNotLoadedException,
+    PerfReportExit,
 )
 from ttnn_visualizer.models import Instance
 from ttnn_visualizer.utils import newest_ops_perf_file
@@ -78,6 +81,33 @@ def _stacked_report_plot_skipped():
         yield
     finally:
         perf_report.HAS_MATPLOTLIB = has_matplotlib
+
+
+_PERF_REPORT_DIR = os.path.dirname(os.path.abspath(perf_report.__file__))
+
+# Stdlib frames that sit between a library's call and the `SystemExit`: the `exit()`
+# builtin and `ArgumentParser.error`. `sys.exit` is C, so it adds no frame.
+_EXIT_HELPER_FILES = frozenset(
+    os.path.abspath(path)
+    for path in (_sitebuiltins.__file__, argparse.__file__)
+    if path is not None
+)
+
+
+def _raised_by_perf_report(error: BaseException) -> bool:
+    """Whether tt-perf-report's own code raised this `SystemExit`.
+
+    Decided by the innermost frame once the stdlib exit helpers are passed over, not
+    by tt-perf-report being anywhere on the stack: gunicorn's timeout handler
+    (`Worker.handle_abort`) exits from a frame of its own while tt-perf-report is
+    still running, and that exit must propagate. #2183
+    """
+    frames = traceback.extract_tb(error.__traceback__)
+    while frames and os.path.abspath(frames[-1].filename) in _EXIT_HELPER_FILES:
+        frames.pop()
+    return bool(frames) and (
+        os.path.dirname(os.path.abspath(frames[-1].filename)) == _PERF_REPORT_DIR
+    )
 
 
 # Cell values after NaN sanitization; matches LocalCSVQueryRunner.execute_query.
@@ -1242,6 +1272,20 @@ class OpsPerformanceReportQueries:
                         cls.DEFAULT_STACKED_CSV_FILE,
                         not merge_devices,
                     )
+            except SystemExit as e:
+                # tt-perf-report calls sys.exit(1) on unparseable inputs (e.g. missing
+                # DEVICE ID). Convert library exits so the MCP server stays up and the
+                # HTTP route returns 422, while letting worker aborts propagate. #2183
+                if not _raised_by_perf_report(e):
+                    raise
+                logger.exception("tt-perf-report exited while loading report")
+                # Only a genuine int is echoed: `sys.exit("...")` carries free text.
+                exit_code = (
+                    e.code
+                    if isinstance(e.code, int) and not isinstance(e.code, bool)
+                    else None
+                )
+                raise PerfReportExit(exit_code) from e
             except Exception as e:
                 logger.error(f"Error loading report: {e}")
                 logger.error(f"Full traceback:\n{traceback.format_exc()}")
@@ -1585,8 +1629,14 @@ class DegradedPerformanceReport(Exception):
 def _generate_performance_report(
     source: _PerformanceReportSource, options: _PerformanceReportOptions
 ) -> Dict:
-    raw_csv = Path(source.path).read_text()
-    return OpsPerformanceReportQueries._generate_report_uncached(raw_csv, options)
+    csv_path = Path(source.path)
+    raw_csv = csv_path.read_text()
+    try:
+        return OpsPerformanceReportQueries._generate_report_uncached(raw_csv, options)
+    except PerfReportExit as e:
+        # Named here, not in the cached generator, so its signature stays
+        # (raw_csv, options). The basename only: hosted error bodies reach users.
+        raise PerfReportExit(e.exit_code, subject=csv_path.name) from e.__cause__
 
 
 @lru_cache(maxsize=MAX_CACHED_PERFORMANCE_REPORTS)
