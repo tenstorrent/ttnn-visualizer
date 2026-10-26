@@ -345,11 +345,11 @@ def summarise(nodes: Sequence[object]) -> Summary:
         # older capture, so neither its `function_end` nor, once the next launch's
         # free-all is the one that clears them, its own free-all snapshots its buffers.
         # The app drops them too; they are counted rather than listed, so the snapshots
-        # stay the app's. Rows hold `_defined` ids where `snapshots` keys raw ones.
-        snapshotted = {_defined(key) for key in snapshots}
+        # stay the app's. Rows hold `_defined` ids where `snapshots` keys raw ones, but
+        # they differ only for a missing id, which is None here and skipped.
         for entry in live:
             owner = entry.row.allocate_operation_id
-            if owner is None or owner in snapshotted:
+            if owner is None or owner in snapshots:
                 continue
             lost = unclosed.setdefault(
                 owner, Unclosed(owner, entry.row.allocate_operation_name)
