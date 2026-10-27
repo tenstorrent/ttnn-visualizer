@@ -43,7 +43,7 @@
     "lint:ts": "pnpm exec tsc --noEmit",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "perf:golden": "UPDATE_PERF_GOLDEN=1 uv run pytest backend/ttnn_visualizer/tests/test_perf_report_contract.py",
-    "agent:parity-golden": "UPDATE_AGENT_PARITY_GOLDEN=1 uv run pytest backend/ttnn_visualizer/tests/test_agent_failure_parity.py",
+    "agent:parity-golden": "UPDATE_AGENT_PARITY_GOLDEN=1 uv run pytest backend/ttnn_visualizer/tests/test_agent_failure_parity.py backend/ttnn_visualizer/tests/test_agent_perf_flags_parity.py",
     "preinstall": "npx only-allow pnpm",
     "prepare": "husky",
     "preview": "vite preview",

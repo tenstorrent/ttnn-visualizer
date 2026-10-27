@@ -23,7 +23,6 @@ This module sits above `tools` and `operations` and is the only one that reads b
 which is what keeps those two from importing each other.
 """
 
-import json
 import logging
 import re
 import sqlite3
@@ -35,12 +34,13 @@ from functools import partial
 from typing import Dict, List, NamedTuple, Optional, Sequence, Set, Tuple
 
 from tt_perf_report.perf_report import HOST_OP_MARKER
-from ttnn_visualizer.agent import failures, operations, perf_detail, tools
+from ttnn_visualizer.agent import failures, operations, perf_detail, perf_flags, tools
 from ttnn_visualizer.agent.bounds import (
     MAX_LIMIT,
     GraphTooLargeError,
     ensure_graph_readable,
 )
+from ttnn_visualizer.agent.captured_graph import UnreadableGraphError, parse_graph
 from ttnn_visualizer.agent.handles import CacheVariant, ReportRegistry
 from ttnn_visualizer.agent.scope_outcomes import is_device_operation, scope_pairing
 from ttnn_visualizer.models import Instance
@@ -238,10 +238,6 @@ def match_device_operations(
     )
 
 
-class UnreadableGraphError(ValueError):
-    """A captured graph that is not a JSON list of nodes."""
-
-
 def _redacted(error: Exception) -> str:
     """An error's text with the system temp directory masked.
 
@@ -270,12 +266,7 @@ def _device_operation_names(raw: Optional[str]) -> Dict[NodeOrder, List[str]]:
     names: Dict[NodeOrder, List[str]] = {order: [] for order in NodeOrder}
     if not raw:
         return names
-    try:
-        nodes = json.loads(raw)
-    except ValueError as error:
-        raise UnreadableGraphError(str(error)) from None
-    if not isinstance(nodes, list):
-        raise UnreadableGraphError("not a list of nodes")
+    nodes = parse_graph(raw)
 
     lifecycle: List[Tuple[NodeOrder, str, Dict]] = []
     for node in nodes:
@@ -687,7 +678,12 @@ def operation_detail(
         handle,
         operation_id=operation_id,
         rank=rank,
-        detail_fields=partial(failures.operation_failure_fields, registry, handle),
+        detail_fields=partial(
+            failures.operation_failure_fields,
+            registry,
+            handle,
+            circular_buffer_limit=tools.row_limit(MAX_LIMIT, groups),
+        ),
     )
     link = operation_link(registry, handle)
     if link.status is LinkStatus.LINKED and result.get("rank") != link.rank:
@@ -705,6 +701,7 @@ def operation_detail(
     if link.status is LinkStatus.LINKED:
         rows = link.perf_rows_by_operation.get(int(operation_id), [])
         empty = tools.empty_detail_fields(registry, handle, groups)
+        flag_inputs = tools.read_flag_inputs(registry, handle, groups)
         result["perf_rows"] = [
             {
                 **tools.project_row(row),
@@ -712,6 +709,7 @@ def operation_detail(
                     tools.countable_device_time(row), link.report_device_time_total
                 ),
                 **perf_detail.detail_fields(row, groups, empty),
+                **perf_flags.flag_fields(row, flag_inputs),
             }
             for row in rows[: tools.row_limit(MAX_LIMIT, groups)]
         ]
@@ -721,6 +719,10 @@ def operation_detail(
         result["device_time_unit"] = DEVICE_TIME_UNIT
         result["projection"] = tools.projection(None)
         result.update(perf_detail.summary(groups, empty))
+        flagged = perf_flags.flagged_rows(
+            rows, flag_inputs, key=("operation", link.rank, int(operation_id))
+        )
+        result.update(perf_flags.summary(flag_inputs, flagged))
         if rows:
             result.update(_device_time_summary(rows, link.report_device_time_total))
             result["report_device_time_total"] = round(link.report_device_time_total, 3)

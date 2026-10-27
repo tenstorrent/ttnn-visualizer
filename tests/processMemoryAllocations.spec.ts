@@ -441,6 +441,30 @@ describe('processMemoryAllocations - cbPressureByOpId snapshots', () => {
         expect(snap.allocations[0].size).toBe(cb1);
     });
 
+    it("does not take the previous DeviceOp's CBs as its own when it frees them (#2185)", () => {
+        // Every capture frees before it allocates, so the second DeviceOp's free
+        // releases the first's CBs — which are the first's, already snapshotted at
+        // its function_end.
+        const first = functionStart('Embeddings');
+        const second = functionStart('Embeddings');
+        const graph = [
+            captureStart(),
+            first,
+            cbDeallocateAll(),
+            cbAllocate('{[(x=0,y=0) - (x=0,y=0)]}', 1024, 0x1000, { deviceId: 0 }),
+            functionEnd('Embeddings'),
+            second,
+            cbDeallocateAll(),
+            cbAllocate('{[(x=0,y=0) - (x=0,y=0)]}', 2048, 0x2000, { deviceId: 1 }),
+            functionEnd('Embeddings'),
+        ];
+
+        const { cbPressureByOpId } = processMemoryAllocations(graph);
+
+        expect(cbPressureByOpId.get(first.id)!.allocations.map((cb) => cb.size)).toEqual([1024]);
+        expect(cbPressureByOpId.get(second.id)!.allocations.map((cb) => cb.size)).toEqual([2048]);
+    });
+
     it('attributes nested CBs to the innermost open function_start', () => {
         const outerStart = functionStart('outer');
         const innerStart = functionStart('inner');

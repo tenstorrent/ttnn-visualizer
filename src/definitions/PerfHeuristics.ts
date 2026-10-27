@@ -26,6 +26,7 @@ export interface PerfHeuristicFlagDefinition {
 // Matches tt-perf-report's mute threshold in perfFunctions cell colouring — keep in sync.
 export const MIN_TOTAL_PERCENT = 0.5;
 
+// Mirrored in `backend/ttnn_visualizer/agent/perf_flags.py`, as is `MIN_TOTAL_PERCENT`.
 export const PERF_HEURISTIC_THRESHOLDS = {
     LOW_CORE_UTILISATION_RATIO: 0.3,
     UNDERUTILISED_CORES_RATIO: 0.25,

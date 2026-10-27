@@ -65,6 +65,9 @@ class CacheVariant(str, Enum):
     SOURCE = "source"
     # The detail fields no row of the whole report carries, read once per handle.
     EMPTY_DETAIL_FIELDS = "empty_detail_fields"
+    # The device's cores and the report's first calls, which the `flags` group reads,
+    # with the flag counts `perf_flags.flagged_rows` keeps on them.
+    PERF_FLAG_INPUTS = "perf_flag_inputs"
     # Likely DRAM fallbacks by rank, which every `operation_detail` call reads.
     DRAM_FALLBACKS = "dram_fallbacks"
     # The L1 peak replay by rank, which reads every operation and captured graph.
@@ -578,15 +581,11 @@ def _hardware(
     return result
 
 
-def _answerable_device_log_columns(
-    performance_path: Optional[str],
-) -> Optional[frozenset]:
+def _answerable_device_log_columns(instance: Instance) -> Optional[frozenset]:
     """The header of a `profile_log_device.csv` that decodes cleanly, has the columns
     `zone_timings` reads and holds at least one data row, or None. #2184"""
-    if performance_path is None:
-        return None
-    path = Path(performance_path, DeviceLogProfilerQueries.DEVICE_LOG_FILE)
-    if not path.is_file():
+    path = DeviceLogProfilerQueries.device_log_path(instance)
+    if path is None:
         return None
     # pandas decodes it as UTF-8, `__enter__` skips the `ARCH: …` line, and the
     # header's leading spaces are stripped before any column is looked up.
@@ -627,9 +626,8 @@ def _inventory(
         perf_ready and {PROGRAM_HASH_COLUMN, PROGRAM_CACHE_HIT_COLUMN} <= perf_columns,
     )
 
-    performance_path = instance.performance_path
     profiler_path = instance.profiler_path
-    device_log_columns = _answerable_device_log_columns(performance_path)
+    device_log_columns = _answerable_device_log_columns(instance)
     record("zone_timings", device_log_columns is not None)
     # Joins a perf row to its zones, so it needs both files, durations to spread
     # (a phase column `query_core_spans` would pair on) and a clock to read their
@@ -681,12 +679,7 @@ def load_report(
     instance = registry.get(handle)
 
     metadata: Dict[str, str] = {}
-    if (
-        instance.performance_path
-        and Path(
-            instance.performance_path, DeviceLogProfilerQueries.DEVICE_LOG_FILE
-        ).is_file()
-    ):
+    if DeviceLogProfilerQueries.device_log_path(instance) is not None:
         metadata = DeviceLogProfilerQueries.read_capture_metadata(instance)
 
     # Found once: the newest CSV is picked by scanning the directory.

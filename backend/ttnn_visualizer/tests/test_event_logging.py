@@ -47,6 +47,7 @@ from ttnn_visualizer.event_logging import (
     get_event_log_path,
     get_launch_mode,
     is_recording_enabled,
+    parse_known_event_fields,
     record_app_start,
     record_event,
     record_events,
@@ -595,6 +596,23 @@ def test_app_start_carries_the_baseline_fields(event_log_directory):
     assert fields["python_version"].count(".") == 1
     assert fields["version"]
     assert fields["os"]
+
+
+def test_app_start_records_an_unexportable_version_as_unknown(
+    event_log_directory, monkeypatch
+):
+    # Safe for logfmt, so `get_application_version` keeps it for its other callers, but
+    # outside the shape the reader exports; writing it would lose the whole launch.
+    monkeypatch.setattr(
+        event_logging, "get_application_version", lambda: "0.104.0+private-host"
+    )
+
+    record_app_start(SimpleNamespace(TT_METAL_HOME=None))
+
+    (line,) = read_event_log_lines(event_log_directory)
+    fields = parse_event_log_line(line)
+    assert fields["version"] == UNKNOWN_VALUE
+    assert parse_known_event_fields(fields) is not None
 
 
 def test_disabled_recording_does_not_build_the_app_start_payload(

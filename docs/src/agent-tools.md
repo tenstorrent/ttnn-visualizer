@@ -91,14 +91,14 @@ another rank's operation under the same id.
 | Tool | Answers |
 |---|---|
 | `load_report` | What this report contains, and which of the tools below apply to it: its signposts, architecture, device count and the tt-perf-report version. Returns a handle the others take. |
-| `top_ops` | The costliest operations by device time, op-to-op gap, total percentage, FLOPS, DRAM bandwidth or core count, over the whole report or a signpost range. Each row carries the profiler `operation_id` it links to, when the handle holds both reports — see below. `include` adds the fields that say why an operation took its time. |
+| `top_ops` | The costliest operations by device time, op-to-op gap, total percentage, FLOPS, DRAM bandwidth or core count, over the whole report or a signpost range. Each row carries the profiler `operation_id` it links to, when the handle holds both reports — see below. `include` adds the fields that say why an operation took its time, and the performance view's heuristic flags. |
 | `op_breakdown` | Where the time went, per op or per op category, over the whole report or a signpost range: each group's count, and its device time and op-to-op gap with the share each is of the total. |
 | `program_cache` | Whether programs were built again rather than reused: per op code, its calls, distinct programs, and how many repeat calls hit or missed the program cache. |
 | `zone_timings` | Per-zone, per-RISC totals from `profile_log_device.csv` — firmware and kernel phases, as measured on device. |
 | `core_spread` | How evenly one operation's kernel time fell across the cores that ran it, or the costliest operations': the minimum, median and maximum per-core span and per RISC, the imbalance between them, the slowest cores by coordinate, and how many cores recorded zones against the row's core count. |
 | `diff_reports` | Per-operation-code deltas between two reports, largest movement first, over the whole reports or one signpost range in both. |
 | `find_operations` | Operations matching a name substring or a call-stack substring, with the ids `operation_detail` takes. |
-| `operation_detail` | One operation: its input and output tensors with shape, dtype, layout and memory config, and what it had allocated, with its error and likely DRAM fallback when it has one. With a linked performance report, also the performance rows it launched, their device time and share of the report's, and the operation's total and slowest row, with the same `include` as `top_ops`. |
+| `operation_detail` | One operation: its input and output tensors with shape, dtype, layout and memory config, what it had allocated, and the circular buffers each of its device operations allocated, with size per core, core range and device count, with its error and likely DRAM fallback when it has one. With a linked performance report, also the performance rows it launched, their device time and share of the report's, and the operation's total and slowest row, with the same `include` as `top_ops`. |
 | `memory_profile` | Memory footprint per operation, keyed by buffer type and ranked within each, with each type's largest footprint and the device's L1 geometry. A floor rather than the peak — see below. |
 | `tensor_flow` | Which operation produced a tensor and which ones consumed it. |
 | `operation_provenance` | What one operation was called with, and where in the model code it came from. |
@@ -224,6 +224,39 @@ Where it does not, which is the common case, the report's own query substitutes 
 per-bank allocation figure, and the response labels it `bytes_per_bank` accordingly. So
 read `tensor_size_unit` rather than assuming the two figures are in different units.
 
+**`operation_detail`'s `circular_buffers` are bytes on each core, read from the captured
+graph.** An L1 bank is one core's L1, so their `size_unit` is `bytes_per_bank`, the unit
+`l1_peak` sums circular buffers in and the unit of the L1 figures under `allocations`. `allocations`
+cannot show circular buffers, though: it reads the post-operation `buffers` table, which a
+circular buffer never enters. Each entry under `circular_buffers` is one device operation
+that allocated circular buffers, as the app's per-core view lists them, and each row gives
+a buffer's address, its size on each core, its `core_range_set` and how many distinct
+cores that covers. A `core_range_set` past 200 characters is cut, and
+`core_range_set_full_length` gives its length; `core_count` still counts all of it. A mesh records every circular buffer once per device; those copies are
+one row, and `device_count` says how many devices allocated it. Older mesh captures give
+each device its own device operation, which the app lists once per device; here those are
+one entry with its own `device_count`, so `circular_buffer_count` counts buffers rather than
+device copies. A device operation launched twice on the same device stays two entries. A
+`globally_allocated` buffer is a view onto an L1 tensor that is already counted, so it adds
+no L1. `max_bytes_per_core` is the largest circular-buffer total on any one core, and a
+buffer whose core range is empty is counted in `unattributed_bytes` instead. At most 100
+rows are listed, or 25 when `include` is set, as for `perf_rows`; the counts cover them all.
+
+**A captured graph records a program's circular buffers only at its first launch.** A
+relaunch from the program cache frees circular buffers and allocates none in the graph, so
+on a warm capture most device operations show none. Those launches are counted, not
+dropped: `unrecorded_launch_count` says how many, `unrecorded_device_operations` names them
+with each name's launch and device counts, and `caveat` says their buffers are unknown
+rather than zero. A device operation with no circular buffers at all looks the same in the
+graph, so these are most likely, not certainly, cached relaunches.
+
+The field is absent when the report has no captured graph for the operation, and withheld
+when its graph cannot be read for the rank asked for, is past the size a tool will read, or
+does not parse; `caveat` then says which. For an operation with an error, the same graph
+names `error.failed_device_operations`, which is withheld alike while the rest of the error
+still answers. A graph that launched no device operation, with no
+`unrecorded_launch_count`, is a real zero.
+
 **`memory_profile` reports a floor, not the peak.** It reads the `buffers` table, which
 records tensor allocations only. A circular buffer never appears there, and neither does a
 tensor allocated and freed inside a single operation. Across the local captures circular
@@ -303,6 +336,10 @@ any of these groups:
 - `cache`: the program hash, whether the program cache held it, and the global call count.
 - `kernels`: the compute and data-movement kernel sources and their hashes, as lists.
 - `advice`: tt-perf-report's advice for the operation, which today covers matmuls.
+- `flags`: the performance view's heuristic flags for the operation — `dram_bound`,
+  `low_utilisation`, `underutilised_cores` and `recompute_candidate` — each with the figures
+  it fired on. See below. It adds no CSV columns, so `include: ["flags"]` alone brings no
+  `included`, `empty_in_report` or `detail_note`.
 
 Times in these groups are microseconds, like `device_time`, although the CSV records most
 of them in nanoseconds. They come from the same merged row as the rest of it: for an
@@ -330,6 +367,69 @@ fills it on the tt-metal that wrote the report. A field empty on some rows only 
 one those operations do not have, such as a block size on an operation that is not a
 matmul; the `noc` fields are filled only for the operations tt-metal matched to its NoC
 traces.
+
+**`flags` are the performance view's heuristic flags, with their evidence.** Asked for
+them, every row carries `flags`, a list in the order the performance view shows them and
+empty when none applies, and the `total_percent` that gates the first three of them. The
+answer's `flag_basis` says what they were read against. Each entry names its `flag` and
+the figures behind it, in place of the view's display text, and repeats no field the row
+already carries:
+
+- `dram_bound`: DRAM bandwidth is the likely bottleneck. `reason` is `bound_dram` when
+  tt-perf-report's `bound` is `DRAM`, or `slow_dram_above_flops` when it is `SLOW` and DRAM
+  is a larger percentage of its peak than FLOPs are; `dram_percent` and `flops_percent` are
+  the two percentages.
+- `low_utilisation`: `core_utilisation_percent` is below 30%, cut rather than rounded to
+  three places so a figure under the threshold never reads as at it. It is the perf model's
+  ideal time over the device time, scaled by the cores the operation could have used over
+  the cores it did. `roofline_modelled` is false when tt-perf-report has no roofline model
+  for the operation (`bound_analysis` `none`), so the ideal time it is compared against is
+  less reliable, and null when the report does not say.
+- `underutilised_cores`: the row's `cores` are fewer than a quarter of `core_capacity`,
+  which is the row's own available cores (`core_capacity_from` `available_cores`) or, for a
+  row without them, the device's (`max_cores`).
+- `recompute_candidate`: a repeat call of a program that missed the program cache — a
+  repeat miss, as `program_cache` counts one, though `program_cache` also counts the ones on
+  rows no flag applies to, below. The `cache` group's `program_hash` names the program.
+
+The first three apply only to an operation whose `total_percent` is at least 0.5, so they
+move with a signpost range, over which tt-perf-report recomputes `total_percent`, as the
+view's move with its signpost filter. None applies to a signpost or a host operation.
+Whether a row is its program's first call is decided over the whole report, as
+`program_cache` decides it, even when a range is read: the view decides it over the rows it
+shows, so there a program first called before the window reads as first called inside it.
+
+`flag_basis.flagged_rows` counts each flag over every row the answer read — the whole
+report or the signpost range for `top_ops`, every row of the operation for
+`operation_detail` — so a flag on a row past the cap is not missed. When every repeat call
+in the report that recorded a cache result missed, `flag_basis.caveat` carries the caveat
+`program_cache` gives: that is what a run with the program cache disabled records, so
+check whether it was before reading each recompute candidate as a program built again.
+`flag_basis.note` repeats the two ways the flags read the report differently from the
+view, below.
+
+`flag_basis.max_cores` is the device's core count, read where the web application reads it,
+through the same reader as `/api/performance/device-log/meta`: `Max Compute Cores` on the
+device log's first line (`max_cores_source` `device_log`); else the default for the device
+log's `architecture`, or Wormhole's when there is no device log or it names no architecture
+the application knows (`architecture_default`); or, where it is more, the most cores any row
+of the report used (`report_rows`). A count of 0 falls back to Wormhole's
+(`fallback_default`). The rows that fallback reads are the whole report's even for a ranged
+read, since a window does not change the device, where the view reads the rows it shows.
+
+The flags read the report differently from the view in two deliberate ways. Over a
+signpost range, first calls and the `report_rows` fallback read the whole report, as above.
+And the view reads tt-metal's 1 ns ideal-time placeholder, described above, as a modelled
+time, which against an operation's real duration gives a utilisation near zero, so it flags
+low utilisation on operations the model never modelled
+([#2162](https://github.com/tenstorrent/ttnn-visualizer/issues/2162)): across ten local and
+demo captures, 166 of its 239 low-utilisation flags. Here a 1 ns ideal time never flags
+`low_utilisation`. Every other flag those captures carry unranged is the view's.
+
+The view's other two flags are not in the list, because other tools answer them in more
+detail: an allocation failure is `errors`' (and `operation_detail`'s `error`), and a likely
+DRAM fallback is `dram_fallbacks`' (and `operation_detail`'s `dram_fallback`). Recompute
+candidates are also counted per op code by `program_cache`.
 
 **`program_cache` says whether programs were built again.** A row is its program's first
 call when no earlier row in the report carries its program hash, and a repeat call

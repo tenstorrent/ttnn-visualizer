@@ -13,6 +13,7 @@ export interface ColumnDefinition {
     footerSpan?: number;
 }
 
+// Mirrored as `BoundType` in `backend/ttnn_visualizer/agent/perf_flags.py`.
 export enum BoundType {
     BOTH = 'BOTH',
     DRAM = 'DRAM',
@@ -23,7 +24,7 @@ export enum BoundType {
 
 // Which roofline model tt-perf-report ran for an op ("Bound Analysis" column). Without it a blank
 // DRAM % or Bound reads the same whether the op was never analysed or measured and found fine
-// (#2048).
+// (#2048). Mirrored as `BoundAnalysis` in `backend/ttnn_visualizer/agent/perf_flags.py`.
 export enum BoundAnalysis {
     FULL = 'full',
     FLOPS_ONLY = 'flops_only',
@@ -204,6 +205,7 @@ export const comparisonKeys: ColumnKeys[] = [
 
 export type PerfTableFilters = Partial<Record<ColumnKeys, string>> | null;
 
+// Mirrored as `RepeatCacheOutcome` in `backend/ttnn_visualizer/agent/perf_flags.py`.
 export enum RepeatCacheOutcome {
     HIT = 'hit',
     MISS = 'miss',

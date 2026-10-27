@@ -147,6 +147,8 @@ function evaluateRowHeuristics(row: TypedPerfTableRow, maxCores: number): RowHeu
     };
 }
 
+// Mirrored, less the allocation-failure and DRAM-fallback flags, as `heuristic_flags` in
+// `backend/ttnn_visualizer/agent/perf_flags.py`.
 export function annotatePerfHeuristicFlags(rows: TypedPerfTableRow[], maxCores: number): TypedPerfTableRow[] {
     return rows.map((row) => {
         const { flags, details } = evaluateRowHeuristics(row, maxCores);
