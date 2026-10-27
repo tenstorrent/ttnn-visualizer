@@ -4,8 +4,9 @@
 
 """What the agent's parity goldens share: how each is written, held and read by its spec.
 
-`test_agent_failure_parity.py` and `test_agent_perf_flags_parity.py` each write a golden
-of a port's answers, and a spec in `tests/` holds the app's functions to it.
+`test_agent_failure_parity.py`, `test_agent_perf_flags_parity.py` and
+`test_agent_l1_pressure_parity.py` each write a golden of a port's answers, and a spec in
+`tests/` holds the app's functions to it.
 
     pnpm run agent:parity-golden    <- regenerates every golden
 """
