@@ -1924,7 +1924,8 @@ class TestDiffReports:
             result = tools.diff_reports(registry, "report-1", "report-2")
 
         assert result["delta_total"] == 0.0
-        assert all(change["delta"] == 0.0 for change in result["changes"])
+        assert result["changes"] == []
+        assert result["within_threshold_count"] == 1
 
     def test_it_groups_by_op_code_so_a_shifted_id_is_not_a_diff(self, tmp_path):
         """An inserted op renumbers every op after it; an id join would call

@@ -69,6 +69,8 @@ DEFAULT_MIN_PERCENT = 5.0
 MAX_CAPTURES_PER_SIDE = 5
 # A local MoE expert op's 30 tensors run to 1,550 characters of signature.
 MAX_SIGNATURE_CHARS = 300
+# Enough for any number or handle list an agent means to pass.
+_MAX_ECHOED_CHARS = 64
 
 DIFF_NOTE = (
     "A group is tt-perf-report's op code, which names a matmul's shapes and a conv's "
@@ -90,6 +92,17 @@ SIGNATURE_NOISE_CAVEAT = (
 
 # Facts of the hardware a capture ran on, any of which moves every figure.
 HARDWARE_FACTS = ("arch", "clock_mhz", "max_compute_cores", "device_count")
+# Whether a capture's CSV records a tensor's logical size beside its padded one.
+TENSOR_SIZES = "tensor_sizes"
+COMPARED_FACTS = (*HARDWARE_FACTS, TENSOR_SIZES)
+
+
+def _echoed(value: object) -> str:
+    """`value` as a refusal names it, cut so an argument cannot fill the answer."""
+    shown = repr(value)
+    if len(shown) <= _MAX_ECHOED_CHARS:
+        return shown
+    return f"{shown[:_MAX_ECHOED_CHARS]}... ({len(shown)} characters)"
 
 
 @dataclass(frozen=True)
@@ -110,18 +123,18 @@ def threshold(name: str, value: object, default: float) -> float:
         return default
     number = finite_number(value)
     if number is None or number < 0:
-        raise ValueError(f"{name} must be a number of at least 0, not {value!r}")
+        raise ValueError(f"{name} must be a number of at least 0, not {_echoed(value)}")
     return number
 
 
-def captures(label: str, handle: str, repeats: object) -> List[str]:
+def side_handles(label: str, handle: str, repeats: object) -> List[str]:
     """One side of a diff: its handle and the repeats measured with it."""
     if repeats is None:
         return [handle]
     if not isinstance(repeats, list) or not all(
         isinstance(repeat, str) for repeat in repeats
     ):
-        raise ValueError(f"{label} must be a list of handles, not {repeats!r}")
+        raise ValueError(f"{label} must be a list of handles, not {_echoed(repeats)}")
     if len(repeats) >= MAX_CAPTURES_PER_SIDE:
         raise ValueError(
             f"{label} takes at most {MAX_CAPTURES_PER_SIDE - 1} handles, since each "
@@ -181,38 +194,43 @@ def capture_totals(
 class Side:
     """One side's groups across its captures.
 
-    `figures` holds the medians of the groups every capture ran equally often and gave a
-    figure, and `unmeasured` the groups every capture ran equally often but one left
-    without any. `measured` holds the groups some capture gave a figure, `calls` each
-    group's calls per capture, `least_measured` the fewest calls with a figure in any
-    capture, and `largest` each group's largest sum.
+    `figures_by_group` holds the medians of the groups every capture ran equally often
+    and gave a figure, and `unmeasured` the groups every capture ran equally often but
+    one left without any. `measured` holds the groups some capture gave a figure,
+    `calls_by_group` each group's calls per capture, `least_measured_by_group` the
+    fewest calls with a figure in any capture, and `largest_by_group` each group's
+    largest sum.
     """
 
-    figures: Dict[Hashable, GroupTotal]
+    figures_by_group: Dict[Hashable, GroupTotal]
     unmeasured: FrozenSet[Hashable]
     measured: FrozenSet[Hashable]
-    calls: Dict[Hashable, Tuple[int, ...]]
-    least_measured: Dict[Hashable, int]
-    largest: Dict[Hashable, float]
+    calls_by_group: Dict[Hashable, Tuple[int, ...]]
+    least_measured_by_group: Dict[Hashable, int]
+    largest_by_group: Dict[Hashable, float]
     total: float
 
     @classmethod
-    def of(cls, captures: List[Dict[Hashable, GroupTotal]]) -> "Side":
-        keys = list(dict.fromkeys(key for capture in captures for key in capture))
+    def of(cls, groups_by_capture: List[Dict[Hashable, GroupTotal]]) -> "Side":
+        keys = list(
+            dict.fromkeys(key for groups in groups_by_capture for key in groups)
+        )
         calls = {
             key: tuple(
-                capture[key].count if key in capture else 0 for capture in captures
+                groups[key].count if key in groups else 0
+                for groups in groups_by_capture
             )
             for key in keys
         }
         least_measured = {
             key: min(
-                capture[key].measured if key in capture else 0 for capture in captures
+                groups[key].measured if key in groups else 0
+                for groups in groups_by_capture
             )
             for key in keys
         }
         largest = {
-            key: max(capture[key].total for capture in captures if key in capture)
+            key: max(groups[key].total for groups in groups_by_capture if key in groups)
             for key in keys
         }
         figures = {}
@@ -223,19 +241,22 @@ class Side:
             if least_measured[key] == 0:
                 unmeasured.add(key)
                 continue
-            groups = [capture[key] for capture in captures]
+            totals = [groups[key] for groups in groups_by_capture]
             figures[key] = GroupTotal(
-                median(group.total for group in groups),
+                median(group.total for group in totals),
                 calls[key][0],
-                median_low(group.measured for group in groups),
+                median_low(group.measured for group in totals),
             )
         measured = frozenset(
             key
             for key in keys
-            if any(capture[key].measured for capture in captures if key in capture)
+            if any(
+                groups[key].measured for groups in groups_by_capture if key in groups
+            )
         )
         total = median(
-            sum(group.total for group in capture.values()) for capture in captures
+            sum(group.total for group in groups.values())
+            for groups in groups_by_capture
         )
         return cls(
             figures,
@@ -249,12 +270,95 @@ class Side:
 
     def ran(self, key: Hashable) -> bool:
         """Whether every capture ran the group, and equally often."""
-        counts = self.calls.get(key)
+        counts = self.calls_by_group.get(key)
         return counts is not None and len(set(counts)) == 1
 
     def disagrees(self, key: Hashable) -> bool:
         """Whether the side's captures disagree on whether, or how often, it ran."""
-        return key in self.calls and not self.ran(key)
+        return key in self.calls_by_group and not self.ran(key)
+
+
+def delta(before: float, after: float) -> float:
+    """The move between two figures as the answer rounds them, so equal figures move
+    by zero rather than by float noise, and never by a negative zero."""
+    return round(round(after, 3) - round(before, 3), 3) + 0.0
+
+
+@dataclass(frozen=True)
+class Change:
+    group: Hashable
+    before: GroupTotal
+    after: GroupTotal
+    delta: float
+
+
+@dataclass(frozen=True)
+class Comparison:
+    """Where each group a diff can say anything about goes, every list largest first."""
+
+    changes: List[Change]
+    within_threshold_count: int
+    new: List[Hashable]
+    missing: List[Hashable]
+    unmeasured: List[Hashable]
+    inconsistent: List[Hashable]
+
+
+def _largest_first(size: float, group: Hashable) -> Tuple[float, str]:
+    """The order of every list: largest first, then by group, so a tie reads the same
+    in every answer."""
+    return -size, str(group)
+
+
+def classify(before: Side, after: Side, thresholds: Thresholds) -> Comparison:
+    """Each group into exactly one list. A group no capture gives a figure, such as a
+    host op's device time, is in none: the metric says nothing about it."""
+    groups = [
+        group
+        for group in dict.fromkeys([*before.calls_by_group, *after.calls_by_group])
+        if group in before.measured or group in after.measured
+    ]
+    changes: List[Change] = []
+    within_threshold_count = 0
+    new: List[Hashable] = []
+    missing: List[Hashable] = []
+    unmeasured: List[Hashable] = []
+    inconsistent: List[Hashable] = []
+    for group in groups:
+        if before.disagrees(group) or after.disagrees(group):
+            inconsistent.append(group)
+        elif group not in before.calls_by_group:
+            new.append(group)
+        elif group not in after.calls_by_group:
+            missing.append(group)
+        elif group in before.unmeasured or group in after.unmeasured:
+            unmeasured.append(group)
+        else:
+            was = before.figures_by_group[group]
+            now = after.figures_by_group[group]
+            move = delta(was.total, now.total)
+            if thresholds.passes(was.total, move):
+                changes.append(Change(group, was, now, move))
+            else:
+                within_threshold_count += 1
+
+    def either_side(group: Hashable) -> float:
+        return max(
+            before.largest_by_group.get(group, 0.0),
+            after.largest_by_group.get(group, 0.0),
+        )
+
+    # Largest movement in either direction: a regression matters as much as a win.
+    changes.sort(key=lambda change: _largest_first(abs(change.delta), change.group))
+    new.sort(key=lambda group: _largest_first(after.largest_by_group[group], group))
+    missing.sort(
+        key=lambda group: _largest_first(before.largest_by_group[group], group)
+    )
+    unmeasured.sort(key=lambda group: _largest_first(either_side(group), group))
+    inconsistent.sort(key=lambda group: _largest_first(either_side(group), group))
+    return Comparison(
+        changes, within_threshold_count, new, missing, unmeasured, inconsistent
+    )
 
 
 def group_fields(key: Hashable, match: DiffMatch) -> Dict[str, object]:
@@ -272,37 +376,42 @@ def group_fields(key: Hashable, match: DiffMatch) -> Dict[str, object]:
     return fields
 
 
-def delta(before: float, after: float) -> float:
-    """The move between two figures as the answer rounds them, so equal figures move
-    by zero rather than by float noise, and never by a negative zero."""
-    return round(round(after, 3) - round(before, 3), 3) + 0.0
-
-
-def _described(values: Dict[str, object]) -> str:
-    return ", ".join(f"{handle} {value}" for handle, value in values.items())
+def _listed(facts: List[str], conjunction: str) -> str:
+    if len(facts) == 1:
+        return facts[0]
+    return f"{', '.join(facts[:-1])} {conjunction} {facts[-1]}"
 
 
 def mismatch_caveat(mismatched: Dict[str, Dict[str, object]]) -> str:
+    """The facts the captures differ in, named rather than quoted: the values are the
+    captures' own text, and `mismatched` gives them by handle."""
     sentences = []
     hardware = [fact for fact in HARDWARE_FACTS if fact in mismatched]
     if hardware:
-        described = "; ".join(
-            f"{fact} ({_described(mismatched[fact])})" for fact in hardware
-        )
         sentences.append(
-            f"The captures differ in {described}, so every delta measures that "
-            "difference as well as any change in the code."
+            f"The captures differ in {_listed(hardware, 'and')}, given by handle under "
+            "mismatched, so every delta measures that difference as well as any change "
+            "in the code."
         )
-    if "tensor_sizes" in mismatched:
+    if TENSOR_SIZES in mismatched:
         sentences.append(
-            "The captures record tensor sizes differently "
-            f"({_described(mismatched['tensor_sizes'])}), so a tile-padded tensor's "
-            "signature differs between them and its ops land under new and missing."
+            "The captures record tensor sizes differently, given by handle under "
+            "mismatched, so a tile-padded tensor's signature differs between them and "
+            "its ops land under new and missing."
         )
     return " ".join(sentences)
 
 
+def unverified_caveat(unverified: Dict[str, List[str]]) -> str:
+    """The facts only some captures record, which the diff could not compare."""
+    return (
+        f"Some captures record no {_listed(list(unverified), 'or')}, listed by fact "
+        "under unverified, so whether they match the others there is unknown."
+    )
+
+
 __all__ = [
+    "COMPARED_FACTS",
     "DEFAULT_MIN_PERCENT",
     "DIFF_MATCHES",
     "DIFF_METRICS",
@@ -311,16 +420,21 @@ __all__ = [
     "MAX_CAPTURES_PER_SIDE",
     "MAX_SIGNATURE_CHARS",
     "SIGNATURE_NOISE_CAVEAT",
+    "TENSOR_SIZES",
     "CaptureTotals",
+    "Change",
+    "Comparison",
     "DiffMatch",
     "DiffMetric",
     "GroupTotal",
     "Side",
     "Thresholds",
     "capture_totals",
-    "captures",
+    "classify",
     "delta",
     "group_fields",
     "mismatch_caveat",
+    "side_handles",
     "threshold",
+    "unverified_caveat",
 ]

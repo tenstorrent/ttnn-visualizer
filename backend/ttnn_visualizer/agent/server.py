@@ -345,8 +345,9 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "moves are counted in within_threshold_count, and an op only one "
                 "report holds is listed under new or missing, never as a change. "
                 "repeats_a and repeats_b add captures of either side, compared by "
-                "their median. A caveat names any architecture, clock or device "
-                "count the captures differ in. "
+                "their median. A caveat names any architecture, clock, core count "
+                "or device count the captures differ in, or that only some of them "
+                "record. "
                 "Accepts additive metrics only (device_time, op_to_op_gap, "
                 "total_percent); rank by a rate or a core count with top_ops. A "
                 "signpost range applies to every capture, and signpost_range_ignored "
@@ -394,12 +395,14 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                         "minimum": 0,
                         "description": (
                             "Smallest move that counts as a change, in the metric's "
-                            "unit: microseconds for device_time (default "
-                            f"{report_diff.DIFF_METRICS['device_time'].min_delta:g}) "
-                            "and op_to_op_gap (default "
-                            f"{report_diff.DIFF_METRICS['op_to_op_gap'].min_delta:g}), "
-                            "percentage points for total_percent (default "
-                            f"{report_diff.DIFF_METRICS['total_percent'].min_delta:g})."
+                            "unit. Defaults: "
+                            + "; ".join(
+                                f"{name} {metric.min_delta:g} {metric.unit}"
+                                for name, metric in sorted(
+                                    report_diff.DIFF_METRICS.items()
+                                )
+                            )
+                            + "."
                         ),
                     },
                     "repeats_a": {

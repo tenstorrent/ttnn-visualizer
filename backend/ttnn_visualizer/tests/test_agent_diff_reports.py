@@ -12,7 +12,6 @@ about. The base behaviour — grouping, ranges, the partitioned caveat — is pi
 """
 
 import json
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -20,6 +19,7 @@ from ttnn_visualizer.agent import op_signatures, report_diff, server, tools
 from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_LIMIT
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
 from ttnn_visualizer.csv_queries import DeviceLogProfilerQueries, ResolvedSignposts
+from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.tests.smoke_capture import (
     signposted_rows,
     smoke_rows,
@@ -71,6 +71,93 @@ def _ops(**device_time_by_op_code):
     ]
 
 
+def _side(*captures):
+    """A side of a diff from each capture's {group: (total, calls, measured calls)}."""
+    return report_diff.Side.of(
+        [
+            {
+                group: report_diff.GroupTotal(*figures)
+                for group, figures in groups.items()
+            }
+            for groups in captures
+        ]
+    )
+
+
+class TestClassify:
+    """`report_diff.classify` alone: where each group goes, with no report behind it."""
+
+    THRESHOLDS = report_diff.Thresholds(percent=5.0, floor=1.0)
+
+    def test_each_group_lands_in_exactly_one_list(self):
+        before = _side(
+            {
+                "Moved": (10.0, 1, 1),
+                "Still": (10.0, 1, 1),
+                "Gone": (3.0, 1, 1),
+                "Blank": (0.0, 2, 0),
+                "Host": (0.0, 1, 0),
+            }
+        )
+        after = _side(
+            {
+                "Moved": (20.0, 1, 1),
+                "Still": (10.2, 1, 1),
+                "Added": (4.0, 1, 1),
+                "Blank": (8.0, 2, 2),
+                "Host": (0.0, 1, 0),
+            }
+        )
+
+        comparison = report_diff.classify(before, after, self.THRESHOLDS)
+
+        (change,) = comparison.changes
+        assert (change.group, change.delta) == ("Moved", 10.0)
+        assert comparison.within_threshold_count == 1
+        assert comparison.new == ["Added"]
+        assert comparison.missing == ["Gone"]
+        # Never given a figure, a host op says nothing about this metric.
+        assert comparison.unmeasured == ["Blank"]
+        assert comparison.inconsistent == []
+
+    def test_captures_disagreeing_on_a_group_make_it_inconsistent(self):
+        before = _side({"Routed": (10.0, 2, 2)}, {"Routed": (5.0, 1, 1)})
+        after = _side({"Routed": (10.0, 2, 2)}, {"Routed": (10.0, 2, 2)})
+
+        comparison = report_diff.classify(before, after, self.THRESHOLDS)
+
+        assert comparison.inconsistent == ["Routed"]
+        assert comparison.changes == [] and comparison.within_threshold_count == 0
+
+    def test_every_list_breaks_a_tie_by_group(self):
+        """One order for every list, so an answer cut at its limit is the same each
+        time it is asked."""
+        both = {
+            "Slower B": (10.0, 1, 1),
+            "Slower A": (10.0, 1, 1),
+            "Gone B": (2.0, 1, 1),
+            "Gone A": (2.0, 1, 1),
+        }
+        before = _side({**both, "Odd B": (3.0, 1, 1), "Odd A": (3.0, 1, 1)}, both)
+        later = {
+            "Slower B": (20.0, 1, 1),
+            "Slower A": (20.0, 1, 1),
+            "Added B": (2.0, 1, 1),
+            "Added A": (2.0, 1, 1),
+        }
+        after = _side(later, later)
+
+        comparison = report_diff.classify(before, after, self.THRESHOLDS)
+
+        assert [change.group for change in comparison.changes] == [
+            "Slower A",
+            "Slower B",
+        ]
+        assert comparison.new == ["Added A", "Added B"]
+        assert comparison.missing == ["Gone A", "Gone B"]
+        assert comparison.inconsistent == ["Odd A", "Odd B"]
+
+
 class TestThresholds:
     @pytest.mark.parametrize(
         "before, after, counted",
@@ -117,8 +204,20 @@ class TestThresholds:
                 "count_after": 1,
             }
         ]
-        assert result["change_count"] == 1
+        assert (result["change_count"], result["returned"]) == (1, 1)
         assert "never as a change" in result["note"]
+
+    def test_returned_counts_the_changes_a_limit_lets_through(self, tmp_path):
+        result = _diff(
+            _registry(tmp_path),
+            {
+                "report-1": _ops(A=10.0, B=10.0, C=10.0),
+                "report-2": _ops(A=20.0, B=30.0, C=40.0),
+            },
+            limit=2,
+        )
+
+        assert (result["returned"], result["change_count"]) == (2, 3)
 
     def test_lower_thresholds_show_smaller_moves(self, tmp_path):
         result = _diff(
@@ -199,6 +298,23 @@ class TestThresholds:
             tools.diff_reports(
                 _registry(tmp_path), "report-1", "report-2", **{argument: value}
             )
+
+    @pytest.mark.parametrize(
+        "argument, value",
+        [("min_delta", "9" * 5000), ("repeats_a", "report-3," * 1000)],
+    )
+    def test_a_refusal_echoes_a_long_argument_cut_short(
+        self, tmp_path, argument, value
+    ):
+        with pytest.raises(ValueError) as refused:
+            tools.diff_reports(
+                _registry(tmp_path), "report-1", "report-2", **{argument: value}
+            )
+
+        message = str(refused.value)
+        assert message.startswith(argument)
+        assert f"({len(repr(value))} characters)" in message
+        assert len(message) < 200
 
     def test_every_summable_metric_has_a_floor_and_a_unit(self):
         """A metric added to `ADDITIVE_METRICS` alone would fail every call by it."""
@@ -459,6 +575,63 @@ class TestRepeats:
         ]
         assert result["changes"] == [] and result["within_threshold_count"] == 0
 
+    def test_a_repeat_with_no_figure_makes_its_group_unmeasured(self, tmp_path):
+        """Not a median over the captures that measured it, which would read the blank
+        repeat as agreeing."""
+        registry = _registry(tmp_path, count=4)
+
+        def calls(time):
+            return [
+                _row(id=str(n + 2), op_code="Conv", device_time=time) for n in range(2)
+            ]
+
+        rows = {
+            "report-1": calls("10.0"),
+            "report-3": calls(""),
+            "report-2": calls("10.0"),
+            "report-4": calls("10.0"),
+        }
+
+        result = _diff(registry, rows, repeats_a=["report-3"], repeats_b=["report-4"])
+
+        assert result["changes"] == []
+        assert result["unmeasured"] == [
+            {
+                "op_code": "Conv",
+                "count_before": 2,
+                "count_after": 2,
+                "measured_before": 0,
+                "measured_after": 2,
+            }
+        ]
+
+    def test_a_change_over_repeats_gives_the_median_measured_calls(self, tmp_path):
+        """Calls measured 4, 2 and 4 times read as 4, the count behind the median
+        total, not the fewest."""
+        registry = _registry(tmp_path, count=4)
+
+        def calls(measured, time):
+            return [
+                _row(
+                    id=str(n + 2),
+                    op_code="Conv",
+                    device_time=str(time) if n < measured else "",
+                )
+                for n in range(4)
+            ]
+
+        rows = {
+            "report-1": calls(4, 10.0),
+            "report-3": calls(2, 10.0),
+            "report-4": calls(4, 10.0),
+            "report-2": calls(3, 20.0),
+        }
+
+        result = _diff(registry, rows, repeats_a=["report-3", "report-4"])
+
+        (change,) = result["changes"]
+        assert (change["measured_before"], change["measured_after"]) == (4, 3)
+
     def test_a_side_total_is_the_median_of_its_captures_totals(self, tmp_path):
         """Not the sum of each group's median, which is no capture's total."""
         registry = _registry(tmp_path, count=4)
@@ -599,8 +772,30 @@ class TestCapturesOnDifferentHardware:
             "clock_mhz": {"report-1": 1000.0, "report-2": 1350.0},
             "max_compute_cores": {"report-1": 64.0, "report-2": 130.0},
         }
-        assert "differ in arch" in result["caveat"]
+        assert "differ in arch, clock_mhz and max_compute_cores" in result["caveat"]
+        # The captures' own text stays in the data, out of the server's prose.
+        assert "blackhole" not in result["caveat"]
         assert [change["op_code"] for change in result["changes"]] == ["Matmul"]
+
+    def test_the_facts_are_read_as_the_flags_read_them(self, tmp_path):
+        """By the reader the flags count cores with, which finds a field past a
+        byte-order mark or a missing comma, so the two cannot disagree on a device."""
+        registry = _registry(
+            tmp_path,
+            preambles=[
+                "\ufeffARCH: wormhole_b0, CHIP_FREQ[MHz]: 1000 Max Compute Cores: 64",
+                PREAMBLE.replace("64", "56"),
+            ],
+        )
+
+        result = _diff(
+            registry, {"report-1": _ops(Matmul=10.0), "report-2": _ops(Matmul=10.0)}
+        )
+
+        assert result["mismatched"] == {
+            "max_compute_cores": {"report-1": 64, "report-2": 56}
+        }
+        assert "unverified" not in result
 
     def test_a_different_device_count_is_caveated(self, tmp_path):
         registry = _registry(tmp_path)
@@ -619,7 +814,9 @@ class TestCapturesOnDifferentHardware:
 
         assert result["mismatched"] == {"device_count": {"report-1": 8, "report-2": 1}}
 
-    def test_a_fact_a_capture_does_not_record_is_not_compared(self, tmp_path):
+    def test_a_fact_only_some_captures_record_is_named_unverified(self, tmp_path):
+        """Left out, the answer would read as checked: the capture with no device log
+        could have run on other hardware."""
         registry = _registry(tmp_path)
         (tmp_path / "capture-2" / DeviceLogProfilerQueries.DEVICE_LOG_FILE).unlink()
 
@@ -628,7 +825,45 @@ class TestCapturesOnDifferentHardware:
         )
 
         assert "mismatched" not in result
-        assert "caveat" not in result
+        assert result["unverified"] == {
+            "arch": ["report-2"],
+            "clock_mhz": ["report-2"],
+            "max_compute_cores": ["report-2"],
+        }
+        assert (
+            "Some captures record no arch, clock_mhz or max_compute_cores"
+            in result["caveat"]
+        )
+
+    def test_a_fact_no_capture_records_is_not_named(self, tmp_path):
+        """With nothing to compare, no capture can differ from another on it."""
+        registry = _registry(tmp_path)
+        for capture in ("capture-1", "capture-2"):
+            (tmp_path / capture / DeviceLogProfilerQueries.DEVICE_LOG_FILE).unlink()
+
+        result = _diff(
+            registry, {"report-1": _ops(Matmul=10.0), "report-2": _ops(Matmul=10.0)}
+        )
+
+        assert "unverified" not in result and "caveat" not in result
+
+    def test_an_unreadable_device_count_is_unverified_and_the_diff_answered(
+        self, tmp_path
+    ):
+        registry = _registry(tmp_path)
+
+        def resolve(instance):
+            if instance.instance_id == "report-2":
+                raise DataFormatError("the performance CSV could not be read")
+            return ResolvedSignposts({}, True, 1)
+
+        with patch.object(tools, "_resolve_signposts", side_effect=resolve):
+            result = _diff(
+                registry, {"report-1": _ops(Matmul=10.0), "report-2": _ops(Matmul=6.0)}
+            )
+
+        assert result["unverified"] == {"device_count": ["report-2"]}
+        assert [change["op_code"] for change in result["changes"]] == ["Matmul"]
 
 
 class TestMetricCaveats:
@@ -866,6 +1101,40 @@ class TestSignatures:
         assert result["within_threshold_count"] == 1
         assert result["changes"] == []
 
+    def test_a_row_past_the_signatures_read_groups_under_none(self, tmp_path):
+        """A row whose id names no position the CSV read gave still counts, rather
+        than failing the diff."""
+
+        def rows(time):
+            return [
+                _row(
+                    id="2", op_code="Matmul", raw_op_code="Matmul", device_time="10.0"
+                ),
+                _row(
+                    id="999", op_code="Matmul", raw_op_code="Matmul", device_time=time
+                ),
+            ]
+
+        reports = {"report-1": rows("10.0"), "report-2": rows("20.0")}
+        signatures = op_signatures.Signatures(["in0 1x1x32x64"], False)
+        with (
+            patch.object(tools, "_op_signatures", return_value=signatures),
+            patch.object(
+                tools,
+                "_generate_canonical_report",
+                side_effect=lambda instance, **_: _perf_report(
+                    reports[instance.instance_id]
+                ),
+            ),
+        ):
+            result = tools.diff_reports(
+                _registry(tmp_path), "report-1", "report-2", match="signature"
+            )
+
+        (change,) = result["changes"]
+        assert (change["raw_op_code"], change["signature"]) == ("Matmul", None)
+        assert result["within_threshold_count"] == 1
+
     def test_a_long_signature_is_cut_and_its_length_given(self, tmp_path):
         def every_slot_filled(rows, duration_ns=None):
             rows = [dict(row) for row in rows]
@@ -1011,10 +1280,48 @@ class TestSchema:
     def test_it_declares_the_new_arguments_with_their_defaults(self, properties):
         assert properties["match"]["enum"] == ["op_code", "signature"]
         assert "Defaults to 5." in properties["min_percent"]["description"]
-        assert "(default 1)" in properties["min_delta"]["description"]
-        assert "(default 0.1)" in properties["min_delta"]["description"]
+        assert "device_time 1 us" in properties["min_delta"]["description"]
+        for name, metric in report_diff.DIFF_METRICS.items():
+            assert f"{name} {metric.min_delta:g} {metric.unit}" in (
+                properties["min_delta"]["description"]
+            )
         for side in ("repeats_a", "repeats_b"):
             assert properties[side]["maxItems"] == report_diff.MAX_CAPTURES_PER_SIDE - 1
+
+    def test_thresholds_reach_the_tool_by_the_names_the_schema_gives(
+        self, tmp_path, event_log_directory
+    ):
+        """A rename on one side of the schema and the tool's arguments fails here."""
+        with patch.object(
+            tools,
+            "_generate_canonical_report",
+            side_effect=lambda instance, **_: _perf_report(_ops(Matmul=10.0)),
+        ):
+            response = server.handle_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "diff_reports",
+                        "arguments": {
+                            "handle_a": "report-1",
+                            "handle_b": "report-2",
+                            "min_percent": 2.5,
+                            "min_delta": 0.25,
+                        },
+                    },
+                },
+                server._tool_table(_registry(tmp_path)),
+            )
+
+        assert not response["result"].get("isError"), response
+        result = json.loads(response["result"]["content"][0]["text"])
+        assert result["thresholds"] == {
+            "min_percent": 2.5,
+            "min_delta": 0.25,
+            "min_delta_unit": "us",
+        }
 
     def test_a_malformed_argument_comes_back_as_a_refusal(
         self, tmp_path, event_log_directory

@@ -65,7 +65,7 @@ from ttnn_visualizer.models import Instance
 
 logger = logging.getLogger(__name__)
 
-Read = TypeVar("Read")
+_Read = TypeVar("_Read")
 
 # The projection every tool reads through, stated rather than defaulted.
 #
@@ -300,12 +300,12 @@ def _per_capture(
     registry: ReportRegistry,
     handle: str,
     variant: CacheVariant,
-    read: Callable[[Instance], Read],
-) -> Read:
+    read: Callable[[Instance], _Read],
+) -> _Read:
     """`read` of the handle's capture, once per capture -- or why it cannot be read."""
     _require_performance_report(registry, handle)
 
-    def build(instance: Instance) -> Union[Read, DataFormatError]:
+    def build(instance: Instance) -> Union[_Read, DataFormatError]:
         _require_same_source(registry, handle, instance)
         try:
             return read(instance)
@@ -879,17 +879,18 @@ def _diff_totals(
     )
 
 
-def _percent_change(before: float, after: float) -> Optional[float]:
-    """`report_diff.delta` as a percentage of `before`; None from zero."""
-    return share_percent(report_diff.delta(before, after), abs(round(before, 3)))
+def _percent_of(move: float, before: float) -> Optional[float]:
+    """A `report_diff.delta` as a percentage of the figure it moved from; None from zero."""
+    return share_percent(move, abs(round(before, 3)))
 
 
 def _read_device_facts(instance: Instance) -> Dict[str, object]:
-    metadata = DeviceLogProfilerQueries.read_capture_metadata(instance)
+    # Read as the flags read the device's cores, so the two cannot disagree about it.
+    meta = _device_meta(instance) or DeviceLogMeta()
     return {
-        "arch": metadata.get("ARCH") or None,
-        "clock_mhz": finite_number(metadata.get("CHIP_FREQ[MHz]")),
-        "max_compute_cores": finite_number(metadata.get("Max Compute Cores")),
+        "arch": meta.architecture,
+        "clock_mhz": meta.frequency,
+        "max_compute_cores": meta.max_cores,
     }
 
 
@@ -907,19 +908,21 @@ def _capture_facts(
         facts["device_count"] = None
     if match is report_diff.DiffMatch.SIGNATURE:
         logical = _op_signatures(registry, handle).logical_sizes
-        facts["tensor_sizes"] = "padded[logical]" if logical else "padded"
+        facts[report_diff.TENSOR_SIZES] = "padded[logical]" if logical else "padded"
     return facts
 
 
-def _mismatches(
+def _compared_facts(
     registry: ReportRegistry, handles: List[str], match: report_diff.DiffMatch
-) -> Dict[str, Dict[str, object]]:
-    """Each fact the captures disagree on, by handle, skipping one a capture lacks."""
+) -> Tuple[Dict[str, Dict[str, object]], Dict[str, List[str]]]:
+    """Each fact the captures disagree on, by handle; and each fact only some of them
+    record, with the handles that record none."""
     facts_by_handle = {
         handle: _capture_facts(registry, handle, match) for handle in handles
     }
     mismatched: Dict[str, Dict[str, object]] = {}
-    for fact in (*report_diff.HARDWARE_FACTS, "tensor_sizes"):
+    unverified: Dict[str, List[str]] = {}
+    for fact in report_diff.COMPARED_FACTS:
         known = {
             handle: facts[fact]
             for handle, facts in facts_by_handle.items()
@@ -927,7 +930,11 @@ def _mismatches(
         }
         if len(set(known.values())) > 1:
             mismatched[fact] = known
-    return mismatched
+        if known and len(known) < len(facts_by_handle):
+            unverified[fact] = [
+                handle for handle in facts_by_handle if handle not in known
+            ]
+    return mismatched, unverified
 
 
 def diff_reports(
@@ -988,8 +995,8 @@ def diff_reports(
     # Four lists beside the changes, at a hundred rows each, would pass the answer
     # budget; their counts say how many more there are.
     side_count = min(count, MAX_DETAILED_LIMIT)
-    before = report_diff.captures("repeats_a", handle_a, repeats_a)
-    after = report_diff.captures("repeats_b", handle_b, repeats_b)
+    before = report_diff.side_handles("repeats_a", handle_a, repeats_a)
+    after = report_diff.side_handles("repeats_b", handle_b, repeats_b)
     handles = before + after
     for handle in handles:
         _require_performance_report(registry, handle)
@@ -1025,79 +1032,48 @@ def diff_reports(
     side_after = report_diff.Side.of(
         [totals_by_handle[handle].by_metric[by] for handle in after]
     )
+    comparison = report_diff.classify(side_before, side_after, thresholds)
 
-    # A group no capture gives a figure, such as a host op's device time, is not one
-    # this metric can say anything about.
-    keys = [
-        key
-        for key in dict.fromkeys([*side_before.calls, *side_after.calls])
-        if key in side_before.measured or key in side_after.measured
-    ]
-    changes = []
-    within_threshold = 0
-    new: List[Hashable] = []
-    missing: List[Hashable] = []
-    unmeasured: List[Hashable] = []
-    inconsistent: List[Hashable] = []
-    for key in keys:
-        if side_before.disagrees(key) or side_after.disagrees(key):
-            inconsistent.append(key)
-        elif key not in side_before.calls:
-            new.append(key)
-        elif key not in side_after.calls:
-            missing.append(key)
-        elif key in side_before.unmeasured or key in side_after.unmeasured:
-            unmeasured.append(key)
-        else:
-            was, now = side_before.figures[key], side_after.figures[key]
-            if not thresholds.passes(
-                was.total, report_diff.delta(was.total, now.total)
-            ):
-                within_threshold += 1
-                continue
-            change: Dict[str, object] = {
-                **report_diff.group_fields(key, grouping),
-                f"{by}_before": _rounded(was.total),
-                f"{by}_after": _rounded(now.total),
-                "delta": report_diff.delta(was.total, now.total),
-                "delta_percent": _percent_change(was.total, now.total),
-                "count_before": was.count,
-                "count_after": now.count,
-            }
-            # Without these a total over fewer measured calls reads as a speed-up.
-            if was.measured != was.count or now.measured != now.count:
-                change["measured_before"] = was.measured
-                change["measured_after"] = now.measured
-            changes.append(change)
-    # Largest movement in either direction: a regression matters as much as a win.
-    changes.sort(key=lambda change: abs(cast(float, change["delta"])), reverse=True)
+    def named(group: Hashable) -> Dict[str, object]:
+        return report_diff.group_fields(group, grouping)
 
-    def one_sided(
-        keys: List[Hashable], side: report_diff.Side, label: str
-    ) -> List[Dict]:
-        held = sorted(keys, key=lambda key: -side.largest[key])
-        return [
-            {
-                **report_diff.group_fields(key, grouping),
-                f"{by}_{label}": (
-                    _rounded(side.figures[key].total) if key in side.figures else None
-                ),
-                f"count_{label}": side.calls[key][0],
-            }
-            for key in held
-        ]
-
-    unmeasured_entries = [
-        {
-            **report_diff.group_fields(key, grouping),
-            "count_before": side_before.calls[key][0],
-            "count_after": side_after.calls[key][0],
-            "measured_before": side_before.least_measured[key],
-            "measured_after": side_after.least_measured[key],
+    def change_entry(change: report_diff.Change) -> Dict[str, object]:
+        was, now = change.before, change.after
+        entry: Dict[str, object] = {
+            **named(change.group),
+            f"{by}_before": _rounded(was.total),
+            f"{by}_after": _rounded(now.total),
+            "delta": change.delta,
+            "delta_percent": _percent_of(change.delta, was.total),
+            "count_before": was.count,
+            "count_after": now.count,
         }
-        for key in unmeasured
-    ]
+        # Without these a total over fewer measured calls reads as a speed-up.
+        if was.measured != was.count or now.measured != now.count:
+            entry["measured_before"] = was.measured
+            entry["measured_after"] = now.measured
+        return entry
 
+    def one_sided_entry(
+        group: Hashable, side: report_diff.Side, label: str
+    ) -> Dict[str, object]:
+        figure = side.figures_by_group.get(group)
+        return {
+            **named(group),
+            f"{by}_{label}": _rounded(figure.total) if figure is not None else None,
+            f"count_{label}": side.calls_by_group[group][0],
+        }
+
+    def unmeasured_entry(group: Hashable) -> Dict[str, object]:
+        return {
+            **named(group),
+            "count_before": side_before.calls_by_group[group][0],
+            "count_after": side_after.calls_by_group[group][0],
+            "measured_before": side_before.least_measured_by_group[group],
+            "measured_after": side_after.least_measured_by_group[group],
+        }
+
+    changes = [change_entry(change) for change in comparison.changes[:count]]
     result: Dict[str, object] = {
         "metric": by,
         "before": handle_a,
@@ -1108,69 +1084,74 @@ def diff_reports(
             "min_delta": thresholds.floor,
             "min_delta_unit": metric.unit,
         },
-        "change_count": len(changes),
-        "within_threshold_count": within_threshold,
-        "changes": changes[:count],
-        "new_count": len(new),
-        "new": one_sided(new, side_after, "after")[:side_count],
-        "missing_count": len(missing),
-        "missing": one_sided(missing, side_before, "before")[:side_count],
-        "unmeasured_count": len(unmeasured),
-        "unmeasured": unmeasured_entries[:side_count],
+        "change_count": len(comparison.changes),
+        "within_threshold_count": comparison.within_threshold_count,
+        "returned": len(changes),
+        "changes": changes,
+        "new_count": len(comparison.new),
+        "new": [
+            one_sided_entry(group, side_after, "after")
+            for group in comparison.new[:side_count]
+        ],
+        "missing_count": len(comparison.missing),
+        "missing": [
+            one_sided_entry(group, side_before, "before")
+            for group in comparison.missing[:side_count]
+        ],
+        "unmeasured_count": len(comparison.unmeasured),
+        "unmeasured": [
+            unmeasured_entry(group) for group in comparison.unmeasured[:side_count]
+        ],
     }
     if len(handles) > 2:
-        inconsistent.sort(
-            key=lambda key: (
-                -max(
-                    side_before.largest.get(key, 0.0), side_after.largest.get(key, 0.0)
-                ),
-                str(key),
-            )
-        )
         result.update(
             {
                 "repeats_before": before[1:],
                 "repeats_after": after[1:],
-                "inconsistent_count": len(inconsistent),
+                "inconsistent_count": len(comparison.inconsistent),
                 "inconsistent": [
                     {
-                        **report_diff.group_fields(key, grouping),
+                        **named(group),
                         "calls_before": list(
-                            side_before.calls.get(key, (0,) * len(before))
+                            side_before.calls_by_group.get(group, (0,) * len(before))
                         ),
                         "calls_after": list(
-                            side_after.calls.get(key, (0,) * len(after))
+                            side_after.calls_by_group.get(group, (0,) * len(after))
                         ),
                     }
-                    for key in inconsistent[:side_count]
+                    for group in comparison.inconsistent[:side_count]
                 ],
             }
         )
+    delta_total = report_diff.delta(side_before.total, side_after.total)
     result.update(
         {
             f"{by}_total_before": _rounded(side_before.total),
             f"{by}_total_after": _rounded(side_after.total),
-            "delta_total": report_diff.delta(side_before.total, side_after.total),
-            "delta_total_percent": _percent_change(side_before.total, side_after.total),
+            "delta_total": delta_total,
+            "delta_total_percent": _percent_of(delta_total, side_before.total),
             "projection": projection(signposts, ignored[0]),
             "note": report_diff.DIFF_NOTE,
         }
     )
 
     caveats = []
-    mismatched = _mismatches(registry, handles, grouping)
+    mismatched, unverified = _compared_facts(registry, handles, grouping)
     if mismatched:
         result["mismatched"] = mismatched
         caveats.append(report_diff.mismatch_caveat(mismatched))
+    if unverified:
+        result["unverified"] = unverified
+        caveats.append(report_diff.unverified_caveat(unverified))
     if grouping is report_diff.DiffMatch.SIGNATURE:
         caveats.append(report_diff.SIGNATURE_NOISE_CAVEAT)
     if metric.caveat:
         caveats.append(metric.caveat)
-    if unmeasured:
+    if comparison.unmeasured:
         caveats.append(
-            f"{len(unmeasured)} groups ran in both reports with no {by} on one side, "
-            "where tt-perf-report left it blank; they are listed under unmeasured, and "
-            "each side's total covers only the calls with a figure."
+            f"{len(comparison.unmeasured)} groups ran in both reports with no {by} on "
+            "one side, where tt-perf-report left it blank; they are listed under "
+            "unmeasured, and each side's total covers only the calls with a figure."
         )
     sub_devices = sorted(
         set().union(*(totals_by_handle[handle].sub_devices for handle in handles))
