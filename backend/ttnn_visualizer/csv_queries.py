@@ -2,13 +2,16 @@
 #
 # SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+import argparse
 import csv
 import json
 import logging
 import os
+import re
 import sys
 import tempfile
 import traceback
+import warnings
 from collections import defaultdict
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -20,6 +23,7 @@ from typing import (
     Dict,
     List,
     Literal,
+    NamedTuple,
     Optional,
     Set,
     Tuple,
@@ -27,6 +31,7 @@ from typing import (
     overload,
 )
 
+import _sitebuiltins
 import matplotlib
 import matplotlib.pyplot as plt
 import orjson
@@ -37,6 +42,7 @@ from ttnn_visualizer.exceptions import (
     DataFormatError,
     InvalidSignpostRange,
     PerformanceReportNotLoadedException,
+    PerfReportExit,
 )
 from ttnn_visualizer.models import Instance
 from ttnn_visualizer.utils import newest_ops_perf_file
@@ -80,6 +86,33 @@ def _stacked_report_plot_skipped():
         perf_report.HAS_MATPLOTLIB = has_matplotlib
 
 
+_PERF_REPORT_DIR = os.path.dirname(os.path.abspath(perf_report.__file__))
+
+# Stdlib frames that sit between a library's call and the `SystemExit`: the `exit()`
+# builtin and `ArgumentParser.error`. `sys.exit` is C, so it adds no frame.
+_EXIT_HELPER_FILES = frozenset(
+    os.path.abspath(path)
+    for path in (_sitebuiltins.__file__, argparse.__file__)
+    if path is not None
+)
+
+
+def _raised_by_perf_report(error: BaseException) -> bool:
+    """Whether tt-perf-report's own code raised this `SystemExit`.
+
+    Decided by the innermost frame once the stdlib exit helpers are passed over, not
+    by tt-perf-report being anywhere on the stack: gunicorn's timeout handler
+    (`Worker.handle_abort`) exits from a frame of its own while tt-perf-report is
+    still running, and that exit must propagate. #2183
+    """
+    frames = traceback.extract_tb(error.__traceback__)
+    while frames and os.path.abspath(frames[-1].filename) in _EXIT_HELPER_FILES:
+        frames.pop()
+    return bool(frames) and (
+        os.path.dirname(os.path.abspath(frames[-1].filename)) == _PERF_REPORT_DIR
+    )
+
+
 # Cell values after NaN sanitization; matches LocalCSVQueryRunner.execute_query.
 CSVCell = Optional[Union[str, float, int]]
 CSVQueryResult = Union[
@@ -105,6 +138,8 @@ REPORT_ROW_ID_OFFSET = 2
 _OP_TYPE_COLUMN = "OP TYPE"
 _OP_CODE_COLUMN = "OP CODE"
 _HOST_START_COLUMN = "HOST START TS"
+# Read in the same pass for the agent's `load_report`, which reports the device count.
+_DEVICE_ID_COLUMN = "DEVICE ID"
 
 # A row's program and whether the program cache held it. Older captures lack both.
 PROGRAM_HASH_COLUMN = "PROGRAM HASH"
@@ -374,8 +409,52 @@ class NPEQueries:
                 return json.load(f)
 
 
+class DeviceLogMeta(NamedTuple):
+    """What `/api/performance/device-log/meta` serves of the device log's first line."""
+
+    architecture: Optional[str] = None
+    frequency: Optional[int] = None
+    # Null on captures whose first line names no count, which most older ones are.
+    max_cores: Optional[int] = None
+
+
+# Searched for anywhere on the line, so a missing comma or a leading BOM still reads. A
+# number of ten digits or more is no count, rather than an int too long to parse.
+_META_ARCHITECTURE = re.compile(r"ARCH:\s*([\w\d_]+)")
+_META_FREQUENCY = re.compile(r"CHIP_FREQ\[MHz\]:\s*(\d{1,9})(?!\d)")
+_META_MAX_CORES = re.compile(r"Max Compute Cores:\s*(\d{1,9})(?!\d)")
+# The meta reads only the first line, and a log with no newline must not be read whole.
+_META_LINE_LIMIT = 65536
+
+
+def parse_device_meta(line: str) -> DeviceLogMeta:
+    """The architecture, clock and core count a device log's first line names."""
+    architecture = _META_ARCHITECTURE.search(line)
+    frequency = _META_FREQUENCY.search(line)
+    max_cores = _META_MAX_CORES.search(line)
+    return DeviceLogMeta(
+        architecture=architecture.group(1) if architecture else None,
+        frequency=int(frequency.group(1)) if frequency else None,
+        max_cores=int(max_cores.group(1)) if max_cores else None,
+    )
+
+
 class DeviceLogProfilerQueries:
     DEVICE_LOG_FILE = "profile_log_device.csv"
+    # What `query_zone_summary` groups by. Kept apart from
+    # REQUIRED_DEVICE_LOG_COLUMNS because only that one route needs them; see the
+    # comment in `query_zone_summary` before folding the two together.
+    ZONE_SUMMARY_COLUMNS = frozenset(
+        {
+            "PCIe slot",
+            "zone name",
+            "RISC processor type",
+            "core_x",
+            "core_y",
+            "run host ID",
+            "time[cycles since reset]",
+        }
+    )
     # Only the columns something downstream depends on. Everything else in the
     # file is passed through untouched, because which columns exist varies by
     # producer and gating on them rejects captures that work fine: the segformer
@@ -390,6 +469,10 @@ class DeviceLogProfilerQueries:
         # so a capture without it would be served to a client expecting it.
         "run host ID",
     ]
+    # Every column `zone_timings` needs: `__enter__` refuses a log without the
+    # required ones, and `query_zone_summary` then groups by the rest. The agent
+    # inventory checks this set so it never lists a log the tool would refuse.
+    ZONE_TIMINGS_COLUMNS = frozenset(REQUIRED_DEVICE_LOG_COLUMNS) | ZONE_SUMMARY_COLUMNS
 
     # The `type` column's vocabulary, as tt-metal writes it. Deliberately not
     # required -- older captures predate the column -- but pinned here so the
@@ -531,12 +614,20 @@ class DeviceLogProfilerQueries:
         `__enter__` skips it (`offset=1`) because pandas would read it as a
         header, so the only way to the clock is to read the line directly — and
         without the clock a cycle count cannot be turned into a duration.
+
+        An unreadable file, or a first line that is not UTF-8, gives `{}` rather
+        than raising: the clock is then unknown, and callers must treat it so.
+        A broken device log must not fail `load_report` for a capture whose ops
+        perf CSV is fine. #2184
         """
         if not instance.performance_path:
             raise PerformanceReportNotLoadedException()
         path = Path(instance.performance_path, cls.DEVICE_LOG_FILE)
-        with open(path, "r") as handle:
-            first_line = handle.readline()
+        try:
+            with open(path, "rb") as handle:
+                first_line = handle.readline().decode("utf-8")
+        except (OSError, UnicodeDecodeError):
+            return {}
 
         metadata: Dict[str, str] = {}
         for field in first_line.split(","):
@@ -544,6 +635,29 @@ class DeviceLogProfilerQueries:
             if separator:
                 metadata[key.strip()] = value.strip()
         return metadata
+
+    @classmethod
+    def device_log_path(cls, instance: Instance) -> Optional[Path]:
+        """The report's device log, or None where it has none: a directory is none."""
+        if not instance.performance_path:
+            return None
+        path = Path(instance.performance_path, cls.DEVICE_LOG_FILE)
+        return path if path.is_file() else None
+
+    @classmethod
+    def read_device_meta(cls, instance: Instance) -> Optional[DeviceLogMeta]:
+        """The device log's first line as `/api/performance/device-log/meta` reads it,
+        or None where the report has no device log.
+
+        The route and the agent's flags read the device's core count through this one
+        reader, so they cannot disagree about a device. Decoded leniently: a stray byte
+        anywhere in the first block of the file must not cost the line.
+        """
+        path = cls.device_log_path(instance)
+        if path is None:
+            return None
+        with open(path, "r", encoding="utf-8", errors="ignore") as handle:
+            return parse_device_meta(handle.readline(_META_LINE_LIMIT).strip())
 
     def query_zone_summary(
         self, limit: Optional[int] = None
@@ -583,16 +697,7 @@ class DeviceLogProfilerQueries:
         # ones *this* query indexes, so a capture missing one fails here with a
         # reason instead of a `KeyError` mid-parse.
         available = set(self.runner.df.columns if self.runner.df is not None else [])
-        needed = {
-            "PCIe slot",
-            "zone name",
-            "RISC processor type",
-            "core_x",
-            "core_y",
-            "run host ID",
-            "time[cycles since reset]",
-        }
-        missing = sorted(needed - available)
+        missing = sorted(self.ZONE_SUMMARY_COLUMNS - available)
         if missing:
             raise DataFormatError(
                 f"{self.DEVICE_LOG_FILE} cannot be summarised by zone; missing: "
@@ -1225,6 +1330,20 @@ class OpsPerformanceReportQueries:
                         cls.DEFAULT_STACKED_CSV_FILE,
                         not merge_devices,
                     )
+            except SystemExit as e:
+                # tt-perf-report calls sys.exit(1) on unparseable inputs (e.g. missing
+                # DEVICE ID). Convert library exits so the MCP server stays up and the
+                # HTTP route returns 422, while letting worker aborts propagate. #2183
+                if not _raised_by_perf_report(e):
+                    raise
+                logger.exception("tt-perf-report exited while loading report")
+                # Only a genuine int is echoed: `sys.exit("...")` carries free text.
+                exit_code = (
+                    e.code
+                    if isinstance(e.code, int) and not isinstance(e.code, bool)
+                    else None
+                )
+                raise PerfReportExit(exit_code) from e
             except Exception as e:
                 logger.error(f"Error loading report: {e}")
                 logger.error(f"Full traceback:\n{traceback.format_exc()}")
@@ -1413,6 +1532,11 @@ class ResolvedSignposts:
 
     positions_by_name: Dict[str, List[int]]
     sorted_by_host_time: bool
+    # Distinct `DEVICE ID`s the rows name, or None when the CSV has no such column.
+    device_count: Optional[int] = None
+
+    def _in_bound_order(self) -> List[Tuple[str, List[int]]]:
+        return sorted(self.positions_by_name.items(), key=lambda item: item[1][0])
 
     def listing(self) -> List[Dict[str, object]]:
         """One entry per name, at the row a bound on that name resolves to.
@@ -1422,26 +1546,52 @@ class ResolvedSignposts:
         """
         return [
             {"id": positions[0] + REPORT_ROW_ID_OFFSET, "op_code": name}
-            for name, positions in sorted(
-                self.positions_by_name.items(), key=lambda item: item[1][0]
-            )
+            for name, positions in self._in_bound_order()
         ]
+
+    def occurrences(self) -> List[Tuple[str, int]]:
+        """Each name with how often it occurs, in `listing`'s order."""
+        return [(name, len(positions)) for name, positions in self._in_bound_order()]
 
 
 def resolve_signposts(
-    csv_file: IO[str], tracing_mode: bool = False
+    csv_file: IO[str], tracing_mode: bool = False, low_memory: bool = False
 ) -> ResolvedSignposts:
     """Read a perf CSV's signposts as `generate_perf_report` orders them.
 
     The read and sort are pandas', as the library's are, so equal timestamps order
-    the same way in both. Only the three columns it needs are parsed. The file is
-    rewound before and after, so the caller can hand it on.
+    the same way in both. Only the columns it needs are parsed. The file is rewound
+    before and after, so the caller can hand it on.
+
+    `low_memory` parses in chunks, as tt-perf-report does not: on every local
+    capture it resolves the same positions, and peaks at a fraction of the memory.
+    A chunk can type a column apart from the rest, though -- one non-numeric host
+    time leaves ints and strings that cannot be sorted together -- so a host time
+    or device id read that way is read again as text, still in chunks: the text a
+    whole-file parse keeps for a column it cannot type.
     """
-    wanted = {_OP_TYPE_COLUMN, _OP_CODE_COLUMN, _HOST_START_COLUMN}
-    csv_file.seek(0)
-    rows = pd.read_csv(
-        csv_file, usecols=lambda column: column in wanted, low_memory=False
-    )
+    wanted = {_OP_TYPE_COLUMN, _OP_CODE_COLUMN, _HOST_START_COLUMN, _DEVICE_ID_COLUMN}
+
+    def read(columns: Set[str], as_text: bool = False) -> pd.DataFrame:
+        csv_file.seek(0)
+        # Its warning is about a mixed column, which is read again below.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", pd.errors.DtypeWarning)
+            return pd.read_csv(
+                csv_file,
+                usecols=lambda column: column in columns,
+                low_memory=low_memory,
+                dtype=str if as_text else None,
+            )
+
+    rows = read(wanted)
+    if low_memory:
+        # The two the answer depends on: the sort, and the distinct-device count.
+        for column in (_HOST_START_COLUMN, _DEVICE_ID_COLUMN):
+            if column in rows.columns and pd.api.types.infer_dtype(
+                rows[column], skipna=True
+            ).startswith("mixed"):
+                rows[column] = read({column}, as_text=True)[column]
     csv_file.seek(0)
 
     sorted_by_host_time = _HOST_START_COLUMN in rows.columns and not tracing_mode
@@ -1458,10 +1608,17 @@ def resolve_signposts(
         for position, name in zip(signposts.index, signposts[_OP_CODE_COLUMN]):
             positions_by_name[str(name)].append(int(position))
 
-    return ResolvedSignposts(dict(positions_by_name), sorted_by_host_time)
+    device_count = (
+        int(rows[_DEVICE_ID_COLUMN].nunique())
+        if _DEVICE_ID_COLUMN in rows.columns
+        else None
+    )
+    return ResolvedSignposts(dict(positions_by_name), sorted_by_host_time, device_count)
 
 
-def read_signposts(csv_file: IO[str], tracing_mode: bool = False) -> ResolvedSignposts:
+def read_signposts(
+    csv_file: IO[str], tracing_mode: bool = False, low_memory: bool = False
+) -> ResolvedSignposts:
     """`resolve_signposts`, with an unreadable capture answered as the caller's data.
 
     `EmptyDataError` and `ParserError` are both `ValueError`s: a ragged or
@@ -1470,7 +1627,7 @@ def read_signposts(csv_file: IO[str], tracing_mode: bool = False) -> ResolvedSig
     same through either.
     """
     try:
-        return resolve_signposts(csv_file, tracing_mode)
+        return resolve_signposts(csv_file, tracing_mode, low_memory)
     except ValueError as error:
         raise DataFormatError(
             f"could not read the report's signposts: {error}"
@@ -1568,8 +1725,14 @@ class DegradedPerformanceReport(Exception):
 def _generate_performance_report(
     source: _PerformanceReportSource, options: _PerformanceReportOptions
 ) -> Dict:
-    raw_csv = Path(source.path).read_text()
-    return OpsPerformanceReportQueries._generate_report_uncached(raw_csv, options)
+    csv_path = Path(source.path)
+    raw_csv = csv_path.read_text()
+    try:
+        return OpsPerformanceReportQueries._generate_report_uncached(raw_csv, options)
+    except PerfReportExit as e:
+        # Named here, not in the cached generator, so its signature stays
+        # (raw_csv, options). The basename only: hosted error bodies reach users.
+        raise PerfReportExit(e.exit_code, subject=csv_path.name) from e.__cause__
 
 
 @lru_cache(maxsize=MAX_CACHED_PERFORMANCE_REPORTS)

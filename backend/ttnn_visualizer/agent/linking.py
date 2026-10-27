@@ -23,7 +23,6 @@ This module sits above `tools` and `operations` and is the only one that reads b
 which is what keeps those two from importing each other.
 """
 
-import json
 import logging
 import re
 import sqlite3
@@ -35,15 +34,15 @@ from functools import partial
 from typing import Dict, List, NamedTuple, Optional, Sequence, Set, Tuple
 
 from tt_perf_report.perf_report import HOST_OP_MARKER
-from ttnn_visualizer.agent import failures, operations, perf_detail, tools
+from ttnn_visualizer.agent import failures, operations, perf_detail, perf_flags, tools
 from ttnn_visualizer.agent.bounds import (
     MAX_LIMIT,
     GraphTooLargeError,
     ensure_graph_readable,
 )
+from ttnn_visualizer.agent.captured_graph import UnreadableGraphError, parse_graph
 from ttnn_visualizer.agent.handles import CacheVariant, ReportRegistry
 from ttnn_visualizer.agent.scope_outcomes import is_device_operation, scope_pairing
-from ttnn_visualizer.csv_queries import SIGNPOST_OP_TYPE
 from ttnn_visualizer.models import Instance
 
 logger = logging.getLogger(__name__)
@@ -221,7 +220,7 @@ def match_device_operations(
     graph always pass; the check guards orders assembled any other way. The raw orders are tried before either collapse, so a
     spurious collapsed prefix cannot pre-empt a complete end-order match.
     """
-    alignable = [row for row in rows if row.get("op_type") != SIGNPOST_OP_TYPE]
+    alignable = [row for row in rows if not tools.is_signpost_row(row)]
 
     first = _attempt(function_start, alignable, MatchedOn.FUNCTION_START)
     if first:
@@ -237,10 +236,6 @@ def match_device_operations(
             function_end, alignable, MatchedOn.FUNCTION_END_COLLAPSED, num_devices
         )
     )
-
-
-class UnreadableGraphError(ValueError):
-    """A captured graph that is not a JSON list of nodes."""
 
 
 def _redacted(error: Exception) -> str:
@@ -271,12 +266,7 @@ def _device_operation_names(raw: Optional[str]) -> Dict[NodeOrder, List[str]]:
     names: Dict[NodeOrder, List[str]] = {order: [] for order in NodeOrder}
     if not raw:
         return names
-    try:
-        nodes = json.loads(raw)
-    except ValueError as error:
-        raise UnreadableGraphError(str(error)) from None
-    if not isinstance(nodes, list):
-        raise UnreadableGraphError("not a list of nodes")
+    nodes = parse_graph(raw)
 
     lifecycle: List[Tuple[NodeOrder, str, Dict]] = []
     for node in nodes:
@@ -337,7 +327,7 @@ def is_host_op_row(row: Dict) -> bool:
 
 def _pairable(row: Dict) -> bool:
     """A row a device operation could pair with: host ops and signposts launch none."""
-    return not is_host_op_row(row) and row.get("op_type") != SIGNPOST_OP_TYPE
+    return not is_host_op_row(row) and not tools.is_signpost_row(row)
 
 
 def _canonical_rows(registry: ReportRegistry, handle: str) -> List[Dict]:
@@ -345,7 +335,7 @@ def _canonical_rows(registry: ReportRegistry, handle: str) -> List[Dict]:
 
 
 def _unlinked_reason(row: Dict) -> UnlinkedReason:
-    if row.get("op_type") == SIGNPOST_OP_TYPE:
+    if tools.is_signpost_row(row):
         return UnlinkedReason.SIGNPOST
     if is_host_op_row(row):
         return UnlinkedReason.HOST_OP
@@ -611,7 +601,7 @@ RANGED_LINK_NOTE = (
 def top_ops(
     registry: ReportRegistry,
     handle: str,
-    by: str = "device_time",
+    by: str = tools.DEFAULT_METRIC,
     limit: Optional[int] = None,
     start_signpost: Optional[str] = None,
     end_signpost: Optional[str] = None,
@@ -654,13 +644,6 @@ def top_ops(
     return result
 
 
-def _share_percent(device_time: Optional[float], total: float) -> Optional[float]:
-    """Percent of `total`, to three significant figures so a sliver stays non-zero."""
-    if device_time is None or total <= 0:
-        return None
-    return float(f"{device_time / total * 100:.3g}")
-
-
 def _device_time_summary(
     rows: Sequence[Dict], report_total: float
 ) -> Dict[str, object]:
@@ -676,7 +659,7 @@ def _device_time_summary(
     slowest, _ = max(timed, key=lambda pair: pair[1])
     return {
         "device_time": round(total, 3),
-        "device_time_share_percent": _share_percent(total, report_total),
+        "device_time_share_percent": tools.share_percent(total, report_total),
         "slowest_perf_id": slowest.get("id"),
     }
 
@@ -695,7 +678,12 @@ def operation_detail(
         handle,
         operation_id=operation_id,
         rank=rank,
-        detail_fields=partial(failures.operation_failure_fields, registry, handle),
+        detail_fields=partial(
+            failures.operation_failure_fields,
+            registry,
+            handle,
+            circular_buffer_limit=tools.row_limit(MAX_LIMIT, groups),
+        ),
     )
     link = operation_link(registry, handle)
     if link.status is LinkStatus.LINKED and result.get("rank") != link.rank:
@@ -713,13 +701,15 @@ def operation_detail(
     if link.status is LinkStatus.LINKED:
         rows = link.perf_rows_by_operation.get(int(operation_id), [])
         empty = tools.empty_detail_fields(registry, handle, groups)
+        flag_inputs = tools.read_flag_inputs(registry, handle, groups)
         result["perf_rows"] = [
             {
                 **tools.project_row(row),
-                "device_time_share_percent": _share_percent(
+                "device_time_share_percent": tools.share_percent(
                     tools.countable_device_time(row), link.report_device_time_total
                 ),
                 **perf_detail.detail_fields(row, groups, empty),
+                **perf_flags.flag_fields(row, flag_inputs),
             }
             for row in rows[: tools.row_limit(MAX_LIMIT, groups)]
         ]
@@ -729,6 +719,10 @@ def operation_detail(
         result["device_time_unit"] = DEVICE_TIME_UNIT
         result["projection"] = tools.projection(None)
         result.update(perf_detail.summary(groups, empty))
+        flagged = perf_flags.flagged_rows(
+            rows, flag_inputs, key=("operation", link.rank, int(operation_id))
+        )
+        result.update(perf_flags.summary(flag_inputs, flagged))
         if rows:
             result.update(_device_time_summary(rows, link.report_device_time_total))
             result["report_device_time_total"] = round(link.report_device_time_total, 3)

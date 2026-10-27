@@ -159,6 +159,7 @@ Applies on touch to views that draw data-proportional visuals (NPE chip cluster 
 
 - The MCP surface lives in **`backend/ttnn_visualizer/agent/`** and reads the query classes directly with an **explicit canonical projection**, never a route's view defaults (which hide host ops and merge devices). Tools return **aggregates or capped slices, never the whole report**, and a number that can mislead — a total over a partitioned run, cycles summed across cores — carries its caveat in the response. Rationale and the #1883 precedent: [CONVENTIONS.md](./CONVENTIONS.md#agent-facing-tools). User-facing docs: [docs/src/agent-tools.md](./docs/src/agent-tools.md).
 - **Adding a tool touches two places on purpose:** `_tool_table` in `server.py`, and the tool table in [docs/src/agent-tools.md](./docs/src/agent-tools.md) in the same change. That page is not a description of the surface, it is the only one an agent's reader ever gets — a tool registered but undocumented is invisible to the client that would have chosen it, and a caveat that never reaches the page is one an agent acts without. Where a tool's answer needs a caveat to be read correctly, the prose beside the table is where it goes. See #2036.
+- **A rule every tool shares goes in `INSTRUCTIONS`** (`server.py`), which `initialize` returns and a client puts in the system prompt; each tool's description keeps its own caveats, and every `_tool_table` entry has a `title`.
 
 ### Upload security
 
@@ -208,6 +209,7 @@ Applies on touch to views that draw data-proportional visuals (NPE chip cluster 
 
 - **`event_logging.py` owns the vocabulary; `src/definitions/EventLogEvent.ts` is a copy.** Keep them in sync; `test_event_logging_frontend_parity.py` enforces the contract.
 - **`docs/src/event-logging.md` is the user-facing copy of the event schema.** Every new event must name the Q1–Q5 decision from #1819 that it informs; update the documentation in the same commit. `test_event_logging_docs_parity.py` enforces the contract.
+- **A new event, field or vocabulary member changes the exported usage metrics, which need a privacy re-review.** `_PRIVACY_REVIEWED_ATTRIBUTES` in `tests/test_usage_collection.py` pins the exported shape literally, so the schema change fails until that literal is edited too; flag the edit for privacy review rather than only updating it.
 - **`MAX_BUFFERED_EVENTS` must equal `MAX_EVENT_LOG_BATCH_EVENTS`**, which bounds write atomicity rather than merely an HTTP body.
 - **The unload beacon must send a `Blob` typed `application/json`** — that content type is what keeps the request non-simple, and a bare-string beacon goes as `text/plain` and is refused.
 - **Failures are silent and batches are never re-buffered.** The only diagnostic is a `console.warn` under `import.meta.env.DEV` carrying the status, never a response body.

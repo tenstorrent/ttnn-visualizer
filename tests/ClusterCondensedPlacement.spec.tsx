@@ -6,6 +6,13 @@ import { cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ClusterRenderer from '../src/components/cluster/ClusterRenderer';
 import type { ClusterTopology } from '../src/model/ClusterModel';
+import {
+    HostOptions,
+    ResizeObserverStub,
+    hostOf,
+    topologyOfHosts,
+    topologyQueryResult,
+} from './helpers/clusterTopologyFixtures';
 
 // Placement is where the condensed layout actually happens — the group gutter, the
 // per-host offset and the mesh-coords guard — and none of it was exercised. Same
@@ -18,55 +25,10 @@ vi.mock('react-router', async () => ({
 }));
 vi.mock('../src/hooks/useAPI', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../src/hooks/useAPI')>()),
-    useGetClusterTopology: () => ({
-        data: topologyOverride,
-        isLoading: false,
-        isError: false,
-        error: null,
-    }),
+    useGetClusterTopology: () => topologyQueryResult(topologyOverride),
 }));
 
-/* eslint-disable class-methods-use-this -- no-op stub has nothing to hold */
-class ResizeObserverStub {
-    observe() {}
-
-    unobserve() {}
-
-    disconnect() {}
-}
-/* eslint-enable class-methods-use-this */
-
-interface HostSpec {
-    rank: number;
-    chipCount: number;
-    /** Board slot per chip; omitted means the descriptor carries none. */
-    slots?: boolean;
-    /** Mesh coordinates per chip, which outrank grouping when every host has them. */
-    mesh?: boolean;
-}
-
-const topologyOf = (hosts: HostSpec[]): ClusterTopology =>
-    ({
-        isMultiHost: hosts.length > 1,
-        worldSize: hosts.length,
-        unresolvedRemoteCount: 0,
-        hosts: hosts.map(({ rank, chipCount, slots, mesh }) => {
-            const chipIds = Array.from({ length: chipCount }, (_, chip) => chip);
-            return {
-                rank,
-                descriptor: {
-                    arch: Object.fromEntries(chipIds.map((chip) => [chip, 'wormhole_b0'])),
-                    chip_unique_ids: Object.fromEntries(chipIds.map((chip) => [chip, String(rank * 100 + chip)])),
-                    chips_with_mmio: [{ 0: 0 }],
-                    ethernet_connections: [],
-                    ...(slots ? { asic_locations: Object.fromEntries(chipIds.map((c) => [c, (c % 8) + 1])) } : {}),
-                },
-                meshChips: mesh ? Object.fromEntries(chipIds.map((c) => [c, [c, rank, 0, 0]])) : {},
-            };
-        }),
-        intraHostLinks: [],
-        interHostLinks: [],
-    }) as unknown as ClusterTopology;
+const topologyOf = (hosts: HostOptions[]): ClusterTopology => topologyOfHosts(hosts.map(hostOf));
 
 /** `{ "<rank>-<chipId>": [column, row] }`, 1-based as CSS grid reports them. */
 const placements = (): Record<string, [number, number]> => {

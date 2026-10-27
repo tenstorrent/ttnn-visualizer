@@ -37,6 +37,7 @@ class DetailGroup(str, Enum):
     CACHE = "cache"
     KERNELS = "kernels"
     ADVICE = "advice"
+    FLAGS = "flags"
 
 
 # How tt-perf-report and pandas spell an empty cell.
@@ -66,7 +67,7 @@ def _microseconds(nanoseconds: object) -> Optional[float]:
 _UNMODELLED_NS = 1.0
 
 
-def _is_unmodelled(nanoseconds: object) -> bool:
+def is_unmodelled(nanoseconds: object) -> bool:
     return _number(nanoseconds) == _UNMODELLED_NS
 
 
@@ -124,7 +125,7 @@ class _Field(NamedTuple):
     filled_by: Optional[str] = None
 
     def value(self, row: Dict) -> object:
-        if self.model_column and _is_unmodelled(row.get(self.model_column)):
+        if self.model_column and is_unmodelled(row.get(self.model_column)):
             return None
         return self.read(row.get(self.column))
 
@@ -244,6 +245,8 @@ _FIELDS: Dict[DetailGroup, Tuple[_Field, ...]] = {
         _Field("data_movement_kernel_hashes", "data_movement_kernel_hash", _listed),
     ),
     DetailGroup.ADVICE: (_Field("advice", "advice", _advice),),
+    # No column: `perf_flags` reads the row against the whole report and the device.
+    DetailGroup.FLAGS: (),
 }
 
 _NOT_A_COLUMN = "not among this report's columns, so no capture option fills it here"
@@ -342,9 +345,14 @@ def empty_in_report(
     }
 
 
+def has_fields(groups: Sequence[DetailGroup]) -> bool:
+    """Whether any group asked for adds detail fields, which `flags` alone does not."""
+    return any(_FIELDS[group] for group in groups)
+
+
 def summary(groups: Sequence[DetailGroup], empty: EmptyFields) -> Dict[str, object]:
     """What an answer with detail fields says about them."""
-    if not groups:
+    if not has_fields(groups):
         return {}
     return {
         "included": [group.value for group in groups],
@@ -360,6 +368,8 @@ __all__ = [
     "detail_fields",
     "empty_fields",
     "empty_in_report",
+    "has_fields",
+    "is_unmodelled",
     "parse_include",
     "summary",
 ]

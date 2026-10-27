@@ -15,7 +15,6 @@ invites the wrong reading carries the unit where it is returned.
 """
 
 import re
-import sqlite3
 from collections import defaultdict
 from contextlib import contextmanager
 from pathlib import Path
@@ -32,8 +31,12 @@ from typing import (
     TypedDict,
 )
 
-from ttnn_visualizer.agent.bounds import MAX_LIMIT, bounded
-from ttnn_visualizer.agent.handles import PROFILER_DB_FILE, ReportRegistry
+from ttnn_visualizer.agent.bounds import MAX_LIMIT, bounded, require_choice
+from ttnn_visualizer.agent.handles import (
+    PROFILER_DB_FILE,
+    ReportRegistry,
+    read_only_connection,
+)
 from ttnn_visualizer.models import Buffer, BufferType, Device, Instance, Operation
 from ttnn_visualizer.queries import DatabaseQueries
 
@@ -89,7 +92,7 @@ def profiler_db(instance: Instance) -> Iterator[DatabaseQueries]:
         raise ProfilerDatabaseMissingError(
             f"no {PROFILER_DB_FILE} in {instance.profiler_path}"
         )
-    connection = sqlite3.connect(f"file:{db_file}?mode=ro", uri=True)
+    connection = read_only_connection(db_file)
     try:
         with DatabaseQueries(connection=connection) as queries:
             yield queries
@@ -919,11 +922,8 @@ def memory_profile(
     # Refused up front, the way `top_ops` refuses an unknown metric. Matching
     # free text against whatever strings the report happens to hold makes a
     # typo indistinguishable from a report that allocates none of that type.
-    if wanted is not None and wanted not in BUFFER_TYPE_NAMES:
-        raise ValueError(
-            f"unknown buffer_type {wanted!r}; expected one of "
-            f"{', '.join(BUFFER_TYPE_NAMES)}"
-        )
+    if wanted is not None:
+        require_choice("buffer_type", wanted, BUFFER_TYPE_NAMES)
 
     instance = registry.get(handle)
     with profiler_db(instance) as queries:
