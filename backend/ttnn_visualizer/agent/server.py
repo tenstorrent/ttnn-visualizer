@@ -397,7 +397,13 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
             "title": "Operation detail",
             "description": (
                 "One operation: its input and output tensors with shape, dtype and "
-                "layout, and what it had allocated. Read tensor_size_unit: a "
+                "layout, what it had allocated, and its per-device l1_pressure in "
+                "bytes per bank "
+                "(fullness_pct, free_segments, largest_free_block and "
+                "largest_free_pct on the most constrained device, the one with "
+                "the smallest largest_free_block; free-space "
+                "figures are an upper bound because buffers excludes circular "
+                "buffers and intra-op tensors). Read tensor_size_unit: a "
                 "tensor size is whole-tensor bytes only where the report carries "
                 "that column, and per bank otherwise. When the handle also holds a "
                 "linked performance report, perf_rows lists the device operations "
@@ -441,8 +447,10 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
             "title": "Memory footprint",
             "description": (
                 "Memory footprint per operation, keyed by buffer type and ranked "
-                "within each type, with that type's largest footprint and the "
-                "device's L1 geometry. A floor, not the peak: the buffers table "
+                "within each type, with that type's largest footprint, the "
+                "device's L1 geometry, and l1_pressure (operations ranked by "
+                "smallest largest_free_block on each operation's most constrained "
+                "device). A floor, not the peak: the buffers table "
                 "records tensor allocations only, so circular buffers and tensors "
                 "allocated and freed inside one operation are absent -- for an "
                 "out-of-memory question read errors and l1_peak instead, and "

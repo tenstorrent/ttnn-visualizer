@@ -12,8 +12,10 @@ from typing import (
     Any,
     Dict,
     Generator,
+    Iterator,
     List,
     Optional,
+    Tuple,
     Type,
     Union,
     get_args,
@@ -28,6 +30,7 @@ from ttnn_visualizer.models import (
     Buffer,
     BufferChunk,
     BufferPage,
+    BufferType,
     Device,
     DeviceOperation,
     ErrorRecord,
@@ -119,6 +122,21 @@ class LocalQueryRunner:
         try:
             cursor.execute(query, params or [])
             return cursor.fetchall()
+        finally:
+            cursor.close()
+
+    def iter_query(
+        self, query: str, params: Optional[List] = None
+    ) -> Iterator[Tuple[Any, ...]]:
+        """
+        Executes a query locally, yielding rows one at a time rather than
+        holding the whole result. The cursor closes once the rows run out or
+        the caller stops reading.
+        """
+        cursor = self.connection.cursor()
+        try:
+            cursor.execute(query, params or [])
+            yield from cursor
         finally:
             cursor.close()
 
@@ -315,6 +333,33 @@ class DatabaseQueries:
             params.append(filters["rank"])
         query += " GROUP BY operation_id, buffer_type, device_id"
         return self.query_runner.execute_query(query, params)
+
+    def iter_l1_extents_by_operation(
+        self, rank: Optional[int] = None
+    ) -> Iterator[Tuple[Any, ...]]:
+        """L1 extents per operation, deduplicated in SQL, ordered by operation.
+
+        Yields ``(operation_id, device_id, address, size)`` rows, one per
+        address on each device with the largest ``max_size_per_bank`` recorded
+        there -- the dedupe ``computeL1PressureForOperation`` does in the app.
+        Rows without an address, or of zero size, occupy nothing and are left
+        out. Streamed rather than returned, for the reason
+        ``query_buffer_totals_by_operation`` aggregates: L1 rows are most of
+        ``buffers``, and a caller measuring one operation at a time need hold
+        only that operation's.
+        """
+        filters = self.merge_rank_filter("buffers", {}, rank)
+        query = (
+            "SELECT operation_id, device_id, address, MAX(max_size_per_bank) "
+            "FROM buffers WHERE buffer_type IN (?, ?) "
+            "AND address IS NOT NULL AND max_size_per_bank > 0"
+        )
+        params: List[Any] = [BufferType.L1.value, BufferType.L1.name]
+        if "rank" in filters:
+            query += " AND rank = ?"
+            params.append(filters["rank"])
+        query += " GROUP BY operation_id, device_id, address ORDER BY operation_id"
+        yield from self.query_runner.iter_query(query, params)
 
     def has_table(self, table_name: str) -> bool:
         """True if the report holds ``table_name``, which older captures may not."""

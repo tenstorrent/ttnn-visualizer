@@ -2,11 +2,12 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { expect, test } from 'vitest';
+import { describe, expect, it, test } from 'vitest';
 import { BufferType } from '../src/model/BufferType';
 import { Buffer } from '../src/model/APIData';
 import { L1PressureStatus } from '../src/model/L1Pressure';
 import { buildL1PressureResult, computeL1PressureForOperation } from '../src/functions/l1Pressure';
+import { makeDevice } from './helpers/deviceInfo';
 
 const L1_START = 0;
 const L1_END = 1000;
@@ -119,7 +120,7 @@ test('computeL1PressureForOperation does not merge same-offset buffers across de
     });
 });
 
-test('computeL1PressureForOperation reports the most-full device across devices', () => {
+test('computeL1PressureForOperation reports the device with the smallest largest free block without device geometry', () => {
     // Device 0: two buffers leaving a fragmented layout; device 1: a single denser allocation.
     const result = computeL1PressureForOperation(
         [makeBuffer(0, 100, 0), makeBuffer(300, 100, 0), makeBuffer(0, 700, 1)],
@@ -127,7 +128,8 @@ test('computeL1PressureForOperation reports the most-full device across devices'
         L1_END,
     );
 
-    // Device 1 is fuller (70% vs 20%), so its figures win and stay internally consistent.
+    // Device 1's largest gap (300) is smaller than device 0's (600), so its figures win and stay
+    // internally consistent.
     expect(result).toEqual({
         fullnessPercent: 70,
         freeSegments: 1,
@@ -179,4 +181,110 @@ test('buildL1PressureResult returns loading while inputs are still fetching', ()
             l1End: L1_END,
         }),
     ).toEqual({ status: L1PressureStatus.Loading, data: null });
+});
+
+test('computeL1PressureForOperation bounds each device by address_at_first_l1_cb_buffer and l1_bank_size when devices are provided', () => {
+    const devices = [
+        makeDevice({
+            device_id: 0,
+            address_at_first_l1_cb_buffer: 103712,
+            l1_bank_size: 1370848,
+            worker_l1_size: 1499136,
+        }),
+    ];
+
+    // Markers spanning all of L1, so ignoring either end of the device's window fails.
+    const result = computeL1PressureForOperation([makeBuffer(103712, 137084, 0)], 0, 1499136, devices);
+
+    expect(result.freeSegments).toBe(1);
+    expect(result.largestFreeBytes).toBe(1370848 - 137084);
+    expect(result.fullnessPercent).toBeCloseTo((137084 / 1370848) * 100, 5);
+    expect(result.largestFreePercent).toBeCloseTo(((1370848 - 137084) / 1370848) * 100, 5);
+});
+
+test('computeL1PressureForOperation selects the device with the smallest largestFreeBytes even when another device has higher fullness', () => {
+    const devices = [
+        makeDevice({ device_id: 0, l1_bank_size: 1000, worker_l1_size: 1000 }),
+        makeDevice({ device_id: 1, l1_bank_size: 1000, worker_l1_size: 1000 }),
+    ];
+    // Device 0: 30% full, fragmented so largestFreeBytes is 350.
+    // Device 1: 60% full, contiguous so largestFreeBytes is 400.
+    const buffers = [makeBuffer(0, 100, 0), makeBuffer(450, 100, 0), makeBuffer(900, 100, 0), makeBuffer(0, 600, 1)];
+
+    const result = computeL1PressureForOperation(buffers, 0, 1000, devices);
+    expect(result.largestFreeBytes).toBe(350);
+    expect(result.fullnessPercent).toBeCloseTo(30, 5);
+    expect(result.freeSegments).toBe(2);
+});
+
+test('computeL1PressureForOperation ignores zero-size buffers rather than splitting a free gap', () => {
+    expect(computeL1PressureForOperation([makeBuffer(500, 0)], L1_START, L1_END)).toEqual({
+        fullnessPercent: 0,
+        freeSegments: 1,
+        largestFreeBytes: 1000,
+        largestFreePercent: 100,
+    });
+});
+
+test('computeL1PressureForOperation falls back to the markers when no device has geometry', () => {
+    const devices = [makeDevice({ device_id: 0, l1_bank_size: 0, worker_l1_size: 1000 })];
+
+    expect(computeL1PressureForOperation([makeBuffer(0, 200)], L1_START, L1_END, devices)).toEqual({
+        fullnessPercent: 20,
+        freeSegments: 1,
+        largestFreeBytes: 800,
+        largestFreePercent: 80,
+    });
+});
+
+test('computeL1PressureForOperation measures a device without geometry against the first device window', () => {
+    const devices = [
+        makeDevice({ device_id: 0, address_at_first_l1_cb_buffer: 100, l1_bank_size: 500, worker_l1_size: 1000 }),
+    ];
+
+    // Device 5 has no row, so it borrows device 0's [100, 600) rather than the [0, 1000) markers.
+    const result = computeL1PressureForOperation([makeBuffer(100, 100, 5)], L1_START, L1_END, devices);
+
+    expect(result.largestFreeBytes).toBe(400);
+    expect(result.fullnessPercent).toBeCloseTo(20, 5);
+});
+
+describe('buildL1PressureResult with device geometry', () => {
+    const ready = (l1Start: number, l1End: number) =>
+        buildL1PressureResult({
+            hasProfilerReport: true,
+            isError: false,
+            isLoading: false,
+            buffersByOperation: [{ id: 7, name: 'ttnn.op', buffers: [makeBuffer(100, 100)] }],
+            devices: [
+                makeDevice({
+                    device_id: 0,
+                    address_at_first_l1_cb_buffer: 100,
+                    l1_bank_size: 400,
+                    worker_l1_size: 1000,
+                }),
+            ],
+            l1SmallBuffers: [],
+            l1Start,
+            l1End,
+        });
+
+    it('is ready even when the markers bound nothing', () => {
+        const result = ready(500, 500);
+
+        expect(result.status).toBe(L1PressureStatus.Ready);
+        expect(result.data?.get(7)?.largestFreeBytes).toBe(300);
+    });
+
+    it('measures each operation against the device window rather than the markers', () => {
+        const metrics = ready(L1_START, L1_END).data?.get(7);
+
+        // [100, 500), not [0, 1000): one 100-byte buffer leaves a 300-byte gap at 25% full.
+        expect(metrics).toEqual({
+            fullnessPercent: 25,
+            freeSegments: 1,
+            largestFreeBytes: 300,
+            largestFreePercent: 75,
+        });
+    });
 });

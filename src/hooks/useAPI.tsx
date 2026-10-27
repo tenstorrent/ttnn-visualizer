@@ -1234,9 +1234,10 @@ export const useBuffers = (bufferType: BufferType | null, useRange?: boolean) =>
 export const useL1PressureByOperation = (): L1PressureResult => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
     const { data: buffersByOperation, isLoading, isError } = useBuffers(BufferType.L1, false);
-    // The markers depend on these two queries; read their load state directly so we don't compute
-    // pressure against the default L1 window before the real markers resolve (which would briefly
-    // show one set of percentages and then flicker into another).
+    // Each device's own L1 window comes from `devices`; the markers bound pressure only when no
+    // device records L1 geometry. Both queries are awaited so we don't compute against a default
+    // window before the real one resolves (which would briefly show one set of percentages and
+    // then flicker into another).
     const { data: devices } = useDevices();
     const { data: l1SmallBuffers } = useGetAllBuffers(BufferType.L1_SMALL);
     const l1Start = useGetL1StartMarker();
