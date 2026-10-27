@@ -14,15 +14,19 @@ alone is millions of rows on an ordinary capture -- and a number whose unit
 invites the wrong reading carries the unit where it is returned.
 """
 
+import heapq
 import re
 from collections import defaultdict
 from contextlib import contextmanager
+from itertools import groupby
+from operator import itemgetter
 from pathlib import Path
 from typing import (
     Callable,
     Dict,
     Iterator,
     List,
+    Mapping,
     NamedTuple,
     Optional,
     Sequence,
@@ -233,13 +237,22 @@ def _buffer_type_name(value: object) -> str:
 
 
 L1_PRESSURE_NOTE = (
-    "Sizes are bytes per bank on `device_id` only. Free-space figures are an "
+    "Sizes are bytes per bank on `device_id` only, the most constrained device: "
+    "the one with the smallest largest free block. Free-space figures are an "
     "upper bound: `buffers` records tensor allocations only, excluding "
     "circular buffers and tensors allocated and freed inside one operation."
 )
 
+NO_L1_GEOMETRY_CAVEAT = (
+    "l1_pressure is null because no device records a usable L1 window "
+    "(`l1_bank_size` and `worker_l1_size` are zero or missing)."
+)
 
-class L1Pressure(TypedDict):
+# `[l1_start, l1_end)` in per-bank bytes.
+L1Window = Tuple[int, int]
+
+
+class _L1PressureFigures(TypedDict):
     device_id: int
     fullness_pct: float
     free_segments: int
@@ -248,33 +261,31 @@ class L1Pressure(TypedDict):
     allocated_bytes: int
     usable_bytes: int
     high_water_bytes: int
+
+
+class L1Pressure(_L1PressureFigures):
     note: str
 
 
-class RankedL1PressureRow(TypedDict):
+class RankedL1PressureRow(_L1PressureFigures):
     operation_id: int
     name: Optional[str]
-    device_id: int
-    fullness_pct: float
-    free_segments: int
-    largest_free_block: int
-    largest_free_pct: float
-    allocated_bytes: int
-    usable_bytes: int
-    high_water_bytes: int
 
 
-def _int_attr(obj: object, attr: str) -> int:
-    value = getattr(obj, attr, None)
+def _as_int(value: object) -> int:
     if value is None or isinstance(value, bool):
         return 0
     try:
-        return int(value)
-    except (TypeError, ValueError):
+        return int(value)  # type: ignore[call-overload]
+    except (TypeError, ValueError, OverflowError):
         return 0
 
 
-def _device_l1_window(device: Device) -> Optional[Tuple[int, int]]:
+def _int_attr(obj: object, attr: str) -> int:
+    return _as_int(getattr(obj, attr, None))
+
+
+def _device_l1_window(device: Device) -> Optional[L1Window]:
     """Usable per-bank L1 window `[l1_start, l1_end)` for one device.
 
     Bounds each device by `[address_at_first_l1_cb_buffer,
@@ -293,23 +304,37 @@ def _device_l1_window(device: Device) -> Optional[Tuple[int, int]]:
     return (l1_start, l1_end)
 
 
-def _compute_device_l1_pressure(
-    buffers: Sequence[Buffer], device_id: int, l1_start: int, l1_end: int
-) -> L1Pressure:
-    usable_size = l1_end - l1_start
-    by_address: Dict[int, int] = {}
-    for buf in buffers:
-        if _buffer_type_name(buf.buffer_type) != BufferType.L1.name:
-            continue
-        size = _int_attr(buf, "max_size_per_bank")
-        if size <= 0 or getattr(buf, "address", None) is None:
-            continue
-        address = _int_attr(buf, "address")
-        if address not in by_address or size > by_address[address]:
-            by_address[address] = size
+def _device_l1_windows(devices: Sequence[Device]) -> Dict[int, L1Window]:
+    """Each device's window, in `devices` order; a device without geometry is left out."""
+    windows: Dict[int, L1Window] = {}
+    for device in devices:
+        window = _device_l1_window(device)
+        if window is not None:
+            windows[_int_attr(device, "device_id")] = window
+    return windows
 
+
+def _pressure_rank(
+    pressure: _L1PressureFigures, tie: int
+) -> Tuple[int, float, int, int]:
+    """Most constrained first: smallest largest free block, then fullest, then most
+    allocated, then `tie`. Fullness is compared unrounded, as the app compares it."""
+    return (
+        pressure["largest_free_block"],
+        -pressure["allocated_bytes"] / pressure["usable_bytes"],
+        -pressure["allocated_bytes"],
+        tie,
+    )
+
+
+def _device_l1_pressure(
+    extents: Dict[int, int], device_id: int, window: L1Window
+) -> L1Pressure:
+    """One device's figures from its `{address: size}` extents, already deduplicated."""
+    l1_start, l1_end = window
+    usable_size = l1_end - l1_start
     clipped: List[Tuple[int, int]] = []
-    for address, size in by_address.items():
+    for address, size in extents.items():
         start = max(address, l1_start)
         end = min(address + size, l1_end)
         if end > start:
@@ -348,62 +373,139 @@ def _compute_device_l1_pressure(
     }
 
 
+def _most_constrained_device(
+    extents_by_device: Dict[int, Dict[int, int]], windows: Dict[int, L1Window]
+) -> L1Pressure:
+    """The device a tensor is least likely to fit on, by `_pressure_rank`.
+
+    A device with no window of its own borrows the first device's. A device
+    holding nothing scores the same as any other empty device with its window,
+    so each distinct window is measured once, for its lowest `device_id`.
+    """
+    fallback = next(iter(windows.values()))
+    candidates = [
+        _device_l1_pressure(extents, device_id, windows.get(device_id, fallback))
+        for device_id, extents in extents_by_device.items()
+    ]
+    empty: Dict[L1Window, int] = {}
+    for device_id in sorted(windows):
+        if device_id not in extents_by_device:
+            empty.setdefault(windows[device_id], device_id)
+    candidates.extend(
+        _device_l1_pressure({}, device_id, window)
+        for window, device_id in empty.items()
+    )
+    return min(candidates, key=lambda item: _pressure_rank(item, item["device_id"]))
+
+
+def _l1_extents_by_device(buffers: Sequence[Buffer]) -> Dict[int, Dict[int, int]]:
+    """L1 `{address: largest size}` per device, as `dedupeAndClipBuffers` keeps them.
+
+    A zero-size row occupies nothing, and the app skips it too rather than
+    splitting a free gap on a zero-width chunk.
+    """
+    extents: Dict[int, Dict[int, int]] = defaultdict(dict)
+    for buf in buffers:
+        if _buffer_type_name(buf.buffer_type) != BufferType.L1.name:
+            continue
+        size = _int_attr(buf, "max_size_per_bank")
+        if size <= 0 or getattr(buf, "address", None) is None:
+            continue
+        by_address = extents[_int_attr(buf, "device_id")]
+        address = _int_attr(buf, "address")
+        if size > by_address.get(address, 0):
+            by_address[address] = size
+    return extents
+
+
 def _compute_l1_pressure(
-    buffers: Sequence[Buffer], devices: Sequence[Device]
+    buffers: Sequence[Buffer], windows: Dict[int, L1Window]
 ) -> Optional[L1Pressure]:
     """Per-operation L1 fullness and free-segment fragmentation. #2172
 
-    Shares the core rule of `computeL1PressureForOperation` in
-    `src/functions/l1Pressure.ts`: per-device `[address_at_first_l1_cb_buffer,
-    min(worker_l1_size, address_at_first_l1_cb_buffer + l1_bank_size))` bounds,
-    deduplicating and clipping L1 tensor intervals per `device_id` before
-    merging overlapping or adjacent allocations, and selecting the most
-    constrained device (smallest `largest_free_block`, then highest
-    `fullness_pct`, `allocated_bytes`, and lowest `device_id`). Unlike the UI
-    helper, returns `None` when the operation recorded no `buffers` rows or no
-    valid device geometry, and ignores zero-size `buffers` rows rather than
-    splitting free segments on zero-width points.
+    Mirrors `computeL1PressureForOperation` in `src/functions/l1Pressure.ts`,
+    and `tests/l1PressureParity.spec.ts` holds the app to this port's answers:
+    per-device windows (`_device_l1_window`), L1 extents deduplicated by address
+    and clipped per `device_id` before overlapping or adjacent ones merge, and
+    the most constrained device by `_pressure_rank`. Unlike the app, returns
+    `None` when the operation recorded no `buffers` rows or no device has a
+    window, where the app reports a fully free window bounded by its markers.
     """
-    if not buffers:
+    if not buffers or not windows:
+        return None
+    return _most_constrained_device(_l1_extents_by_device(buffers), windows)
+
+
+def _ranked_l1_pressure(
+    queries: DatabaseQueries,
+    scope: RankScope,
+    operation_ids: Set[int],
+    windows: Dict[int, L1Window],
+    names: Mapping[int, Optional[str]],
+    cap: int,
+) -> Optional[Dict[str, object]]:
+    """`memory_profile`'s L1 pressure block, most constrained operations first.
+
+    Read one operation at a time from rows already deduplicated in SQL
+    (`iter_l1_extents_by_operation`), keeping only the `cap` most constrained:
+    the `buffers` table is too large to hold, as `query_buffer_totals_by_operation`
+    explains. An operation with L1 rows but no extent that occupies anything is
+    measured as empty.
+    """
+    if not operation_ids or not windows:
         return None
 
-    buffers_by_device: Dict[int, List[Buffer]] = defaultdict(list)
-    for buf in buffers:
-        buffers_by_device[_int_attr(buf, "device_id")].append(buf)
+    def measured() -> Iterator[Tuple[int, L1Pressure]]:
+        seen: Set[int] = set()
+        rows = queries.iter_l1_extents_by_operation(rank=scope.rank)
+        for operation_id, group in groupby(rows, key=itemgetter(0)):
+            extents: Dict[int, Dict[int, int]] = defaultdict(dict)
+            for _, device_id, address, size in group:
+                extents[_as_int(device_id)][_as_int(address)] = _as_int(size)
+            seen.add(operation_id)
+            yield operation_id, _most_constrained_device(extents, windows)
+        empty = _most_constrained_device({}, windows)
+        for operation_id in sorted(operation_ids - seen):
+            yield operation_id, empty
 
-    device_windows: Dict[int, Tuple[int, int]] = {}
-    for device in devices:
-        window = _device_l1_window(device)
-        if window is not None:
-            device_windows[_int_attr(device, "device_id")] = window
+    count = 0
 
-    if not device_windows:
-        return None
+    def counted() -> Iterator[Tuple[int, L1Pressure]]:
+        nonlocal count
+        for item in measured():
+            count += 1
+            yield item
 
-    fallback_window = next(iter(device_windows.values()))
-    all_device_ids = sorted(set(device_windows) | set(buffers_by_device))
-    candidates: List[L1Pressure] = [
-        _compute_device_l1_pressure(
-            buffers_by_device.get(dev_id, ()),
-            dev_id,
-            device_windows.get(dev_id, fallback_window)[0],
-            device_windows.get(dev_id, fallback_window)[1],
-        )
-        for dev_id in all_device_ids
-    ]
-
-    if not candidates:
-        return None
-
-    return min(
-        candidates,
-        key=lambda item: (
-            item["largest_free_block"],
-            -item["fullness_pct"],
-            -item["allocated_bytes"],
-            item["device_id"],
-        ),
+    top = heapq.nsmallest(
+        cap, counted(), key=lambda item: _pressure_rank(item[1], item[0])
     )
+    return {
+        "ranked_by": "largest_free_block",
+        "operation_count": count,
+        "returned": len(top),
+        "operations": [
+            _ranked_row(operation_id, names.get(operation_id), pressure)
+            for operation_id, pressure in top
+        ],
+        "note": L1_PRESSURE_NOTE,
+    }
+
+
+def _ranked_row(
+    operation_id: int, name: Optional[str], pressure: L1Pressure
+) -> RankedL1PressureRow:
+    return {
+        "operation_id": operation_id,
+        "name": name,
+        "device_id": pressure["device_id"],
+        "fullness_pct": pressure["fullness_pct"],
+        "free_segments": pressure["free_segments"],
+        "largest_free_block": pressure["largest_free_block"],
+        "largest_free_pct": pressure["largest_free_pct"],
+        "allocated_bytes": pressure["allocated_bytes"],
+        "usable_bytes": pressure["usable_bytes"],
+        "high_water_bytes": pressure["high_water_bytes"],
+    }
 
 
 def _scoped_devices(queries: DatabaseQueries, scope: RankScope) -> List[Device]:
@@ -411,11 +513,7 @@ def _scoped_devices(queries: DatabaseQueries, scope: RankScope) -> List[Device]:
     return list(queries.query_devices(filters=scoped(queries, "devices", scope)))
 
 
-def _device_capacity(
-    queries: DatabaseQueries,
-    scope: RankScope,
-    devices: Optional[Sequence[Device]] = None,
-) -> Dict[str, object]:
+def _device_capacity(devices: Sequence[Device]) -> Dict[str, object]:
     """L1 geometry, so a per-bank figure can be read against something.
 
     The report carries no DRAM capacity at all, which is said explicitly: an
@@ -425,15 +523,14 @@ def _device_capacity(
     The geometry is one device's, and which one is named in the response rather
     than left as an assumption about them being identical.
     """
-    # Rank-scoped like the figures beside it: on a multi-host report an
-    # unfiltered read counts every rank's devices, which answers a different
-    # question than the rest of the response.
-    resolved = _scoped_devices(queries, scope) if devices is None else list(devices)
-    if not resolved:
+    # `devices` is rank-scoped like the figures beside it (`_scoped_devices`):
+    # on a multi-host report an unfiltered read counts every rank's devices,
+    # which answers a different question than the rest of the response.
+    if not devices:
         return {"devices": 0, "dram_capacity": None}
-    device = resolved[0]
+    device = devices[0]
     return {
-        "devices": len(resolved),
+        "devices": len(devices),
         "geometry_from_device": device.device_id,
         "l1_bank_size": device.l1_bank_size,
         "l1_num_banks": device.l1_num_banks,
@@ -790,7 +887,7 @@ def operation_detail(
                 filters=scoped(queries, "buffers", scope, operation_id=wanted_operation)
             )
         )
-        devices = _scoped_devices(queries, scope)
+        windows = _device_l1_windows(_scoped_devices(queries, scope))
 
         # Only the tensors this operation refers to. Reading the report's whole
         # tensor table to describe a handful parses every other tensor's memory
@@ -865,7 +962,7 @@ def operation_detail(
         "input_count": len(inputs),
         "output_count": len(outputs),
         "allocations": dict(sorted(allocations.items())),
-        "l1_pressure": _compute_l1_pressure(buffers, devices),
+        "l1_pressure": _compute_l1_pressure(buffers, windows),
         # Reported rather than asserted: these two are in different units on a
         # report that carries `tensors.size`, and in the *same* unit on one that
         # does not, where the tensor figure is the per-bank allocation itself.
@@ -880,6 +977,8 @@ def operation_detail(
             result.get("caveat"),
             "l1_pressure is null because no buffer rows were recorded for this operation.",
         )
+    elif not windows:
+        result["caveat"] = joined_caveat(result.get("caveat"), NO_L1_GEOMETRY_CAVEAT)
     if withheld:
         result["caveat"] = joined_caveat(result.get("caveat"), withheld)
     return result
@@ -937,23 +1036,24 @@ def memory_profile(
             )
         }
         scoped_devices = _scoped_devices(queries, scope)
-        capacity = _device_capacity(queries, scope, scoped_devices)
-        has_l1_rows = any(
-            _buffer_type_name(row[1]) == BufferType.L1.name for row in grouped
-        )
-        raw_buffers = (
-            list(
-                queries.query_buffers(
-                    filters=scoped(
-                        queries,
-                        "buffers",
-                        scope,
-                        buffer_type=[BufferType.L1.value, BufferType.L1.name],
-                    )
-                )
+        capacity = _device_capacity(scoped_devices)
+        cap = bounded(limit)
+        l1_windows = _device_l1_windows(scoped_devices)
+        l1_pressure_block = (
+            _ranked_l1_pressure(
+                queries,
+                scope,
+                {
+                    row[0]
+                    for row in grouped
+                    if _buffer_type_name(row[1]) == BufferType.L1.name
+                },
+                l1_windows,
+                names,
+                cap,
             )
-            if wanted in (None, BufferType.L1.name) and scoped_devices and has_l1_rows
-            else []
+            if wanted in (None, BufferType.L1.name)
+            else None
         )
 
     # `(operation_id, buffer_type, device_id, total, count)`, already summed in
@@ -977,7 +1077,6 @@ def memory_profile(
         devices.add(device_id)
         by_type[type_name][operation_id] += total
 
-    cap = bounded(limit)
     memory: Dict[str, object] = {}
     for type_name in sorted(by_type):
         footprints = by_type[type_name]
@@ -1013,51 +1112,7 @@ def memory_profile(
             ],
         }
 
-    l1_pressure_block: Optional[Dict[str, object]] = None
-    if BufferType.L1.name in by_type and scoped_devices:
-        l1_buffers_by_op: Dict[int, List[Buffer]] = defaultdict(list)
-        for buf in raw_buffers:
-            if _buffer_type_name(buf.buffer_type) == BufferType.L1.name:
-                l1_buffers_by_op[_int_attr(buf, "operation_id")].append(buf)
-        pressure_rows: List[RankedL1PressureRow] = []
-        for op_id in by_type[BufferType.L1.name]:
-            pressure = _compute_l1_pressure(
-                l1_buffers_by_op.get(op_id, ()), scoped_devices
-            )
-            if pressure is None:
-                continue
-            pressure_rows.append(
-                {
-                    "operation_id": op_id,
-                    "name": names.get(op_id),
-                    "device_id": pressure["device_id"],
-                    "fullness_pct": pressure["fullness_pct"],
-                    "free_segments": pressure["free_segments"],
-                    "largest_free_block": pressure["largest_free_block"],
-                    "largest_free_pct": pressure["largest_free_pct"],
-                    "allocated_bytes": pressure["allocated_bytes"],
-                    "usable_bytes": pressure["usable_bytes"],
-                    "high_water_bytes": pressure["high_water_bytes"],
-                }
-            )
-        if pressure_rows:
-            pressure_rows.sort(
-                key=lambda item: (
-                    item["largest_free_block"],
-                    -item["fullness_pct"],
-                    -item["allocated_bytes"],
-                    item["operation_id"],
-                )
-            )
-            l1_pressure_block = {
-                "ranked_by": "largest_free_block",
-                "operation_count": len(pressure_rows),
-                "returned": min(len(pressure_rows), cap),
-                "operations": pressure_rows[:cap],
-                "note": L1_PRESSURE_NOTE,
-            }
-
-    return {
+    result: Dict[str, object] = {
         "handle": handle,
         "buffer_type": wanted,
         # Keyed by memory type even when one was selected, so a caller reads one
@@ -1097,6 +1152,9 @@ def memory_profile(
         **scope.as_response(),
         **_caveats(scope, devices=devices),
     }
+    if BufferType.L1.name in by_type and not l1_windows:
+        result["caveat"] = joined_caveat(result.get("caveat"), NO_L1_GEOMETRY_CAVEAT)
+    return result
 
 
 def tensor_flow(

@@ -43,7 +43,7 @@ export function buildL1PressureResult({
     for (const operation of buffersByOperation) {
         pressureByOperation.set(
             operation.id,
-            computeL1PressureForOperation(operation.buffers, l1Start, l1End, devices),
+            mostConstrainedDevice(operation.buffers, { start: l1Start, end: l1End }, deviceWindows).metrics,
         );
     }
 
@@ -58,6 +58,13 @@ interface MemoryChunk {
 interface L1Window {
     start: number;
     end: number;
+}
+
+export interface DeviceL1Pressure {
+    // Null only when no device has geometry and the operation holds no buffers.
+    deviceId: number | null;
+    allocatedBytes: number;
+    metrics: L1PressureMetrics;
 }
 
 function resolveDeviceL1Windows(devices: DeviceInfo[] | undefined): Map<number, L1Window> {
@@ -84,29 +91,60 @@ function resolveDeviceL1Windows(devices: DeviceInfo[] | undefined): Map<number, 
 
 // Perf-table v1 uses DB buffers from useBuffers(BufferType.L1) only — not captured-graph CBs
 // or buffer_allocate nodes that OperationDetails.memoryData() also considers.
+// Mirrored as `_compute_l1_pressure` in `backend/ttnn_visualizer/agent/operations.py`, held to
+// this function by tests/l1PressureParity.spec.ts. The port returns null where this returns a
+// fully free window: for an operation with no buffer rows, and when no device has geometry.
 export function computeL1PressureForOperation(
     buffers: Buffer[],
     l1Start: number,
     l1End: number,
     devices?: DeviceInfo[],
 ): L1PressureMetrics {
-    const deviceWindows = resolveDeviceL1Windows(devices);
-    const defaultUsableSize = l1End - l1Start;
+    return computeMostConstrainedL1Device(buffers, l1Start, l1End, devices).metrics;
+}
 
-    if (deviceWindows.size === 0 && defaultUsableSize <= 0) {
-        return {
-            fullnessPercent: 0,
-            freeSegments: 0,
-            largestFreeBytes: 0,
-            largestFreePercent: 0,
-        };
-    }
+// As computeL1PressureForOperation, with the device it reports on.
+export function computeMostConstrainedL1Device(
+    buffers: Buffer[],
+    l1Start: number,
+    l1End: number,
+    devices?: DeviceInfo[],
+): DeviceL1Pressure {
+    return mostConstrainedDevice(buffers, { start: l1Start, end: l1End }, resolveDeviceL1Windows(devices));
+}
+
+// The device a tensor is least likely to fit on: smallest largest free block, then fullest, then
+// most allocated, then lowest device_id — the order `_pressure_rank` gives in the agent's port.
+const rankMostConstrained = (a: DeviceL1Pressure, b: DeviceL1Pressure): number =>
+    a.metrics.largestFreeBytes - b.metrics.largestFreeBytes ||
+    b.metrics.fullnessPercent - a.metrics.fullnessPercent ||
+    b.allocatedBytes - a.allocatedBytes ||
+    (a.deviceId ?? 0) - (b.deviceId ?? 0);
+
+function mostConstrainedDevice(
+    buffers: Buffer[],
+    markerWindow: L1Window,
+    deviceWindows: Map<number, L1Window>,
+): DeviceL1Pressure {
+    const unavailable: DeviceL1Pressure = {
+        deviceId: null,
+        allocatedBytes: 0,
+        metrics: { fullnessPercent: 0, freeSegments: 0, largestFreeBytes: 0, largestFreePercent: 0 },
+    };
 
     // Each device has its own physical L1 sharing the same address layout, so buffers must be
     // grouped by device_id before deduping/merging — otherwise same-offset buffers on different
     // devices collide and the merged layout is meaningless. When device geometry is present, each
-    // device is bounded by [address_at_first_l1_cb_buffer, address_at_first_l1_cb_buffer + l1_bank_size)
-    // so reserved L1 Small space is not counted as free L1 (#2172).
+    // device is bounded by [address_at_first_l1_cb_buffer, min(worker_l1_size, address_at_first_l1_cb_buffer
+    // + l1_bank_size)) so reserved L1 Small space is not counted as free L1 (#2172). Without it, the
+    // L1 start and L1 Small markers bound every device.
+    const [firstWindow] = deviceWindows.values();
+    const fallbackWindow = firstWindow ?? markerWindow;
+
+    if (fallbackWindow.end <= fallbackWindow.start) {
+        return unavailable;
+    }
+
     const buffersByDevice = new Map<number, Buffer[]>();
 
     for (const buffer of buffers) {
@@ -119,55 +157,50 @@ export function computeL1PressureForOperation(
         }
     }
 
-    const pickMostConstrained = (worst: L1PressureMetrics, metrics: L1PressureMetrics): L1PressureMetrics =>
-        metrics.largestFreeBytes < worst.largestFreeBytes ||
-        (metrics.largestFreeBytes === worst.largestFreeBytes && metrics.fullnessPercent > worst.fullnessPercent)
-            ? metrics
-            : worst;
+    const candidates = [...buffersByDevice].map(([deviceId, deviceBuffers]) =>
+        computeDevicePressure(deviceBuffers, deviceId, deviceWindows.get(deviceId) ?? fallbackWindow),
+    );
 
-    if (deviceWindows.size > 0) {
-        const fallbackWindow = deviceWindows.values().next().value!;
-        const candidateIds = new Set<number>([...deviceWindows.keys(), ...buffersByDevice.keys()]);
-        const metricsPerDevice: L1PressureMetrics[] = [];
-        for (const deviceId of candidateIds) {
-            const window = deviceWindows.get(deviceId) ?? fallbackWindow;
-            const deviceBuffers = buffersByDevice.get(deviceId) ?? [];
-            metricsPerDevice.push(
-                computeMetricsForDevice(deviceBuffers, window.start, window.end, window.end - window.start),
-            );
+    // A device holding nothing scores the same as any other empty device with its window, so each
+    // distinct window is measured once, for its lowest device_id.
+    const emptyByWindow = new Map<string, number>();
+
+    for (const [deviceId, window] of deviceWindows) {
+        const key = `${window.start}:${window.end}`;
+        const lowest = emptyByWindow.get(key);
+        if (!buffersByDevice.has(deviceId) && (lowest === undefined || deviceId < lowest)) {
+            emptyByWindow.set(key, deviceId);
         }
-
-        return metricsPerDevice.reduce(pickMostConstrained);
     }
 
-    const deviceGroups = [...buffersByDevice.values()];
-
-    if (deviceGroups.length === 0) {
-        return computeMetricsForDevice([], l1Start, l1End, defaultUsableSize);
+    for (const deviceId of emptyByWindow.values()) {
+        candidates.push(computeDevicePressure([], deviceId, deviceWindows.get(deviceId) ?? fallbackWindow));
     }
 
-    return deviceGroups
-        .map((deviceBuffers) => computeMetricsForDevice(deviceBuffers, l1Start, l1End, defaultUsableSize))
-        .reduce(pickMostConstrained);
+    if (candidates.length === 0) {
+        return computeDevicePressure([], null, fallbackWindow);
+    }
+
+    return candidates.reduce((worst, candidate) => (rankMostConstrained(candidate, worst) < 0 ? candidate : worst));
 }
 
-function computeMetricsForDevice(
-    buffers: Buffer[],
-    l1Start: number,
-    l1End: number,
-    usableSize: number,
-): L1PressureMetrics {
-    const clippedChunks = dedupeAndClipBuffers(buffers, l1Start, l1End);
+function computeDevicePressure(buffers: Buffer[], deviceId: number | null, window: L1Window): DeviceL1Pressure {
+    const usableSize = window.end - window.start;
+    const clippedChunks = dedupeAndClipBuffers(buffers, window.start, window.end);
     const mergedChunks = mergeOverlappingChunks(clippedChunks);
-    const gapSizes = computeGapSizes(mergedChunks, l1Start, l1End);
+    const gapSizes = computeGapSizes(mergedChunks, window.start, window.end);
     const usedBytes = mergedChunks.reduce((sum, chunk) => sum + chunk.size, 0);
     const largestFreeBytes = gapSizes.reduce((largest, gap) => (gap > largest ? gap : largest), 0);
 
     return {
-        fullnessPercent: (usedBytes / usableSize) * 100,
-        freeSegments: gapSizes.length,
-        largestFreeBytes,
-        largestFreePercent: (largestFreeBytes / usableSize) * 100,
+        deviceId,
+        allocatedBytes: usedBytes,
+        metrics: {
+            fullnessPercent: (usedBytes / usableSize) * 100,
+            freeSegments: gapSizes.length,
+            largestFreeBytes,
+            largestFreePercent: (largestFreeBytes / usableSize) * 100,
+        },
     };
 }
 
@@ -175,7 +208,8 @@ function dedupeAndClipBuffers(buffers: Buffer[], l1Start: number, l1End: number)
     const byAddress = new Map<number, number>();
 
     for (const buffer of buffers) {
-        if (buffer.address != null) {
+        // A zero-size row occupies nothing, and as a zero-width chunk it would split a free gap.
+        if (buffer.address != null && buffer.size > 0) {
             const existingSize = byAddress.get(buffer.address);
             if (existingSize === undefined || buffer.size > existingSize) {
                 byAddress.set(buffer.address, buffer.size);

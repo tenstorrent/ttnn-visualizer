@@ -1056,6 +1056,7 @@ class TestOperationDetail:
 
     def test_l1_pressure_reports_the_most_constrained_device(self, loaded):
         """Each device has its own physical L1; the most constrained device is
+        the one with the smallest largest free block, not the fullest, and is
         reported along with its `device_id`."""
         sql = _REPORT_SQL + """
         INSERT INTO devices (
@@ -1064,18 +1065,20 @@ class TestOperationDetail:
         ) VALUES (1, 1499136, 64, 1370848, 64, 0);
         INSERT INTO operations VALUES (5, 'ttnn.mesh_op', 1.0);
         INSERT INTO buffers VALUES
-            (5, 0, 0, 10000, 'L1', 0),
+            (5, 0, 0, 100000, 'L1', 0),
+            (5, 0, 500000, 100000, 'L1', 0),
+            (5, 0, 1000000, 100000, 'L1', 0),
             (5, 1, 0, 685424, 'L1', 0);
         """
         registry, handle = loaded(sql, name="l1-two-devices")
 
         pressure = agent_operations.operation_detail(registry, handle, 5)["l1_pressure"]
-        assert pressure["device_id"] == 1
-        assert pressure["allocated_bytes"] == 685424
-        assert pressure["fullness_pct"] == 50.0
-        assert pressure["largest_free_block"] == 685424
-        assert pressure["largest_free_pct"] == 50.0
-        assert pressure["free_segments"] == 1
+        # Device 1 is fuller (50%), but device 0's largest gap is smaller.
+        assert pressure["device_id"] == 0
+        assert pressure["allocated_bytes"] == 300000
+        assert pressure["fullness_pct"] == 21.9
+        assert pressure["largest_free_block"] == 400000
+        assert pressure["free_segments"] == 3
 
     def test_l1_pressure_is_none_without_device_geometry(self, loaded):
         registry_no_dev, handle_no_dev = loaded(
@@ -1115,7 +1118,10 @@ class TestOperationDetail:
             ]
         ):
             reg, hdl = loaded(_REPORT_SQL + update, name=f"l1-bad-geom-{index}")
-            assert agent_operations.operation_detail(reg, hdl, 2)["l1_pressure"] is None
+            detail = agent_operations.operation_detail(reg, hdl, 2)
+            assert detail["l1_pressure"] is None
+            # Said, so a null reads as missing geometry rather than a fault.
+            assert agent_operations.NO_L1_GEOMETRY_CAVEAT in detail["caveat"]
 
     def test_l1_pressure_merges_overlapping_adjacent_and_duplicate_buffers(
         self, loaded
@@ -1171,6 +1177,70 @@ class TestOperationDetail:
 
         detail_null_addr = agent_operations.operation_detail(registry, handle, 8)
         assert detail_null_addr["l1_pressure"]["allocated_bytes"] == 2048
+
+    def test_memory_profile_ranks_by_largest_free_block_not_fullness(self, loaded):
+        """Fuller-but-contiguous ranks below fragmented-but-emptier: the ranking
+        answers "would this tensor have fit?", which fullness alone does not."""
+        sql = _REPORT_SQL + """
+        INSERT INTO operations VALUES
+            (10, 'ttnn.contiguous', 1.0),
+            (11, 'ttnn.fragmented', 1.0),
+            (12, 'ttnn.unaddressed', 1.0);
+        INSERT INTO buffers VALUES
+            (10, 0, 0, 600000, 'L1', 0),
+            (11, 0, 300000, 10000, 'L1', 0),
+            (11, 0, 700000, 10000, 'L1', 0),
+            (12, 0, NULL, 8192, 'L1', 0);
+        """
+        registry, handle = loaded(sql, name="l1-ranking")
+
+        profile = agent_operations.memory_profile(registry, handle)
+        ranked = profile["l1_pressure"]
+        order = [row["operation_id"] for row in ranked["operations"]]
+        # 11's largest gap is 660,848 B at 1.5% full; 10's is 770,848 B at 43.8%.
+        assert order[:2] == [11, 10]
+        # An operation whose L1 rows occupy nothing is still measured, as empty.
+        assert order[-1] == 12
+        assert ranked["operations"][-1]["allocated_bytes"] == 0
+        assert ranked["operation_count"] == len(order) == 5
+
+        limited = agent_operations.memory_profile(registry, handle, limit=1)
+        assert limited["l1_pressure"]["operation_count"] == 5
+        assert limited["l1_pressure"]["returned"] == 1
+        assert [
+            row["operation_id"] for row in limited["l1_pressure"]["operations"]
+        ] == [11]
+
+    def test_memory_profile_l1_pressure_reads_integer_buffer_types(self, loaded):
+        sql = _INTEGER_BUFFER_TYPE_SQL + """
+        INSERT INTO buffers VALUES (1, 0, 50000, 8192, 0, 0);
+        """
+        registry, handle = loaded(sql, name="l1-int-profile")
+
+        rows = agent_operations.memory_profile(registry, handle)["l1_pressure"][
+            "operations"
+        ]
+        assert {row["operation_id"]: row["allocated_bytes"] for row in rows}[1] == 4096
+
+    def test_memory_profile_l1_pressure_is_none_unless_l1_is_read(self, loaded):
+        registry, handle = loaded(name="l1-dram-only")
+
+        profile = agent_operations.memory_profile(registry, handle, buffer_type="DRAM")
+        assert profile["l1_pressure"] is None
+        assert "caveat" not in profile or (
+            agent_operations.NO_L1_GEOMETRY_CAVEAT not in profile["caveat"]
+        )
+
+    def test_memory_profile_l1_pressure_is_none_without_device_geometry(self, loaded):
+        registry, handle = loaded(
+            _REPORT_SQL + "UPDATE devices SET l1_bank_size = 0;", name="l1-no-geom"
+        )
+
+        profile = agent_operations.memory_profile(registry, handle)
+        assert profile["l1_pressure"] is None
+        assert agent_operations.NO_L1_GEOMETRY_CAVEAT in profile["caveat"]
+        # The footprints beside it do not depend on geometry.
+        assert profile["memory_by_buffer_type"]["L1"]["peak"] == 4096
 
 
 class TestOperationProvenance:
@@ -1681,6 +1751,13 @@ class TestRankScope:
         detail_one = agent_operations.operation_detail(registry, handle, 1, rank=1)
         assert detail_zero["l1_pressure"]["allocated_bytes"] == 1024
         assert detail_one["l1_pressure"]["allocated_bytes"] == 8192
+        # The ranked block streams its own read of `buffers`, rank-scoped too.
+        assert [
+            row["allocated_bytes"] for row in zero["l1_pressure"]["operations"]
+        ] == [1024]
+        assert [row["allocated_bytes"] for row in one["l1_pressure"]["operations"]] == [
+            8192
+        ]
 
     def test_a_rank_column_on_one_table_is_not_applied_to_the_others(self, loaded):
         """`report_has_rank_column` only inspects `operations`, so deciding once
