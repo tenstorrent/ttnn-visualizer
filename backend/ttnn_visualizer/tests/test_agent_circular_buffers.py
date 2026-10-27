@@ -125,6 +125,11 @@ class TestSummarise:
 
         assert [row.device_count for row in _rows(nodes)] == [1, 1]
 
+    def test_a_device_id_after_javascript_s_whitespace_is_the_same_device(self):
+        nodes = _device_operation().cb(device_id=1).cb(device_id="\ufeff1").end().nodes
+
+        assert [row.device_count for row in _rows(nodes)] == [1, 1]
+
     def test_a_repeat_on_one_device_is_its_own_row(self):
         graph = _device_operation()
         for device in (0, 1, 0, 1):

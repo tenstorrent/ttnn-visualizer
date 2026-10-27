@@ -153,7 +153,8 @@ def _curated_flag_cases() -> List[Dict]:
                 {**dram, "total_percent": "\u200b0.6"},
                 {**dram, "total_percent": "Infinityx"},
                 {"cores": "\u00a08", "available_cores": "\ufeff64"},
-                # A negative zero, which an int would lose, and a cell past the float range.
+                # Reads that must not raise: a negative zero, whose sign no output here
+                # shows (`test_agent_js_values.py` holds it), and a cell past the float range.
                 {"cores": "8", "available_cores": "-0"},
                 {"cores": "-0"},
                 {"cores": "9" * 309},

@@ -115,7 +115,7 @@ def cores_in_range(range_set: object) -> Tuple[Tuple[int, int], ...]:
 
 
 def _normalised_device_id(device_id: object) -> Optional[float]:
-    """`normaliseDeviceId`: a finite `NumberValue(device_id)`, else None."""
+    """`normaliseDeviceId`: a finite `Number(device_id)`, else None."""
     if isinstance(device_id, Missing) or device_id is None or device_id == "":
         return None
     number = js_number(device_id)
