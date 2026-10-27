@@ -6,8 +6,10 @@
 
 A port of the circular-buffer half of `processMemoryAllocations`
 (`src/functions/processMemoryAllocations.ts`), with `createCbSlotKeys` and `cbDeviceKey`
-(`src/functions/cbDeviceSlots.ts`) and `getCoresInRangeList` (`src/functions/math.ts`);
-mirror a change there. It reads nodes as `captured_graph.parse_graph` gives them, with an
+(`src/functions/cbDeviceSlots.ts`) and `getCoresInRangeList` (`src/functions/math.ts`),
+and of the modal's `sortDeviceOperationsByBufferDeallocation`
+(`src/model/OperationDetails.ts`), which orders the graph that walk reads; mirror a
+change there. It reads nodes as `captured_graph.parse_graph` gives them, with an
 older capture's `counter` already renamed to `id`, as the app's are by fetch time.
 """
 
@@ -60,9 +62,9 @@ CIRCULAR_BUFFERS_NOTE = (
     "gives its length. A graph records a program's circular buffers only at its "
     "first launch: a relaunch from the program cache frees and allocates none, so a "
     "device operation that freed but recorded no buffers is counted under "
-    "unrecorded_device_operations, not as one that used none. An older capture leaves "
-    "a failed launch's scope open, and its circular buffers are counted under "
-    "unclosed_device_operations rather than listed. At most "
+    "unrecorded_device_operations, not as one that used none. Buffers a graph cut "
+    "off mid-launch leaves no free-all after are counted in "
+    "unlisted_circular_buffer_count, not listed. At most "
     f"{MAX_LIMIT} rows are listed, {MAX_DETAILED_LIMIT} when include is set; the "
     "counts cover them all."
 )
@@ -247,20 +249,6 @@ class Launch:
 
 
 @dataclass
-class Unclosed:
-    """A device operation whose circular buffers were dropped without a snapshot of its
-    scope, as happens when a capture written before tt-metal #53041 leaves a failed
-    launch's scope open. #2218
-
-    Not in the app, which drops them alike.
-    """
-
-    operation_id: object
-    name: object
-    circular_buffer_count: int = 0
-
-
-@dataclass
 class Summary:
     # In the order `cbPressureByOpId` holds them: first set, last value.
     snapshots: List[Snapshot] = field(default_factory=list)
@@ -269,8 +257,9 @@ class Summary:
     allocating_operation_ids: Set[object] = field(default_factory=set)
     # In the order they first freed.
     launches: List[Launch] = field(default_factory=list)
-    # In the order their buffers were first dropped.
-    unclosed: List[Unclosed] = field(default_factory=list)
+    # Buffers dropped before any snapshot of the scope that allocated them. Not in the
+    # app, which drops them silently. #2218
+    unlisted_count: int = 0
 
     def unrecorded(self) -> List[Launch]:
         """The launches that recorded no circular buffers: most are a cached program's
@@ -303,7 +292,7 @@ def summarise(nodes: Sequence[object]) -> Summary:
     snapshots: Dict[object, Snapshot] = {}
     allocating: Set[object] = set()
     launches: Dict[object, Launch] = {}
-    unclosed: Dict[object, Unclosed] = {}
+    unlisted_count = 0
     scopes: List[_Scope] = []
     bytes_by_device_core: Dict[str, Number] = {}
     unattributed_by_device: Dict[str, Number] = {}
@@ -340,21 +329,15 @@ def summarise(nodes: Sequence[object]) -> Summary:
             ],
         )
 
-    def count_unsnapshotted() -> None:
-        # Called as `live` is dropped. A scope a launch failed in is left open by an
-        # older capture, so neither its `function_end` nor, once the next launch's
-        # free-all is the one that clears them, its own free-all snapshots its buffers.
-        # The app drops them too; they are counted rather than listed, so the snapshots
-        # stay the app's. Rows hold `_defined` ids where `snapshots` keys raw ones, but
-        # they differ only for a missing id, which is None here and skipped.
-        for entry in live:
-            owner = entry.row.allocate_operation_id
-            if owner is None or owner in snapshots:
-                continue
-            lost = unclosed.setdefault(
-                owner, Unclosed(owner, entry.row.allocate_operation_name)
-            )
-            lost.circular_buffer_count += 1
+    def count_unlisted() -> None:
+        # As `live` is dropped. A missing owner id is None here, so `snapshots`' raw keys
+        # match every owner that is checked.
+        nonlocal unlisted_count
+        unlisted_count += sum(
+            entry.row.allocate_operation_id is not None
+            and entry.row.allocate_operation_id not in snapshots
+            for entry in live
+        )
 
     # The app's loop starts past the first node, which a capture makes `capture_start`.
     for node in nodes[1:]:
@@ -442,7 +425,7 @@ def summarise(nodes: Sequence[object]) -> Summary:
                 for entry in live
             ):
                 snapshot(current)
-            count_unsnapshotted()
+            count_unlisted()
             bytes_by_device_core.clear()
             unattributed_by_device.clear()
             live = []
@@ -457,13 +440,62 @@ def summarise(nodes: Sequence[object]) -> Summary:
             if scopes:
                 scopes.pop()
 
-    count_unsnapshotted()
+    count_unlisted()
     return Summary(
         list(snapshots.values()),
         allocating,
         list(launches.values()),
-        list(unclosed.values()),
+        unlisted_count,
     )
+
+
+def _node_type(node: object) -> object:
+    return node.get("node_type") if isinstance(node, dict) else None
+
+
+def _scope_key(scopes: List[Dict]) -> object:
+    # `-1` outside any scope, as the app keys it; an id-less scope is `undefined`.
+    return _node_id(scopes[-1]) if scopes else -1
+
+
+def sort_by_buffer_deallocation(nodes: Sequence[object]) -> List[object]:
+    """`OperationDetails.sortDeviceOperationsByBufferDeallocation`: the order the modal
+    walks a graph in, which `operation_circular_buffers` therefore reads too. #2218
+
+    Each scope's last free-all is moved to after every run of circular buffers the
+    scope allocates that another node follows, so a launch's own free snapshots its
+    buffers even when its scope never closes, as a failed launch's does in a capture
+    written before tt-metal #53041. A scope that allocated none loses its free-all,
+    so launches are read from the raw order. The stack carries over from the first pass
+    to the second, as the app's does.
+    """
+    free_all_by_scope: Dict[object, object] = {}
+    kept: List[object] = []
+    scopes: List[Dict] = []
+    for node in nodes:
+        node_type = _node_type(node)
+        if node_type == _FUNCTION_START and isinstance(node, dict):
+            scopes.append(node)
+        if node_type == _FUNCTION_END and scopes:
+            scopes.pop()
+        if node_type == _DEALLOCATE_ALL:
+            free_all_by_scope[_scope_key(scopes)] = node
+        else:
+            kept.append(node)
+
+    ordered: List[object] = []
+    for index, node in enumerate(kept):
+        ordered.append(node)
+        node_type = _node_type(node)
+        if node_type == _FUNCTION_START and isinstance(node, dict):
+            scopes.append(node)
+        if node_type == _FUNCTION_END and scopes:
+            scopes.pop()
+        if node_type == _ALLOCATE and index + 1 < len(kept):
+            free_all = free_all_by_scope.get(_scope_key(scopes))
+            if free_all is not None and _node_type(kept[index + 1]) != _ALLOCATE:
+                ordered.append(free_all)
+    return ordered
 
 
 def select_read(summary: Summary) -> List[Snapshot]:
@@ -606,7 +638,7 @@ def response(
     snapshots: Sequence[Snapshot],
     unrecorded: Sequence[Launch] = (),
     limit: int = MAX_LIMIT,
-    unclosed: Sequence[Unclosed] = (),
+    unlisted_count: int = 0,
 ) -> Dict[str, object]:
     """`operation_detail`'s `circular_buffers`, with at most `limit` rows listed."""
     remaining = limit
@@ -649,21 +681,11 @@ def response(
         "device_operations": device_operations,
         "unrecorded_launch_count": unrecorded_count,
         "unrecorded_device_operations": unrecorded_by_name[:MAX_LIMIT],
-        "unclosed_circular_buffer_count": sum(
-            lost.circular_buffer_count for lost in unclosed
-        ),
-        "unclosed_device_operations": [
-            {"name": lost.name, "circular_buffer_count": lost.circular_buffer_count}
-            for lost in unclosed[:MAX_LIMIT]
-        ],
+        "unlisted_circular_buffer_count": unlisted_count,
         "size_unit": BUFFER_SIZE_UNIT,
         "note": CIRCULAR_BUFFERS_NOTE,
     }
-    if (
-        rows_total > limit
-        or len(unrecorded_by_name) > MAX_LIMIT
-        or len(unclosed) > MAX_LIMIT
-    ):
+    if rows_total > limit or len(unrecorded_by_name) > MAX_LIMIT:
         result["truncated"] = True
     return result
 
@@ -672,13 +694,17 @@ def operation_circular_buffers(
     nodes: Sequence[object], limit: int = MAX_LIMIT
 ) -> Dict[str, object]:
     """The circular buffers an operation's captured graph allocated, as the app shows
-    them but with a mesh's per-device sections folded, with at most `limit` listed."""
-    summary = summarise(nodes)
+    them but with a mesh's per-device sections folded, with at most `limit` listed.
+
+    Snapshots are read in the modal's order; launches in the raw one, since the sort
+    drops the free-all of a scope that allocated nothing.
+    """
+    summary = summarise(sort_by_buffer_deallocation(nodes))
     return response(
         fold_devices(select_read(summary)),
-        summary.unrecorded(),
+        summarise(nodes).unrecorded(),
         limit,
-        summary.unclosed,
+        summary.unlisted_count,
     )
 
 
@@ -690,11 +716,11 @@ __all__ = [
     "Launch",
     "Snapshot",
     "Summary",
-    "Unclosed",
     "cores_in_range",
     "fold_devices",
     "operation_circular_buffers",
     "response",
     "select_read",
+    "sort_by_buffer_deallocation",
     "summarise",
 ]

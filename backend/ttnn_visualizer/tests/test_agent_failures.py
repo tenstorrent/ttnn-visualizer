@@ -1403,11 +1403,10 @@ class TestOperationDetail:
         assert "1 device operation launch whose" in detail["caveat"]
         assert "unknown, not zero" in detail["caveat"]
 
-    def test_a_failed_launch_left_open_has_its_buffers_counted_in_the_caveat(
-        self, tmp_path
-    ):
-        """A capture written before tt-metal #53041 leaves the failed scope open, so its
-        buffers are not listed; the error names it and the caveat counts them. #2218"""
+    @staticmethod
+    def _failed_matmul(tmp_path, ended: bool):
+        """#2218's example: a capture written before tt-metal #53041 leaves the failed
+        launch's scope open."""
         graph = (
             CapturedGraph()
             .start("ttnn::matmul")
@@ -1419,26 +1418,41 @@ class TestOperationDetail:
             .free_all()
             .cb(200)
             .cb(300)
-            .nodes
         )
+        if ended:
+            graph.capture_end()
         registry, handle = _report(
             tmp_path,
             operations=[(1, "ttnn.matmul")],
             errors=[(1, "ttnn.matmul", "TT_THROW", _OUT_OF_MEMORY)],
-            graphs=[(1, graph)],
+            graphs=[(1, [node for node in graph.nodes if isinstance(node, dict)])],
         )
+        return linking.operation_detail(registry, handle, operation_id=1)
 
-        detail = linking.operation_detail(registry, handle, operation_id=1)
+    def test_a_failed_launch_left_open_lists_its_buffers_under_it(self, tmp_path):
+        """Read in the modal's order, as every real graph ends with `capture_end`."""
+        detail = self._failed_matmul(tmp_path, ended=True)
 
         assert detail["error"]["failed_device_operations"] == ["MatmulDeviceOperation"]
         buffers = detail["circular_buffers"]
+        assert [
+            (operation["name"], operation["circular_buffer_count"])
+            for operation in buffers["device_operations"]
+        ] == [("TilizeDeviceOperation", 1), ("MatmulDeviceOperation", 2)]
+        assert buffers["unlisted_circular_buffer_count"] == 0
+        assert "leaves out" not in (detail.get("caveat") or "")
+
+    def test_a_graph_cut_off_after_a_launch_s_buffers_counts_them_in_the_caveat(
+        self, tmp_path
+    ):
+        """Nothing follows the buffers, so no free-all can be moved after them."""
+        detail = self._failed_matmul(tmp_path, ended=False)
+
+        buffers = detail["circular_buffers"]
         assert buffers["circular_buffer_count"] == 1
-        assert buffers["unclosed_circular_buffer_count"] == 2
-        assert buffers["unclosed_device_operations"] == [
-            {"name": "MatmulDeviceOperation", "circular_buffer_count": 2}
-        ]
+        assert buffers["unlisted_circular_buffer_count"] == 2
         assert "leaves out 2 circular buffers" in detail["caveat"]
-        assert "undercount" in detail["caveat"]
+        assert "device_operation_count leave them out" in detail["caveat"]
         assert "unknown, not zero" not in detail["caveat"]
 
     def test_its_circular_buffers_are_read_from_the_rank_asked_for(self, tmp_path):

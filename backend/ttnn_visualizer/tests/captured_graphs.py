@@ -62,6 +62,11 @@ class CapturedGraph:
         params: Dict = {} if name is None else {"name": name}
         return self.add({"node_type": "function_end", "params": params})
 
+    def capture_end(self) -> "CapturedGraph":
+        """The node every real graph ends with, which lets the modal's sort move the
+        last launch's free-all after its buffers."""
+        return self.add({"node_type": "capture_end", "params": {}})
+
     def free_all(self, device_id: object = None) -> "CapturedGraph":
         """A launch's free-all; a capture names its device, and a None one is left out."""
         params: Dict = {} if device_id is None else {"device_id": device_id}

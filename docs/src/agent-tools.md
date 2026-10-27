@@ -247,20 +247,20 @@ with each name's launch and device counts, and `caveat` says their buffers are u
 rather than zero. A device operation with no circular buffers at all looks the same in the
 graph, so these are most likely, not certainly, cached relaunches.
 
-**A capture written before tt-metal #53041 leaves a failed launch's scope open.** The
-device operation it failed in never closes, so its circular buffers are never taken as
-its own and are not listed, as the app does not list them either. They are counted:
-`unclosed_circular_buffer_count` says how many, `unclosed_device_operations` names each
-device operation with its count, and `caveat` says `circular_buffer_count` and
-`max_bytes_per_core` undercount. For an operation with an error, the same device
-operation is named in `error.failed_device_operations`.
+**A capture written before tt-metal #53041 leaves a failed launch's scope open.** Its
+circular buffers are still listed under that device operation, as the app's view lists
+them: the graph is read in the view's order, which moves each launch's free-all after its
+buffers. Only a graph cut off right after a launch's buffers leaves them with no free-all
+to follow; those are counted in `unlisted_circular_buffer_count` rather than listed, and
+`caveat` says `circular_buffer_count` and `device_operation_count` leave them out. For an
+operation with an error, the failed launch is named in `error.failed_device_operations`.
 
 The field is absent when the report has no captured graph for the operation, and withheld
 when its graph cannot be read for the rank asked for, is past the size a tool will read, or
 does not parse; `caveat` then says which. For an operation with an error, the same graph
 names `error.failed_device_operations`, which is withheld alike while the rest of the error
 still answers. A graph that launched no device operation, with no
-`unrecorded_launch_count`, is a real zero.
+`unrecorded_launch_count` and no `unlisted_circular_buffer_count`, is a real zero.
 
 **`memory_profile` reports a floor, not the peak.** It reads the `buffers` table, which
 records tensor allocations only. A circular buffer never appears there, and neither does a

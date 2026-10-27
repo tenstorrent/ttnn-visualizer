@@ -12,7 +12,7 @@ app does before it reads a graph.
 
 import json
 import math
-from typing import List
+from typing import List, Tuple
 
 import pytest
 from ttnn_visualizer.agent import circular_buffers
@@ -238,10 +238,13 @@ class TestSummarise:
     def test_a_free_all_snapshots_the_buffers_it_frees(self):
         """The older order; every local capture frees before it allocates instead."""
         nodes = CapturedGraph().start("Tilize").cb().free_all().end().nodes
+        summary = summarise(nodes)
 
-        (snapshot,) = summarise(nodes).snapshots
+        (snapshot,) = summary.snapshots
 
         assert [row.address for row in snapshot.allocations] == [100]
+        # Counted only once the snapshot has been taken, they are not lost.
+        assert summary.unlisted_count == 0
 
     def test_a_second_batch_in_one_scope_is_dropped_as_the_app_drops_it(self):
         """The first batch is snapshotted at the free that starts the second, so the
@@ -468,12 +471,30 @@ class TestUnrecordedLaunches:
         assert response["unrecorded_device_operations"] == []
 
     def test_a_graph_that_launched_nothing_is_a_real_zero(self):
-        nodes = CapturedGraph().start("ttnn::reshape").end().nodes
+        nodes = CapturedGraph().start("ttnn::reshape").end().capture_end().nodes
 
         response = operation_circular_buffers(nodes)
 
         assert response["circular_buffer_count"] == 0
         assert response["unrecorded_launch_count"] == 0
+        assert response["unlisted_circular_buffer_count"] == 0
+
+    def test_a_lone_launch_cut_off_after_its_buffers_is_not_a_zero(self):
+        nodes = (
+            CapturedGraph()
+            .start("ttnn::matmul")
+            .start("Matmul")
+            .free_all()
+            .cb()
+            .cb(200)
+            .nodes
+        )
+
+        response = operation_circular_buffers(nodes)
+
+        assert response["circular_buffer_count"] == 0
+        assert response["unrecorded_launch_count"] == 0
+        assert response["unlisted_circular_buffer_count"] == 2
 
 
 def _failed_matmul() -> CapturedGraph:
@@ -493,39 +514,107 @@ def _failed_matmul() -> CapturedGraph:
     )
 
 
-class TestUnclosedScopes:
-    """An older capture leaves a failed launch's scope open; its buffers are counted,
-    not listed, so the snapshots stay the app's. #2218"""
+def _listed(nodes: List[object]) -> List[Tuple[object, object]]:
+    operations = operation_circular_buffers(nodes)["device_operations"]
+    assert isinstance(operations, list)
+    return [
+        (operation["name"], operation["circular_buffer_count"])
+        for operation in operations
+    ]
 
-    def test_a_scope_left_open_at_the_end_is_counted(self):
-        nodes = _failed_matmul().nodes
 
-        summary = summarise(nodes)
+class TestFailedLaunch:
+    """An older capture leaves a failed launch's scope open; read in the modal's order,
+    its buffers are still listed under it. #2218"""
+
+    def test_an_open_scope_s_buffers_are_listed_under_it(self):
+        nodes = _failed_matmul().capture_end().nodes
+
         response = operation_circular_buffers(nodes)
 
-        # The walk's end takes no snapshot: only Tilize's `function_end` did.
-        assert [snapshot.operation_id for snapshot in summary.snapshots] == [2]
-        assert summary.unclosed == [circular_buffers.Unclosed(6, "Matmul", 2)]
-        assert response["circular_buffer_count"] == 1
-        assert response["unclosed_circular_buffer_count"] == 2
-        assert response["unclosed_device_operations"] == [
-            {"name": "Matmul", "circular_buffer_count": 2}
-        ]
+        assert _listed(nodes) == [("Tilize", 1), ("Matmul", 2)]
+        assert response["unlisted_circular_buffer_count"] == 0
         assert response["unrecorded_launch_count"] == 0
 
-    def test_a_closed_failed_scope_is_listed(self):
-        # The shape tt-metal #53041 writes closes the failed scope. It also marks the end
-        # aborted, which this walk does not read.
-        nodes = _failed_matmul().end().end().nodes
+    def test_a_closed_failed_scope_is_listed_alike(self):
+        # tt-metal #53041 closes the failed scope, marking its end aborted, which this
+        # walk does not read.
+        nodes = _failed_matmul().end().end().capture_end().nodes
+
+        assert _listed(nodes) == [("Tilize", 1), ("Matmul", 2)]
+
+    def test_a_launch_after_a_caught_failure_takes_none_of_its_buffers(self):
+        nodes = (
+            _failed_matmul()
+            .start("Untilize")
+            .free_all()
+            .cb(400)
+            .end()
+            .end()
+            .capture_end()
+            .nodes
+        )
 
         response = operation_circular_buffers(nodes)
 
-        assert response["circular_buffer_count"] == 3
-        assert response["unclosed_circular_buffer_count"] == 0
-        assert response["unclosed_device_operations"] == []
+        assert _listed(nodes) == [("Tilize", 1), ("Matmul", 2), ("Untilize", 1)]
+        assert response["unlisted_circular_buffer_count"] == 0
 
-    def test_a_scope_cleared_by_a_later_launch_s_free_is_counted(self):
-        # A sibling launch after the failure frees what the open scope allocated.
+    def test_a_graph_cut_off_after_the_failed_launch_s_buffers_counts_them(self):
+        nodes = _failed_matmul().nodes
+
+        response = operation_circular_buffers(nodes)
+
+        assert _listed(nodes) == [("Tilize", 1)]
+        assert response["unlisted_circular_buffer_count"] == 2
+
+    def test_a_parent_that_allocates_before_its_child_is_listed(self):
+        # As the demo segformer_decoder's UpSample nests HaloDeviceOperation.
+        nodes = (
+            CapturedGraph()
+            .start("UpSample")
+            .free_all()
+            .cb()
+            .start("HaloDeviceOperation")
+            .free_all()
+            .cb(200)
+            .end()
+            .end()
+            .capture_end()
+            .nodes
+        )
+
+        response = operation_circular_buffers(nodes)
+
+        assert _listed(nodes) == [("UpSample", 1), ("HaloDeviceOperation", 1)]
+        assert response["unlisted_circular_buffer_count"] == 0
+
+    def test_a_cached_relaunch_is_still_counted_from_the_raw_order(self):
+        # The sort drops the free-all of a scope that allocated nothing.
+        nodes = (
+            _device_operation("Matmul")
+            .cb()
+            .end()
+            .start("Matmul")
+            .free_all()
+            .end()
+            .capture_end()
+            .nodes
+        )
+
+        assert operation_circular_buffers(nodes)["unrecorded_launch_count"] == 1
+
+
+class TestUnlistedCount:
+    """In raw order, as the parity golden replays the app's walk."""
+
+    def test_buffers_dropped_at_the_walk_s_end_are_counted(self):
+        summary = summarise(_failed_matmul().capture_end().nodes)
+
+        assert [snapshot.name for snapshot in select_read(summary)] == ["Tilize"]
+        assert summary.unlisted_count == 2
+
+    def test_buffers_a_later_launch_frees_are_counted(self):
         nodes = _failed_matmul().start("Untilize").free_all().cb(400).end().nodes
 
         summary = summarise(nodes)
@@ -534,7 +623,7 @@ class TestUnclosedScopes:
             "Tilize",
             "Untilize",
         ]
-        assert summary.unclosed == [circular_buffers.Unclosed(6, "Matmul", 2)]
+        assert summary.unlisted_count == 2
 
     def test_a_closed_launch_freed_by_the_next_is_not_counted(self):
         nodes = (
@@ -548,38 +637,10 @@ class TestUnclosedScopes:
             .nodes
         )
 
-        assert summarise(nodes).unclosed == []
-
-    def test_an_open_scope_that_allocated_nothing_is_not_counted(self):
-        nodes = (
-            CapturedGraph()
-            .start("ttnn::matmul")
-            .start("Tilize")
-            .free_all()
-            .cb()
-            .end()
-            .nodes
-        )
-
-        assert summarise(nodes).unclosed == []
+        assert summarise(nodes).unlisted_count == 0
 
     def test_buffers_allocated_outside_any_scope_are_not_counted(self):
-        nodes = CapturedGraph().cb().nodes
-
-        assert summarise(nodes).unclosed == []
-
-    def test_the_named_device_operations_are_capped_and_counted_in_full(self):
-        graph = CapturedGraph().start("ttnn::op")
-        # Each launch frees the last one's buffers before its scope closed, and the
-        # walk's end drops the last one's.
-        for operation in range(MAX_LIMIT + 1):
-            graph.start(f"Device{operation}").free_all().cb()
-
-        response = operation_circular_buffers(graph.nodes)
-
-        assert response["unclosed_circular_buffer_count"] == MAX_LIMIT + 1
-        assert len(response["unclosed_device_operations"]) == MAX_LIMIT
-        assert response["truncated"] is True
+        assert summarise(CapturedGraph().cb().nodes).unlisted_count == 0
 
 
 class TestResponse:

@@ -940,6 +940,75 @@ def _circular_buffer_cases(rng: random.Random) -> List[Dict]:
     ]
 
 
+def _curated_order_graphs() -> List[List[object]]:
+    return [
+        # #2218: a failed launch's scope never closes, and its free moves after its
+        # buffers because `capture_end` follows them.
+        CapturedGraph()
+        .start("ttnn::matmul")
+        .start("Tilize")
+        .free_all()
+        .cb()
+        .end()
+        .start("Matmul")
+        .free_all()
+        .cb("200")
+        .cb("300")
+        .capture_end()
+        .nodes,
+        # The same cut off after its buffers: nothing follows them, so their free is
+        # dropped.
+        CapturedGraph().start("Matmul").free_all().cb().cb("200").nodes,
+        # A tensor splits one scope's buffers, so its free follows each run.
+        CapturedGraph()
+        .start("Conv")
+        .free_all()
+        .cb()
+        .tensor()
+        .cb("200")
+        .end()
+        .capture_end()
+        .nodes,
+        # A cached relaunch allocates nothing, so its free is dropped.
+        CapturedGraph().start("Matmul").free_all().end().capture_end().nodes,
+        # A free outside any scope, keyed as the app keys it.
+        CapturedGraph().free_all().cb().start("Late").cb("200").end().nodes,
+        # A parent that allocates before its child launches.
+        CapturedGraph()
+        .start("UpSample")
+        .free_all()
+        .cb()
+        .start("HaloDeviceOperation")
+        .free_all()
+        .cb("200")
+        .end()
+        .end()
+        .capture_end()
+        .nodes,
+    ]
+
+
+def _order_case(nodes: List[object]) -> Dict:
+    position_by_node = {id(node): index for index, node in enumerate(nodes)}
+    return {
+        "nodes": nodes,
+        "order": [
+            position_by_node[id(node)]
+            for node in circular_buffers.sort_by_buffer_deallocation(nodes)
+        ],
+    }
+
+
+def _device_operation_order_cases(rng: random.Random) -> List[Dict]:
+    graphs = _curated_order_graphs()
+    for _ in range(40):
+        nodes = _cb_graph(rng)
+        if rng.random() < 0.5:
+            nodes.append({"id": len(nodes), "node_type": "capture_end", "params": {}})
+        graphs.append(nodes)
+    return [_order_case(nodes) for nodes in graphs]
+
+
 def _generate_golden() -> Dict:
     rng = random.Random(_SEED)
     return {
@@ -955,6 +1024,7 @@ def _generate_golden() -> Dict:
         "l1Peak": _l1_peak_cases(rng),
         "topOperations": _top_operation_cases(rng),
         "circularBuffers": _circular_buffer_cases(rng),
+        "deviceOperationOrder": _device_operation_order_cases(rng),
     }
 
 
@@ -1047,6 +1117,14 @@ def test_the_golden_exercises_every_branch():
     }
     assert taken_at == {"circular_buffer_deallocate_all", "function_end"}
     assert any(len(case["snapshots"]) > 1 for case in golden["circularBuffers"])
+    # The sort moves a free, follows two runs with one, and drops one.
+    orders = [case["order"] for case in golden["deviceOperationOrder"]]
+    assert any(order != sorted(order) for order in orders)
+    assert any(len(order) > len(set(order)) for order in orders)
+    assert any(
+        len(set(order)) < len(case["nodes"])
+        for case, order in zip(golden["deviceOperationOrder"], orders)
+    )
 
 
 def _snapshot_triggers(nodes: List[Dict]) -> List[int]:
