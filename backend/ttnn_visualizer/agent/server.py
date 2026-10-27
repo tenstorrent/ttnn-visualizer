@@ -25,6 +25,7 @@ from ttnn_visualizer.agent import (
     linking,
     operations,
     perf_detail,
+    report_diff,
     tools,
 )
 from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_LIMIT
@@ -53,7 +54,7 @@ PROTOCOL_VERSION = "2025-06-18"
 SERVER_NAME = "ttnn-visualizer"
 
 # A frame this long is a client fault or a runaway, not a call: the largest real
-# request is a `tools/call` with two handles and a limit. Read as a cap rather
+# request is a `tools/call` with ten handles and a few numbers. Read as a cap rather
 # than a buffer, so an unbounded line cannot be accumulated before it is refused.
 MAX_LINE_BYTES = 1_000_000
 
@@ -335,13 +336,22 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
             "title": "Compare two reports",
             "description": (
                 "Per-op-code deltas between two reports, largest movement first. "
-                "Grouped by op code rather than joined on op id, so a change that "
-                "adds or reorders ops does not report every later op as changed. "
+                "Grouped by tt-perf-report's op code, which names a matmul's shapes "
+                "and a conv's config, rather than joined on op id, so a change that "
+                "adds or reorders ops does not report every later op as changed; "
+                "match signature groups by raw op code and tensors instead. A move is "
+                "a change only past both min_percent and min_delta, whose defaults "
+                "sit above an op code's run-to-run noise in device time; smaller "
+                "moves are counted in within_threshold_count, and an op only one "
+                "report holds is listed under new or missing, never as a change. "
+                "repeats_a and repeats_b add captures of either side, compared by "
+                "their median. A caveat names any architecture, clock or device "
+                "count the captures differ in. "
                 "Accepts additive metrics only (device_time, op_to_op_gap, "
                 "total_percent); rank by a rate or a core count with top_ops. A "
-                "signpost range applies to both reports, and signpost_range_ignored "
-                "is true only when neither holds signposts. A range is refused when "
-                "only one report holds signposts, since a window against a whole "
+                "signpost range applies to every capture, and signpost_range_ignored "
+                "is true only when none holds signposts. A range is refused when "
+                "only some captures hold signposts, since a window against a whole "
                 "report shows every row outside it as a change."
             ),
             "schema": {
@@ -350,8 +360,68 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                     "handle_a": {"type": "string", "description": "Baseline."},
                     "handle_b": {"type": "string", "description": "After the change."},
                     "by": _ADDITIVE_METRIC_SCHEMA,
-                    "limit": _LIMIT_SCHEMA,
+                    "limit": {
+                        **_LIMIT_SCHEMA,
+                        "description": (
+                            f"Changes to return, capped at {MAX_LIMIT}, or "
+                            f"{MAX_DETAILED_LIMIT} with match signature; the other "
+                            f"lists are capped at {MAX_DETAILED_LIMIT}."
+                        ),
+                    },
                     **_SIGNPOST_SCHEMAS,
+                    "match": {
+                        "type": "string",
+                        "enum": sorted(report_diff.DIFF_MATCHES),
+                        "description": (
+                            "op_code (the default), or signature: the raw op code "
+                            "with its input and output tensors' shapes, layouts, "
+                            "dtypes and memory, which splits ops such as a reshard "
+                            "whose op code names no shape. Signature entries name "
+                            "the group as raw_op_code."
+                        ),
+                    },
+                    "min_percent": {
+                        "type": "number",
+                        "minimum": 0,
+                        "description": (
+                            "Smallest move that counts as a change, as a percentage "
+                            "of the baseline figure. Defaults to "
+                            f"{report_diff.DEFAULT_MIN_PERCENT:g}."
+                        ),
+                    },
+                    "min_delta": {
+                        "type": "number",
+                        "minimum": 0,
+                        "description": (
+                            "Smallest move that counts as a change, in the metric's "
+                            "unit: microseconds for device_time (default "
+                            f"{report_diff.DIFF_METRICS['device_time'].min_delta:g}) "
+                            "and op_to_op_gap (default "
+                            f"{report_diff.DIFF_METRICS['op_to_op_gap'].min_delta:g}), "
+                            "percentage points for total_percent (default "
+                            f"{report_diff.DIFF_METRICS['total_percent'].min_delta:g})."
+                        ),
+                    },
+                    "repeats_a": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "maxItems": report_diff.MAX_CAPTURES_PER_SIDE - 1,
+                        "description": (
+                            "Handles of further baseline captures, run the same way; "
+                            "each figure on that side is then the median across "
+                            "them and handle_a."
+                        ),
+                    },
+                    "repeats_b": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "maxItems": report_diff.MAX_CAPTURES_PER_SIDE - 1,
+                        "description": (
+                            "Handles of further captures after the change, run the "
+                            "same way; each figure on that side is then the median "
+                            "across them and handle_b."
+                        ),
+                    },
                 },
                 "required": ["handle_a", "handle_b"],
             },

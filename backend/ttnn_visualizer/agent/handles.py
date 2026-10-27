@@ -62,6 +62,12 @@ class CacheVariant(str, Enum):
     # The performance CSV the handle's first read came from, so a later read can
     # tell whether it is still reading the same capture.
     SOURCE = "source"
+    # Each CSV row's tensor signature, which `diff_reports` matches on when asked.
+    OP_SIGNATURES = "op_signatures"
+    # A capture's group totals per range and match, which `diff_reports` compares.
+    DIFF_TOTALS = "diff_totals"
+    # The device log's architecture, clock and cores, which `diff_reports` compares.
+    CAPTURE_FACTS = "capture_facts"
     # The detail fields no row of the whole report carries, read once per handle.
     EMPTY_DETAIL_FIELDS = "empty_detail_fields"
     # The device's cores and the report's first calls, which the `flags` group reads,
@@ -77,10 +83,14 @@ class CacheVariant(str, Enum):
 # handle. Each is a generated report of up to a whole report's rows, and an agent
 # walking per-layer signposts asks for many, so they are evicted least recently
 # used rather than pinned; an evicted range costs a full regeneration, since
-# nothing underneath keeps generated dicts. Two is one `diff_reports` pair, and
-# each one more holds another report's rows for the life of the process.
+# nothing underneath keeps generated dicts. Two is one two-capture `diff_reports`,
+# and each one more holds another report's rows for the life of the process.
 # The detail columns add about 3% to each, since their repeated cells are interned.
 MAX_SCOPED_REPORTS = 2
+
+# Derived from a scoped snapshot but a few kilobytes each, so pinned for every scope
+# asked: `diff_reports` with repeats reads more windows than the snapshots keep.
+_PINNED_SCOPED_VARIANTS = frozenset({CacheVariant.DIFF_TOTALS})
 
 
 class UnknownHandleError(ValueError):
@@ -103,13 +113,13 @@ class UnsharedSnapshot(Exception):
 class ReportRegistry:
     """Process-local handle → `Instance` map.
 
-    A cache of one would be wrong here: `diff_reports` needs two reports live at
-    the same time, which is the whole point of the tool.
+    A cache of one would be wrong here: `diff_reports` compares two reports or more,
+    which is the whole point of the tool.
     """
 
     def __init__(self) -> None:
         self._instances: Dict[str, Instance] = {}
-        self._reports: Dict[Tuple[Hashable, CacheVariant], object] = {}
+        self._reports: Dict[Tuple[Hashable, ...], object] = {}
         self._scoped_reports: (
             "OrderedDict[Tuple[Hashable, CacheVariant, Hashable], object]"
         ) = OrderedDict()
@@ -159,7 +169,8 @@ class ReportRegistry:
         `scope` keeps a narrowed read of the same report -- a signpost range, see
         `tools.SignpostRange` -- apart from the whole one. Unlike the unscoped
         snapshots, scoped ones are not pinned: at most `MAX_SCOPED_REPORTS` are
-        kept, least recently used first out.
+        kept, least recently used first out. A variant in `_PINNED_SCOPED_VARIANTS`
+        is small, and is kept for every scope asked.
 
         `share_key` keeps one snapshot for every handle that names the same key
         rather than one per handle. Handles are never released, so an agent that
@@ -183,11 +194,22 @@ class ReportRegistry:
         self._store(owner, variant, scope, snapshot)
         return cast(Cached, snapshot)
 
+    @staticmethod
+    def _pinned_key(
+        owner: Hashable, variant: CacheVariant, scope: Hashable
+    ) -> Optional[Tuple[Hashable, ...]]:
+        """Where a pinned entry is kept, or None for a scoped snapshot."""
+        if scope is None:
+            return (owner, variant)
+        if variant in _PINNED_SCOPED_VARIANTS:
+            return (owner, variant, scope)
+        return None
+
     def _lookup(
         self, owner: Hashable, variant: CacheVariant, scope: Hashable
     ) -> Tuple[bool, object]:
-        if scope is None:
-            key = (owner, variant)
+        key = self._pinned_key(owner, variant, scope)
+        if key is not None:
             return key in self._reports, self._reports.get(key)
         scoped_key = (owner, variant, scope)
         if scoped_key not in self._scoped_reports:
@@ -198,8 +220,9 @@ class ReportRegistry:
     def _store(
         self, owner: Hashable, variant: CacheVariant, scope: Hashable, snapshot: object
     ) -> None:
-        if scope is None:
-            self._reports[(owner, variant)] = snapshot
+        key = self._pinned_key(owner, variant, scope)
+        if key is not None:
+            self._reports[key] = snapshot
             return
         self._scoped_reports[(owner, variant, scope)] = snapshot
         while len(self._scoped_reports) > MAX_SCOPED_REPORTS:

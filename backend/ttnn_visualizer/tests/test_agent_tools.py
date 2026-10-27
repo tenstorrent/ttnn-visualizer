@@ -1942,10 +1942,11 @@ class TestDiffReports:
         ):
             result = tools.diff_reports(registry, "report-1", "report-2")
 
-        by_op = {change["op_code"]: change for change in result["changes"]}
-        assert by_op["Matmul"]["delta"] == 0.0
-        assert by_op["Reshard"]["delta"] == 2.0
-        assert by_op["Reshard"]["count_before"] == 0
+        assert result["changes"] == []
+        assert result["within_threshold_count"] == 1
+        assert result["new"] == [
+            {"op_code": "Reshard", "device_time_after": 2.0, "count_after": 1}
+        ]
 
     def test_a_partitioned_diff_carries_the_caveat_too(self, tmp_path):
         """A delta of two unsound totals is unsound the same way — and this is the

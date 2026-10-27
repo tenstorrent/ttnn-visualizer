@@ -95,7 +95,7 @@ another rank's operation under the same id.
 | `op_breakdown` | Where the time went, per op or per op category, over the whole report or a signpost range: each group's count, and its device time and op-to-op gap with the share each is of the total. |
 | `program_cache` | Whether programs were built again rather than reused: per op code, its calls, distinct programs, and how many repeat calls hit or missed the program cache. |
 | `zone_timings` | Per-zone, per-RISC totals from `profile_log_device.csv` — firmware and kernel phases, as measured on device. |
-| `diff_reports` | Per-operation-code deltas between two reports, largest movement first, over the whole reports or one signpost range in both. |
+| `diff_reports` | Per-operation-code deltas between two reports, largest movement first, over the whole reports or one signpost range in every capture: only moves past a noise threshold count as changes, operations one report lacks are listed apart, and repeated captures of either side are compared by their median. `match: signature` groups by raw op code and tensors instead. |
 | `find_operations` | Operations matching a name substring or a call-stack substring, with the ids `operation_detail` takes. |
 | `operation_detail` | One operation: its input and output tensors with shape, dtype, layout and memory config, what it had allocated, and the circular buffers each of its device operations allocated, with size per core, core range and device count, with its error and likely DRAM fallback when it has one. With a linked performance report, also the performance rows it launched, their device time and share of the report's, and the operation's total and slowest row, with the same `include` as `top_ops`. |
 | `memory_profile` | Memory footprint per operation, keyed by buffer type and ranked within each, with each type's largest footprint and the device's L1 geometry. A floor rather than the peak — see below. |
@@ -186,9 +186,10 @@ characters. A report with no signposts at all is read whole, because tt-perf-rep
 uses the whole file rather than some other window, and the response's `projection` says so
 with `signpost_range_ignored`. Every ranged response's `projection` names the range, so a
 windowed answer cannot be taken for a whole-report one. `diff_reports` applies one range to
-both reports, and refuses when only one of them holds signposts: a window compared against
-a whole report would show every row outside the window as a change. It checks the range
-against both reports before generating either, and a refusal names the report it is about.
+every capture it compares, and refuses when only some of them hold signposts: a window
+compared against a whole report would show every row outside the window as a change. It
+checks the range against every capture before generating any, and a refusal names the
+report it is about.
 
 One filter is applied, deliberately: per-device rows are **merged**, so an operation that
 ran on eight devices is one row rather than eight. That is the unit an operation is
@@ -466,6 +467,89 @@ time and their shares match the stacked report tt-perf-report generates from the
 That report itself is not generated: the answer is computed from the rows, which also gives
 it the op-to-op gap the stacked report leaves out.
 
+**`diff_reports` calls a move a change only when it is bigger than run-to-run noise.** Two
+captures of the same code never time an operation identically, so a diff that ranks every
+group that moved puts that jitter beside real changes. On two captures of one model taken
+minutes apart, every op code's device time moved, by up to 3.8%, and on another such pair
+by up to 4.3%. A group therefore counts as a change only when it moved by at least
+`min_percent` of its baseline figure, 5% unless asked, and by at least `min_delta` in the
+metric's unit: 1 µs for device time and op-to-op gap, 0.1 percentage points for
+`total_percent`. The floor keeps a small operation's jitter from counting, since a percentage
+of a tiny figure is mostly jitter: on the second pair a 3.5 µs operation moved 4.3%, by
+0.15 µs. Requiring both is the rule tt-metal's LLK performance regression check applies.
+`thresholds` names the values used, `changes` lists the changes largest first with
+`delta_percent` beside each `delta`, `change_count` counts them all, and
+`within_threshold_count` counts the groups both reports hold that moved less. `limit`
+caps `changes` at 100; every other list is capped at 25, and its count says how many
+more there are. A move from
+zero has no percentage, so only `min_delta` applies to it. Lower thresholds show smaller
+moves, and 0 for both lists every group that moved at all.
+
+An operation only one report ran is neither faster nor slower, so it is never a change:
+`new` lists the groups only the second report ran, with their figures there, and `missing`
+those only the first ran, each largest first and counted in full by `new_count` and
+`missing_count`. Which groups a report ran is read from every row, figure or not:
+tt-perf-report leaves a call's figure blank where its duration is invalid, as it does a
+report's first op-to-op gap. A group both reports ran with no figure at all on one side is
+listed under `unmeasured`, with its calls and how many of them carry a figure on each side,
+and a caveat says each side's total covers only the calls with one; a group with no figure
+in either report, such as a host operation's device time, is left out. A change over fewer
+measured calls on one side than calls carries `measured_before` and `measured_after`, since
+its total covers only those.
+
+`repeats_a` and `repeats_b` take further captures of either side, run the same way, up to
+five captures a side. Each figure is then the median of the side's captures, as the LLK
+check compares repeated runs, which makes a lower threshold safe to read; with two captures
+a side the median is their mean, so three or five resist one outlier. A group the side's
+captures disagree on, by whether it ran or how many calls it made, is listed under
+`inconsistent`, largest first, with `calls_before` and `calls_after` giving each capture's
+calls, rather than compared on unlike work. Each capture may be given once: a handle given
+twice, or two handles loaded on the same capture, is refused. A capture's totals are kept
+per range and match, so asking again with other thresholds or another metric generates no
+report, though the first ranged call generates every capture's window. The first call also
+generates each capture's whole report that no tool has read yet, which on a single-device
+capture of 100,000 rows takes about 20 s, and that report stays loaded for the server's
+life, as every handle's does: about 350 MB at that size.
+
+Without `match`, a group is tt-perf-report's op code, which already names a matmul's shapes
+and a convolution's or halo's configuration. `match: signature` groups instead by the raw op
+code and its input and output tensors' shapes, layouts, dtypes and memory, read from the
+CSV's `INPUT_n_*` and `OUTPUT_n_*` columns, and names each group by `raw_op_code` and
+`signature`. That splits an operation whose op code names no shape, such as
+`InterleavedToShardedDeviceOperation`, and pairs a convolution whose configuration changed as
+one change rather than a `new` and a `missing`, while summing two configurations of one
+convolution over the same tensors. The device a memory name carries
+(`DEV_1_L1_INTERLEAVED`) is left out, so the copies of one operation across a mesh's devices
+match. Calls are summed per signature, not paired by occurrence, so one slow layer among
+many identical ones moves its signature by its share. A signature holds fewer calls than an
+op code, so it moves more between runs of the same code: on the first pair above, three
+two-call shapes of one op code moved by 9–18% while the op code as a whole moved 2.9%, and
+the answer's caveat quotes that before a signature's move is read as a change. A signature
+past 300 characters is cut, and `signature_full_length` gives its length; with signatures
+`changes` is capped at 25 rather than 100. A capture whose CSV has no tensor columns, or
+cannot be read, is refused. Older captures record a tile-padded size alone, where newer
+ones record `padded[logical]`, so an operation on a padded tensor has a different signature
+in each; `mismatched` names `tensor_sizes` when the captures differ in it.
+
+When the captures' device logs name different architectures, clocks or compute core
+counts, or their CSVs hold rows for different numbers of devices, `mismatched` lists the
+values by handle and a caveat says every delta measures that difference too. They are read
+once per capture, as its rows are. The diff is still answered, since comparing
+two architectures can be the question. A fact a capture does not record is not compared.
+Every capture is generated by the same tt-perf-report, the release `load_report` names.
+
+Two metrics carry a caveat of their own. Op-to-op gaps are host time between operations,
+including dispatch and a program's compilation on its first call: on the first pair above
+they moved by a median of 17% per op code, so 38 of its 55 op codes count as changed by
+op-to-op gap and none by device time. `total_percent` is a group's share of its report's
+device time and op-to-op gap together, so it carries the gaps' noise, 48 of 55 on the same
+pair, and moves whenever any other group does: on two resnet50 captures three weeks apart,
+four matmuls' shares more than doubled while their device time moved by under 1%. Compare
+device time to see whether a kernel changed.
+
+`delta_total` and `delta_total_percent` compare the reports' totals, the medians of the
+captures' totals with repeats, beside `<metric>_total_before` and `<metric>_total_after`.
+
 **`errors` says where a run stopped and why an allocation failed.** It lists the rows of the
 report's `errors` table, as the web application shows them. An `incomplete_operation` error
 is an operation that started and never completed, so the run most likely crashed inside it.
@@ -585,7 +669,7 @@ to act on it: the arguments it was called with, and the innermost stack frame's 
 line, function and source line.
 
 `top_ops` names an operation too, but its `id` is a row of the performance CSV and does
-not belong here (`diff_reports` returns no id at all: it groups by op code): the two ids are small integers in overlapping
+not belong here (`diff_reports` returns no id at all: it groups by op code, or op code and signature): the two ids are small integers in overlapping
 ranges, so passing one where the other belongs answers about a different operation
 rather than refusing. Pass a `top_ops` row's `operation_id` instead, or search for the
 name with `find_operations`. `program_cache`'s `first_repeat_miss_perf_id` is a CSV row in the
