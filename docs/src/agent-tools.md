@@ -97,8 +97,8 @@ another rank's operation under the same id.
 | `zone_timings` | Per-zone, per-RISC totals from `profile_log_device.csv` — firmware and kernel phases, as measured on device. |
 | `diff_reports` | Per-operation-code deltas between two reports, largest movement first, over the whole reports or one signpost range in both. |
 | `find_operations` | Operations matching a name substring or a call-stack substring, with the ids `operation_detail` takes. |
-| `operation_detail` | One operation: its input and output tensors with shape, dtype, layout and memory config, what it had allocated, and the circular buffers each of its device operations allocated, with size per core, core range and device count, with its error and likely DRAM fallback when it has one. With a linked performance report, also the performance rows it launched, their device time and share of the report's, and the operation's total and slowest row, with the same `include` as `top_ops`. |
-| `memory_profile` | Memory footprint per operation, keyed by buffer type and ranked within each, with each type's largest footprint and the device's L1 geometry. A floor rather than the peak — see below. |
+| `operation_detail` | One operation: its input and output tensors with shape, dtype, layout and memory config, what it had allocated, and the circular buffers each of its device operations allocated, with size per core, core range and device count, with its error and likely DRAM fallback when it has one, and its per-device `l1_pressure` (`fullness_pct`, `free_segments`, `largest_free_block`, `largest_free_pct`). With a linked performance report, also the performance rows it launched, their device time and share of the report's, and the operation's total and slowest row, with the same `include` as `top_ops`. |
+| `memory_profile` | Memory footprint per operation, keyed by buffer type and ranked within each, with each type's largest footprint, the device's L1 geometry, and `l1_pressure` ranking operations by smallest `largest_free_block` on the most constrained device. A floor rather than the peak — see below. |
 | `tensor_flow` | Which operation produced a tensor and which ones consumed it. |
 | `operation_provenance` | What one operation was called with, and where in the model code it came from. |
 | `errors` | The errors the run recorded, including an operation that started and never completed: which operation, the device operations whose launch failed, and for an allocation failure its figures and why it did not fit. |
@@ -627,9 +627,18 @@ called through helpers rather than only those it called directly.
 Accuracy questions are not answerable. Both tensor-comparison tables exist in every
 local capture and are empty in every one, so there is nothing to build a PCC tool on.
 
-Page-level memory questions — fragmentation, or the per-bank detail behind the web
-application's memory plot — are not exposed. That data runs to millions of rows on an
-ordinary capture and needs a different shape than a tool response.
+Page-level memory questions — the per-bank, per-page detail behind the web
+application's memory plot — are not exposed, because `buffer_pages` runs to millions of
+rows on an ordinary capture and needs a different shape than a tool response. Per-operation
+L1 fullness, free-segment counts and the largest free block are derived from `buffers` and
+`devices` instead (bounded per device to `[address_at_first_l1_cb_buffer,
+address_at_first_l1_cb_buffer + l1_bank_size)`, capped at `worker_l1_size`, and reporting
+the most constrained device — the one with the smallest largest free block — with
+free-space figures marked as an upper bound because circular buffers and intra-op tensors
+are absent) and exposed as `l1_pressure` on `operation_detail` and `memory_profile`. Its
+figures are bytes per bank (`size_unit`), so a whole-tensor size in `bytes` is not
+comparable to them. It is null, with a caveat saying why, for an operation with no
+`buffers` rows or a report whose devices record no L1 geometry.
 
 Device profiler logs carry named zones only where a kernel was instrumented to emit them.
 Most captures contain only the default firmware and kernel zones — `BRISC-FW`,
