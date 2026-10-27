@@ -5,7 +5,8 @@
 """The JavaScript reads every agent port shares. #2219
 
 The parity goldens hold these as the ports use them, on the inputs a capture or a report
-writes; these hold the edges the goldens do not reach.
+writes; these hold the edges the goldens do not reach. Every expectation is what node gives
+for the same input.
 """
 
 import math
@@ -13,22 +14,27 @@ import math
 import pytest
 from ttnn_visualizer.agent.js_values import (
     MISSING,
-    is_truthy,
+    js_divide,
+    js_is_finite,
     js_max,
     js_number,
+    js_parse_float,
+    js_parse_int,
     js_template,
-    parse_float,
-    parse_int,
+    js_truthy,
 )
 
 
 def _same(actual: float, expected: float) -> bool:
+    """Equal as JavaScript's `Object.is` compares: NaN is NaN, and -0 is not 0."""
     if math.isnan(expected):
         return math.isnan(actual)
-    return actual == expected
+    return actual == expected and math.copysign(1.0, actual) == math.copysign(
+        1.0, expected
+    )
 
 
-class TestParseInt:
+class TestJsParseInt:
     @pytest.mark.parametrize(
         ("value", "expected"),
         [
@@ -46,12 +52,18 @@ class TestParseInt:
             (MISSING, math.nan),
             (True, math.nan),
             (math.inf, math.nan),
-            # `String(5e-7)` is "5e-7".
+            # `String(5e-7)` is "5e-7", `String(5e-5)` is "0.00005", and `String(1e21)`
+            # is "1e+21".
             (5e-7, 5),
+            (5e-5, 0),
+            (1e21, 1),
+            # An int has no -0, so it stays a float.
+            ("-0", -0.0),
+            ("0", 0),
         ],
     )
     def test_it_reads_as_parse_int_does(self, value, expected):
-        assert _same(parse_int(value), expected)
+        assert _same(js_parse_int(value), expected)
 
     @pytest.mark.parametrize(
         ("value", "expected"),
@@ -65,10 +77,10 @@ class TestParseInt:
         ],
     )
     def test_it_skips_javascript_s_whitespace_only(self, value, expected):
-        assert _same(parse_int(value), expected)
+        assert _same(js_parse_int(value), expected)
 
     def test_an_integer_stays_an_integer(self):
-        assert isinstance(parse_int("4096"), int)
+        assert isinstance(js_parse_int("4096"), int)
 
     @pytest.mark.parametrize(
         ("value", "expected"),
@@ -82,10 +94,10 @@ class TestParseInt:
         ],
     )
     def test_it_reads_a_long_prefix_as_javascript_s_number_does(self, value, expected):
-        assert parse_int(value) == expected
+        assert js_parse_int(value) == expected
 
 
-class TestParseFloat:
+class TestJsParseFloat:
     @pytest.mark.parametrize(
         ("value", "expected"),
         [
@@ -101,7 +113,7 @@ class TestParseFloat:
         ],
     )
     def test_it_reads_as_parse_float_does(self, value, expected):
-        assert _same(parse_float(value), expected)
+        assert _same(js_parse_float(value), expected)
 
 
 class TestJsNumber:
@@ -122,9 +134,33 @@ class TestJsNumber:
             ("12abc", math.nan),
             (True, 1.0),
             (MISSING, math.nan),
+            ("-0x10", math.nan),
+            ("0x1_0", math.nan),
+            ("\u0664\u0662", math.nan),
+            ("1e", math.nan),
+            ("5.", 5.0),
+            ("+.5e-2", 0.005),
+            ("-0", -0.0),
+            pytest.param(10**400, math.inf, id="int-past-the-float-range"),
+            ([5], 5.0),
+            ([], 0.0),
+            ({}, math.nan),
         ],
     )
     def test_it_reads_as_number_does(self, value, expected):
+        assert _same(js_number(value), expected)
+
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            ("\ufeff12", 12.0),
+            ("12\u3000", 12.0),
+            # Python's whitespace, not JavaScript's.
+            ("\x1c12", math.nan),
+            ("12\x85", math.nan),
+        ],
+    )
+    def test_it_skips_javascript_s_whitespace_only(self, value, expected):
         assert _same(js_number(value), expected)
 
 
@@ -140,6 +176,21 @@ class TestJsTemplate:
             (True, "true"),
             ("{}", "{}"),
             (MISSING, "undefined"),
+            (-0.0, "0"),
+            (0.1, "0.1"),
+            (1e20, "100000000000000000000"),
+            (1e21, "1e+21"),
+            (-1.5e300, "-1.5e+300"),
+            (1e-6, "0.000001"),
+            (5e-5, "0.00005"),
+            (1e-7, "1e-7"),
+            (123e-20, "1.23e-18"),
+            (5e-324, "5e-324"),
+            # A JSON integer is a double to JavaScript.
+            (9007199254740993, "9007199254740992"),
+            pytest.param(10**400, "Infinity", id="int-past-the-float-range"),
+            ([1, None, MISSING, "a", [2, 3]], "1,,,a,2,3"),
+            ({}, "[object Object]"),
         ],
     )
     def test_it_renders_as_javascript_does(self, value, expected):
@@ -154,19 +205,59 @@ class TestJsMax:
             (2, 1, 2),
             (math.nan, 1, math.nan),
             (1, math.nan, math.nan),
+            (-0.0, 0.0, 0.0),
+            (0.0, -0.0, 0.0),
+            (-0.0, -0.0, -0.0),
         ],
     )
-    def test_it_is_nan_when_either_side_is(self, left, right, expected):
+    def test_it_reads_as_math_max_does(self, left, right, expected):
         assert _same(js_max(left, right), expected)
 
 
-class TestIsTruthy:
+class TestJsDivide:
+    @pytest.mark.parametrize(
+        ("numerator", "denominator", "expected"),
+        [
+            (6.0, 3.0, 2.0),
+            (1.0, 0.0, math.inf),
+            (1.0, -0.0, -math.inf),
+            (-1.0, 0.0, -math.inf),
+            (0.0, 0.0, math.nan),
+            (math.nan, 0.0, math.nan),
+        ],
+    )
+    def test_it_divides_as_ieee_does(self, numerator, denominator, expected):
+        assert _same(js_divide(numerator, denominator), expected)
+
+
+class TestJsIsFinite:
+    @pytest.mark.parametrize("value", [0, -0.0, 1.5, 2**1000])
+    def test_finite_numbers(self, value):
+        assert js_is_finite(value)
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            math.nan,
+            math.inf,
+            pytest.param(-(10**400), id="int-past-the-float-range"),
+            "1",
+            True,
+            None,
+            MISSING,
+        ],
+    )
+    def test_everything_else(self, value):
+        assert not js_is_finite(value)
+
+
+class TestJsTruthy:
     @pytest.mark.parametrize(
         "value", [None, MISSING, "", 0, 0.0, -0.0, math.nan, False]
     )
     def test_falsy_values(self, value):
-        assert not is_truthy(value)
+        assert not js_truthy(value)
 
     @pytest.mark.parametrize("value", ["0", "false", 1, -1.5, True, [], {}])
     def test_truthy_values(self, value):
-        assert is_truthy(value)
+        assert js_truthy(value)

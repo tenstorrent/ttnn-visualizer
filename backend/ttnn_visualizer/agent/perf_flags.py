@@ -11,8 +11,9 @@ thresholds in `src/definitions/PerfHeuristics.ts`, and the fields and first-call
 and DRAM-fallback flags are not ported, because `errors` and `dram_fallbacks` answer
 them.
 
-Values are read as JavaScript reads them: a NaN stays one where `parseFloat` gives it,
-and None is null, since which of the two a cell becomes decides some flags.
+Values are read as JavaScript reads them, through `js_values`: a NaN stays one where
+`parseFloat` gives it, and None is null, since which of the two a cell becomes decides
+some flags.
 """
 
 import math
@@ -31,10 +32,15 @@ from typing import (
     Sequence,
     Set,
     Tuple,
-    TypeGuard,
 )
 
-from ttnn_visualizer.agent.js_values import is_truthy, parse_float, parse_int
+from ttnn_visualizer.agent.js_values import (
+    js_divide,
+    js_is_finite,
+    js_parse_float,
+    js_parse_int,
+    js_truthy,
+)
 from ttnn_visualizer.agent.perf_detail import is_unmodelled
 from ttnn_visualizer.csv_queries import SIGNPOST_OP_TYPE, DeviceLogMeta
 
@@ -130,30 +136,12 @@ _BOUND_ANALYSES = frozenset(analysis.value for analysis in BoundAnalysis)
 def _parse_nullable_integer(value: object) -> Optional[float]:
     if value is None or value == "":
         return None
-    parsed = parse_int(value)
+    parsed = js_parse_int(value)
     return None if math.isnan(parsed) else float(parsed)
 
 
 def _parse_filled_float(value: object) -> Optional[float]:
-    return parse_float(value) if is_truthy(value) else None
-
-
-def _is_valid_number(value: object) -> TypeGuard[float]:
-    """`isValidNumber`, which is `Number.isFinite`."""
-    return (
-        isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and math.isfinite(value)
-    )
-
-
-def _divide(numerator: float, denominator: float) -> float:
-    """IEEE division, as JavaScript divides; Python raises on a zero denominator."""
-    if denominator != 0:
-        return numerator / denominator
-    if numerator == 0 or math.isnan(numerator):
-        return math.nan
-    return math.copysign(math.inf, numerator) * math.copysign(1.0, denominator)
+    return js_parse_float(value) if js_truthy(value) else None
 
 
 def program_calls(rows: Iterable[Dict]) -> Iterator[Tuple[Dict, bool]]:
@@ -177,11 +165,11 @@ def repeat_cache_outcome(
     """`getRepeatCacheOutcome`: how a repeat call's cache result reads, None for a row that
     is no repeat. A miss is the view's recompute candidate; `program_cache` counts by it.
     """
-    if not is_truthy(program) or is_first_call:
+    if not js_truthy(program) or is_first_call:
         return None
     if cache_hit is None:
         return RepeatCacheOutcome.UNRECORDED
-    return RepeatCacheOutcome.HIT if is_truthy(cache_hit) else RepeatCacheOutcome.MISS
+    return RepeatCacheOutcome.HIT if js_truthy(cache_hit) else RepeatCacheOutcome.MISS
 
 
 def cache_looks_disabled(repeat_hits: int, repeat_misses: int) -> bool:
@@ -218,7 +206,7 @@ class FlagRow:
 
 def row_cores(row: Dict) -> float:
     """A row's core count as `enrichRowData` parses it, which `core_count` reads."""
-    return float(parse_int(row.get("cores")))
+    return float(js_parse_int(row.get("cores")))
 
 
 def typed_row(row: Dict, is_first_hash_occurrence: bool = True) -> FlagRow:
@@ -229,8 +217,8 @@ def typed_row(row: Dict, is_first_hash_occurrence: bool = True) -> FlagRow:
     """
     bound_analysis = row.get("bound_analysis")
     return FlagRow(
-        total_percent=parse_float(row.get("total_percent")),
-        device_time=parse_float(row.get("device_time")),
+        total_percent=js_parse_float(row.get("total_percent")),
+        device_time=js_parse_float(row.get("device_time")),
         cores=row_cores(row),
         available_cores=_parse_nullable_integer(row.get("available_cores")),
         dram_percent=_parse_filled_float(row.get("dram_percent")),
@@ -257,22 +245,18 @@ def core_utilisation(row: FlagRow, max_cores: float) -> float:
     the cores the op could have used over the cores it did; 0 where it cannot be read.
     """
     ideal, duration, cores = row.pm_ideal_ns, row.device_time, row.cores
-    if (
-        _is_valid_number(ideal)
-        and _is_valid_number(duration)
-        and _is_valid_number(cores)
-    ):
-        utilisation = _divide(ideal, duration * 1000) * _divide(
+    if js_is_finite(ideal) and js_is_finite(duration) and js_is_finite(cores):
+        utilisation = js_divide(ideal, duration * 1000) * js_divide(
             _core_capacity(row, max_cores), cores
         )
-        if _is_valid_number(utilisation):
+        if js_is_finite(utilisation):
             return utilisation
     return 0.0
 
 
 def _is_eligible(row: FlagRow) -> bool:
     return (
-        not is_truthy(row.missing)
+        not js_truthy(row.missing)
         and row.op_type != SIGNPOST_OP_TYPE
         and row.bound != BoundType.HOST
     )
@@ -294,14 +278,14 @@ def _is_slow_dram_dominant(row: FlagRow) -> bool:
 def _is_underutilised_cores(row: FlagRow, max_cores: float) -> bool:
     cores = row.cores
     # Not `max_cores > 0`: the view refuses only `<= 0`, which a NaN passes.
-    if _is_valid_number(cores) and not max_cores <= 0:
+    if js_is_finite(cores) and not max_cores <= 0:
         capacity = _core_capacity(row, max_cores)
         return capacity > 0 and cores / capacity < UNDERUTILISED_CORES_RATIO
     return False
 
 
 def _figure(value: Optional[float]) -> Optional[float]:
-    return round(value, 3) if _is_valid_number(value) else None
+    return round(value, 3) if js_is_finite(value) else None
 
 
 def _whole(value: object) -> object:

@@ -31,11 +31,11 @@ from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_LIMIT
 from ttnn_visualizer.agent.js_values import (
     MISSING,
     Missing,
-    Number,
+    NumberValue,
     js_max,
     js_number,
+    js_parse_int,
     js_template,
-    parse_int,
 )
 from ttnn_visualizer.agent.operations import BUFFER_SIZE_UNIT
 
@@ -115,7 +115,7 @@ def cores_in_range(range_set: object) -> Tuple[Tuple[int, int], ...]:
 
 
 def _normalised_device_id(device_id: object) -> Optional[float]:
-    """`normaliseDeviceId`: a finite `Number(device_id)`, else None."""
+    """`normaliseDeviceId`: a finite `NumberValue(device_id)`, else None."""
     if isinstance(device_id, Missing) or device_id is None or device_id == "":
         return None
     number = js_number(device_id)
@@ -161,9 +161,9 @@ class CircularBufferRow:
     """`CBAllocationSummary`, without the expanded `cores`."""
 
     node_id: object
-    address: Number
+    address: NumberValue
     # Per core.
-    size: Number
+    size: NumberValue
     core_count: int
     core_range_set: object
     allocate_operation_id: object
@@ -181,9 +181,9 @@ class Snapshot:
     operation_id: object
     # The scope's name, which the app reads from its stack rather than the snapshot.
     name: object
-    by_core: Dict[str, Number]
-    max_bytes: Number
-    unattributed_bytes: Number
+    by_core: Dict[str, NumberValue]
+    max_bytes: NumberValue
+    unattributed_bytes: NumberValue
     allocations: List[CircularBufferRow]
 
 
@@ -242,8 +242,8 @@ def summarise(nodes: Sequence[object]) -> Summary:
     allocating: Set[object] = set()
     launches: Dict[object, Launch] = {}
     scopes: List[_Scope] = []
-    bytes_by_device_core: Dict[str, Number] = {}
-    unattributed_by_device: Dict[str, Number] = {}
+    bytes_by_device_core: Dict[str, NumberValue] = {}
+    unattributed_by_device: Dict[str, NumberValue] = {}
     live: List[_Live] = []
     live_by_slot: Dict[str, _Live] = {}
     slot_of = _slot_keys()
@@ -251,15 +251,15 @@ def summarise(nodes: Sequence[object]) -> Summary:
     def snapshot(scope: _Scope) -> None:
         if not live and not bytes_by_device_core and not unattributed_by_device:
             return
-        by_core: Dict[str, Number] = {}
-        max_bytes: Number = 0
+        by_core: Dict[str, NumberValue] = {}
+        max_bytes: NumberValue = 0
         for key, size in bytes_by_device_core.items():
             core = key[key.index("|") + 1 :]
             per_core = js_max(by_core.get(core, 0), size)
             by_core[core] = per_core
             if per_core > max_bytes:
                 max_bytes = per_core
-        unattributed: Number = 0
+        unattributed: NumberValue = 0
         for size in unattributed_by_device.values():
             unattributed = js_max(unattributed, size)
         if unattributed_by_device:
@@ -292,7 +292,7 @@ def summarise(nodes: Sequence[object]) -> Summary:
         if node_type == _ALLOCATE and isinstance(raw_params, dict):
             if current is not None:
                 allocating.add(current.id)
-            size = parse_int(params.get("size", MISSING))
+            size = js_parse_int(params.get("size", MISSING))
             range_set = params.get("core_range_set", MISSING)
             cores = cores_in_range(range_set)
             globally_allocated = _is_globally_allocated(
@@ -311,7 +311,7 @@ def summarise(nodes: Sequence[object]) -> Summary:
                             bytes_by_device_core.get(key, 0) + size
                         )
 
-            address = parse_int(params.get("address", MISSING))
+            address = js_parse_int(params.get("address", MISSING))
             identity = "|".join(
                 js_template(part)
                 for part in (
@@ -511,7 +511,7 @@ def _core_range_set(value: object) -> Dict[str, object]:
     }
 
 
-def _figure(value: Number) -> Optional[Number]:
+def _figure(value: NumberValue) -> Optional[NumberValue]:
     # JSON holds no NaN; a size no capture writes reads as unknown.
     return value if math.isfinite(value) else None
 

@@ -25,7 +25,7 @@ from typing import (
     Tuple,
 )
 
-from ttnn_visualizer.agent.js_values import js_number
+from ttnn_visualizer.agent.js_values import MISSING, js_divide, js_number, js_truthy
 from ttnn_visualizer.models import L1_BUFFER_TYPES, Buffer, BufferType
 
 # `L1_NUM_CORES`: the bank count a node without `max_size_per_bank` falls back to.
@@ -88,21 +88,16 @@ def _is_l1_node(params: Dict) -> bool:
 
 def _param(params: Dict, key: str) -> float:
     """A param as the app reads it: missing is undefined, so NaN, while null is 0."""
-    return js_number(params[key]) if key in params else math.nan
+    return js_number(params.get(key, MISSING))
 
 
 def _per_bank_bytes(params: Dict, bank_count: int) -> float:
     if "max_size_per_bank" in params:
         return js_number(params["max_size_per_bank"])
     cores = _param(params, "num_cores")
-    divisor = cores if cores and not math.isnan(cores) else float(bank_count)
-    size = _param(params, "size")
-    if divisor == 0:
-        # As JavaScript divides: no bank count is no figure, not an error.
-        return (
-            math.nan if size == 0 or math.isnan(size) else math.copysign(math.inf, size)
-        )
-    return size / divisor
+    divisor = cores if js_truthy(cores) else float(bank_count)
+    # No bank count is no figure, not an error.
+    return js_divide(_param(params, "size"), divisor)
 
 
 def _params(node: object) -> Optional[Dict]:

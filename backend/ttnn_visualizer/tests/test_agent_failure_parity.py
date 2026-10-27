@@ -844,8 +844,8 @@ def _curated_cb_graphs() -> List[List[object]]:
         .cb(core_range_set=_CORE_RANGE_SETS[2], size="1024abc")
         .cb(core_range_set=_CORE_RANGE_SETS[3], address=300)
         .cb(core_range_set=_CORE_RANGE_SETS[4], device_id="abc")
-        .end()
-        .nodes,
+        # A size after JavaScript's whitespace, which Python's `str.strip` keeps.
+        .cb(core_range_set=_CORE_RANGE_SETS[1], size="\ufeff4096").end().nodes,
         # Sibling device operations in every capture's order: each one's free releases
         # the last one's buffers, which must not be taken as its own. #2185
         CapturedGraph()

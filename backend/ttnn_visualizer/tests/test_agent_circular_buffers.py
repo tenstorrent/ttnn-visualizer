@@ -188,6 +188,26 @@ class TestSummarise:
             is None
         )
 
+    @pytest.mark.parametrize("digits", ["9" * 309, "9" * 5000])
+    def test_a_figure_past_the_float_range_is_no_figure(self, digits):
+        # `parseInt` reads it as Infinity, which the answer cannot carry as a number.
+        nodes = _device_operation().cb(digits, size=digits).end().nodes
+
+        (row,) = operation_circular_buffers(nodes)["device_operations"][0][
+            "circular_buffers"
+        ]
+
+        assert (row["address"], row["size_per_core"]) == (None, None)
+
+    def test_an_address_past_2_to_the_53_rounds_as_the_app_s_does(self):
+        nodes = _device_operation().cb("9007199254740993").end().nodes
+
+        (row,) = operation_circular_buffers(nodes)["device_operations"][0][
+            "circular_buffers"
+        ]
+
+        assert row["address"] == 9007199254740992
+
     def test_the_first_node_is_skipped_as_the_app_skips_it(self):
         nodes = CapturedGraph().start("Tilize").cb().end().nodes[1:]
 
