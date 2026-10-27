@@ -2,13 +2,13 @@
 #
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-"""Reading a value as the app's JavaScript reads it, shared so every port reads one the
+r"""Reading a value as the app's JavaScript reads it, shared so every port reads one the
 same way. #2219
 
 `Number`, `String` and a template literal, `parseInt`, `parseFloat`, `trim` and `\s`,
-`Math.max`, `Number.isFinite`, division and truthiness, as the ports of the app's functions need
-them; mirror a change in the TS each port names. A Python int is a JSON number, which
-JavaScript holds as a double, so each read takes it as one.
+`Math.max`, `Number.isFinite`, division and truthiness, as the ports of the app's
+functions need them; mirror a change in the TS each port names. A Python int is a JSON
+number, which JavaScript holds as a double, so each read takes it as one.
 """
 
 import math
