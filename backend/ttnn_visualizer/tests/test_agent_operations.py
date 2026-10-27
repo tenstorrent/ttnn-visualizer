@@ -967,6 +967,312 @@ class TestOperationDetail:
         with pytest.raises(ValueError, match="no operation 99"):
             agent_operations.operation_detail(registry, handle, 99)
 
+    def test_it_reports_l1_pressure_and_fragmentation_per_operation(self, loaded):
+        """Matches `computeL1PressureForOperation` in `src/functions/l1Pressure.ts`
+        with per-device `[address_at_first_l1_cb_buffer,
+        address_at_first_l1_cb_buffer + l1_bank_size)` bounds. #2172"""
+        sql = _REPORT_SQL + """
+        INSERT INTO operations VALUES (4, 'ttnn.fragmented_op', 1.0);
+        INSERT INTO buffers VALUES
+            (4, 0, 100000, 50000, 'L1', 0),
+            (4, 0, 500000, 50000, 'L1', 0);
+        """
+        registry, handle = loaded(sql, name="l1-pressure")
+
+        op1 = agent_operations.operation_detail(registry, handle, 1)
+        assert op1["l1_pressure"] == {
+            "device_id": 0,
+            "fullness_pct": 0.0,
+            "free_segments": 1,
+            "largest_free_block": 1370848,
+            "largest_free_pct": 100.0,
+            "allocated_bytes": 0,
+            "usable_bytes": 1370848,
+            "high_water_bytes": 0,
+            "size_unit": agent_operations.BUFFER_SIZE_UNIT,
+            "note": agent_operations.L1_PRESSURE_NOTE,
+        }
+
+        op2 = agent_operations.operation_detail(registry, handle, 2)
+        assert op2["l1_pressure"] == {
+            "device_id": 0,
+            "fullness_pct": 0.3,
+            "free_segments": 2,
+            "largest_free_block": 1370848 - 4296,
+            "largest_free_pct": 99.7,
+            "allocated_bytes": 4096,
+            "usable_bytes": 1370848,
+            "high_water_bytes": 4296,
+            "size_unit": agent_operations.BUFFER_SIZE_UNIT,
+            "note": agent_operations.L1_PRESSURE_NOTE,
+        }
+
+        op4 = agent_operations.operation_detail(registry, handle, 4)
+        assert op4["l1_pressure"] == {
+            "device_id": 0,
+            "fullness_pct": 7.3,
+            "free_segments": 3,
+            "largest_free_block": 1370848 - 550000,
+            "largest_free_pct": 59.9,
+            "allocated_bytes": 100000,
+            "usable_bytes": 1370848,
+            "high_water_bytes": 550000,
+            "size_unit": agent_operations.BUFFER_SIZE_UNIT,
+            "note": agent_operations.L1_PRESSURE_NOTE,
+        }
+
+        ranked = agent_operations.memory_profile(registry, handle)["l1_pressure"]
+        assert ranked["ranked_by"] == "largest_free_block"
+        assert [row["operation_id"] for row in ranked["operations"]] == [4, 2, 3]
+        assert ranked["operations"][0]["largest_free_block"] == 1370848 - 550000
+
+    def test_l1_pressure_clips_buffers_below_l1_start_and_above_l1_end(self, loaded):
+        """A device with non-zero `address_at_first_l1_cb_buffer` clips buffers
+        straddling the start or the end before summing `allocated_bytes`."""
+        sql = _REPORT_SQL + """
+        UPDATE devices
+        SET address_at_first_l1_bank = 103712,
+            address_at_first_l1_cb_buffer = 103712
+        WHERE device_id = 0;
+        INSERT INTO operations VALUES (5, 'ttnn.straddle', 1.0);
+        INSERT INTO buffers VALUES
+            (5, 0, 100000, 10000, 'L1', 0),
+            (5, 0, 1470000, 10000, 'L1', 0);
+        """
+        registry, handle = loaded(sql, name="l1-clip")
+
+        pressure = agent_operations.operation_detail(registry, handle, 5)["l1_pressure"]
+        # Window is [103712, 1474560), usable_bytes = 1370848.
+        # First buffer clips to [103712, 110000) -> 6288 B.
+        # Second buffer clips to [1470000, 1474560) -> 4560 B.
+        assert pressure == {
+            "device_id": 0,
+            "fullness_pct": 0.8,
+            "free_segments": 1,
+            "largest_free_block": 1470000 - 110000,
+            "largest_free_pct": 99.2,
+            "allocated_bytes": 6288 + 4560,
+            "usable_bytes": 1370848,
+            "high_water_bytes": 1370848,
+            "size_unit": agent_operations.BUFFER_SIZE_UNIT,
+            "note": agent_operations.L1_PRESSURE_NOTE,
+        }
+
+    def test_l1_pressure_reports_the_most_constrained_device(self, loaded):
+        """Each device has its own physical L1; the most constrained device is
+        the one with the smallest largest free block, not the fullest, and is
+        reported along with its `device_id`."""
+        sql = _REPORT_SQL + """
+        INSERT INTO devices (
+            device_id, worker_l1_size, l1_num_banks, l1_bank_size,
+            num_compute_cores, total_l1_for_tensors
+        ) VALUES (1, 1499136, 64, 1370848, 64, 0);
+        INSERT INTO operations VALUES (5, 'ttnn.mesh_op', 1.0);
+        INSERT INTO buffers VALUES
+            (5, 0, 0, 100000, 'L1', 0),
+            (5, 0, 500000, 100000, 'L1', 0),
+            (5, 0, 1000000, 100000, 'L1', 0),
+            (5, 1, 0, 685424, 'L1', 0);
+        """
+        registry, handle = loaded(sql, name="l1-two-devices")
+
+        pressure = agent_operations.operation_detail(registry, handle, 5)["l1_pressure"]
+        # Device 1 is fuller (50%), but device 0's largest gap is smaller.
+        assert pressure["device_id"] == 0
+        assert pressure["allocated_bytes"] == 300000
+        assert pressure["fullness_pct"] == 21.9
+        assert pressure["largest_free_block"] == 400000
+        assert pressure["free_segments"] == 3
+
+    def test_l1_pressure_is_none_without_device_geometry(self, loaded):
+        registry_no_dev, handle_no_dev = loaded(
+            _NO_DEVICES_SQL + """
+            CREATE TABLE tensors (
+                tensor_id int UNIQUE, shape text, dtype text, layout text,
+                memory_config text, device_id int, address int, buffer_type text, size int
+            );
+            CREATE TABLE input_tensors (operation_id int, input_index int, tensor_id int);
+            CREATE TABLE output_tensors (operation_id int, output_index int, tensor_id int);
+            CREATE TABLE devices (
+                device_id int, num_y_cores int, num_x_cores int,
+                num_y_compute_cores int, num_x_compute_cores int,
+                worker_l1_size int, l1_num_banks int, l1_bank_size int,
+                address_at_first_l1_bank int, address_at_first_l1_cb_buffer int,
+                num_banks_per_storage_core int, num_compute_cores int,
+                num_storage_cores int, total_l1_memory int, total_l1_for_tensors int,
+                total_l1_for_interleaved_buffers int, total_l1_for_sharded_buffers int,
+                cb_limit int
+            );
+            """,
+            name="l1-empty-devices",
+        )
+        assert (
+            agent_operations.operation_detail(registry_no_dev, handle_no_dev, 1)[
+                "l1_pressure"
+            ]
+            is None
+        )
+
+        for index, update in enumerate(
+            [
+                "UPDATE devices SET worker_l1_size = 0;",
+                "UPDATE devices SET worker_l1_size = NULL;",
+                "UPDATE devices SET l1_bank_size = 0;",
+                "UPDATE devices SET address_at_first_l1_cb_buffer = 1499136;",
+            ]
+        ):
+            reg, hdl = loaded(_REPORT_SQL + update, name=f"l1-bad-geom-{index}")
+            detail = agent_operations.operation_detail(reg, hdl, 2)
+            assert detail["l1_pressure"] is None
+            # Said, so a null reads as missing geometry rather than a fault.
+            assert agent_operations.NO_L1_GEOMETRY_CAVEAT in detail["caveat"]
+
+    def test_l1_pressure_merges_overlapping_adjacent_and_duplicate_buffers(
+        self, loaded
+    ):
+        sql = _REPORT_SQL + """
+        INSERT INTO operations VALUES (6, 'ttnn.merge_op', 1.0);
+        INSERT INTO buffers VALUES
+            (6, 0, 1000, 2000, 'L1', 0),
+            (6, 0, 1000, 5000, 'L1', 0),
+            (6, 0, 4000, 3000, 'L1', 0),
+            (6, 0, 7000, 3000, 'L1', 0),
+            (6, 0, 20000, 5000, 'L1', 0),
+            (6, 0, 20000, 1000, 'DRAM', 0),
+            (6, 0, 20000, 1000, 'L1_SMALL', 0),
+            (6, 0, 30000, 0, 'L1', 0);
+        """
+        registry, handle = loaded(sql, name="l1-merge")
+
+        pressure = agent_operations.operation_detail(registry, handle, 6)["l1_pressure"]
+        # [1000, 6000) + [4000, 7000) + [7000, 10000) -> [1000, 10000) = 9000 B
+        # plus [20000, 25000) = 5000 B -> total 14000 B, high-water 25000 B.
+        # Gaps: [0, 1000) = 1000, [10000, 20000) = 10000, [25000, 1370848) = 1345848.
+        assert pressure["allocated_bytes"] == 14000
+        assert pressure["high_water_bytes"] == 25000
+        assert pressure["free_segments"] == 3
+        assert pressure["largest_free_block"] == 1370848 - 25000
+
+    def test_l1_pressure_counts_integer_l1_buffer_type_only(self, loaded):
+        sql = _INTEGER_BUFFER_TYPE_SQL + """
+        INSERT INTO buffers VALUES (1, 0, 50000, 8192, 0, 0);
+        """
+        registry, handle = loaded(sql, name="l1-int-type")
+
+        pressure = agent_operations.operation_detail(registry, handle, 1)["l1_pressure"]
+        assert pressure["allocated_bytes"] == 4096
+        assert pressure["high_water_bytes"] == 4196
+
+    def test_l1_pressure_is_none_when_operation_has_no_buffer_rows(self, loaded):
+        """An incomplete or unrecorded operation with zero `buffers` rows must
+        return `l1_pressure: None` with a caveat rather than claiming 100% free L1."""
+        sql = _REPORT_SQL + """
+        INSERT INTO operations VALUES (7, 'ttnn.incomplete_op', 0.0);
+        INSERT INTO operations VALUES (8, 'ttnn.null_addr_op', 1.0);
+        INSERT INTO buffers VALUES
+            (8, 0, NULL, 8192, 'L1', 0),
+            (8, 0, 4096, 2048, 'L1', 0);
+        """
+        registry, handle = loaded(sql, name="l1-no-buffers")
+
+        detail_empty = agent_operations.operation_detail(registry, handle, 7)
+        assert detail_empty["l1_pressure"] is None
+        assert "no buffer rows were recorded" in detail_empty["caveat"]
+
+        detail_null_addr = agent_operations.operation_detail(registry, handle, 8)
+        assert detail_null_addr["l1_pressure"]["allocated_bytes"] == 2048
+
+    def test_memory_profile_ranks_by_largest_free_block_not_fullness(self, loaded):
+        """Fuller-but-contiguous ranks below fragmented-but-emptier: the ranking
+        answers "would this tensor have fit?", which fullness alone does not."""
+        sql = _REPORT_SQL + """
+        INSERT INTO operations VALUES
+            (10, 'ttnn.contiguous', 1.0),
+            (11, 'ttnn.fragmented', 1.0),
+            (12, 'ttnn.unaddressed', 1.0),
+            (13, 'ttnn.top_of_l1', 1.0);
+        INSERT INTO buffers VALUES
+            (10, 0, 0, 600000, 'L1', 0),
+            (11, 0, 300000, 10000, 'L1', 0),
+            (11, 0, 700000, 10000, 'L1', 0),
+            (12, 0, NULL, 8192, 'L1', 0),
+            (13, 0, 1360000, 1000, 'L1', 0);
+        """
+        registry, handle = loaded(sql, name="l1-ranking")
+
+        profile = agent_operations.memory_profile(registry, handle)
+        ranked = profile["l1_pressure"]
+        order = [row["operation_id"] for row in ranked["operations"]]
+        # 11's largest gap is 660,848 B at 1.5% full; 10's is 770,848 B at 43.8%.
+        # 13 holds 1,000 B near the top of L1: by high-water mark it would rank
+        # first, by largest free block (1,360,000 B) it ranks third.
+        assert order == [11, 10, 13, 2, 3, 12]
+        # An operation whose L1 rows occupy nothing is still measured, as empty.
+        assert ranked["operations"][-1]["allocated_bytes"] == 0
+        assert ranked["operation_count"] == 6
+
+        # Selecting L1 reads the same rows, rather than measuring nothing.
+        assert (
+            agent_operations.memory_profile(registry, handle, buffer_type="L1")[
+                "l1_pressure"
+            ]
+            == ranked
+        )
+
+        limited = agent_operations.memory_profile(registry, handle, limit=1)
+        assert limited["l1_pressure"]["operation_count"] == 6
+        assert limited["l1_pressure"]["returned"] == 1
+        assert [
+            row["operation_id"] for row in limited["l1_pressure"]["operations"]
+        ] == [11]
+
+    def test_l1_pressure_says_what_its_figures_are(self, loaded):
+        """The unit and the upper bound travel with the figures, in both tools."""
+        registry, handle = loaded(name="l1-note")
+
+        detail = agent_operations.operation_detail(registry, handle, 2)["l1_pressure"]
+        ranked = agent_operations.memory_profile(registry, handle)["l1_pressure"]
+
+        for block in (detail, ranked):
+            assert block["size_unit"] == agent_operations.BUFFER_SIZE_UNIT
+            assert block["note"] == agent_operations.L1_PRESSURE_NOTE
+        note = agent_operations.L1_PRESSURE_NOTE
+        assert "bytes per bank" in note
+        assert "upper bound" in note
+        assert "circular buffers" in note
+        assert "smallest largest free block" in note
+
+    def test_memory_profile_l1_pressure_reads_integer_buffer_types(self, loaded):
+        sql = _INTEGER_BUFFER_TYPE_SQL + """
+        INSERT INTO buffers VALUES (1, 0, 50000, 8192, 0, 0);
+        """
+        registry, handle = loaded(sql, name="l1-int-profile")
+
+        rows = agent_operations.memory_profile(registry, handle)["l1_pressure"][
+            "operations"
+        ]
+        assert {row["operation_id"]: row["allocated_bytes"] for row in rows}[1] == 4096
+
+    def test_memory_profile_l1_pressure_is_none_unless_l1_is_read(self, loaded):
+        registry, handle = loaded(name="l1-dram-only")
+
+        profile = agent_operations.memory_profile(registry, handle, buffer_type="DRAM")
+        assert profile["l1_pressure"] is None
+        assert "caveat" not in profile or (
+            agent_operations.NO_L1_GEOMETRY_CAVEAT not in profile["caveat"]
+        )
+
+    def test_memory_profile_l1_pressure_is_none_without_device_geometry(self, loaded):
+        registry, handle = loaded(
+            _REPORT_SQL + "UPDATE devices SET l1_bank_size = 0;", name="l1-no-geom"
+        )
+
+        profile = agent_operations.memory_profile(registry, handle)
+        assert profile["l1_pressure"] is None
+        assert agent_operations.NO_L1_GEOMETRY_CAVEAT in profile["caveat"]
+        # The footprints beside it do not depend on geometry.
+        assert profile["memory_by_buffer_type"]["L1"]["peak"] == 4096
+
 
 class TestOperationProvenance:
     def test_it_answers_what_the_operation_was_called_with(self, loaded):
@@ -1472,6 +1778,17 @@ class TestRankScope:
         # response it sits in.
         assert zero["device"]["devices"] == 1
         assert one["device"]["devices"] == 1
+        detail_zero = agent_operations.operation_detail(registry, handle, 1, rank=0)
+        detail_one = agent_operations.operation_detail(registry, handle, 1, rank=1)
+        assert detail_zero["l1_pressure"]["allocated_bytes"] == 1024
+        assert detail_one["l1_pressure"]["allocated_bytes"] == 8192
+        # The ranked block streams its own read of `buffers`, rank-scoped too.
+        assert [
+            row["allocated_bytes"] for row in zero["l1_pressure"]["operations"]
+        ] == [1024]
+        assert [row["allocated_bytes"] for row in one["l1_pressure"]["operations"]] == [
+            8192
+        ]
 
     def test_a_rank_column_on_one_table_is_not_applied_to_the_others(self, loaded):
         """`report_has_rank_column` only inspects `operations`, so deciding once
