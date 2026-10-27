@@ -205,10 +205,10 @@ class Side:
 
     `figures_by_group` holds the medians of the groups every capture ran equally often
     and gave a figure, each with the measured calls of the captures it comes from, and
-    `unmeasured` the groups every capture ran equally often but one left without any. `measured` holds the groups some capture gave a figure,
-    `calls_by_group` each group's calls per capture, `least_measured_by_group` the
-    fewest calls with a figure in any capture, and `largest_by_group` each group's
-    largest sum.
+    `unmeasured` the groups every capture ran equally often but one left without any.
+    `measured` holds the groups some capture gave a figure, `calls_by_group` each
+    group's calls per capture, `least_measured_by_group` the fewest calls with a figure
+    in any capture, and `largest_by_group` each group's largest sum.
     """
 
     figures_by_group: Dict[Hashable, GroupTotal]

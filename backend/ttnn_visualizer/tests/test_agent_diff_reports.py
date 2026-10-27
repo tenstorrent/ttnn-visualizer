@@ -18,7 +18,11 @@ import pytest
 from ttnn_visualizer.agent import op_signatures, report_diff, server, tools
 from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_LIMIT
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
-from ttnn_visualizer.csv_queries import DeviceLogProfilerQueries, ResolvedSignposts
+from ttnn_visualizer.csv_queries import (
+    DegradedPerformanceReport,
+    DeviceLogProfilerQueries,
+    ResolvedSignposts,
+)
 from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.tests.smoke_capture import (
     signposted_rows,
@@ -464,6 +468,32 @@ class TestUnmeasuredGroups:
         assert (change["count_before"], change["count_after"]) == (4, 4)
         assert (change["measured_before"], change["measured_after"]) == (4, 2)
 
+    def test_a_new_or_missing_group_over_fewer_measured_calls_says_so(self, tmp_path):
+        """Two of four calls timed at 10 µs would otherwise read as four totalling 20."""
+        pool = [{**row, "op_code": "Pool"} for row in _partly_measured(2, 10.0)]
+
+        result = _diff(
+            _registry(tmp_path),
+            {"report-1": _partly_measured(2, 10.0), "report-2": pool},
+        )
+
+        assert result["missing"] == [
+            {
+                "op_code": "Conv",
+                "device_time_before": 20.0,
+                "count_before": 4,
+                "measured_before": 2,
+            }
+        ]
+        assert result["new"] == [
+            {
+                "op_code": "Pool",
+                "device_time_after": 20.0,
+                "count_after": 4,
+                "measured_after": 2,
+            }
+        ]
+
     def test_a_fully_measured_change_carries_no_measured_counts(self, tmp_path):
         result = _diff(
             _registry(tmp_path),
@@ -837,6 +867,76 @@ class TestRepeats:
                 )
 
         generate.assert_not_called()
+
+
+def _degraded_once(handle, window=None):
+    """Matmul at 10 µs in report-1 and 20 µs elsewhere; `handle`'s first report, or its
+    first of `window`, comes back degraded with every row lost."""
+    degraded = iter([True])
+
+    def generate(instance, **overrides):
+        time = 10.0 if instance.instance_id == "report-1" else 20.0
+        report = _perf_report(_ops(Matmul=time))
+        asked = window is None or overrides.get("start_signpost") == window.start
+        if instance.instance_id == handle and asked and next(degraded, False):
+            raise DegradedPerformanceReport({**report, "report": []})
+        return report
+
+    return patch.object(tools, "_generate_canonical_report", side_effect=generate)
+
+
+class TestDegradedReports:
+    """A report generated with swallowed errors may only be missing rows by chance,
+    so its totals go when it does: kept, they would outlast it and disagree with the
+    handle's next read."""
+
+    def test_a_degraded_repeat_is_read_again_by_the_next_diff(self, tmp_path):
+        registry = _registry(tmp_path, count=3)
+
+        with _degraded_once("report-3"):
+            first = tools.diff_reports(
+                registry, "report-1", "report-2", repeats_b=["report-3"]
+            )
+            healthy = tools.canonical_report(registry, "report-3")
+            second = tools.diff_reports(
+                registry, "report-1", "report-2", repeats_b=["report-3"]
+            )
+
+        assert first["inconsistent"] == [
+            {"op_code": "Matmul", "calls_before": [1], "calls_after": [1, 0]}
+        ]
+        assert [row["device_time"] for row in healthy["report"]] == ["20.0"]
+        (change,) = second["changes"]
+        assert (change["device_time_before"], change["device_time_after"]) == (
+            10.0,
+            20.0,
+        )
+        assert second["inconsistent"] == []
+
+    def test_a_degraded_window_s_totals_go_when_it_is_evicted(self, tmp_path):
+        """A compared capture keeps its degraded window, but only until two other
+        windows evict it; its totals, in a larger cache, would have outlived it."""
+        registry = _registry(tmp_path)
+        window = tools.SignpostRange("PERF_DECODE", "PERF_DECODE_END")
+        bounds = {"start_signpost": window.start, "end_signpost": window.end}
+
+        with (
+            _signposts_in("report-1", "report-2"),
+            _degraded_once("report-1", window),
+        ):
+            first = tools.diff_reports(registry, "report-1", "report-2", **bounds)
+            for handle in ("report-1", "report-2"):
+                tools.canonical_report(registry, handle, tools.SignpostRange("A", "B"))
+            healthy = tools.canonical_report(registry, "report-1", window)
+            second = tools.diff_reports(registry, "report-1", "report-2", **bounds)
+
+        assert [entry["op_code"] for entry in first["new"]] == ["Matmul"]
+        assert [row["device_time"] for row in healthy["report"]] == ["10.0"]
+        (change,) = second["changes"]
+        assert (change["device_time_before"], change["device_time_after"]) == (
+            10.0,
+            20.0,
+        )
 
 
 class TestCapturesOnDifferentHardware:

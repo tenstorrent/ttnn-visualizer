@@ -496,12 +496,13 @@ listed under `unmeasured`, with its calls and how many of them carry a figure on
 and a caveat says each side's total covers only the calls with one; a group with no figure
 in either report, such as a host operation's device time, is left out. A change over fewer
 measured calls on one side than calls carries `measured_before` and `measured_after`, since
-its total covers only those.
+its total covers only those, and a `new` or `missing` entry over fewer carries
+`measured_after` or `measured_before` for the same reason.
 
 `repeats_a` and `repeats_b` take further captures of either side, run the same way, up to
 five captures a side. Each figure is then the median of the side's captures, as the LLK
 check compares repeated runs, which makes a lower threshold safe to read; with two captures
-a side the median is their mean, so three or five resist one outlier. A change's measured
+a side the median is their mean, so three or five resist one outlier. An entry's measured
 calls are the fewest among the captures its median comes from, so a partial capture's sum
 never reads as complete, and `new` and `missing` rank by the median each entry gives rather
 than by one capture's total. A group the side's captures disagree on, by whether it ran or
@@ -512,8 +513,10 @@ twice, or two handles loaded on the same capture, is refused. A capture's totals
 per range, by op code and, where its CSV has tensor columns, by signature, so asking again
 with other thresholds, another metric or the other match generates no report; a whole
 report's totals stay for the server's life, and a range's for up to 64 captures and ranges,
-the least recently used dropped first. The first call generates each capture's report that
-no tool has read yet, which on a single-device capture of 100,000 rows takes about 20 s.
+the least recently used dropped first. Totals read from a report generated with swallowed
+errors, which may be missing rows by chance, are not kept, so the next call reads that
+report again. The first call generates each capture's report that no tool has read yet,
+which on a single-device capture of 100,000 rows takes about 20 s.
 The two compared captures' reports then stay loaded, as every handle's does, about 350 MB
 at that size, while a repeat's is read for its totals and dropped.
 

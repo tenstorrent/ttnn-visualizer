@@ -111,6 +111,18 @@ class UnsharedSnapshot(Exception):
         self.snapshot = snapshot
 
 
+class UnkeptSnapshot(Exception):
+    """Raised by a builder that learns only as it builds that no handle may keep it.
+
+    Totals read from a report generated with swallowed errors are one: the handle may
+    drop or evict that report, and its next read would then disagree with them.
+    """
+
+    def __init__(self, snapshot: object):
+        super().__init__("snapshot kept by no handle")
+        self.snapshot = snapshot
+
+
 class ReportRegistry:
     """Process-local handle → `Instance` map.
 
@@ -186,7 +198,8 @@ class ReportRegistry:
         that copy answers the handle before the shared one is asked.
 
         `keep=False` returns a snapshot it had to build without keeping it, for a
-        caller that reads what it needs and should not pin a whole report for it.
+        caller that reads what it needs and should not pin a whole report for it. A
+        builder that raises `UnkeptSnapshot` has its snapshot returned the same way.
         """
         owners = [handle] if share_key is None else [handle, share_key]
         for owner in owners:
@@ -199,6 +212,8 @@ class ReportRegistry:
             snapshot, owner = build(self.get(handle)), owners[-1]
         except UnsharedSnapshot as unshared:
             snapshot, owner = unshared.snapshot, handle
+        except UnkeptSnapshot as unkept:
+            return cast(Cached, unkept.snapshot)
         if keep:
             self._store(owner, variant, scope, snapshot)
         return cast(Cached, snapshot)

@@ -30,6 +30,7 @@ from ttnn_visualizer.agent.handles import (
     MAX_SCOPED_REPORTS,
     CacheVariant,
     ReportRegistry,
+    UnkeptSnapshot,
     UnknownHandleError,
     load_report,
 )
@@ -1825,6 +1826,21 @@ class TestScopedSnapshots:
         registry.cached_report("report-1", build, keep=False)
 
         assert built == [0, 1]
+
+    def test_a_snapshot_its_builder_declines_to_keep_is_built_again(self, tmp_path):
+        registry = ReportRegistry()
+        write_device_log(tmp_path, MODERN_HEADER, [])
+        load_report(registry, performance_path=str(tmp_path))
+        built = []
+
+        def build(_instance):
+            built.append(len(built))
+            raise UnkeptSnapshot(len(built))
+
+        first = registry.cached_report("report-1", build)
+        second = registry.cached_report("report-1", build)
+
+        assert (first, second) == (1, 2)
 
     def test_clearing_the_registry_drops_ranged_snapshots_too(self, tmp_path):
         registry = ReportRegistry()

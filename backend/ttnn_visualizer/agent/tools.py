@@ -39,6 +39,7 @@ from ttnn_visualizer.agent.cells import finite_number
 from ttnn_visualizer.agent.handles import (
     CacheVariant,
     ReportRegistry,
+    UnkeptSnapshot,
     UnsharedSnapshot,
     perf_csv_columns,
 )
@@ -183,6 +184,10 @@ class SignpostRange:
         return {"start_signpost": self.start, "end_signpost": self.end}
 
 
+# Set on a report generated with swallowed errors, which may be missing rows by chance.
+_DEGRADED_KEY = "degraded"
+
+
 def canonical_report(
     registry: ReportRegistry,
     handle: str,
@@ -202,9 +207,9 @@ def canonical_report(
     handle's first read came from; see `_require_same_source`. Snapshots are kept
     per capture rather than per handle, so handles loaded on the same unchanged
     CSV share one. The rows are shared with them: copy a row before changing it.
-    A report generated with swallowed errors is the exception: it is kept by the
-    handle that read it alone, so loading the report again regenerates it.
-    `keep=False` reads a report no tool has kept without keeping it.
+    A report generated with swallowed errors is the exception: it is marked `degraded`
+    and kept by the handle that read it alone, so loading the report again regenerates
+    it. `keep=False` reads a report no tool has kept without keeping it.
     """
     _require_performance_report(registry, handle)
     ignored = range_ignored(registry, handle, signposts)
@@ -218,7 +223,7 @@ def canonical_report(
         try:
             return _generate_canonical_report(instance, **overrides)
         except DegradedPerformanceReport as degraded:
-            raise UnsharedSnapshot(degraded.report) from None
+            raise UnsharedSnapshot({**degraded.report, _DEGRADED_KEY: True}) from None
 
     source = _pin_source(registry, handle)
     report = registry.cached_report(
@@ -873,13 +878,13 @@ def _diff_totals(
 
     Kept by the handle alone, as a degraded report is, so loading the capture again
     reads it again. Unless `keep_report`, a report no tool has kept is read for its
-    totals and dropped.
+    totals and dropped. A degraded report's totals are not kept at all: the handle may
+    drop or evict that report, and its next read would then disagree with them.
     """
 
     def build(instance: Instance) -> _DiffTotals:
-        rows = canonical_report(registry, handle, signposts, keep=keep_report).get(
-            "report", []
-        )
+        report = canonical_report(registry, handle, signposts, keep=keep_report)
+        rows = report.get("report", [])
         sub_devices = frozenset(_sub_devices(rows))
         totals = {
             report_diff.DiffMatch.OP_CODE: report_diff.capture_totals(
@@ -894,6 +899,8 @@ def _diff_totals(
                 lambda row: _signature_key(row, signatures),
                 sub_devices,
             )
+        if report.get(_DEGRADED_KEY):
+            raise UnkeptSnapshot(totals)
         return totals
 
     return registry.cached_report(
@@ -1095,11 +1102,15 @@ def diff_reports(
         group: Hashable, side: report_diff.Side, label: str
     ) -> Dict[str, object]:
         figure = side.figures_by_group.get(group)
-        return {
+        entry: Dict[str, object] = {
             **named(group),
             f"{by}_{label}": _rounded(figure.total) if figure is not None else None,
             f"count_{label}": side.calls_by_group[group][0],
         }
+        # As on a change, since a total over fewer measured calls is a partial one.
+        if figure is not None and figure.measured != figure.count:
+            entry[f"measured_{label}"] = figure.measured
+        return entry
 
     def unmeasured_entry(group: Hashable) -> Dict[str, object]:
         return {
