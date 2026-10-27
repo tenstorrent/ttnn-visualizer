@@ -1063,6 +1063,12 @@ class DeviceLogProfilerQueries:
         columns = list(self._ZONE_COLUMNS) + [phase_column]
 
         for chunk in self._zone_chunks(columns):
+            # A run cell that is not a number makes pandas read the chunk's run IDs
+            # as strings, which match no requested run, so they are read as numbers
+            # first: the stray cell, not its chunk, is what is left out.
+            chunk = chunk.assign(
+                **{"run host ID": pd.to_numeric(chunk["run host ID"], errors="coerce")}
+            )
             # The run filter first: it is a numeric hash test, and it leaves the
             # string work below the requested runs' rows.
             chunk = chunk[chunk["run host ID"].isin(run_ids)]

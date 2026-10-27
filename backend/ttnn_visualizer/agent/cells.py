@@ -32,8 +32,16 @@ def whole_number(value: object) -> Optional[int]:
     """A cell as an int, truncated, or None where `finite_number` gives None.
 
     For cells that count or identify something: a core count, a call count, a
-    device id.
+    device id. An int, or a string of one, is read exactly: through a float, a
+    cycle count past 2**53 would round and move a firmware window's edge.
     """
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            pass
     number = finite_number(value)
     return None if number is None else int(number)
 

@@ -390,6 +390,21 @@ class TestFirmwareWindows:
         assert op["cores_in_log"] == 2
         assert op["core_span"]["max_us"] == 2.0
 
+    def test_a_window_past_2_53_cycles_holds_a_zone_ending_on_its_last_cycle(
+        self, tmp_path
+    ):
+        """A float holds whole numbers exactly only up to 2**53, which a 1 GHz
+        counter passes after about a hundred days without a reset: read through
+        one, this window's end rounds down a cycle and loses the zone."""
+        end = 2**53 + 1
+        rows = _zone(0, 1, 1, "BRISC", end - 1000, end)
+        perf = _op(cores="1", **_window(end - 2000, end))
+
+        op = _spread(tmp_path, rows, [perf], perf_id="1")["ops"][0]
+
+        assert op["in_log"] is True
+        assert op["core_span"]["max_us"] == 1.0
+
     def test_a_long_trace_gives_every_replay_its_own_zones(self, tmp_path):
         """A thousand replays of one op on one core, each a cycle longer than the
         last: each row must find its own among them."""
@@ -492,6 +507,17 @@ class TestUnreadableCells:
             type(core["x"]) is int and type(core["y"]) is int
             for core in op["slowest_cores"]
         )
+
+    def test_a_run_that_is_not_a_number_elsewhere_keeps_the_join(self, tmp_path):
+        """A text cell makes pandas read the column as strings, which match no
+        requested run's int."""
+        rows = THREE_CORES + _zone(0, 5, 1, "BRISC", 0, 500, run="abc")
+
+        op = _spread(tmp_path, rows, [_op()], perf_id="1")["ops"][0]
+
+        assert op["in_log"] is True
+        assert op["cores_in_log"] == 3
+        assert op["core_span"]["max_us"] == 3.0
 
 
 class TestRanking:
