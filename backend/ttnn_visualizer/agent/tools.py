@@ -14,10 +14,10 @@ import io
 import logging
 import statistics
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
 from enum import Enum
-from typing import Dict, List, Optional, Sequence, Tuple, Union, cast
+from typing import Dict, List, Optional, Sequence, Set, Tuple, Union, cast
 
 from ttnn_visualizer.agent import perf_detail, perf_flags
 from ttnn_visualizer.agent.bounds import (
@@ -37,12 +37,15 @@ from ttnn_visualizer.csv_queries import (
     MAX_LISTED_SIGNPOSTS,
     SIGNPOST_OP_TYPE,
     CoreSpan,
+    CoreSpans,
     DegradedPerformanceReport,
     DeviceLogMeta,
     DeviceLogProfilerQueries,
+    DeviceRun,
     OpsPerformanceQueries,
     OpsPerformanceReportQueries,
     ResolvedSignposts,
+    SpanRequest,
     check_signpost_range,
     read_signposts,
     signpost_range_ignored,
@@ -770,8 +773,10 @@ CORE_SPREAD_NOTE = (
     "comparable: a merged row is the slowest device's, except an all-gather, "
     "reduce-scatter or all-reduce, whose row is the first device's but whose "
     "device_time is the mean across devices, so its core spans need not match it. "
-    "per_core_*_us are the performance CSV's own figures, where it has them. Times "
-    "are microseconds."
+    "per_core_*_us are the performance CSV's own figures, where it has them. A row "
+    "reads only the zones inside its own firmware cycles, so each replay of a traced "
+    "op is its own. slowest_cores are the device log's NOC coordinates, not logical "
+    "worker coordinates. Times are microseconds."
 )
 
 # Enough to say where the stragglers sit without listing a 130-core grid.
@@ -815,6 +820,15 @@ def _core_figures(cores: Dict[tuple, CoreSpan], clock_mhz: float) -> Dict[str, o
     }
 
 
+def _spannable(row: Dict) -> bool:
+    """Whether a row is a device op with zones the log could hold."""
+    return (
+        not is_signpost_row(row)
+        and whole_number(row.get("global_call_count")) is not None
+        and whole_number(row.get("device")) is not None
+    )
+
+
 def _spread_rows(
     rows: List[Dict], perf_id: Optional[str], limit: Optional[int]
 ) -> List[Dict]:
@@ -823,10 +837,7 @@ def _spread_rows(
         candidates = [
             row
             for row in rows
-            if not is_signpost_row(row)
-            and whole_number(row.get("global_call_count")) is not None
-            and whole_number(row.get("device")) is not None
-            and finite_number(row.get("device_time")) is not None
+            if _spannable(row) and finite_number(row.get("device_time")) is not None
         ]
         return sorted(
             candidates,
@@ -845,15 +856,78 @@ def _spread_rows(
         raise ValueError(
             f"row {perf_id} is the signpost {op_code!r}, which runs on no core"
         )
-    if (
-        whole_number(row.get("global_call_count")) is None
-        or whole_number(row.get("device")) is None
-    ):
+    if not _spannable(row):
         raise ValueError(
             f"row {perf_id} ({op_code}) has no global call count or device, so it is "
             "a host op with no zones in the device log"
         )
     return [row]
+
+
+def _span_request(row: Dict) -> SpanRequest:
+    """A spannable row's run, and its firmware window where it has one."""
+    run = (
+        cast(int, whole_number(row.get("global_call_count"))),
+        cast(int, whole_number(row.get("device"))),
+    )
+    start = whole_number(row.get("device_fw_start_cycle"))
+    end = whole_number(row.get("device_fw_end_cycle"))
+    window = (start, end) if start is not None and end is not None else None
+    if window is not None and window[0] > window[1]:
+        window = None
+    return SpanRequest(run, window)
+
+
+@dataclass(frozen=True)
+class _CoreSpreadIndex:
+    """Every device op's spread, kept per handle so drilling in costs one log read.
+
+    A few hundred bytes an op, where the spans they come from are a core's each.
+    """
+
+    figures: Dict[SpanRequest, Dict[str, object]]
+    zoned: frozenset
+    pairing: Dict[DeviceRun, Dict[str, int]]
+    # How many of the report's rows share each run, which a windowless row's
+    # figures pool over.
+    rows_per_run: Dict[DeviceRun, int]
+
+
+def _core_spread_index(
+    registry: ReportRegistry, handle: str, rows: List[Dict], clock_mhz: int
+) -> _CoreSpreadIndex:
+    def build(instance: Instance) -> _CoreSpreadIndex:
+        requests = [_span_request(row) for row in rows if _spannable(row)]
+        try:
+            with DeviceLogProfilerQueries(instance, stream=True) as queries:
+                read: CoreSpans = queries.query_core_spans(set(requests))
+        except DataFormatError as error:
+            # A log without phases is a deliberate refusal, not an unexpected
+            # failure, and the server records only a ValueError as one.
+            raise ValueError(str(error)) from error
+        return _CoreSpreadIndex(
+            figures={
+                request: _core_figures(cores, clock_mhz)
+                for request, cores in read.spans.items()
+                if cores
+            },
+            zoned=frozenset(read.zoned),
+            pairing=read.pairing,
+            rows_per_run=dict(Counter(request.run for request in requests)),
+        )
+
+    return registry.cached_report(handle, build, variant=CacheVariant.CORE_SPREAD)
+
+
+def _summed_pairing(
+    pairing: Dict[DeviceRun, Dict[str, int]], runs: Set[DeviceRun]
+) -> Dict[str, int]:
+    """The pairing counts of the given runs only."""
+    summed = {"unmatched_starts": 0, "unmatched_ends": 0, "dropped_starts": 0}
+    for run in runs:
+        for name, count in pairing.get(run, {}).items():
+            summed[name] += count
+    return summed
 
 
 def core_spread(
@@ -867,60 +941,66 @@ def core_spread(
     A perf row times an op once, as its slowest core; whether every core took that
     long or a few stragglers set it is in the device log. The row's global call
     count is the log's `run host ID` and its device the log's `PCIe slot`, so
-    each op is read on the one device its row came from. #2173
+    each op is read on the one device its row came from, and the row's firmware
+    window keeps a traced op's replays, or another run's zones under the same call
+    count, out of it. #2173
     """
     _require_performance_report(registry, handle)
     instance = registry.get(handle)
-    rows = _spread_rows(
-        canonical_report(registry, handle).get("report", []), perf_id, limit
-    )
-
-    metadata = DeviceLogProfilerQueries.read_capture_metadata(instance)
-    clock_mhz = finite_number(metadata.get("CHIP_FREQ[MHz]"))
-    if not clock_mhz:
+    # The cheap refusals first: they need no report generated.
+    if DeviceLogProfilerQueries.device_log_path(instance) is None:
         raise ValueError(
-            f"{DeviceLogProfilerQueries.DEVICE_LOG_FILE} records no CHIP_FREQ[MHz] in "
-            "its first line, so its cycles cannot be read as time"
+            f"{handle!r} has no {DeviceLogProfilerQueries.DEVICE_LOG_FILE} beside its "
+            "performance CSV, so there are no per-core kernel zones to read"
         )
-
-    def run_of(row: Dict) -> Tuple[int, int]:
-        return (
-            cast(int, whole_number(row.get("global_call_count"))),
-            cast(int, whole_number(row.get("device"))),
+    clock_mhz = DeviceLogProfilerQueries.clock_mhz(instance)
+    if clock_mhz is None:
+        raise ValueError(
+            f"{DeviceLogProfilerQueries.DEVICE_LOG_FILE} records no positive "
+            "CHIP_FREQ[MHz] in its first line, so its cycles cannot be read as time"
         )
-
-    try:
-        with DeviceLogProfilerQueries(instance, stream=True) as queries:
-            spans, pairing = queries.query_core_spans({run_of(row) for row in rows})
-    except DataFormatError as error:
-        # A log without phases is a deliberate refusal, not an unexpected failure,
-        # and the server records only a ValueError as one.
-        raise ValueError(str(error)) from error
+    # A cached report answers without asking where it came from, and the log is
+    # read live: rows of a rewritten CSV would be joined to zones they never had.
+    _require_same_source(registry, handle, instance)
+    report_rows = canonical_report(registry, handle).get("report", [])
+    rows = _spread_rows(report_rows, perf_id, limit)
+    index = _core_spread_index(registry, handle, report_rows, clock_mhz)
 
     ops: List[Dict[str, object]] = []
-    short = 0
+    short = over = absent = outside = pooled = 0
     for row in rows:
-        call_count, device = run_of(row)
-        cores = spans.get((call_count, device), {})
+        request = _span_request(row)
+        figures = index.figures.get(request)
         perf_cores = whole_number(row.get("cores"))
         detail = perf_detail.detail_fields(row, (perf_detail.DetailGroup.CORES,))
+        call_count, device = request.run
         entry: Dict[str, object] = {
             **project_row(row),
             "device": device,
             "global_call_count": call_count,
-            "in_log": bool(cores),
+            "in_log": figures is not None,
             **{name: detail.get(name) for name in _PERF_PER_CORE_FIELDS},
         }
-        if cores:
-            entry.update(_core_figures(cores, clock_mhz))
-            if perf_cores is not None and len(cores) < perf_cores:
+        if figures is None:
+            if request.run in index.zoned:
+                outside += 1
+            else:
+                absent += 1
+        else:
+            entry.update(figures)
+            cores_in_log = cast(int, figures["cores_in_log"])
+            if perf_cores is not None and cores_in_log < perf_cores:
                 short += 1
+            if perf_cores is not None and cores_in_log > perf_cores:
+                over += 1
+            if request.window is None and index.rows_per_run.get(request.run, 0) > 1:
+                pooled += 1
         ops.append(entry)
-    absent = sum(1 for op in ops if not op["in_log"])
 
+    meta = DeviceLogProfilerQueries.read_device_meta(instance)
     result: Dict[str, object] = {
         "handle": handle,
-        "arch": metadata.get("ARCH"),
+        "arch": meta.architecture if meta is not None else None,
         "clock_mhz": clock_mhz,
         "returned": len(ops),
         "ops": ops,
@@ -934,6 +1014,21 @@ def core_spread(
             "log for their call count and device (in_log is false): the log covers "
             "other runs, or it stopped before them."
         )
+    if outside:
+        caveats.append(
+            f"{outside} of {len(ops)} operations have kernel zones under their call "
+            "count and device, but none inside the row's own firmware cycles "
+            "(in_log is false): the log's zones for that call count belong to "
+            "another execution, so this device log is likely not the one this "
+            "performance CSV was captured with."
+        )
+    if pooled:
+        caveats.append(
+            f"{pooled} of {len(ops)} operations share their call count and device "
+            "with other rows -- a traced op's replays -- and their rows carry no "
+            "firmware cycles to tell them apart, so their figures pool every such "
+            "row's zones."
+        )
     if short:
         caveats.append(
             f"{short} of {len(ops)} operations recorded kernel zones on fewer cores "
@@ -942,7 +1037,17 @@ def core_spread(
             "markers or a truncated capture would cause it; tt-metal reports a full "
             "profiler buffer only in its host log, never in the device log."
         )
-    pairing_caveat = _pairing_caveat(pairing, "these spans")
+    if over:
+        caveats.append(
+            f"{over} of {len(ops)} operations recorded kernel zones on more cores "
+            "than their row's cores, as a DRAM-sharded matmul's helper cores do: "
+            "their median and imbalance mix cores with different roles, while "
+            "max_us and slowest_cores still name the cores that set the time."
+        )
+    pairing_caveat = _pairing_caveat(
+        _summed_pairing(index.pairing, {_span_request(row).run for row in rows}),
+        "these spans",
+    )
     if pairing_caveat:
         caveats.append(pairing_caveat)
     if caveats:

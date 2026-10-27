@@ -153,7 +153,7 @@ _PERF_ID_SCHEMA = {
     "type": ["string", "integer"],
     "description": (
         "A performance row's id, as a top_ops row's id or any *_perf_id gives it; "
-        "never an operation_id. Omit it for the costliest ops by device time."
+        "never an operation_id."
     ),
 }
 _ADDITIVE_METRIC_SCHEMA = {
@@ -353,7 +353,13 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "type": "object",
                 "properties": {
                     "handle": {"type": "string"},
-                    "perf_id": _PERF_ID_SCHEMA,
+                    "perf_id": {
+                        **_PERF_ID_SCHEMA,
+                        "description": (
+                            f"{_PERF_ID_SCHEMA['description']} Omit it for the "
+                            "costliest ops by device time."
+                        ),
+                    },
                     "limit": {
                         "type": "integer",
                         "description": (

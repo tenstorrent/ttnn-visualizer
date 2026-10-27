@@ -120,8 +120,9 @@ loaded without a `performance_path` is refused and says so. `zone_timings` is li
 `profile_log_device.csv` decodes as UTF-8, has every column the tool reads (`timer_id`,
 `zone name`, `run host ID`, `PCIe slot`, `RISC processor type`, `core_x`, `core_y` and
 `time[cycles since reset]`), and has at least one data row. `core_spread` is listed only when
-`zone_timings` is, the performance CSV can be reported on, and the device log marks zone
-starts and ends in a `type` or `zone phase` column. `top_ops`, `op_breakdown` and
+`zone_timings` is, the performance CSV can be reported on, the device log marks zone
+starts and ends in a `type` or `zone phase` column, and its first line names a positive
+`CHIP_FREQ[MHz]`. `top_ops`, `op_breakdown` and
 `program_cache` are listed only when the performance CSV can be reported on, and when it
 cannot, `performance_csv_problem` says why (`empty`, `no data rows`, `missing columns: …`, or
 that it cannot be read or decoded).
@@ -518,19 +519,32 @@ and ends failed to pair so a partial total does not read as a complete one.
 
 `core_spread` reads each operation on one device only, never pooling devices, since each
 runs its own clock. A performance row's global call count is the device log's `run host ID`
-and its device is the log's `PCIe slot`, which held one-to-one on every local capture we
-checked. On a multi-device report a row is the slowest device's, except an all-gather,
+and its device is the log's `PCIe slot`. That pair does not single out one execution: a
+traced operation's replays share it, and call counts repeat from one capture to the next.
+So a row's zones are only those inside its own `DEVICE FW START CYCLE` to
+`DEVICE FW END CYCLE`, which keeps each replay's figures its own. An operation with zones
+under its call count and device but none inside its firmware cycles has `in_log` false,
+with a caveat that the log belongs to another execution — usually a device log beside a
+different run's performance CSV. A row without firmware cycles takes every zone of its call
+count and device, and when other rows share them its figures pool theirs, which a caveat
+says. On a multi-device report a row is the slowest device's, except an all-gather,
 reduce-scatter or all-reduce, where it is the first device's but its `device_time` is the
 mean across devices, so its core spans need not match it; each operation names its
 `device`. A core's span runs from its first kernel start to its last kernel end across its
 RISCs, which is how tt-metal measures `DEVICE KERNEL DURATION PER CORE`, and the
 performance CSV's own minimum, maximum and average are returned beside it where the capture
-has them. `imbalance` is the maximum over the median. An operation with no kernel zones for
-its call count and device has `in_log` false and no figures rather than zeros: the log can
-cover different runs from the CSV, or stop before them. When fewer cores recorded zones than
-the row reports, the spread covers only the cores that did. Dropped markers cause that, and
-tt-metal reports a full profiler buffer in its host log only, never in the device log.
-Each call reads the whole device log once, however many operations it covers.
+has them. `imbalance` is the maximum over the median. `slowest_cores` name cores by the
+device log's NOC coordinates, not logical worker coordinates: Wormhole's worker (0,0)
+logs as (1,1). An operation with no kernel zones for its call count and device has
+`in_log` false and no figures rather than zeros: the log can cover different runs from the
+CSV, or stop before them. When fewer cores recorded zones than the row reports, the spread
+covers only the cores that did. Dropped markers cause that, and tt-metal reports a full
+profiler buffer in its host log only, never in the device log. When more cores recorded
+zones than the row reports, as a DRAM-sharded matmul's helper cores do, the median and
+`imbalance` mix cores with different roles, while the maximum and `slowest_cores` still
+name the cores that set the time; a caveat says so. The first call on a handle reads the
+whole device log once for every operation in the report, and later calls answer from that
+read.
 
 **A performance row and a profiler operation are linked by order, not by a shared id.**
 Neither report records the other's id, so when a handle is loaded with both, the tools

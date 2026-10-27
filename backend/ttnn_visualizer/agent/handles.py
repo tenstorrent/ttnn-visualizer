@@ -33,7 +33,6 @@ from typing import (
     cast,
 )
 
-from ttnn_visualizer.agent.cells import finite_number
 from ttnn_visualizer.csv_queries import (
     PROGRAM_CACHE_HIT_COLUMN,
     PROGRAM_HASH_COLUMN,
@@ -72,6 +71,8 @@ class CacheVariant(str, Enum):
     DRAM_FALLBACKS = "dram_fallbacks"
     # The L1 peak replay by rank, which reads every operation and captured graph.
     L1_PEAK = "l1_peak"
+    # Every device op's per-core spread, from one read of the device log.
+    CORE_SPREAD = "core_spread"
 
 
 # Snapshots narrowed by a scope -- a signpost range -- kept at once, across every
@@ -599,9 +600,7 @@ def _answerable_device_log_columns(instance: Instance) -> Optional[frozenset]:
     return columns if problem is None else None
 
 
-def _inventory(
-    instance: Instance, perf_csv: Optional[Path], metadata: Dict[str, str]
-) -> Dict[str, object]:
+def _inventory(instance: Instance, perf_csv: Optional[Path]) -> Dict[str, object]:
     """What this report can actually answer.
 
     Reported up front because the three report kinds are independent: a Blaze-style
@@ -637,7 +636,7 @@ def _inventory(
         perf_ready
         and device_log_columns is not None
         and bool(DeviceLogProfilerQueries.ZONE_PHASE_TOKENS.keys() & device_log_columns)
-        and bool(finite_number(metadata.get("CHIP_FREQ[MHz]"))),
+        and DeviceLogProfilerQueries.clock_mhz(instance) is not None,
     )
 
     # Per tool, against the tables it reads. A partial capture can answer
@@ -690,7 +689,7 @@ def load_report(
         "performance_path": performance,
         "capture": metadata,
         **_hardware(instance, metadata, perf_csv),
-        **_inventory(instance, perf_csv, metadata),
+        **_inventory(instance, perf_csv),
     }
 
 

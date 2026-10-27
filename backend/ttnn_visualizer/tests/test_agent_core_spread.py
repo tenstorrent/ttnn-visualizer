@@ -5,9 +5,10 @@
 """`core_spread`: one operation's kernel time across its cores, on one device.
 
 A perf row's global call count is the device log's `run host ID` and its device the
-log's `PCIe slot`. Every local capture checked held that one-to-one, and a core's
-span read this way reproduced tt-metal's `DEVICE KERNEL DURATION PER CORE` columns to
-the nanosecond, so the fixtures here build both files on that join. #2173
+log's `PCIe slot`, and a core's span read this way reproduces tt-metal's `DEVICE
+KERNEL DURATION PER CORE` columns, so the fixtures here build both files on that join.
+A traced op's replays share one call count and device, so a row's own firmware cycles
+choose its zones among them. #2173
 """
 
 import json
@@ -17,7 +18,7 @@ import pytest
 from ttnn_visualizer import csv_queries
 from ttnn_visualizer.agent import server, tools
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
-from ttnn_visualizer.csv_queries import DeviceLogProfilerQueries
+from ttnn_visualizer.csv_queries import DeviceLogProfilerQueries, SpanRequest
 from ttnn_visualizer.event_logging import McpToolOutcome
 from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.models import Instance
@@ -203,6 +204,50 @@ class TestRefusals:
             with pytest.raises(ValueError, match="CHIP_FREQ"):
                 tools.core_spread(registry, "report-1", perf_id="1")
 
+    @pytest.mark.parametrize("clock", ["-1000", "0"])
+    def test_a_clock_that_is_not_positive_is_refused(self, tmp_path, clock):
+        write_device_log(tmp_path, MODERN_HEADER, THREE_CORES)
+        path = tmp_path / DeviceLogProfilerQueries.DEVICE_LOG_FILE
+        lines = path.read_text().splitlines()
+        path.write_text(
+            "\n".join([f"ARCH: wormhole_b0, CHIP_FREQ[MHz]: {clock}", *lines[1:]])
+            + "\n"
+        )
+        registry = ReportRegistry()
+        load_report(registry, performance_path=str(tmp_path))
+
+        with patch.object(
+            tools, "_generate_canonical_report", return_value=_perf_report([_op()])
+        ):
+            with pytest.raises(ValueError, match="positive CHIP_FREQ"):
+                tools.core_spread(registry, "report-1", perf_id="1")
+
+    def test_a_report_without_a_device_log_says_so(self, tmp_path):
+        write_ops_perf(tmp_path, smoke_rows())
+        registry = ReportRegistry()
+        load_report(registry, performance_path=str(tmp_path))
+
+        with patch.object(tools, "_generate_canonical_report") as generate:
+            with pytest.raises(ValueError, match="has no profile_log_device.csv"):
+                tools.core_spread(registry, "report-1", perf_id="1")
+        # Refused before a report is generated for it.
+        generate.assert_not_called()
+
+    def test_a_rewritten_capture_is_refused_after_the_report_is_cached(self, tmp_path):
+        """The cached report answers without asking where it came from, and the log
+        is read live: the rewritten CSV's log would be joined to the old rows."""
+        write_device_log(tmp_path, MODERN_HEADER, THREE_CORES)
+        write_ops_perf(tmp_path, smoke_rows())
+        registry = ReportRegistry()
+        handle = load_report(registry, performance_path=str(tmp_path))["handle"]
+        tools.top_ops(registry, handle)
+
+        write_ops_perf(tmp_path, smoke_rows()[:-1])
+        write_device_log(tmp_path, MODERN_HEADER, THREE_CORES[:2])
+
+        with pytest.raises(ValueError, match="has changed since it was first read"):
+            tools.core_spread(registry, handle, limit=1)
+
     def test_a_log_without_phases_has_no_durations_to_spread(self, tmp_path):
         rows = ["0,1,1,BRISC,10,1000,0,1024,BRISC-KERNEL,1,brisc.cc"]
 
@@ -244,6 +289,84 @@ class TestCaveats:
     def test_a_complete_read_carries_no_caveat(self, tmp_path):
         assert "caveat" not in _spread(tmp_path, THREE_CORES, [_op()], perf_id="1")
 
+    def test_more_cores_than_the_row_reports_is_caveated(self, tmp_path):
+        """A DRAM-sharded matmul's helper cores: the median and imbalance mix roles."""
+        result = _spread(tmp_path, THREE_CORES, [_op(cores="2")], perf_id="1")
+
+        assert result["ops"][0]["cores_in_log"] == 3
+        assert "more cores" in result["caveat"]
+        assert "fewer cores" not in result["caveat"]
+
+
+def _window(start, end):
+    """A perf row's firmware cycles, as tt-metal writes them."""
+    return {"device_fw_start_cycle": str(start), "device_fw_end_cycle": str(end)}
+
+
+class TestFirmwareWindows:
+    """A row's zones are the ones inside its own firmware cycles. #2217"""
+
+    # Two replays of one traced op: same call count, device and core, one after
+    # the other. 1.0 us, then 1.5 us.
+    REPLAYS = [
+        *_zone(0, 1, 1, "BRISC", 0, 1000),
+        *_zone(0, 1, 1, "BRISC", 10000, 11500),
+    ]
+
+    def test_each_replay_of_a_traced_op_reads_only_its_own_zones(self, tmp_path):
+        perf_rows = [
+            _op(perf_id="1", cores="1", **_window(0, 2000)),
+            _op(perf_id="2", cores="1", **_window(9000, 12000)),
+        ]
+
+        result = _spread(tmp_path, self.REPLAYS, perf_rows)
+
+        spans = {op["id"]: op["core_span"]["max_us"] for op in result["ops"]}
+        assert spans == {"1": 1.0, "2": 1.5}
+        # Its own replay's kernel time, not the two replays' sum.
+        assert result["ops"][1]["by_risc"]["BRISC"]["max_us"] == 1.5
+        assert "caveat" not in result
+
+    def test_replays_without_firmware_cycles_say_they_pool(self, tmp_path):
+        perf_rows = [_op(perf_id="1", cores="1"), _op(perf_id="2", cores="1")]
+
+        result = _spread(tmp_path, self.REPLAYS, perf_rows)
+
+        assert "2 of 2 operations share their call count" in result["caveat"]
+
+    def test_one_windowless_row_per_run_pools_nothing(self, tmp_path):
+        result = _spread(tmp_path, THREE_CORES, [_op()], perf_id="1")
+
+        assert "caveat" not in result
+
+    def test_zones_of_another_execution_are_not_this_rows(self, tmp_path):
+        """A perf CSV beside another run's log: the call count matches, the cycles
+        do not."""
+        perf = _op(**_window(50000, 60000))
+
+        result = _spread(tmp_path, THREE_CORES, [perf], perf_id="1")
+
+        op = result["ops"][0]
+        assert op["in_log"] is False
+        assert "core_span" not in op
+        assert "belong to another execution" in result["caveat"]
+        assert "have no kernel zones" not in result["caveat"]
+
+    def test_a_zone_straddling_the_window_is_left_out(self, tmp_path):
+        perf = _op(cores="3", **_window(0, 2500))
+
+        op = _spread(tmp_path, THREE_CORES, [perf], perf_id="1")["ops"][0]
+
+        assert op["cores_in_log"] == 2
+        assert op["core_span"]["max_us"] == 2.0
+
+    def test_a_reversed_window_is_read_as_none(self, tmp_path):
+        perf = _op(**_window(5000, 0))
+
+        op = _spread(tmp_path, THREE_CORES, [perf], perf_id="1")["ops"][0]
+
+        assert op["core_span"]["max_us"] == 3.0
+
 
 class TestRanking:
     def test_without_a_perf_id_it_ranks_device_ops_by_device_time(self, tmp_path):
@@ -269,20 +392,36 @@ class TestRanking:
         assert result["returned"] == tools.MAX_DETAILED_LIMIT
 
     def test_every_op_comes_from_one_read_of_the_log(self, tmp_path):
+        """Drilling in one perf_id at a time reads the log once per handle, not once
+        a call."""
         perf_rows = [
             _op(perf_id=str(index), call_count=RUN + index) for index in range(3)
         ]
+        registry = ReportRegistry()
+        write_device_log(tmp_path, MODERN_HEADER, THREE_CORES)
+        load_report(registry, performance_path=str(tmp_path))
 
-        with patch.object(
-            DeviceLogProfilerQueries,
-            "query_core_spans",
-            autospec=True,
-            side_effect=DeviceLogProfilerQueries.query_core_spans,
-        ) as read:
-            _spread(tmp_path, THREE_CORES, perf_rows)
+        with (
+            patch.object(
+                tools,
+                "_generate_canonical_report",
+                return_value=_perf_report(perf_rows),
+            ),
+            patch.object(
+                DeviceLogProfilerQueries,
+                "query_core_spans",
+                autospec=True,
+                side_effect=DeviceLogProfilerQueries.query_core_spans,
+            ) as read,
+        ):
+            for perf_id in ("0", "1", "2"):
+                tools.core_spread(registry, "report-1", perf_id=perf_id)
+            tools.core_spread(registry, "report-1")
 
         assert read.call_count == 1
-        assert read.call_args.args[1] == {(RUN + index, 0) for index in range(3)}
+        assert read.call_args.args[1] == {
+            SpanRequest((RUN + index, 0)) for index in range(3)
+        }
 
 
 def test_a_pre_rename_capture_pairs_begin_with_end(tmp_path):
@@ -395,7 +534,9 @@ def test_a_ragged_row_mid_file_is_a_data_error_while_streaming(tmp_path, query):
     rows = [*THREE_CORES[:2], '0,1,1,BRISC,1,"unterminated', *THREE_CORES[2:]]
     write_device_log(tmp_path, MODERN_HEADER, rows)
     instance = Instance(instance_id="pytest", performance_path=str(tmp_path))
-    arguments = {"runs": {(RUN, 0)}} if query == "query_core_spans" else {}
+    arguments = (
+        {"requests": {SpanRequest((RUN, 0))}} if query == "query_core_spans" else {}
+    )
 
     with DeviceLogProfilerQueries(instance, stream=True) as queries:
         with pytest.raises(DataFormatError, match="could not be parsed"):
@@ -428,6 +569,19 @@ class TestInventory:
         loaded = load_report(ReportRegistry(), performance_path=str(tmp_path))
 
         assert "core_spread" in loaded["answerable"]
+
+    def test_a_negative_clock_is_not_listed(self, tmp_path):
+        write_device_log(tmp_path, MODERN_HEADER, THREE_CORES)
+        path = tmp_path / DeviceLogProfilerQueries.DEVICE_LOG_FILE
+        lines = path.read_text().splitlines()
+        path.write_text(
+            "\n".join(["ARCH: wormhole_b0, CHIP_FREQ[MHz]: -1000", *lines[1:]]) + "\n"
+        )
+        write_ops_perf(tmp_path, smoke_rows())
+
+        loaded = load_report(ReportRegistry(), performance_path=str(tmp_path))
+
+        assert "core_spread" in loaded["unanswerable"]
 
     def test_a_log_without_a_clock_is_not_listed(self, tmp_path):
         """The tool refuses a log with no CHIP_FREQ, so the list must not offer it."""

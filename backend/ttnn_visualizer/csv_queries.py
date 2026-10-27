@@ -12,7 +12,7 @@ import sys
 import tempfile
 import traceback
 import warnings
-from collections import defaultdict
+from collections import Counter, defaultdict
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import lru_cache
@@ -20,7 +20,9 @@ from io import StringIO
 from pathlib import Path
 from typing import (
     IO,
+    Callable,
     Dict,
+    Hashable,
     Iterator,
     List,
     Literal,
@@ -29,6 +31,7 @@ from typing import (
     Set,
     Tuple,
     Union,
+    cast,
     overload,
 )
 
@@ -191,6 +194,42 @@ class CoreSpan:
         self.risc_cycles[risc] = self.risc_cycles.get(risc, 0) + end - start
 
 
+# A `(run host ID, PCIe slot)` pair: one operation's call on one device, as a perf
+# row's global call count and device name it.
+DeviceRun = Tuple[int, int]
+# Cycles on the device's own counter, start and end inclusive.
+CycleWindow = Tuple[int, int]
+
+
+@dataclass(frozen=True)
+class SpanRequest:
+    """One perf row's kernel zones to collect: its run, and its firmware window.
+
+    A traced op's replays share one run and slot, so the window -- the row's own
+    `DEVICE FW START CYCLE` to `DEVICE FW END CYCLE` -- is what tells one replay's
+    zones from the next. None takes every zone of the run, for a row without one.
+    """
+
+    run: DeviceRun
+    window: Optional[CycleWindow] = None
+
+    def holds(self, start: int, end: int) -> bool:
+        return self.window is None or (
+            self.window[0] <= start and end <= self.window[1]
+        )
+
+
+@dataclass
+class CoreSpans:
+    """What `query_core_spans` read: each request's cores, and what the log held."""
+
+    spans: Dict[SpanRequest, Dict[Tuple[int, int], CoreSpan]]
+    # Every requested run with at least one paired kernel zone, inside a window or not.
+    zoned: Set[DeviceRun]
+    # `_ZonePairer.pairing`'s counts per run, for runs where anything failed to pair.
+    pairing: Dict[DeviceRun, Dict[str, int]]
+
+
 class _ZonePairer:
     """Pairs each zone start with the end that closes it, under the open-start ceiling.
 
@@ -199,12 +238,22 @@ class _ZonePairer:
     else it holds is the caller's business.
     """
 
-    def __init__(self, start_token: str, end_token: str) -> None:
+    def __init__(
+        self,
+        start_token: str,
+        end_token: str,
+        group: Optional[Callable[[tuple], Hashable]] = None,
+    ) -> None:
         self.start_token = start_token
         self.end_token = end_token
         self.open_starts: Dict[tuple, int] = {}
         self.unpaired_ends = 0
         self.dropped_starts = 0
+        # What each count is also kept by, so a caller can read the counts of some
+        # keys' groups alone -- one operation's run, say -- rather than the log's.
+        self.group = group
+        self.unpaired_ends_by: Counter = Counter()
+        self.dropped_starts_by: Counter = Counter()
 
     def offer(self, key: tuple, phase: str, cycles: Union[int, float]) -> Optional[int]:
         """Take one row; return its start's cycles when the row is an end that paired."""
@@ -214,6 +263,8 @@ class _ZonePairer:
                 and key not in self.open_starts
             ):
                 self.dropped_starts += 1
+                if self.group is not None:
+                    self.dropped_starts_by[self.group(key)] += 1
             else:
                 self.open_starts[key] = int(cycles)
             return None
@@ -222,7 +273,25 @@ class _ZonePairer:
         start = self.open_starts.pop(key, None)
         if start is None:
             self.unpaired_ends += 1
+            if self.group is not None:
+                self.unpaired_ends_by[self.group(key)] += 1
         return start
+
+    def pairing_by_group(self) -> Dict[Hashable, Dict[str, int]]:
+        """`pairing`'s counts for each group that has any, without logging them."""
+        assert self.group is not None, "constructed without a group"
+        open_starts = Counter(self.group(key) for key in self.open_starts)
+        groups = (
+            set(open_starts) | set(self.unpaired_ends_by) | set(self.dropped_starts_by)
+        )
+        return {
+            group: {
+                "unmatched_starts": open_starts[group],
+                "unmatched_ends": self.unpaired_ends_by[group],
+                "dropped_starts": self.dropped_starts_by[group],
+            }
+            for group in groups
+        }
 
     def pairing(self, log_file: str) -> Dict[str, int]:
         """What did not pair, in both directions, returned rather than only logged.
@@ -716,7 +785,7 @@ class DeviceLogProfilerQueries:
         path = Path(instance.performance_path, cls.DEVICE_LOG_FILE)
         try:
             with open(path, "rb") as handle:
-                first_line = handle.readline().decode("utf-8")
+                first_line = handle.readline(_META_LINE_LIMIT).decode("utf-8")
         except (OSError, UnicodeDecodeError):
             return {}
 
@@ -805,6 +874,17 @@ class DeviceLogProfilerQueries:
             return None
         with open(path, "r", encoding="utf-8", errors="ignore") as handle:
             return parse_device_meta(handle.readline(_META_LINE_LIMIT).strip())
+
+    @classmethod
+    def clock_mhz(cls, instance: Instance) -> Optional[int]:
+        """The device clock the log's first line names, or None where it names none.
+
+        A zero clock is none: no cycle count can be read as time against it. The
+        agent's inventory and `core_spread` both ask this, so the tool is listed
+        exactly when it can read cycles as time.
+        """
+        meta = cls.read_device_meta(instance)
+        return meta.frequency if meta is not None and meta.frequency else None
 
     def query_zone_summary(
         self, limit: Optional[int] = None
@@ -907,21 +987,21 @@ class DeviceLogProfilerQueries:
         pairing = pairer.pairing(self.DEVICE_LOG_FILE)
         return (summary[:limit] if limit is not None else summary), pairing
 
-    def query_core_spans(
-        self, runs: Set[Tuple[int, int]]
-    ) -> Tuple[Dict[Tuple[int, int], Dict[Tuple[int, int], CoreSpan]], Dict[str, int]]:
-        """Each core's kernel zones for the given `(run host ID, PCIe slot)` pairs.
+    def query_core_spans(self, requests: Set[SpanRequest]) -> CoreSpans:
+        """Each core's kernel zones for the given perf rows' runs and windows.
 
         A perf row's `GLOBAL CALL COUNT` is the `run host ID` of its zones, and its
-        `DEVICE ID` is their `PCIe slot`: on every local capture checked, each run
-        ID sits on one slot and each call count on one row. Keying on both keeps
-        one device's cores apart from another's, whose cycle counters are not
-        comparable.
+        `DEVICE ID` is their `PCIe slot`. Keying on both keeps one device's cores
+        apart from another's, whose cycle counters are not comparable. Neither
+        tells a traced op's replays apart, nor one capture's run from another's
+        that reused its call counts, so a request with a firmware window takes
+        only the zones inside it: that reproduces tt-metal's per-core figures on
+        traced captures, and a log beside another run's perf CSV leaves the
+        window empty.
 
         Rows of other runs are dropped a chunk at a time before pairing, so the
-        open starts held are only the requested operations'. Returns the spans as
-        `{(run, slot): {(core_x, core_y): CoreSpan}}` and the same pairing counts
-        as `query_zone_summary`, counted over the requested runs only.
+        open starts held are only the requested operations'. Pairing counts are
+        kept per run, so a caller reads only its own operations'.
         """
         phase_column, start_token, end_token = self._zone_phase(
             "split into per-core kernel spans"
@@ -933,11 +1013,18 @@ class DeviceLogProfilerQueries:
                 "`type` nor a `zone phase` column), so it holds no kernel durations"
             )
 
-        spans: Dict[Tuple[int, int], Dict[Tuple[int, int], CoreSpan]] = {
-            run: {} for run in runs
+        spans: Dict[SpanRequest, Dict[Tuple[int, int], CoreSpan]] = {
+            request: {} for request in requests
         }
-        run_ids = {run_id for run_id, _ in runs}
-        pairer = _ZonePairer(start_token, end_token)
+        by_run: Dict[DeviceRun, List[SpanRequest]] = defaultdict(list)
+        for request in requests:
+            by_run[request.run].append(request)
+        zoned: Set[DeviceRun] = set()
+        run_ids = {run_id for run_id, _ in by_run}
+        # The key ends `(…, slot, x, y, run_id)`; its run is the run ID and slot.
+        pairer = _ZonePairer(
+            start_token, end_token, group=lambda key: (key[-1], key[2])
+        )
         columns = list(self._ZONE_COLUMNS) + [phase_column]
 
         for chunk in self._zone_chunks(columns):
@@ -953,7 +1040,8 @@ class DeviceLogProfilerQueries:
                 *(chunk[column] for column in columns)
             ):
                 run = (run_id, slot)
-                if run not in spans:
+                wanted = by_run.get(run)
+                if wanted is None:
                     continue
                 risc = str(risc).strip()
                 start = pairer.offer(
@@ -964,10 +1052,19 @@ class DeviceLogProfilerQueries:
                 if start is None:
                     continue
                 end = int(cycles)
-                span = spans[run].setdefault((x, y), CoreSpan(start, end, {}))
-                span.add(risc, start, end)
+                zoned.add(run)
+                for request in wanted:
+                    if request.holds(start, end):
+                        cores = spans[request]
+                        span = cores.setdefault((x, y), CoreSpan(start, end, {}))
+                        span.add(risc, start, end)
 
-        return spans, pairer.pairing(self.DEVICE_LOG_FILE)
+        pairer.pairing(self.DEVICE_LOG_FILE)
+        return CoreSpans(
+            spans=spans,
+            zoned=zoned,
+            pairing=cast(Dict[DeviceRun, Dict[str, int]], pairer.pairing_by_group()),
+        )
 
     @staticmethod
     def get_raw_csv(instance: Instance):
