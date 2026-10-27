@@ -16,13 +16,14 @@ import re
 from decimal import Decimal
 from typing import TypeGuard, Union
 
+# An unsigned decimal. Each digit run can be split only one way, so a long run ending in
+# a non-digit fails in linear time rather than quadratic.
+_DECIMAL = r"(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?"
 # What `parseFloat` and `parseInt(…, 10)` read: the longest such prefix, after spaces.
-_JS_FLOAT = re.compile(
-    r"[+-]?(?:Infinity|(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][+-]?[0-9]+)?)"
-)
+_JS_FLOAT = re.compile(rf"[+-]?(?:Infinity|{_DECIMAL})")
 _JS_INT = re.compile(r"[+-]?[0-9]+")
 # What `Number` reads whole: a decimal, a radix literal (unsigned), or an infinity.
-_JS_DECIMAL = re.compile(r"[+-]?(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][+-]?[0-9]+)?")
+_JS_DECIMAL = re.compile(rf"[+-]?{_DECIMAL}")
 _JS_RADIX = re.compile(r"0(?:[xX][0-9a-fA-F]+|[oO][0-7]+|[bB][01]+)")
 _JS_INFINITY = re.compile(r"[+-]?Infinity")
 # What `Number`, `parseInt` and `parseFloat` skip; Python's `str.strip` skips another set.
@@ -35,6 +36,8 @@ _JS_WHITESPACE = (
 _MAX_PLAIN_DIGITS = 21
 # Past this many zeros after the point, likewise.
 _MAX_LEADING_ZEROS = 6
+# Up to here every integer is a double, and both languages print it digit for digit.
+_MAX_SAFE_INTEGER = 2**53
 
 NumberValue = Union[int, float]
 
@@ -92,6 +95,8 @@ def _number_text(number: float) -> str:
         return "0"
     if math.isinf(number):
         return "Infinity" if number > 0 else "-Infinity"
+    if number.is_integer() and abs(number) <= _MAX_SAFE_INTEGER:
+        return str(int(number))
     sign = "-" if number < 0 else ""
     parts = Decimal(repr(abs(number))).as_tuple()
     assert isinstance(parts.exponent, int)
@@ -119,6 +124,8 @@ def js_template(value: object) -> str:
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, int):
+        if abs(value) <= _MAX_SAFE_INTEGER:
+            return str(value)
         return _number_text(_double(value))
     if isinstance(value, float):
         return _number_text(value)

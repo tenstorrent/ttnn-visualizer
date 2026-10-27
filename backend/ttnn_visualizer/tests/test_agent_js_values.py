@@ -10,6 +10,7 @@ for the same input.
 """
 
 import math
+import time
 
 import pytest
 from ttnn_visualizer.agent.js_values import (
@@ -108,6 +109,12 @@ class TestJsParseFloat:
             (math.inf, math.inf),
             ("inf", math.nan),
             ("\ufeff2.5", 2.5),
+            # `String(5e-7)` is "5e-7" and `String(1e21)` is "1e+21", which read back whole.
+            (5e-7, 5e-7),
+            (1e21, 1e21),
+            # `String(-0)` is "0", so only the string keeps the sign.
+            (-0.0, 0.0),
+            ("-0", -0.0),
             (None, math.nan),
             (MISSING, math.nan),
         ],
@@ -141,6 +148,11 @@ class TestJsNumber:
             ("5.", 5.0),
             ("+.5e-2", 0.005),
             ("-0", -0.0),
+            ("0X10", 16.0),
+            ("+0x10", math.nan),
+            (" 0x10 ", 16.0),
+            ("1e400", math.inf),
+            ("-.5", -0.5),
             pytest.param(10**400, math.inf, id="int-past-the-float-range"),
             ([5], 5.0),
             ([], 0.0),
@@ -162,6 +174,14 @@ class TestJsNumber:
     )
     def test_it_skips_javascript_s_whitespace_only(self, value, expected):
         assert _same(js_number(value), expected)
+
+    @pytest.mark.parametrize("value", ["1" * 100_000 + "x", "1." + "1" * 100_000 + "x"])
+    def test_a_long_digit_run_is_read_in_linear_time(self, value):
+        # A pattern that splits a digit run more than one way takes minutes here.
+        started = time.perf_counter()
+
+        assert math.isnan(js_number(value))
+        assert time.perf_counter() - started < 1
 
 
 class TestJsTemplate:
@@ -208,6 +228,9 @@ class TestJsMax:
             (-0.0, 0.0, 0.0),
             (0.0, -0.0, 0.0),
             (-0.0, -0.0, -0.0),
+            # The ports mix an int 0 with a parsed -0.
+            (0, -0.0, 0.0),
+            (-0.0, 0, 0.0),
         ],
     )
     def test_it_reads_as_math_max_does(self, left, right, expected):

@@ -136,11 +136,16 @@ class TestDeviceMeta:
 class TestOversizedCells:
     """A cell past the float range reads as infinity, as the view's `parseInt` gives."""
 
-    def test_a_row_s_cores(self):
-        assert perf_flags.row_cores({"cores": "9" * 309}) == math.inf
+    # The second is past Python's limit on converting a digit string to an int.
+    _OVERSIZED = pytest.mark.parametrize("cell", ["9" * 309, "9" * 5000])
 
-    def test_a_row_s_available_cores(self):
-        row = perf_flags.typed_row({"available_cores": "9" * 309})
+    @_OVERSIZED
+    def test_a_row_s_cores(self, cell):
+        assert perf_flags.row_cores({"cores": cell}) == math.inf
+
+    @_OVERSIZED
+    def test_a_row_s_available_cores(self, cell):
+        row = perf_flags.typed_row({"available_cores": cell})
 
         assert row.available_cores == math.inf
 
