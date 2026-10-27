@@ -264,6 +264,7 @@ class _L1PressureFigures(TypedDict):
 
 
 class L1Pressure(_L1PressureFigures):
+    size_unit: str
     note: str
 
 
@@ -369,6 +370,8 @@ def _device_l1_pressure(
         "allocated_bytes": allocated_bytes,
         "usable_bytes": usable_size,
         "high_water_bytes": high_water_bytes,
+        # Per bank, beside a `tensor_size_unit` that can be whole-tensor bytes.
+        "size_unit": BUFFER_SIZE_UNIT,
         "note": L1_PRESSURE_NOTE,
     }
 
@@ -481,6 +484,7 @@ def _ranked_l1_pressure(
     )
     return {
         "ranked_by": "largest_free_block",
+        "size_unit": BUFFER_SIZE_UNIT,
         "operation_count": count,
         "returned": len(top),
         "operations": [

@@ -989,6 +989,7 @@ class TestOperationDetail:
             "allocated_bytes": 0,
             "usable_bytes": 1370848,
             "high_water_bytes": 0,
+            "size_unit": agent_operations.BUFFER_SIZE_UNIT,
             "note": agent_operations.L1_PRESSURE_NOTE,
         }
 
@@ -1002,6 +1003,7 @@ class TestOperationDetail:
             "allocated_bytes": 4096,
             "usable_bytes": 1370848,
             "high_water_bytes": 4296,
+            "size_unit": agent_operations.BUFFER_SIZE_UNIT,
             "note": agent_operations.L1_PRESSURE_NOTE,
         }
 
@@ -1015,6 +1017,7 @@ class TestOperationDetail:
             "allocated_bytes": 100000,
             "usable_bytes": 1370848,
             "high_water_bytes": 550000,
+            "size_unit": agent_operations.BUFFER_SIZE_UNIT,
             "note": agent_operations.L1_PRESSURE_NOTE,
         }
 
@@ -1051,6 +1054,7 @@ class TestOperationDetail:
             "allocated_bytes": 6288 + 4560,
             "usable_bytes": 1370848,
             "high_water_bytes": 1370848,
+            "size_unit": agent_operations.BUFFER_SIZE_UNIT,
             "note": agent_operations.L1_PRESSURE_NOTE,
         }
 
@@ -1185,12 +1189,14 @@ class TestOperationDetail:
         INSERT INTO operations VALUES
             (10, 'ttnn.contiguous', 1.0),
             (11, 'ttnn.fragmented', 1.0),
-            (12, 'ttnn.unaddressed', 1.0);
+            (12, 'ttnn.unaddressed', 1.0),
+            (13, 'ttnn.top_of_l1', 1.0);
         INSERT INTO buffers VALUES
             (10, 0, 0, 600000, 'L1', 0),
             (11, 0, 300000, 10000, 'L1', 0),
             (11, 0, 700000, 10000, 'L1', 0),
-            (12, 0, NULL, 8192, 'L1', 0);
+            (12, 0, NULL, 8192, 'L1', 0),
+            (13, 0, 1360000, 1000, 'L1', 0);
         """
         registry, handle = loaded(sql, name="l1-ranking")
 
@@ -1198,18 +1204,43 @@ class TestOperationDetail:
         ranked = profile["l1_pressure"]
         order = [row["operation_id"] for row in ranked["operations"]]
         # 11's largest gap is 660,848 B at 1.5% full; 10's is 770,848 B at 43.8%.
-        assert order[:2] == [11, 10]
+        # 13 holds 1,000 B near the top of L1: by high-water mark it would rank
+        # first, by largest free block (1,360,000 B) it ranks third.
+        assert order == [11, 10, 13, 2, 3, 12]
         # An operation whose L1 rows occupy nothing is still measured, as empty.
-        assert order[-1] == 12
         assert ranked["operations"][-1]["allocated_bytes"] == 0
-        assert ranked["operation_count"] == len(order) == 5
+        assert ranked["operation_count"] == 6
+
+        # Selecting L1 reads the same rows, rather than measuring nothing.
+        assert (
+            agent_operations.memory_profile(registry, handle, buffer_type="L1")[
+                "l1_pressure"
+            ]
+            == ranked
+        )
 
         limited = agent_operations.memory_profile(registry, handle, limit=1)
-        assert limited["l1_pressure"]["operation_count"] == 5
+        assert limited["l1_pressure"]["operation_count"] == 6
         assert limited["l1_pressure"]["returned"] == 1
         assert [
             row["operation_id"] for row in limited["l1_pressure"]["operations"]
         ] == [11]
+
+    def test_l1_pressure_says_what_its_figures_are(self, loaded):
+        """The unit and the upper bound travel with the figures, in both tools."""
+        registry, handle = loaded(name="l1-note")
+
+        detail = agent_operations.operation_detail(registry, handle, 2)["l1_pressure"]
+        ranked = agent_operations.memory_profile(registry, handle)["l1_pressure"]
+
+        for block in (detail, ranked):
+            assert block["size_unit"] == agent_operations.BUFFER_SIZE_UNIT
+            assert block["note"] == agent_operations.L1_PRESSURE_NOTE
+        note = agent_operations.L1_PRESSURE_NOTE
+        assert "bytes per bank" in note
+        assert "upper bound" in note
+        assert "circular buffers" in note
+        assert "smallest largest free block" in note
 
     def test_memory_profile_l1_pressure_reads_integer_buffer_types(self, loaded):
         sql = _INTEGER_BUFFER_TYPE_SQL + """

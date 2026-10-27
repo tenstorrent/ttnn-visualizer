@@ -627,9 +627,10 @@ L1 fullness, free-segment counts and the largest free block are derived from `bu
 address_at_first_l1_cb_buffer + l1_bank_size)`, capped at `worker_l1_size`, and reporting
 the most constrained device — the one with the smallest largest free block — with
 free-space figures marked as an upper bound because circular buffers and intra-op tensors
-are absent) and exposed as `l1_pressure` on `operation_detail` and `memory_profile`. It is
-null, with a caveat saying why, for an operation with no `buffers` rows or a report whose
-devices record no L1 geometry.
+are absent) and exposed as `l1_pressure` on `operation_detail` and `memory_profile`. Its
+figures are bytes per bank (`size_unit`), so a whole-tensor size in `bytes` is not
+comparable to them. It is null, with a caveat saying why, for an operation with no
+`buffers` rows or a report whose devices record no L1 geometry.
 
 Device profiler logs carry named zones only where a kernel was instrumented to emit them.
 Most captures contain only the default firmware and kernel zones — `BRISC-FW`,

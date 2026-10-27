@@ -148,6 +148,13 @@ def _curated_cases() -> List[Dict]:
             [_device(0), _device(1, bank=0)],
             [_buffer(0, 0, 100), _buffer(1, 0, 400)],
         ),
+        # Duplicate `devices` rows: the last row per `device_id` wins, as the app's
+        # `useDevices` keeps it, for the device's own window and for the one it lends.
+        _case(
+            [_device(0), _device(1, bank=500), _device(1, bank=800)],
+            [_buffer(1, 0, 100)],
+        ),
+        _case([_device(0, bank=500), _device(0, bank=900)], [_buffer(3, 0, 100)]),
         # A device holding nothing can be the most constrained, when its window is
         # smaller than the free space another device has left.
         _case([_device(0), _device(1, bank=500)], [_buffer(0, 0, 100)]),

@@ -397,7 +397,8 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
             "title": "Operation detail",
             "description": (
                 "One operation: its input and output tensors with shape, dtype and "
-                "layout, what it had allocated, and its per-device l1_pressure "
+                "layout, what it had allocated, and its per-device l1_pressure in "
+                "bytes per bank "
                 "(fullness_pct, free_segments, largest_free_block and "
                 "largest_free_pct on the most constrained device, the one with "
                 "the smallest largest_free_block; free-space "
