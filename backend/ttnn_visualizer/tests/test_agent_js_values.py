@@ -21,6 +21,7 @@ from ttnn_visualizer.agent.js_values import (
     js_parse_float,
     js_parse_int,
     js_template,
+    js_trim,
     js_truthy,
 )
 
@@ -195,6 +196,20 @@ class TestJsTemplate:
     )
     def test_it_renders_as_javascript_does(self, value, expected):
         assert js_template(value) == expected
+
+
+class TestJsTrim:
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            (" \t12\n", "12"),
+            ("\ufeff12\u3000", "12"),
+            # Python's whitespace, not JavaScript's.
+            ("\x1c12\x85", "\x1c12\x85"),
+        ],
+    )
+    def test_it_trims_javascript_s_whitespace_only(self, text, expected):
+        assert js_trim(text) == expected
 
 
 class TestJsMax:

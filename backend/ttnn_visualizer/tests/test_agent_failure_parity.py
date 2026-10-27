@@ -336,8 +336,23 @@ def _curated_fallback_runs() -> List[List[Dict]]:
         **_operation(1, "ttnn.reshape", [unreadable], request="L1"),
         "inputs": [{**unreadable, "id": 11}],
     }
+    # A count of 3 against an input's 2 at the same address is no view, so it flags;
+    # an unreadable shape can't rule a view out. JavaScript's `\s` takes a BOM and
+    # not U+001C, Python's the reverse.
+    shape_whitespace = [
+        [
+            {
+                **_operation(
+                    1, "ttnn.reshape", [{**_dram(10), "shape": shape}], request="L1"
+                ),
+                "inputs": [{**_dram(11), "shape": "Shape([2])"}],
+            }
+        ]
+        for shape in ("Shape([1,\ufeff3])", "Shape([1,\x1c3])", "Shape([\u00a03 ])")
+    ]
     return [
         [view_like],
+        *shape_whitespace,
         [
             _operation(1, "ttnn.matmul", [], oom_l1),
             _operation(2, "ttnn.matmul", [_dram(1)]),
