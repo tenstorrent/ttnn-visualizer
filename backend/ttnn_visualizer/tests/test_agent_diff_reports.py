@@ -71,6 +71,18 @@ def _ops(**device_time_by_op_code):
     ]
 
 
+def _partly_measured(measured, time, calls=4):
+    """`calls` calls of one Conv, the first `measured` of them timed at `time`."""
+    return [
+        _row(
+            id=str(n + 2),
+            op_code="Conv",
+            device_time=str(time) if n < measured else "",
+        )
+        for n in range(calls)
+    ]
+
+
 def _side(*captures):
     """A side of a diff from each capture's {group: (total, calls, measured calls)}."""
     return report_diff.Side.of(
@@ -639,28 +651,72 @@ class TestRepeats:
         """Calls measured 4, 2 and 4 times read as 4, the count behind the median
         total, not the fewest."""
         registry = _registry(tmp_path, count=4)
-
-        def calls(measured, time):
-            return [
-                _row(
-                    id=str(n + 2),
-                    op_code="Conv",
-                    device_time=str(time) if n < measured else "",
-                )
-                for n in range(4)
-            ]
-
         rows = {
-            "report-1": calls(4, 10.0),
-            "report-3": calls(2, 10.0),
-            "report-4": calls(4, 10.0),
-            "report-2": calls(3, 20.0),
+            "report-1": _partly_measured(4, 10.0),
+            "report-3": _partly_measured(2, 10.0),
+            "report-4": _partly_measured(4, 10.0),
+            "report-2": _partly_measured(3, 20.0),
         }
 
         result = _diff(registry, rows, repeats_a=["report-3", "report-4"])
 
         (change,) = result["changes"]
         assert (change["measured_before"], change["measured_after"]) == (4, 3)
+
+    @pytest.mark.parametrize(
+        "after, median",
+        [
+            pytest.param([(4, 10.0), (2, 40.0), (4, 40.0)], 80.0, id="the middle one"),
+            pytest.param(
+                [(4, 10.0), (2, 40.0)], 60.0, id="the two an even count averages"
+            ),
+        ],
+    )
+    def test_a_median_from_a_partly_measured_capture_says_so(
+        self, tmp_path, after, median
+    ):
+        """Totals and measured calls sort differently here, so the median total is a
+        partial sum: without its coverage it would read as a speed-up."""
+        registry = _registry(tmp_path, count=1 + len(after))
+        handles = ["report-2", *(f"report-{n}" for n in range(3, 2 + len(after)))]
+        rows = {"report-1": _partly_measured(4, 40.0)}
+        for handle, (measured, time) in zip(handles, after):
+            rows[handle] = _partly_measured(measured, time)
+
+        result = _diff(registry, rows, repeats_b=handles[1:])
+
+        (change,) = result["changes"]
+        assert change["device_time_after"] == median
+        assert (change["measured_before"], change["measured_after"]) == (4, 2)
+
+    def test_a_one_sided_group_ranks_by_its_median_not_an_outlier(self, tmp_path):
+        """One slow repeat must not carry a small group past the cap ahead of a bigger
+        one, so new and missing rank by the figure each entry gives."""
+        registry = _registry(tmp_path, count=6)
+        rows = {}
+        for handle, outlier in (
+            ("report-1", 1.0),
+            ("report-3", 1.0),
+            ("report-4", 1000.0),
+        ):
+            rows[handle] = _ops(Matmul=10.0, GoneOutlier=outlier, GoneSteady=10.0)
+        for handle, outlier in (
+            ("report-2", 1.0),
+            ("report-5", 1.0),
+            ("report-6", 1000.0),
+        ):
+            rows[handle] = _ops(Matmul=10.0, NewOutlier=outlier, NewSteady=10.0)
+
+        result = _diff(
+            registry,
+            rows,
+            repeats_a=["report-3", "report-4"],
+            repeats_b=["report-5", "report-6"],
+            limit=1,
+        )
+
+        assert [entry["op_code"] for entry in result["new"]] == ["NewSteady"]
+        assert [entry["op_code"] for entry in result["missing"]] == ["GoneSteady"]
 
     def test_a_side_total_is_the_median_of_its_captures_totals(self, tmp_path):
         """Not the sum of each group's median, which is no capture's total."""

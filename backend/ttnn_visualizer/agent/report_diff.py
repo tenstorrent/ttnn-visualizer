@@ -10,7 +10,7 @@ Pure: `tools.diff_reports` reads the reports, and this decides what their totals
 
 from dataclasses import dataclass
 from enum import Enum
-from statistics import median, median_low
+from statistics import median
 from typing import Callable, Dict, FrozenSet, Hashable, List, Optional, Tuple, cast
 
 from ttnn_visualizer.agent.cells import finite_number
@@ -190,13 +190,22 @@ def capture_totals(
     return CaptureTotals(by_metric, sub_devices)
 
 
+def _measured_behind_median(totals: List[GroupTotal]) -> int:
+    """The fewest measured calls among the captures a median total comes from, both
+    middle ones for an even count, so a partial capture's sum never reads as complete.
+    """
+    ranked = sorted(group.total for group in totals)
+    low, high = ranked[(len(ranked) - 1) // 2], ranked[len(ranked) // 2]
+    return min(group.measured for group in totals if low <= group.total <= high)
+
+
 @dataclass(frozen=True)
 class Side:
     """One side's groups across its captures.
 
     `figures_by_group` holds the medians of the groups every capture ran equally often
-    and gave a figure, and `unmeasured` the groups every capture ran equally often but
-    one left without any. `measured` holds the groups some capture gave a figure,
+    and gave a figure, each with the measured calls of the captures it comes from, and
+    `unmeasured` the groups every capture ran equally often but one left without any. `measured` holds the groups some capture gave a figure,
     `calls_by_group` each group's calls per capture, `least_measured_by_group` the
     fewest calls with a figure in any capture, and `largest_by_group` each group's
     largest sum.
@@ -245,7 +254,7 @@ class Side:
             figures[key] = GroupTotal(
                 median(group.total for group in totals),
                 calls[key][0],
-                median_low(group.measured for group in totals),
+                _measured_behind_median(totals),
             )
         measured = frozenset(
             key
@@ -348,12 +357,15 @@ def classify(before: Side, after: Side, thresholds: Thresholds) -> Comparison:
             after.largest_by_group.get(group, 0.0),
         )
 
+    def shown(side: Side, group: Hashable) -> float:
+        # The figure the entry gives, so one outlier repeat can't carry it past the cap.
+        figure = side.figures_by_group.get(group)
+        return figure.total if figure is not None else side.largest_by_group[group]
+
     # Largest movement in either direction: a regression matters as much as a win.
     changes.sort(key=lambda change: _largest_first(abs(change.delta), change.group))
-    new.sort(key=lambda group: _largest_first(after.largest_by_group[group], group))
-    missing.sort(
-        key=lambda group: _largest_first(before.largest_by_group[group], group)
-    )
+    new.sort(key=lambda group: _largest_first(shown(after, group), group))
+    missing.sort(key=lambda group: _largest_first(shown(before, group), group))
     unmeasured.sort(key=lambda group: _largest_first(either_side(group), group))
     inconsistent.sort(key=lambda group: _largest_first(either_side(group), group))
     return Comparison(

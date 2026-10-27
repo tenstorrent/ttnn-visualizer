@@ -501,8 +501,11 @@ its total covers only those.
 `repeats_a` and `repeats_b` take further captures of either side, run the same way, up to
 five captures a side. Each figure is then the median of the side's captures, as the LLK
 check compares repeated runs, which makes a lower threshold safe to read; with two captures
-a side the median is their mean, so three or five resist one outlier. A group the side's
-captures disagree on, by whether it ran or how many calls it made, is listed under
+a side the median is their mean, so three or five resist one outlier. A change's measured
+calls are the fewest among the captures its median comes from, so a partial capture's sum
+never reads as complete, and `new` and `missing` rank by the median each entry gives rather
+than by one capture's total. A group the side's captures disagree on, by whether it ran or
+how many calls it made, is listed under
 `inconsistent`, largest first, with `calls_before` and `calls_after` giving each capture's
 calls, rather than compared on unlike work. Each capture may be given once: a handle given
 twice, or two handles loaded on the same capture, is refused. A capture's totals are kept
