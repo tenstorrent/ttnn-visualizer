@@ -143,7 +143,7 @@ def side_handles(label: str, handle: str, repeats: object) -> List[str]:
     return [handle, *repeats]
 
 
-@dataclass
+@dataclass(slots=True)
 class GroupTotal:
     """A group's calls, how many of them carry a figure, and the figures' sum.
 

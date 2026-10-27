@@ -525,8 +525,8 @@ class TestRepeats:
         assert result["inconsistent_count"] == 2
 
     def test_a_ranged_diff_with_repeats_reads_each_window_once(self, tmp_path):
-        """More windows than the snapshot cache keeps, asked again with another metric
-        and another threshold: no window is generated twice."""
+        """More windows than the snapshot cache keeps, asked again with another metric,
+        another threshold and the other match: no window is generated twice."""
         registry = _registry(tmp_path, count=6)
         generated = []
 
@@ -540,9 +540,11 @@ class TestRepeats:
             "repeats_a": ["report-3", "report-4"],
             "repeats_b": ["report-5", "report-6"],
         }
+        signatures = op_signatures.Signatures(["in0 1x1x32x32"], False)
         with (
             _signposts_in(*(f"report-{number}" for number in range(1, 7))),
             patch.object(tools, "_generate_canonical_report", side_effect=generate),
+            patch.object(tools, "_op_signatures", return_value=signatures),
         ):
             tools.diff_reports(registry, "report-1", "report-2", **arguments)
             tools.diff_reports(
@@ -551,8 +553,36 @@ class TestRepeats:
             tools.diff_reports(
                 registry, "report-1", "report-2", min_percent=1, **arguments
             )
+            tools.diff_reports(
+                registry, "report-1", "report-2", match="signature", **arguments
+            )
 
         assert sorted(generated) == [f"report-{number}" for number in range(1, 7)]
+
+    def test_a_repeat_s_report_is_read_for_its_totals_and_not_kept(self, tmp_path):
+        """The compared captures keep theirs, as any tool's read does, for the questions
+        that follow a diff; a repeat's would hold a whole report its totals already
+        summarise."""
+        registry = _registry(tmp_path, count=4)
+        generated = []
+
+        def generate(instance, **_):
+            generated.append(instance.instance_id)
+            return _perf_report(_ops(Matmul=10.0))
+
+        with patch.object(tools, "_generate_canonical_report", side_effect=generate):
+            tools.diff_reports(
+                registry,
+                "report-1",
+                "report-2",
+                repeats_a=["report-3"],
+                repeats_b=["report-4"],
+            )
+            generated.clear()
+            for number in range(1, 5):
+                tools.canonical_report(registry, f"report-{number}")
+
+        assert generated == ["report-3", "report-4"]
 
     def test_captures_that_ran_a_group_unequally_often_are_inconsistent(self, tmp_path):
         """A median of totals over different call counts compares different work."""
@@ -1134,6 +1164,61 @@ class TestSignatures:
         (change,) = result["changes"]
         assert (change["raw_op_code"], change["signature"]) == ("Matmul", None)
         assert result["within_threshold_count"] == 1
+
+    def test_a_rewritten_capture_never_mixes_its_signatures_and_rows(self, tmp_path):
+        """A signature is found by the position a row names, so both must come from one
+        capture: after a rewrite a diff answers from what it read before, and a range
+        that needs a new read is refused."""
+        before = _transpose_reshaped(signposted_rows())
+        registry = self._registry(
+            tmp_path, before, _transpose_reshaped(before, duration_ns=37_000)
+        )
+        tools.diff_reports(registry, "report-1", "report-2")
+        write_ops_perf(tmp_path / "after", before[:-1])
+
+        result = tools.diff_reports(registry, "report-1", "report-2", match="signature")
+
+        (change,) = result["changes"]
+        assert change["signature"].startswith("in0 1x1x64x128")
+        with pytest.raises(ValueError, match="has changed since it was first read"):
+            tools.diff_reports(
+                registry,
+                "report-1",
+                "report-2",
+                match="signature",
+                start_signpost="PERF_START",
+                end_signpost="PERF_END",
+            )
+
+    def test_a_diff_by_op_code_does_not_need_signatures(self, tmp_path):
+        """They are read beside the totals so the other match reads no report again,
+        but a CSV without them still diffs by op code."""
+        with patch.object(tools, "_read_op_signatures", return_value=None):
+            result = _diff(
+                _registry(tmp_path),
+                {"report-1": _ops(Matmul=10.0), "report-2": _ops(Matmul=20.0)},
+            )
+
+        assert [change["op_code"] for change in result["changes"]] == ["Matmul"]
+
+    def test_signatures_unreadable_beside_the_totals_are_refused_later(self, tmp_path):
+        """Readable when asked but not when the totals were kept, they would be missing
+        from what the diff compares, so a fresh handle is asked for."""
+        registry = _registry(tmp_path)
+        failures = [OSError("busy"), OSError("busy")]
+
+        def read(_instance):
+            if failures:
+                raise failures.pop()
+            return op_signatures.Signatures(["in0 1x1x32x32"], False)
+
+        rows = {"report-1": _ops(Matmul=10.0), "report-2": _ops(Matmul=10.0)}
+        with patch.object(tools, "_read_op_signatures", side_effect=read):
+            _diff(registry, rows)
+            with pytest.raises(
+                ValueError, match="could not be read when its totals were"
+            ):
+                _diff(registry, rows, match="signature")
 
     def test_a_long_signature_is_cut_and_its_length_given(self, tmp_path):
         def every_slot_filled(rows, duration_ns=None):

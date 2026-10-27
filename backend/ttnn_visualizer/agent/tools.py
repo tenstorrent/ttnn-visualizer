@@ -184,7 +184,10 @@ class SignpostRange:
 
 
 def canonical_report(
-    registry: ReportRegistry, handle: str, signposts: Optional[SignpostRange] = None
+    registry: ReportRegistry,
+    handle: str,
+    signposts: Optional[SignpostRange] = None,
+    keep: bool = True,
 ) -> Dict:
     """One generated report per handle and range; see `ReportRegistry.cached_report`.
 
@@ -201,6 +204,7 @@ def canonical_report(
     CSV share one. The rows are shared with them: copy a row before changing it.
     A report generated with swallowed errors is the exception: it is kept by the
     handle that read it alone, so loading the report again regenerates it.
+    `keep=False` reads a report no tool has kept without keeping it.
     """
     _require_performance_report(registry, handle)
     ignored = range_ignored(registry, handle, signposts)
@@ -217,7 +221,9 @@ def canonical_report(
             raise UnsharedSnapshot(degraded.report) from None
 
     source = _pin_source(registry, handle)
-    report = registry.cached_report(handle, build, scope=scope, share_key=source)
+    report = registry.cached_report(
+        handle, build, scope=scope, share_key=source, keep=keep
+    )
     return {**report, "signpost_range_ignored": True} if ignored else report
 
 
@@ -837,17 +843,21 @@ def _signature_key(
     return op_code, signature or ""
 
 
-def _group_key(
-    registry: ReportRegistry, handle: str, match: report_diff.DiffMatch
-) -> Callable[[Dict], Optional[Hashable]]:
-    if match is report_diff.DiffMatch.OP_CODE:
-        return _op_code_key
-    signatures = _op_signatures(registry, handle).by_position
-    return lambda row: _signature_key(row, signatures)
+def _readable_signatures(
+    registry: ReportRegistry, handle: str
+) -> Optional[List[Optional[str]]]:
+    """The handle's signatures, or None where they cannot be read: a diff by op code
+    must not fail on them."""
+    try:
+        return _op_signatures(registry, handle).by_position
+    except (OSError, ValueError):
+        return None
 
 
 # The report field behind each summable metric, all summed in one pass.
 _DIFF_FIELDS = {metric: SORTABLE_METRICS[metric] for metric in sorted(ADDITIVE_METRICS)}
+
+_DiffTotals = Dict[report_diff.DiffMatch, report_diff.CaptureTotals]
 
 
 def _diff_totals(
@@ -855,27 +865,42 @@ def _diff_totals(
     handle: str,
     signposts: Optional[SignpostRange],
     ignored: bool,
-    match: report_diff.DiffMatch,
-    key_of: Callable[[Dict], Optional[Hashable]],
-) -> report_diff.CaptureTotals:
-    """A capture's group totals for every summable metric, kept per handle, range and
-    match: asked again with other thresholds or another metric, a diff reads no report.
+    keep_report: bool,
+) -> _DiffTotals:
+    """A capture's group totals for every summable metric, by op code and, where its
+    CSV has tensor columns, by signature, kept per handle and range: asked again with
+    other thresholds, another metric or the other match, a diff reads no report.
 
     Kept by the handle alone, as a degraded report is, so loading the capture again
-    reads it again.
+    reads it again. Unless `keep_report`, a report no tool has kept is read for its
+    totals and dropped.
     """
 
-    def build(instance: Instance) -> report_diff.CaptureTotals:
-        rows = canonical_report(registry, handle, signposts).get("report", [])
-        return report_diff.capture_totals(
-            rows, _DIFF_FIELDS, key_of, frozenset(_sub_devices(rows))
+    def build(instance: Instance) -> _DiffTotals:
+        rows = canonical_report(registry, handle, signposts, keep=keep_report).get(
+            "report", []
         )
+        sub_devices = frozenset(_sub_devices(rows))
+        totals = {
+            report_diff.DiffMatch.OP_CODE: report_diff.capture_totals(
+                rows, _DIFF_FIELDS, _op_code_key, sub_devices
+            )
+        }
+        signatures = _readable_signatures(registry, handle)
+        if signatures is not None:
+            totals[report_diff.DiffMatch.SIGNATURE] = report_diff.capture_totals(
+                rows,
+                _DIFF_FIELDS,
+                lambda row: _signature_key(row, signatures),
+                sub_devices,
+            )
+        return totals
 
     return registry.cached_report(
         handle,
         build,
         variant=CacheVariant.DIFF_TOTALS,
-        scope=(None if ignored else signposts, match),
+        scope=None if ignored else signposts,
     )
 
 
@@ -1017,15 +1042,27 @@ def diff_reports(
     if signposts is not None and not ignored[0]:
         for handle in handles:
             check_range(registry, handle, signposts)
-    key_by_handle = {
-        handle: _group_key(registry, handle, grouping) for handle in handles
-    }
-    totals_by_handle = {
-        handle: _diff_totals(
-            registry, handle, signposts, ignored[0], grouping, key_by_handle[handle]
+    if grouping is report_diff.DiffMatch.SIGNATURE:
+        for handle in handles:
+            _op_signatures(registry, handle)
+
+    def totals_of(handle: str) -> report_diff.CaptureTotals:
+        # A repeat is there for its totals, so only the compared captures keep a report.
+        by_match = _diff_totals(
+            registry,
+            handle,
+            signposts,
+            ignored[0],
+            keep_report=handle in (handle_a, handle_b),
         )
-        for handle in handles
-    }
+        if grouping not in by_match:
+            raise ValueError(
+                f"the signatures behind {handle!r} could not be read when its totals "
+                "were; call load_report again for a fresh handle"
+            )
+        return by_match[grouping]
+
+    totals_by_handle = {handle: totals_of(handle) for handle in handles}
     side_before = report_diff.Side.of(
         [totals_by_handle[handle].by_metric[by] for handle in before]
     )

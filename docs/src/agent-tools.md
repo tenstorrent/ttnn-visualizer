@@ -506,11 +506,13 @@ captures disagree on, by whether it ran or how many calls it made, is listed und
 `inconsistent`, largest first, with `calls_before` and `calls_after` giving each capture's
 calls, rather than compared on unlike work. Each capture may be given once: a handle given
 twice, or two handles loaded on the same capture, is refused. A capture's totals are kept
-per range and match, so asking again with other thresholds or another metric generates no
-report, though the first ranged call generates every capture's window. The first call also
-generates each capture's whole report that no tool has read yet, which on a single-device
-capture of 100,000 rows takes about 20 s, and that report stays loaded for the server's
-life, as every handle's does: about 350 MB at that size.
+per range, by op code and, where its CSV has tensor columns, by signature, so asking again
+with other thresholds, another metric or the other match generates no report; a whole
+report's totals stay for the server's life, and a range's for up to 64 captures and ranges,
+the least recently used dropped first. The first call generates each capture's report that
+no tool has read yet, which on a single-device capture of 100,000 rows takes about 20 s.
+The two compared captures' reports then stay loaded, as every handle's does, about 350 MB
+at that size, while a repeat's is read for its totals and dropped.
 
 Without `match`, a group is tt-perf-report's op code, which already names a matmul's shapes
 and a convolution's or halo's configuration. `match: signature` groups instead by the raw op

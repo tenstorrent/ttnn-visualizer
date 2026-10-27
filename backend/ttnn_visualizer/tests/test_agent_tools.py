@@ -26,7 +26,9 @@ from ttnn_visualizer import csv_queries
 from ttnn_visualizer.agent import handles, server, tools
 from ttnn_visualizer.agent.bounds import MAX_LIMIT
 from ttnn_visualizer.agent.handles import (
+    MAX_SCOPED_DIFF_TOTALS,
     MAX_SCOPED_REPORTS,
+    CacheVariant,
     ReportRegistry,
     UnknownHandleError,
     load_report,
@@ -1775,6 +1777,54 @@ class TestScopedSnapshots:
         registry.cached_report("report-1", build(None))
 
         assert built == [1]
+
+    def test_diff_totals_are_evicted_apart_from_the_reports(self, tmp_path):
+        """Far more of them are kept, oldest first out, and filling them evicts no
+        report."""
+        registry = ReportRegistry()
+        write_device_log(tmp_path, MODERN_HEADER, [])
+        load_report(registry, performance_path=str(tmp_path))
+        built = []
+
+        def build(label):
+            def _build(_instance):
+                built.append(label)
+                return label
+
+            return _build
+
+        def totals(scope):
+            registry.cached_report(
+                "report-1", build(scope), variant=CacheVariant.DIFF_TOTALS, scope=scope
+            )
+
+        registry.cached_report("report-1", build("report"), scope="window")
+        for scope in range(MAX_SCOPED_DIFF_TOTALS + 1):
+            totals(scope)
+        built.clear()
+
+        registry.cached_report("report-1", build("report"), scope="window")
+        totals(1)
+        totals(0)
+
+        assert built == [0]
+
+    def test_a_snapshot_not_kept_is_built_again(self, tmp_path):
+        registry = ReportRegistry()
+        write_device_log(tmp_path, MODERN_HEADER, [])
+        load_report(registry, performance_path=str(tmp_path))
+        built = []
+
+        def build(_instance):
+            built.append(len(built))
+            return len(built)
+
+        registry.cached_report("report-1", build, keep=False)
+        registry.cached_report("report-1", build)
+        # Found now, so nothing is built whether or not it would be kept.
+        registry.cached_report("report-1", build, keep=False)
+
+        assert built == [0, 1]
 
     def test_clearing_the_registry_drops_ranged_snapshots_too(self, tmp_path):
         registry = ReportRegistry()
