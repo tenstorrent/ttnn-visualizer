@@ -10,6 +10,7 @@ the perf model's placeholder the view misreads, and where the flags reach a resp
 """
 
 import json
+import math
 from pathlib import Path
 from unittest.mock import patch
 
@@ -130,6 +131,23 @@ class TestDeviceMeta:
         assert tools._device_meta(
             Instance(instance_id="non-utf-8", performance_path=str(directory))
         ) == DeviceLogMeta("blackhole", 1350, 120)
+
+
+class TestOversizedCells:
+    """A cell past the float range reads as infinity, as the view's `parseInt` gives."""
+
+    # The second is past Python's limit on converting a digit string to an int.
+    _OVERSIZED = pytest.mark.parametrize("cell", ["9" * 309, "9" * 5000])
+
+    @_OVERSIZED
+    def test_a_row_s_cores(self, cell):
+        assert perf_flags.row_cores({"cores": cell}) == math.inf
+
+    @_OVERSIZED
+    def test_a_row_s_available_cores(self, cell):
+        row = perf_flags.typed_row({"available_cores": cell})
+
+        assert row.available_cores == math.inf
 
 
 class TestResolveMaxCores:

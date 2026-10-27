@@ -688,6 +688,48 @@ def _l1_peak_cases(rng: random.Random) -> List[Dict]:
             64,
             None,
         ),
+        # Figures as `Number` reads them: after JavaScript's whitespace but not Python's,
+        # and never with an underscore, which Python's `int(…, 0)` takes.
+        _l1_peak_case(
+            [
+                {
+                    "id": 1,
+                    "device_operations": [
+                        {
+                            "node_type": "buffer_allocate",
+                            "params": {
+                                "address": "\ufeff100",
+                                "type": "L1",
+                                "size": "\u30001000",
+                                "num_cores": "\ufeff2",
+                            },
+                        },
+                        {
+                            "node_type": "buffer_allocate",
+                            "params": {
+                                "address": "0x1_0",
+                                "type": "L1",
+                                "size": "1000",
+                                "num_cores": "1",
+                            },
+                        },
+                        {
+                            "node_type": "buffer_allocate",
+                            "params": {
+                                "address": "\x1c200",
+                                "type": "L1",
+                                "size": "1000",
+                                "num_cores": "\x1c2",
+                            },
+                        },
+                    ],
+                }
+            ],
+            {},
+            {},
+            64,
+            None,
+        ),
     ]
     for _ in range(30):
         operations: List[Dict] = [
@@ -862,6 +904,16 @@ def _curated_cb_graphs() -> List[List[object]]:
         .nodes,
         # A buffer before any scope opens joins the next scope's snapshot.
         CapturedGraph().cb().start("Late").cb("200").end().nodes,
+        # Figures after JavaScript's whitespace, which Python's `str.strip` keeps, and
+        # after Python's, which JavaScript's does not skip: device "\x1c1" is no device.
+        CapturedGraph()
+        .start("Whitespace")
+        .free_all()
+        .cb(size="\ufeff4096", device_id=1)
+        .cb("\u3000200", device_id="\ufeff1")
+        .cb("300", device_id="\x1c1")
+        .end()
+        .nodes,
     ]
 
 

@@ -25,6 +25,7 @@ from typing import (
     Tuple,
 )
 
+from ttnn_visualizer.agent.js_values import MISSING, js_divide, js_number, js_truthy
 from ttnn_visualizer.models import L1_BUFFER_TYPES, Buffer, BufferType
 
 # `L1_NUM_CORES`: the bank count a node without `max_size_per_bank` falls back to.
@@ -49,36 +50,6 @@ class Precision(str, Enum):
     EXACT = "exact"
     # A node never says which cores (#2027), so two residents may not share one.
     UPPER_BOUND = "upper-bound"
-
-
-def js_number(value: object) -> float:
-    """`Number(value)` as the app reads a graph param."""
-    if value is None:
-        return 0.0
-    if isinstance(value, bool):
-        return float(value)
-    if isinstance(value, (int, float)):
-        return float(value)
-    if not isinstance(value, str):
-        return math.nan
-    text = value.strip()
-    if text == "":
-        return 0.0
-    if text[:2].lower() in ("0x", "0o", "0b"):
-        try:
-            return float(int(text, 0))
-        except ValueError:
-            return math.nan
-    if "_" in text or text.lower().strip("+-") in ("inf", "infinity", "nan"):
-        return {
-            "Infinity": math.inf,
-            "+Infinity": math.inf,
-            "-Infinity": -math.inf,
-        }.get(text, math.nan)
-    try:
-        return float(text)
-    except ValueError:
-        return math.nan
 
 
 def _address(params: Dict) -> Optional[float]:
@@ -117,21 +88,16 @@ def _is_l1_node(params: Dict) -> bool:
 
 def _param(params: Dict, key: str) -> float:
     """A param as the app reads it: missing is undefined, so NaN, while null is 0."""
-    return js_number(params[key]) if key in params else math.nan
+    return js_number(params.get(key, MISSING))
 
 
 def _per_bank_bytes(params: Dict, bank_count: int) -> float:
     if "max_size_per_bank" in params:
         return js_number(params["max_size_per_bank"])
     cores = _param(params, "num_cores")
-    divisor = cores if cores and not math.isnan(cores) else float(bank_count)
-    size = _param(params, "size")
-    if divisor == 0:
-        # As JavaScript divides: no bank count is no figure, not an error.
-        return (
-            math.nan if size == 0 or math.isnan(size) else math.copysign(math.inf, size)
-        )
-    return size / divisor
+    divisor = cores if js_truthy(cores) else float(bank_count)
+    # No bank count is no figure, not an error.
+    return js_divide(_param(params, "size"), divisor)
 
 
 def _params(node: object) -> Optional[Dict]:
@@ -547,7 +513,6 @@ __all__ = [
     "Resident",
     "ResidentKind",
     "build_l1_peak",
-    "js_number",
     "last_valid_consumer",
     "resolve_address_lifetimes",
     "top_compositions",

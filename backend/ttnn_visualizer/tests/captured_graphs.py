@@ -9,8 +9,8 @@
 drifting between them when the port starts reading another param. A module rather than
 helpers in ``conftest.py``, for the reason ``event_log_readers.py`` gives.
 
-Values are written as given. A capture writes strings, but the parity golden also feeds
-numbers, to hold the app's `parseInt` reading of them.
+Values are written as given. A capture writes strings or integers, never a float; the
+parity golden feeds both, to hold the app's `parseInt` reading of them.
 """
 
 from typing import Dict, List, Optional
