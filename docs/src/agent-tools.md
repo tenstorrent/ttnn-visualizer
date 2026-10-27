@@ -523,9 +523,11 @@ and its device is the log's `PCIe slot`. That pair does not single out one execu
 traced operation's replays share it, and call counts repeat from one capture to the next.
 So a row's zones are only those inside its own `DEVICE FW START CYCLE` to
 `DEVICE FW END CYCLE`, which keeps each replay's figures its own. An operation with zones
-under its call count and device but none inside its firmware cycles has `in_log` false,
-with a caveat that the log belongs to another execution — usually a device log beside a
-different run's performance CSV. A row without firmware cycles takes every zone of its call
+under its call count and device but none inside its firmware cycles has `in_log` false.
+When no row of that call count and device has zones inside its own cycles, the caveat says
+the log belongs to another execution — usually a device log beside a different run's
+performance CSV. When other replays do, it names a profiler buffer that filled partway
+through the trace as the likelier cause, since that drops later replays' zones. A row without firmware cycles takes every zone of its call
 count and device, and when other rows share them its figures pool theirs, which a caveat
 says. On a multi-device report a row is the slowest device's, except an all-gather,
 reduce-scatter or all-reduce, where it is the first device's but its `device_time` is the
@@ -542,9 +544,12 @@ covers only the cores that did. Dropped markers cause that, and tt-metal reports
 profiler buffer in its host log only, never in the device log. When more cores recorded
 zones than the row reports, as a DRAM-sharded matmul's helper cores do, the median and
 `imbalance` mix cores with different roles, while the maximum and `slowest_cores` still
-name the cores that set the time; a caveat says so. The first call on a handle reads the
-whole device log once for every operation in the report, and later calls answer from that
-read.
+name the cores that set the time; a caveat says so. Unpaired zones are counted per call
+count and device, not per replay, so an unpaired zone in one replay is reported on every
+replay of that operation. A kernel row whose slot, core or cycle count is not a number is
+left out and counted in a caveat rather than failing the call. The first call on a handle
+reads the whole device log once for every operation in the report, and later calls answer
+from that read, with the clock it was read at.
 
 **A performance row and a profiler operation are linked by order, not by a shared id.**
 Neither report records the other's id, so when a handle is loaded with both, the tools

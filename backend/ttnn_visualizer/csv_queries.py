@@ -12,6 +12,7 @@ import sys
 import tempfile
 import traceback
 import warnings
+from bisect import bisect_right
 from collections import Counter, defaultdict
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -38,6 +39,7 @@ from typing import (
 import _sitebuiltins
 import matplotlib
 import matplotlib.pyplot as plt
+import numpy as np
 import orjson
 import pandas as pd
 import zstd
@@ -213,10 +215,34 @@ class SpanRequest:
     run: DeviceRun
     window: Optional[CycleWindow] = None
 
-    def holds(self, start: int, end: int) -> bool:
-        return self.window is None or (
-            self.window[0] <= start and end <= self.window[1]
+
+class _RunRequests:
+    """One run's requests, and which of them hold a zone.
+
+    One device runs one op at a time, so a run's firmware windows do not overlap,
+    and the one that can hold a zone is the last to start at or before it: a
+    binary search, rather than a scan of every replay for every zone, which on a
+    trace of a thousand replays is the difference between a read and a hang.
+    """
+
+    def __init__(self, requests: List[SpanRequest]) -> None:
+        windowed = sorted(
+            (request for request in requests if request.window is not None),
+            key=lambda request: cast(CycleWindow, request.window),
         )
+        self.starts = [cast(CycleWindow, request.window)[0] for request in windowed]
+        self.windowed = windowed
+        # At most one: requests are a set, and a windowless one is its run alone.
+        self.whole = [request for request in requests if request.window is None]
+
+    def holding(self, start: int, end: int) -> List[SpanRequest]:
+        held = list(self.whole)
+        index = bisect_right(self.starts, start) - 1
+        if index >= 0:
+            request = self.windowed[index]
+            if end <= cast(CycleWindow, request.window)[1]:
+                held.append(request)
+        return held
 
 
 @dataclass
@@ -228,6 +254,9 @@ class CoreSpans:
     zoned: Set[DeviceRun]
     # `_ZonePairer.pairing`'s counts per run, for runs where anything failed to pair.
     pairing: Dict[DeviceRun, Dict[str, int]]
+    # Kernel rows of a requested run ID left out for a slot, core or cycle count that
+    # is not a finite number, by run host ID: the slot itself may be what is broken.
+    malformed: Dict[int, int]
 
 
 class _ZonePairer:
@@ -605,6 +634,8 @@ class DeviceLogProfilerQueries:
     # REQUIRED_DEVICE_LOG_COLUMNS because only the zone queries need them; see the
     # comment in `_zone_phase` before folding the two together.
     ZONE_SUMMARY_COLUMNS = frozenset(_ZONE_COLUMNS)
+    # The columns `query_core_spans` reads as numbers, besides the run it filters on.
+    _SPAN_NUMBER_COLUMNS = ("PCIe slot", "core_x", "core_y", "time[cycles since reset]")
     # The column that marks a zone's start and end, with its two tokens, in the
     # order one is preferred when a capture has both. Two spellings of the same
     # fact, neither required: a current capture writes `type` as ZONE_START /
@@ -1000,8 +1031,10 @@ class DeviceLogProfilerQueries:
         window empty.
 
         Rows of other runs are dropped a chunk at a time before pairing, so the
-        open starts held are only the requested operations'. Pairing counts are
-        kept per run, so a caller reads only its own operations'.
+        open starts held are only the requested runs'. Pairing counts are kept per
+        run, so a caller reads only its own operations'. A kernel row whose slot,
+        core or cycles is not a finite number is left out and counted rather than
+        failing every operation's read.
         """
         phase_column, start_token, end_token = self._zone_phase(
             "split into per-core kernel spans"
@@ -1019,7 +1052,9 @@ class DeviceLogProfilerQueries:
         by_run: Dict[DeviceRun, List[SpanRequest]] = defaultdict(list)
         for request in requests:
             by_run[request.run].append(request)
+        lookup = {run: _RunRequests(wanted) for run, wanted in by_run.items()}
         zoned: Set[DeviceRun] = set()
+        malformed: Counter = Counter()
         run_ids = {run_id for run_id, _ in by_run}
         # The key ends `(…, slot, x, y, run_id)`; its run is the run ID and slot.
         pairer = _ZonePairer(
@@ -1029,18 +1064,34 @@ class DeviceLogProfilerQueries:
 
         for chunk in self._zone_chunks(columns):
             # The run filter first: it is a numeric hash test, and it leaves the
-            # string work below a few requested operations' rows.
+            # string work below the requested runs' rows.
             chunk = chunk[chunk["run host ID"].isin(run_ids)]
             # BRISC-, NCRISC- and TRISC-KERNEL: the firmware zones wrap them, and
             # tt-metal's per-core figures read the kernels.
             chunk = chunk[
                 chunk["zone name"].astype(str).str.strip().str.endswith("-KERNEL")
             ]
+            numbers = chunk[list(self._SPAN_NUMBER_COLUMNS)].apply(
+                pd.to_numeric, errors="coerce"
+            )
+            finite = np.isfinite(numbers.to_numpy(dtype=float)).all(axis=1)
+            if not finite.all():
+                malformed.update(chunk["run host ID"][~finite].astype(int).tolist())
+            # Whole numbers from here, so a blank cell elsewhere in a column, which
+            # makes pandas read it as floats, still keys and reports as ints.
+            kept = chunk[finite]
+            chunk = kept.assign(
+                **{
+                    column: numbers[column][finite].astype("int64")
+                    for column in self._SPAN_NUMBER_COLUMNS
+                },
+                **{"run host ID": kept["run host ID"].astype("int64")},
+            )
             for zone, risc, slot, x, y, run_id, cycles, phase in zip(
-                *(chunk[column] for column in columns)
+                *(chunk[column].tolist() for column in columns)
             ):
                 run = (run_id, slot)
-                wanted = by_run.get(run)
+                wanted = lookup.get(run)
                 if wanted is None:
                     continue
                 risc = str(risc).strip()
@@ -1051,19 +1102,19 @@ class DeviceLogProfilerQueries:
                 )
                 if start is None:
                     continue
-                end = int(cycles)
+                end = cycles
                 zoned.add(run)
-                for request in wanted:
-                    if request.holds(start, end):
-                        cores = spans[request]
-                        span = cores.setdefault((x, y), CoreSpan(start, end, {}))
-                        span.add(risc, start, end)
+                for request in wanted.holding(start, end):
+                    cores = spans[request]
+                    span = cores.setdefault((x, y), CoreSpan(start, end, {}))
+                    span.add(risc, start, end)
 
         pairer.pairing(self.DEVICE_LOG_FILE)
         return CoreSpans(
             spans=spans,
             zoned=zoned,
             pairing=cast(Dict[DeviceRun, Dict[str, int]], pairer.pairing_by_group()),
+            malformed=dict(malformed),
         )
 
     @staticmethod

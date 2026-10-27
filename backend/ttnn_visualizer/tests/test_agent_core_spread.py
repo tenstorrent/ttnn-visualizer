@@ -133,6 +133,7 @@ class TestStatistics:
         # The same definition read two ways: tt-metal's columns and the log's spans.
         assert op["per_core_min_us"] == op["core_span"]["min_us"]
         assert op["per_core_max_us"] == op["core_span"]["max_us"]
+        assert op["per_core_avg_us"] == 2.067
 
 
 class TestDevicesNeverPool:
@@ -256,6 +257,12 @@ class TestRefusals:
 
 
 class TestCaveats:
+    def test_a_row_without_a_core_count_is_neither_short_nor_over(self, tmp_path):
+        result = _spread(tmp_path, THREE_CORES, [_op(cores="")], perf_id="1")
+
+        assert "fewer cores" not in result.get("caveat", "")
+        assert "more cores" not in result.get("caveat", "")
+
     def test_an_op_missing_from_the_log_says_so_rather_than_reading_zero(
         self, tmp_path
     ):
@@ -367,8 +374,145 @@ class TestFirmwareWindows:
 
         assert op["core_span"]["max_us"] == 3.0
 
+    def test_the_window_holds_a_zone_ending_on_its_last_cycle(self, tmp_path):
+        op = _spread(tmp_path, THREE_CORES, [_op(**_window(0, 3000))], perf_id="1")[
+            "ops"
+        ][0]
+
+        assert op["cores_in_log"] == 3
+        assert op["core_span"]["max_us"] == 3.0
+
+    def test_the_window_leaves_out_a_zone_ending_one_cycle_after(self, tmp_path):
+        op = _spread(tmp_path, THREE_CORES, [_op(**_window(0, 2999))], perf_id="1")[
+            "ops"
+        ][0]
+
+        assert op["cores_in_log"] == 2
+        assert op["core_span"]["max_us"] == 2.0
+
+    def test_a_long_trace_gives_every_replay_its_own_zones(self, tmp_path):
+        """A thousand replays of one op on one core, each a cycle longer than the
+        last: each row must find its own among them."""
+        replays = 1000
+        rows = [
+            line
+            for replay in range(replays)
+            for line in _zone(
+                0, 1, 1, "BRISC", replay * 10000, replay * 10000 + 1000 + replay
+            )
+        ]
+        perf_rows = [
+            _op(
+                perf_id=str(replay),
+                cores="1",
+                device_time=str(replays - replay),
+                **_window(replay * 10000, replay * 10000 + 5000),
+            )
+            for replay in range(replays)
+        ]
+
+        registry = ReportRegistry()
+        write_device_log(tmp_path, MODERN_HEADER, rows)
+        load_report(registry, performance_path=str(tmp_path))
+        with patch.object(
+            tools, "_generate_canonical_report", return_value=_perf_report(perf_rows)
+        ):
+            first = tools.core_spread(registry, "report-1", perf_id="0")
+            last = tools.core_spread(registry, "report-1", perf_id=str(replays - 1))
+
+        assert first["ops"][0]["core_span"]["max_us"] == 1.0
+        assert last["ops"][0]["core_span"]["max_us"] == 1.999
+        assert "caveat" not in last
+
+    def test_a_replay_that_lost_its_zones_names_a_full_buffer(self, tmp_path):
+        """Later replays losing their zones is what a profiler buffer filling
+        mid-trace looks like, not a log from another execution."""
+        perf_rows = [
+            _op(perf_id="1", cores="1", **_window(0, 2000)),
+            _op(perf_id="2", cores="1", **_window(20000, 22000)),
+        ]
+
+        result = _spread(tmp_path, self.REPLAYS, perf_rows)
+
+        assert [op["in_log"] for op in result["ops"]] == [True, False]
+        assert "profiler buffer that filled" in result["caveat"]
+        assert "belong to another execution" not in result["caveat"]
+
+    def test_an_unpaired_start_in_one_replay_is_caveated_on_every_replay(
+        self, tmp_path
+    ):
+        """Pairing is counted per call count and device, not per replay: an open
+        start has no end to place it in a window."""
+        open_start = "0,2,1,BRISC,1,10500,0,1024,,,BRISC-KERNEL,ZONE_START,1,k.cc,"
+        perf_rows = [
+            _op(perf_id="1", cores="1", **_window(0, 2000)),
+            _op(perf_id="2", cores="1", **_window(9000, 12000)),
+        ]
+
+        for perf_id in ("1", "2"):
+            result = _spread(
+                tmp_path, self.REPLAYS + [open_start], perf_rows, perf_id=perf_id
+            )
+            assert "1 zone starts and 0 ends did not pair" in result["caveat"]
+
+
+class TestUnreadableCells:
+    """A cell that is not a number costs its row, not every operation's answer."""
+
+    @pytest.mark.parametrize(
+        "bad",
+        [
+            _zone(0, "abc", 1, "BRISC", 0, 9000),
+            _zone(0, 4, 1, "BRISC", "", 9000),
+            _zone(0, 4, 1, "BRISC", "inf", "inf"),
+            _zone(0, 4, 1, "BRISC", "nan", 9000),
+            _zone("x", 4, 1, "BRISC", 0, 9000),
+        ],
+        ids=["core", "blank-cycles", "inf", "nan", "slot"],
+    )
+    def test_a_row_with_a_cell_that_is_not_a_number_is_left_out(self, tmp_path, bad):
+        result = _spread(tmp_path, THREE_CORES + bad, [_op()], perf_id="1")
+
+        op = result["ops"][0]
+        assert op["in_log"] is True
+        assert op["cores_in_log"] == 3
+        assert op["core_span"]["max_us"] == 3.0
+        assert "kernel rows" in result["caveat"]
+        assert "not a number" in result["caveat"]
+
+    def test_a_blank_run_elsewhere_keeps_the_join_and_whole_coordinates(self, tmp_path):
+        """A blank cell makes pandas read the column as floats."""
+        rows = THREE_CORES + _zone(0, 5, 1, "BRISC", 0, 500, run="")
+
+        op = _spread(tmp_path, rows, [_op()], perf_id="1")["ops"][0]
+
+        assert op["in_log"] is True
+        assert op["cores_in_log"] == 3
+        assert all(
+            type(core["x"]) is int and type(core["y"]) is int
+            for core in op["slowest_cores"]
+        )
+
 
 class TestRanking:
+    def test_the_limit_is_ignored_with_a_perf_id(self, tmp_path):
+        result = _spread(tmp_path, THREE_CORES, [_op()], perf_id="1", limit=0)
+
+        assert result["returned"] == 1
+        assert result["ops"][0]["id"] == "1"
+
+    def test_a_row_without_device_time_is_not_ranked_but_can_be_named(self, tmp_path):
+        perf_rows = [
+            _op(perf_id="1", device_time="1"),
+            _op(perf_id="2", call_count=RUN + 1, device_time=""),
+        ]
+
+        ranked = _spread(tmp_path, THREE_CORES, perf_rows)
+        named = _spread(tmp_path, THREE_CORES, perf_rows, perf_id="2")
+
+        assert [op["id"] for op in ranked["ops"]] == ["1"]
+        assert [op["id"] for op in named["ops"]] == ["2"]
+
     def test_without_a_perf_id_it_ranks_device_ops_by_device_time(self, tmp_path):
         perf_rows = [
             _op(perf_id="1", device_time="1"),
@@ -456,6 +600,52 @@ def test_the_smoke_capture_reads_end_to_end():
     assert "fewer cores" in result["caveat"]
 
 
+class TestCache:
+    def test_a_rewritten_log_answers_with_the_clock_its_figures_were_read_at(
+        self, tmp_path
+    ):
+        registry = ReportRegistry()
+        write_device_log(tmp_path, MODERN_HEADER, THREE_CORES)
+        load_report(registry, performance_path=str(tmp_path))
+        path = tmp_path / DeviceLogProfilerQueries.DEVICE_LOG_FILE
+        with patch.object(
+            tools, "_generate_canonical_report", return_value=_perf_report([_op()])
+        ):
+            tools.core_spread(registry, "report-1", perf_id="1")
+            lines = path.read_text().splitlines()
+            path.write_text(
+                "\n".join(["ARCH: blackhole, CHIP_FREQ[MHz]: 500", *lines[1:]]) + "\n"
+            )
+            result = tools.core_spread(registry, "report-1", perf_id="1")
+
+        assert result["clock_mhz"] == 1000
+        assert result["arch"] == "wormhole_b0"
+        assert result["ops"][0]["core_span"]["max_us"] == 3.0
+
+    def test_a_failed_read_is_not_cached(self, tmp_path):
+        rows = ["0,1,1,BRISC,10,1000,0,1024,BRISC-KERNEL,1,brisc.cc"]
+        registry = ReportRegistry()
+        write_device_log(tmp_path, UNTYPED_HEADER, rows)
+        load_report(registry, performance_path=str(tmp_path))
+
+        with (
+            patch.object(
+                tools, "_generate_canonical_report", return_value=_perf_report([_op()])
+            ),
+            patch.object(
+                DeviceLogProfilerQueries,
+                "query_core_spans",
+                autospec=True,
+                side_effect=DeviceLogProfilerQueries.query_core_spans,
+            ) as read,
+        ):
+            for _ in range(2):
+                with pytest.raises(ValueError, match="no kernel durations"):
+                    tools.core_spread(registry, "report-1", perf_id="1")
+
+        assert read.call_count == 2
+
+
 class TestPairing:
     """The pairing `query_zone_summary` pins, held for `query_core_spans` too."""
 
@@ -541,6 +731,49 @@ def test_a_ragged_row_mid_file_is_a_data_error_while_streaming(tmp_path, query):
     with DeviceLogProfilerQueries(instance, stream=True) as queries:
         with pytest.raises(DataFormatError, match="could not be parsed"):
             getattr(queries, query)(**arguments)
+
+
+def test_a_log_missing_a_zone_column_is_refused_with_its_name(tmp_path):
+    header = MODERN_HEADER.replace(" core_x,", "")
+    rows = [line.replace(",1,1,", ",1,", 1) for line in THREE_CORES]
+    write_device_log(tmp_path, header, rows)
+    instance = Instance(instance_id="pytest", performance_path=str(tmp_path))
+
+    with DeviceLogProfilerQueries(instance, stream=True) as queries:
+        with pytest.raises(
+            DataFormatError, match="per-core kernel spans; missing: core_x"
+        ):
+            queries.query_core_spans({SpanRequest((RUN, 0))})
+
+
+class TestCaptureMetadata:
+    """`read_capture_metadata` reads one bounded first line, never the whole file."""
+
+    def _instance(self, tmp_path, first_line: bytes):
+        path = tmp_path / DeviceLogProfilerQueries.DEVICE_LOG_FILE
+        path.write_bytes(first_line + b"\n" + MODERN_HEADER.encode() + b"\n")
+        return Instance(instance_id="pytest", performance_path=str(tmp_path))
+
+    def test_a_first_line_past_the_limit_is_read_up_to_it(self, tmp_path):
+        line = PREAMBLE.encode() + b"," + b"x" * (2 * csv_queries._META_LINE_LIMIT)
+
+        metadata = DeviceLogProfilerQueries.read_capture_metadata(
+            self._instance(tmp_path, line)
+        )
+
+        assert metadata["CHIP_FREQ[MHz]"] == "1000"
+
+    def test_a_cut_through_a_multibyte_character_reads_as_no_metadata(self, tmp_path):
+        # One ASCII byte then two-byte characters: the limit, an even byte count,
+        # falls in the middle of one.
+        line = b"A" + "\u00e9".encode() * csv_queries._META_LINE_LIMIT
+
+        assert (
+            DeviceLogProfilerQueries.read_capture_metadata(
+                self._instance(tmp_path, line)
+            )
+            == {}
+        )
 
 
 class TestInventory:

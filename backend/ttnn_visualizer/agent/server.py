@@ -346,8 +346,9 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "per RISC, max over median as imbalance, and the slowest cores by "
                 "coordinate. Each op is read on the one device its row came from, "
                 "never pooled across devices. Takes one perf_id, or ranks the "
-                f"costliest ops by device time, capped at {MAX_DETAILED_LIMIT}. Each "
-                "call reads the whole device log."
+                f"costliest ops by device time, capped at {MAX_DETAILED_LIMIT}. The "
+                "first call on a handle reads the whole device log; later calls "
+                "answer from that read."
             ),
             "schema": {
                 "type": "object",
