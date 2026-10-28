@@ -261,6 +261,18 @@ INSERT INTO devices (
          (0, 1499136, 64, 1370848, 64, 0, 1);
 """
 
+# A different device 0 row per rank, so a read that unions the ranks gives one rank the
+# other's geometry.
+_RANKED_DEVICE_ROWS_SQL = _RANKED_REPORT_SQL + """
+UPDATE devices SET l1_bank_size = 1000000 WHERE rank = 1;
+"""
+
+# The same with `devices` written before the column, and an operation with no buffers.
+_UNRANKED_DEVICES_SQL = _RANKED_DEVICE_ROWS_SQL + """
+ALTER TABLE devices DROP COLUMN rank;
+INSERT INTO operations VALUES (2, 'op_without_buffers', 1.0, 0);
+"""
+
 # `rank` on `operations` but not on `buffers` or `tensors`. `report_has_rank_column`
 # inspects `operations` alone, so a report shaped like this is what separates
 # asking the query layer per table from applying the rank everywhere.
@@ -828,6 +840,27 @@ class TestMemoryProfile:
         # geometry names the device it came from rather than assuming zero.
         assert result["device"]["devices"] == 2
         assert result["device"]["geometry_from_device"] == 1
+
+    def test_a_repeated_device_id_is_read_as_its_last_row_everywhere(self, loaded):
+        """As `fetchDevices` keeps it. The device block read the first row while
+        `l1_pressure` kept the last, so one answer described two geometries."""
+        sql = _REPORT_SQL + """
+        INSERT INTO devices (
+            device_id, worker_l1_size, l1_num_banks, l1_bank_size,
+            num_compute_cores, total_l1_for_tensors
+        ) VALUES (0, 1499136, 64, 1000000, 64, 0);
+        """
+        registry, handle = loaded(sql, name="repeated-device")
+
+        profile = agent_operations.memory_profile(registry, handle)
+        detail = agent_operations.operation_detail(registry, handle, 2)
+
+        assert profile["device"]["devices"] == 1
+        assert profile["device"]["l1_bank_size"] == 1000000
+        assert detail["l1_pressure"]["usable_bytes"] == 1000000
+        assert {
+            row["usable_bytes"] for row in profile["l1_pressure"]["operations"]
+        } == {1000000}
 
     def test_an_integer_buffer_type_column_is_named(self, loaded):
         """Older reports store `buffer_type` as the enum's value."""
@@ -1766,29 +1799,34 @@ class TestRankScope:
         assert [op["name"] for op in result["operations"]] == ["op_on_rank_one"]
 
     def test_the_rank_reaches_the_allocation_figures_too(self, loaded):
-        registry, handle = loaded(_RANKED_REPORT_SQL, name="ranked")
+        registry, handle = loaded(_RANKED_DEVICE_ROWS_SQL, name="ranked")
 
         zero = agent_operations.memory_profile(registry, handle)
         one = agent_operations.memory_profile(registry, handle, rank=1)
 
         assert zero["memory_by_buffer_type"]["L1"]["peak"] == 1024
         assert one["memory_by_buffer_type"]["L1"]["peak"] == 8192
-        # The device block is rank-scoped too. Unfiltered it would count both
-        # ranks' devices and answer a different question than the rest of the
-        # response it sits in.
+        # The device block is rank-scoped too. Unfiltered, rank 0 would read rank 1's
+        # device row, beside figures that describe rank 0.
         assert zero["device"]["devices"] == 1
         assert one["device"]["devices"] == 1
+        assert zero["device"]["l1_bank_size"] == 1370848
+        assert one["device"]["l1_bank_size"] == 1000000
         detail_zero = agent_operations.operation_detail(registry, handle, 1, rank=0)
         detail_one = agent_operations.operation_detail(registry, handle, 1, rank=1)
         assert detail_zero["l1_pressure"]["allocated_bytes"] == 1024
         assert detail_one["l1_pressure"]["allocated_bytes"] == 8192
+        assert detail_zero["l1_pressure"]["usable_bytes"] == 1370848
+        assert detail_one["l1_pressure"]["usable_bytes"] == 1000000
         # The ranked block streams its own read of `buffers`, rank-scoped too.
         assert [
-            row["allocated_bytes"] for row in zero["l1_pressure"]["operations"]
-        ] == [1024]
-        assert [row["allocated_bytes"] for row in one["l1_pressure"]["operations"]] == [
-            8192
-        ]
+            (row["allocated_bytes"], row["usable_bytes"])
+            for row in zero["l1_pressure"]["operations"]
+        ] == [(1024, 1370848)]
+        assert [
+            (row["allocated_bytes"], row["usable_bytes"])
+            for row in one["l1_pressure"]["operations"]
+        ] == [(8192, 1000000)]
 
     def test_a_rank_column_on_one_table_is_not_applied_to_the_others(self, loaded):
         """`report_has_rank_column` only inspects `operations`, so deciding once
@@ -1856,6 +1894,54 @@ class TestRankScope:
             ]
         ] == ["op_rank1"]
 
+    def test_l1_figures_from_devices_that_cannot_be_attributed_to_a_rank_are_withheld(
+        self, loaded
+    ):
+        """With `rank` on `buffers` and not on `devices`, every rank's L1 pressure was
+        measured on whichever rank's device row came last. The footprints are still
+        attributable, so both tools answer and withhold what `devices` decides."""
+        registry, handle = loaded(_UNRANKED_DEVICES_SQL, name="unranked-devices")
+
+        for rank, size in ((0, 1024), (1, 8192)):
+            detail = agent_operations.operation_detail(registry, handle, 1, rank=rank)
+            profile = agent_operations.memory_profile(registry, handle, rank=rank)
+
+            assert detail["allocations"]["L1"]["size"] == size
+            assert detail["l1_pressure"] is None
+            assert "l1_pressure is withheld" in detail["caveat"]
+            assert profile["memory_by_buffer_type"]["L1"]["peak"] == size
+            assert profile["device"] is None
+            assert profile["l1_pressure"] is None
+            assert "device and l1_pressure are withheld" in profile["caveat"]
+            for caveat in (detail["caveat"], profile["caveat"]):
+                assert f"cannot be attributed to rank {rank}" in caveat
+                assert agent_operations.NO_L1_GEOMETRY_CAVEAT not in caveat
+
+        # Null for want of buffer rows, whatever the devices say.
+        empty = agent_operations.operation_detail(registry, handle, 2, rank=0)
+        assert "no buffer rows" in empty["caveat"]
+        assert "withheld" not in empty["caveat"]
+
+        registry, handle = loaded(
+            _UNRANKED_DEVICES_SQL + "UPDATE buffers SET buffer_type = 'DRAM';",
+            name="unranked-devices-dram",
+        )
+        dram = agent_operations.memory_profile(registry, handle, rank=1)
+        assert dram["device"] is None
+        assert "device is withheld" in dram["caveat"]
+
+    def test_an_empty_devices_table_without_rank_is_read_as_empty(self, loaded):
+        """No row of it can be misattributed, so it answers as on a single-host report."""
+        registry, handle = loaded(
+            _UNRANKED_DEVICES_SQL + "DELETE FROM devices;", name="unranked-no-devices"
+        )
+
+        profile = agent_operations.memory_profile(registry, handle, rank=1)
+
+        assert profile["device"] == {"devices": 0, "dram_capacity": None}
+        assert agent_operations.NO_L1_GEOMETRY_CAVEAT in profile["caveat"]
+        assert "withheld" not in profile["caveat"]
+
     @pytest.mark.parametrize(
         "tool", [failures.errors, failures.dram_fallbacks, failures.l1_peak]
     )
@@ -1894,6 +1980,8 @@ class TestRankScope:
 
         assert result["memory_by_buffer_type"]["L1"]["peak"] == 4096
         assert result["rank"] == 0
+        assert result["device"]["devices"] == 1
+        assert result["l1_pressure"] is not None
 
     def test_a_single_host_report_carries_no_rank_caveat(self, loaded):
         """A caveat on every response is one an agent learns to skip."""

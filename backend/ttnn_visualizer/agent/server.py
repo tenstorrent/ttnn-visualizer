@@ -458,7 +458,8 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "bytes per bank and are never "
                 "added across memory types, whose bank counts differ. Comparable to "
                 "l1_bank_size; a device-wide total cannot be derived from the "
-                "response, and the report carries no DRAM capacity."
+                "response, and the report carries no DRAM capacity. device is null, "
+                "with a caveat, when the devices rows cannot be attributed to the rank."
             ),
             "schema": {
                 "type": "object",

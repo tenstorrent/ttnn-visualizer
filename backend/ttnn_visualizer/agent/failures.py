@@ -39,12 +39,13 @@ from ttnn_visualizer.agent.handles import TOOL_TABLES, CacheVariant, ReportRegis
 from ttnn_visualizer.agent.operations import (
     BUFFER_SIZE_UNIT,
     RankScope,
-    UnattributableRankError,
     caveat_field,
     profiler_db,
     rank_scope,
     refuse_unattributable,
     scoped,
+    scoped_devices,
+    unattributable_reason,
 )
 from ttnn_visualizer.agent.scope_outcomes import failed_device_operation_names
 from ttnn_visualizer.agent.tool_names import McpToolName
@@ -541,14 +542,12 @@ class L1PeakReport:
 
 def report_l1_peak(queries: DatabaseQueries, scope: RankScope) -> L1PeakReport:
     """The replay, the address lifetimes it read, and the device it was judged against."""
-    devices = list(queries.query_devices(scoped(queries, "devices", scope)))
+    devices = scoped_devices(queries, scope)
     if not devices:
         raise ValueError(
             "this report has no devices row, so there is no bank count or L1 size to "
             "replay its captured graph against"
         )
-    # As `fetchDevices`: the first id keeps its place, and a later row of it wins.
-    devices = list({entry.device_id: entry for entry in devices}.values())
     device = devices[0]
     graphs = _graphs(queries, scope, "the replay")
     report = _report_operations(queries, scope, with_consumers=True)
@@ -821,12 +820,10 @@ def _attributable(
     field: str,
 ) -> bool:
     """Whether `field` can be read for the rank; if not, `withheld` says why."""
-    try:
-        refuse_unattributable(queries, scope, *tables)
-    except UnattributableRankError as error:
-        withheld.append(f"{field} is withheld: {error}")
-        return False
-    return True
+    reason = unattributable_reason(queries, scope, *tables)
+    if reason is not None:
+        withheld.append(f"{field} is withheld: {reason}")
+    return reason is None
 
 
 __all__ = [

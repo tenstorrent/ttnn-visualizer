@@ -408,14 +408,7 @@ def _read_profiler_side(
         # Distinct ids, as the app counts them: `fetchDevices` drops repeated device
         # ids (#425) before the count reaches the matcher, and a raw row count would
         # expect a different number of copies per operation from the collapse.
-        num_devices = len(
-            {
-                device.device_id
-                for device in queries.query_devices(
-                    filters=operations.scoped(queries, "devices", scope)
-                )
-            }
-        )
+        num_devices = len(operations.scoped_devices(queries, scope))
     return scope.rank, names_by_operation, num_devices, has_graph
 
 

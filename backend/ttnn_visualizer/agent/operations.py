@@ -199,8 +199,17 @@ def refuse_unattributable(
     all -- 84 of 86 have no rank column and the other two have it on every table.
     So this is insurance against schema drift, not a live failure. #2014
     """
+    reason = unattributable_reason(queries, scope, *tables)
+    if reason is not None:
+        raise UnattributableRankError(reason)
+
+
+def unattributable_reason(
+    queries: DatabaseQueries, scope: RankScope, *tables: str
+) -> Optional[str]:
+    """Why `refuse_unattributable` refuses `tables`, for a field withheld instead."""
     if scope.rank is None or len(scope.ranks) <= 1:
-        return
+        return None
     # A table that is absent holds no rows, so there is nothing to attribute to the
     # wrong rank. Treating it as "a table without `rank`" refused every call to a
     # tool that was advertised as answerable and would have answered — the
@@ -211,13 +220,14 @@ def refuse_unattributable(
         if queries._check_table_exists(table)
         and not queries.table_has_rank_column(table)
     ]
-    if unfiltered:
-        raise UnattributableRankError(
-            f"this report carries `rank` on `operations` but not on "
-            f"{', '.join(f'`{table}`' for table in unfiltered)}, so its rows span "
-            f"ranks {', '.join(str(entry) for entry in scope.ranks)} and cannot be "
-            f"attributed to rank {scope.rank}"
-        )
+    if not unfiltered:
+        return None
+    return (
+        f"this report carries `rank` on `operations` but not on "
+        f"{', '.join(f'`{table}`' for table in unfiltered)}, so its rows span "
+        f"ranks {', '.join(str(entry) for entry in scope.ranks)} and cannot be "
+        f"attributed to rank {scope.rank}"
+    )
 
 
 def _buffer_type_name(value: object) -> str:
@@ -512,9 +522,25 @@ def _ranked_row(
     }
 
 
-def _scoped_devices(queries: DatabaseQueries, scope: RankScope) -> List[Device]:
-    """Rank-scoped `devices` rows, read once per tool call."""
-    return list(queries.query_devices(filters=scoped(queries, "devices", scope)))
+def scoped_devices(queries: DatabaseQueries, scope: RankScope) -> List[Device]:
+    """Rank-scoped `devices` rows, one per `device_id`, read once per tool call.
+
+    As `fetchDevices`: the first id keeps its place, and a later row of it wins.
+    """
+    rows = queries.query_devices(filters=scoped(queries, "devices", scope))
+    return list({device.device_id: device for device in rows}.values())
+
+
+def _attributable_devices(
+    queries: DatabaseQueries, scope: RankScope
+) -> Tuple[List[Device], Optional[str]]:
+    """`scoped_devices`, or none and why when they can't be attributed to the rank.
+
+    An empty table holds nothing to misattribute, so it reads as empty.
+    """
+    devices = scoped_devices(queries, scope)
+    reason = unattributable_reason(queries, scope, "devices") if devices else None
+    return ([] if reason else devices), reason
 
 
 def _device_capacity(devices: Sequence[Device]) -> Dict[str, object]:
@@ -527,7 +553,7 @@ def _device_capacity(devices: Sequence[Device]) -> Dict[str, object]:
     The geometry is one device's, and which one is named in the response rather
     than left as an assumption about them being identical.
     """
-    # `devices` is rank-scoped like the figures beside it (`_scoped_devices`):
+    # `devices` is rank-scoped like the figures beside it (`scoped_devices`):
     # on a multi-host report an unfiltered read counts every rank's devices,
     # which answers a different question than the rest of the response.
     if not devices:
@@ -891,7 +917,8 @@ def operation_detail(
                 filters=scoped(queries, "buffers", scope, operation_id=wanted_operation)
             )
         )
-        windows = _device_l1_windows(_scoped_devices(queries, scope))
+        device_rows, devices_unattributable = _attributable_devices(queries, scope)
+        windows = _device_l1_windows(device_rows)
 
         # Only the tensors this operation refers to. Reading the report's whole
         # tensor table to describe a handful parses every other tensor's memory
@@ -981,6 +1008,10 @@ def operation_detail(
             result.get("caveat"),
             "l1_pressure is null because no buffer rows were recorded for this operation.",
         )
+    elif devices_unattributable:
+        result["caveat"] = joined_caveat(
+            result.get("caveat"), f"l1_pressure is withheld: {devices_unattributable}."
+        )
     elif not windows:
         result["caveat"] = joined_caveat(result.get("caveat"), NO_L1_GEOMETRY_CAVEAT)
     if withheld:
@@ -1039,10 +1070,10 @@ def memory_profile(
                 filters=scoped(queries, "operations", scope)
             )
         }
-        scoped_devices = _scoped_devices(queries, scope)
-        capacity = _device_capacity(scoped_devices)
+        device_rows, devices_unattributable = _attributable_devices(queries, scope)
+        capacity = None if devices_unattributable else _device_capacity(device_rows)
         cap = bounded(limit)
-        l1_windows = _device_l1_windows(scoped_devices)
+        l1_windows = _device_l1_windows(device_rows)
         l1_pressure_block = (
             _ranked_l1_pressure(
                 queries,
@@ -1156,7 +1187,17 @@ def memory_profile(
         **scope.as_response(),
         **_caveats(scope, devices=devices),
     }
-    if BufferType.L1.name in by_type and not l1_windows:
+    if devices_unattributable:
+        withheld_fields = (
+            "device and l1_pressure are"
+            if BufferType.L1.name in by_type
+            else "device is"
+        )
+        result["caveat"] = joined_caveat(
+            result.get("caveat"),
+            f"{withheld_fields} withheld: {devices_unattributable}.",
+        )
+    elif BufferType.L1.name in by_type and not l1_windows:
         result["caveat"] = joined_caveat(result.get("caveat"), NO_L1_GEOMETRY_CAVEAT)
     return result
 

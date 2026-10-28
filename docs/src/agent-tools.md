@@ -283,7 +283,10 @@ operations at rank 9" otherwise reads as a fact about the run. And where a repor
 `rank` on its operations but not on the table holding the figures — a schema mix that
 would silently union every rank and attribute the total to whichever rank you asked for —
 the call is refused instead, because a caveat naming a rank the numbers do not describe is
-worse than no answer.
+worse than no answer. Where that table feeds only an optional field, the field is withheld
+instead, with a `caveat` saying why, and the rest answers: `operation_detail`'s error,
+circular buffers and DRAM fallback, and, for `devices`, `l1_pressure` and
+`memory_profile`'s `device` block, which are null.
 
 **A total on a partitioned run carries a caveat.** When a report spans more than one
 sub-device, operations on different sub-devices can run concurrently, so summed device
@@ -630,7 +633,10 @@ free-space figures marked as an upper bound because circular buffers and intra-o
 are absent) and exposed as `l1_pressure` on `operation_detail` and `memory_profile`. Its
 figures are bytes per bank (`size_unit`), so a whole-tensor size in `bytes` is not
 comparable to them. It is null, with a caveat saying why, for an operation with no
-`buffers` rows or a report whose devices record no L1 geometry.
+`buffers` rows, a report whose devices record no L1 geometry, or a report holding more
+than one rank whose `devices` table carries no `rank`. A `device_id` with more than one
+row is read as its last row, as the web application reads it, for `l1_pressure` and the
+`device` block alike, and `device.devices` counts distinct ids.
 
 Device profiler logs carry named zones only where a kernel was instrumented to emit them.
 Most captures contain only the default firmware and kernel zones — `BRISC-FW`,
