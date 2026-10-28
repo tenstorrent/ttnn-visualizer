@@ -15,6 +15,7 @@ import { processMemoryAllocations } from '../src/functions/processMemoryAllocati
 import { AllocationFailure } from '../src/model/AllocationFailure';
 import { Buffer, Node, Operation, OperationDescription } from '../src/model/APIData';
 import { L1PeakDecomposition } from '../src/model/L1PeakDecomposition';
+import { OperationDetails } from '../src/model/OperationDetails';
 import { CBPressureSnapshot } from '../src/model/MemoryAllocations';
 import golden from './data/agentFailureParity.json';
 
@@ -32,6 +33,7 @@ it('the golden covers every function the agent restates', () => {
     expect(golden.l1Peak.length).toBeGreaterThan(0);
     expect(golden.topOperations.length).toBeGreaterThan(0);
     expect(golden.circularBuffers.length).toBeGreaterThan(0);
+    expect(golden.deviceOperationOrder.length).toBeGreaterThan(0);
 });
 
 describe('parseAllocationFailure and its diagnosis', () => {
@@ -166,5 +168,16 @@ describe('processMemoryAllocations circular-buffer snapshots', () => {
         expect([...cbPressureByOpId.entries()].map(([opId, snapshot]) => [opId, projected(snapshot)])).toEqual(
             snapshots,
         );
+    });
+});
+
+describe('OperationDetails.sortDeviceOperationsByBufferDeallocation', () => {
+    // The order the modal hands processMemoryAllocations, as positions in the input; a
+    // free-all the sort repeats appears more than once.
+    it.each(indexedCases(golden.deviceOperationOrder))('case %i matches the agent', (_, { nodes, order }) => {
+        const input = structuredClone(nodes) as Node[];
+        const sorted = OperationDetails.prototype.sortDeviceOperationsByBufferDeallocation(input);
+
+        expect(sorted.map((node) => input.indexOf(node))).toEqual(order);
     });
 });
