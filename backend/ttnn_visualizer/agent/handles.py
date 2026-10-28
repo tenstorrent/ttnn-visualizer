@@ -62,6 +62,12 @@ class CacheVariant(str, Enum):
     # The performance CSV the handle's first read came from, so a later read can
     # tell whether it is still reading the same capture.
     SOURCE = "source"
+    # Each CSV row's tensor signature, which `diff_reports` matches on when asked.
+    OP_SIGNATURES = "op_signatures"
+    # A capture's group totals per range, which `diff_reports` compares.
+    DIFF_TOTALS = "diff_totals"
+    # The device log's architecture, clock and cores, which `diff_reports` compares.
+    CAPTURE_FACTS = "capture_facts"
     # The detail fields no row of the whole report carries, read once per handle.
     EMPTY_DETAIL_FIELDS = "empty_detail_fields"
     # The device's cores and the report's first calls, which the `flags` group reads,
@@ -79,10 +85,15 @@ class CacheVariant(str, Enum):
 # handle. Each is a generated report of up to a whole report's rows, and an agent
 # walking per-layer signposts asks for many, so they are evicted least recently
 # used rather than pinned; an evicted range costs a full regeneration, since
-# nothing underneath keeps generated dicts. Two is one `diff_reports` pair, and
-# each one more holds another report's rows for the life of the process.
+# nothing underneath keeps generated dicts. Two is one two-capture `diff_reports`,
+# and each one more holds another report's rows for the life of the process.
 # The detail columns add about 3% to each, since their repeated cells are interned.
 MAX_SCOPED_REPORTS = 2
+
+# A capture's diff totals for one range, by op code and signature: about 0.4 KB a
+# group, 108 KB for a local capture's 59 op codes and 202 signatures. Kept apart so a
+# diff with repeats still reads each window once, and capped so a range walk is bounded.
+MAX_SCOPED_DIFF_TOTALS = 64
 
 
 class UnknownHandleError(ValueError):
@@ -102,17 +113,32 @@ class UnsharedSnapshot(Exception):
         self.snapshot = snapshot
 
 
+class UnkeptSnapshot(Exception):
+    """Raised by a builder that learns only as it builds that no handle may keep it.
+
+    Totals read from a report generated with swallowed errors are one: the handle may
+    drop or evict that report, and its next read would then disagree with them.
+    """
+
+    def __init__(self, snapshot: object):
+        super().__init__("snapshot kept by no handle")
+        self.snapshot = snapshot
+
+
 class ReportRegistry:
     """Process-local handle → `Instance` map.
 
-    A cache of one would be wrong here: `diff_reports` needs two reports live at
-    the same time, which is the whole point of the tool.
+    A cache of one would be wrong here: `diff_reports` compares two reports or more,
+    which is the whole point of the tool.
     """
 
     def __init__(self) -> None:
         self._instances: Dict[str, Instance] = {}
         self._reports: Dict[Tuple[Hashable, CacheVariant], object] = {}
         self._scoped_reports: (
+            "OrderedDict[Tuple[Hashable, CacheVariant, Hashable], object]"
+        ) = OrderedDict()
+        self._scoped_totals: (
             "OrderedDict[Tuple[Hashable, CacheVariant, Hashable], object]"
         ) = OrderedDict()
         self._next_id = 1
@@ -143,6 +169,7 @@ class ReportRegistry:
         variant: CacheVariant = CacheVariant.CANONICAL_REPORT,
         scope: Hashable = None,
         share_key: Hashable = None,
+        keep: bool = True,
     ) -> Cached:
         """Keep one report snapshot per handle, variant and scope.
 
@@ -161,7 +188,8 @@ class ReportRegistry:
         `scope` keeps a narrowed read of the same report -- a signpost range, see
         `tools.SignpostRange` -- apart from the whole one. Unlike the unscoped
         snapshots, scoped ones are not pinned: at most `MAX_SCOPED_REPORTS` are
-        kept, least recently used first out.
+        kept, least recently used first out, and apart from them at most
+        `MAX_SCOPED_DIFF_TOTALS` of the small `DIFF_TOTALS`.
 
         `share_key` keeps one snapshot for every handle that names the same key
         rather than one per handle. Handles are never released, so an agent that
@@ -170,6 +198,10 @@ class ReportRegistry:
         handles are strings and the keys passed are not. A builder that raises
         `UnsharedSnapshot` has its snapshot kept under the handle instead, and
         that copy answers the handle before the shared one is asked.
+
+        `keep=False` returns a snapshot it had to build without keeping it, for a
+        caller that reads what it needs and should not pin a whole report for it. A
+        builder that raises `UnkeptSnapshot` has its snapshot returned the same way.
         """
         owners = [handle] if share_key is None else [handle, share_key]
         for owner in owners:
@@ -182,8 +214,20 @@ class ReportRegistry:
             snapshot, owner = build(self.get(handle)), owners[-1]
         except UnsharedSnapshot as unshared:
             snapshot, owner = unshared.snapshot, handle
-        self._store(owner, variant, scope, snapshot)
+        except UnkeptSnapshot as unkept:
+            return cast(Cached, unkept.snapshot)
+        if keep:
+            self._store(owner, variant, scope, snapshot)
         return cast(Cached, snapshot)
+
+    def _scoped(
+        self, variant: CacheVariant
+    ) -> Tuple["OrderedDict[Tuple[Hashable, CacheVariant, Hashable], object]", int]:
+        """The least-recently-used cache a scoped entry of `variant` is kept in, and
+        how many it keeps."""
+        if variant is CacheVariant.DIFF_TOTALS:
+            return self._scoped_totals, MAX_SCOPED_DIFF_TOTALS
+        return self._scoped_reports, MAX_SCOPED_REPORTS
 
     def _lookup(
         self, owner: Hashable, variant: CacheVariant, scope: Hashable
@@ -191,11 +235,12 @@ class ReportRegistry:
         if scope is None:
             key = (owner, variant)
             return key in self._reports, self._reports.get(key)
+        scoped, _ = self._scoped(variant)
         scoped_key = (owner, variant, scope)
-        if scoped_key not in self._scoped_reports:
+        if scoped_key not in scoped:
             return False, None
-        self._scoped_reports.move_to_end(scoped_key)
-        return True, self._scoped_reports[scoped_key]
+        scoped.move_to_end(scoped_key)
+        return True, scoped[scoped_key]
 
     def _store(
         self, owner: Hashable, variant: CacheVariant, scope: Hashable, snapshot: object
@@ -203,14 +248,16 @@ class ReportRegistry:
         if scope is None:
             self._reports[(owner, variant)] = snapshot
             return
-        self._scoped_reports[(owner, variant, scope)] = snapshot
-        while len(self._scoped_reports) > MAX_SCOPED_REPORTS:
-            self._scoped_reports.popitem(last=False)
+        scoped, size = self._scoped(variant)
+        scoped[(owner, variant, scope)] = snapshot
+        while len(scoped) > size:
+            scoped.popitem(last=False)
 
     def clear(self) -> None:
         self._instances.clear()
         self._reports.clear()
         self._scoped_reports.clear()
+        self._scoped_totals.clear()
         self._next_id = 1
 
 

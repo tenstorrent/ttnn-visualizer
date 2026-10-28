@@ -17,9 +17,21 @@ import sys
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
 from enum import Enum
-from typing import Dict, List, Optional, Sequence, Set, Tuple, Union, cast
+from typing import (
+    Callable,
+    Dict,
+    Hashable,
+    List,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    TypeVar,
+    Union,
+    cast,
+)
 
-from ttnn_visualizer.agent import perf_detail, perf_flags
+from ttnn_visualizer.agent import op_signatures, perf_detail, perf_flags, report_diff
 from ttnn_visualizer.agent.bounds import (
     MAX_DETAILED_LIMIT,
     MAX_LIMIT,
@@ -30,11 +42,13 @@ from ttnn_visualizer.agent.cells import finite_number, whole_number
 from ttnn_visualizer.agent.handles import (
     CacheVariant,
     ReportRegistry,
+    UnkeptSnapshot,
     UnsharedSnapshot,
     perf_csv_columns,
 )
 from ttnn_visualizer.csv_queries import (
     MAX_LISTED_SIGNPOSTS,
+    REPORT_ROW_ID_OFFSET,
     SIGNPOST_OP_TYPE,
     CoreSpan,
     CoreSpans,
@@ -58,6 +72,8 @@ from ttnn_visualizer.exceptions import (
 from ttnn_visualizer.models import Instance
 
 logger = logging.getLogger(__name__)
+
+_Read = TypeVar("_Read")
 
 # The projection every tool reads through, stated rather than defaulted.
 #
@@ -117,7 +133,7 @@ def countable_device_time(row: Dict) -> Optional[float]:
 
 def _rounded(value: Optional[float]) -> Optional[float]:
     """Nanosecond precision is plenty, and a 17-digit float is context spent."""
-    return None if value is None else round(value, 3)
+    return None if value is None else report_diff.as_answered(value)
 
 
 def is_signpost_row(row: Dict) -> bool:
@@ -175,8 +191,15 @@ class SignpostRange:
         return {"start_signpost": self.start, "end_signpost": self.end}
 
 
+# Set on a report generated with swallowed errors, which may be missing rows by chance.
+_DEGRADED_KEY = "degraded"
+
+
 def canonical_report(
-    registry: ReportRegistry, handle: str, signposts: Optional[SignpostRange] = None
+    registry: ReportRegistry,
+    handle: str,
+    signposts: Optional[SignpostRange] = None,
+    keep: bool = True,
 ) -> Dict:
     """One generated report per handle and range; see `ReportRegistry.cached_report`.
 
@@ -191,8 +214,9 @@ def canonical_report(
     handle's first read came from; see `_require_same_source`. Snapshots are kept
     per capture rather than per handle, so handles loaded on the same unchanged
     CSV share one. The rows are shared with them: copy a row before changing it.
-    A report generated with swallowed errors is the exception: it is kept by the
-    handle that read it alone, so loading the report again regenerates it.
+    A report generated with swallowed errors is the exception: it is marked `degraded`
+    and kept by the handle that read it alone, so loading the report again regenerates
+    it. `keep=False` reads a report no tool has kept without keeping it.
     """
     _require_performance_report(registry, handle)
     ignored = range_ignored(registry, handle, signposts)
@@ -206,10 +230,12 @@ def canonical_report(
         try:
             return _generate_canonical_report(instance, **overrides)
         except DegradedPerformanceReport as degraded:
-            raise UnsharedSnapshot(degraded.report) from None
+            raise UnsharedSnapshot({**degraded.report, _DEGRADED_KEY: True}) from None
 
     source = _pin_source(registry, handle)
-    report = registry.cached_report(handle, build, scope=scope, share_key=source)
+    report = registry.cached_report(
+        handle, build, scope=scope, share_key=source, keep=keep
+    )
     return {**report, "signpost_range_ignored": True} if ignored else report
 
 
@@ -227,7 +253,7 @@ def check_range(
 ) -> None:
     """Refuse a range this handle's signposts cannot honour, naming the handle.
 
-    `diff_reports` asks it of both reports before generating either, so the
+    `diff_reports` asks it of every capture before generating any, so the
     refusal has to say which one it is about.
     """
     try:
@@ -288,25 +314,33 @@ def range_ignored(
     )
 
 
-def _signposts(registry: ReportRegistry, handle: str) -> ResolvedSignposts:
-    """The handle's signposts, read once per capture -- or why they cannot be."""
+def _per_capture(
+    registry: ReportRegistry,
+    handle: str,
+    variant: CacheVariant,
+    read: Callable[[Instance], _Read],
+) -> _Read:
+    """`read` of the handle's capture, once per capture -- or why it cannot be read."""
     _require_performance_report(registry, handle)
 
-    def build(instance: Instance) -> Union[ResolvedSignposts, DataFormatError]:
+    def build(instance: Instance) -> Union[_Read, DataFormatError]:
         _require_same_source(registry, handle, instance)
         try:
-            return _resolve_signposts(instance)
+            return read(instance)
         except DataFormatError as error:
             # The same bytes fail the same way, and a rewritten CSV is another source.
             return error
 
     source = _pin_source(registry, handle)
-    resolved = registry.cached_report(
-        handle, build, variant=CacheVariant.SIGNPOSTS, share_key=source
-    )
+    resolved = registry.cached_report(handle, build, variant=variant, share_key=source)
     if isinstance(resolved, DataFormatError):
         raise resolved.with_traceback(None)
     return resolved
+
+
+def _signposts(registry: ReportRegistry, handle: str) -> ResolvedSignposts:
+    """The handle's signposts, read once per capture -- or why they cannot be."""
+    return _per_capture(registry, handle, CacheVariant.SIGNPOSTS, _resolve_signposts)
 
 
 def _resolve_signposts(instance: Instance) -> ResolvedSignposts:
@@ -456,7 +490,7 @@ def project_row(row: Dict, metric: str = DEFAULT_METRIC) -> Dict[str, object]:
     """
     return {
         "id": row.get("id"),
-        "op_code": row.get("op_code") or row.get("raw_op_code"),
+        "op_code": _display_op_code(row),
         metric: _rounded(finite_number(row.get(SORTABLE_METRICS[metric]))),
         "cores": finite_number(row.get("cores")),
         "bound": row.get("bound") or None,
@@ -464,6 +498,16 @@ def project_row(row: Dict, metric: str = DEFAULT_METRIC) -> Dict[str, object]:
         "bound_analysis": row.get("bound_analysis") or None,
         "op_category": row.get("op_category") or None,
     }
+
+
+def _raw_op_code(row: Dict) -> str:
+    """A row's op code before tt-perf-report adds a matmul's shapes or conv config."""
+    return str(row.get("raw_op_code") or row.get("op_code") or "").strip()
+
+
+def _display_op_code(row: Dict) -> object:
+    """A row's op code as tt-perf-report names it, else its raw one."""
+    return row.get("op_code") or row.get("raw_op_code")
 
 
 def empty_detail_fields(
@@ -619,8 +663,7 @@ def program_cache(
     rows = canonical_report(registry, handle).get("report", [])
     calls_by_op_code: Dict[str, _ProgramCalls] = {}
     for row, first in perf_flags.program_calls(rows):
-        # The raw code: tt-perf-report adds a matmul's shape to `op_code`.
-        op_code = str(row.get("raw_op_code") or row.get("op_code") or "").strip()
+        op_code = _raw_op_code(row)
         entry = calls_by_op_code.setdefault(op_code, _ProgramCalls(op_code))
         entry.calls += 1
         if first:
@@ -742,6 +785,232 @@ def zone_timings(
     return result
 
 
+def _require_distinct_captures(registry: ReportRegistry, handles: List[str]) -> None:
+    """Refuse a capture given twice: it would be compared with itself, or counted twice
+    in a median."""
+    handle_by_source: Dict[object, str] = {}
+    for handle in handles:
+        source = _pin_source(registry, handle)
+        if source is None:
+            continue
+        earlier = handle_by_source.get(source)
+        if earlier is not None:
+            given = (
+                f"{handle!r} is given twice"
+                if earlier == handle
+                else f"{earlier!r} and {handle!r} are the same capture"
+            )
+            raise ValueError(f"{given}; pass each capture once")
+        handle_by_source[source] = handle
+
+
+def _read_op_signatures(instance: Instance) -> Optional[op_signatures.Signatures]:
+    path = OpsPerformanceQueries.get_local_ops_perf_file_path(instance)
+    with open(path, newline="") as csv_file:
+        return op_signatures.read_signatures(csv_file)
+
+
+def _op_signatures(registry: ReportRegistry, handle: str) -> op_signatures.Signatures:
+    """The handle's tensor signatures by CSV position, read once per capture."""
+    try:
+        signatures = _per_capture(
+            registry, handle, CacheVariant.OP_SIGNATURES, _read_op_signatures
+        )
+    except DataFormatError as error:
+        # A refusal, as the same unreadable CSV is when the report is generated.
+        raise ValueError(f"{handle!r}: {error}") from error
+    if signatures is None:
+        raise ValueError(
+            f"the performance CSV behind {handle!r} has no INPUT_n or OUTPUT_n "
+            "columns, so its operations have no signature to match on; use match "
+            "op_code"
+        )
+    return signatures
+
+
+def _op_code_key(row: Dict) -> Optional[str]:
+    return str(_display_op_code(row) or "").strip() or None
+
+
+def _signature_key(
+    row: Dict, signatures: List[Optional[str]]
+) -> Optional[Tuple[str, str]]:
+    op_code = _raw_op_code(row)
+    if not op_code:
+        return None
+    try:
+        position = int(row["id"]) - REPORT_ROW_ID_OFFSET
+    except (KeyError, TypeError, ValueError):
+        position = -1
+    signature = signatures[position] if 0 <= position < len(signatures) else None
+    return op_code, signature or ""
+
+
+def _readable_signatures(
+    registry: ReportRegistry, handle: str
+) -> Optional[List[Optional[str]]]:
+    """The handle's signatures, or None where they cannot be read: a diff by op code
+    must not fail on them."""
+    try:
+        return _op_signatures(registry, handle).by_position
+    except (OSError, ValueError):
+        return None
+
+
+# The report field behind each summable metric, all summed in one pass.
+_DIFF_FIELDS = {metric: SORTABLE_METRICS[metric] for metric in sorted(ADDITIVE_METRICS)}
+
+# By match; signature totals are None where the CSV's signatures could not be read.
+_DiffTotals = Dict[report_diff.DiffMatch, Optional[report_diff.CaptureTotals]]
+
+
+def _diff_totals(
+    registry: ReportRegistry,
+    handle: str,
+    signposts: Optional[SignpostRange],
+    ignored: bool,
+    keep_report: bool,
+    grouping: report_diff.DiffMatch,
+) -> _DiffTotals:
+    """A capture's group totals for every summable metric, by op code and, once a
+    signature diff asks, by signature, kept per handle and range: asked again with other
+    thresholds, another metric or a match already read, a diff reads no report.
+
+    Kept by the handle alone, as a degraded report is, so loading the capture again
+    reads it again. Unless `keep_report`, a report no tool has kept is read for its
+    totals and dropped, so its signature totals are summed with its op codes rather
+    than at a later signature diff that would generate it again. A degraded report's
+    totals are not kept at all: the handle may drop or evict that report, and its next
+    read would then disagree with them.
+    """
+
+    def summed(
+        report: Dict, key_of: Callable[[Dict], Optional[Hashable]]
+    ) -> report_diff.CaptureTotals:
+        rows = report.get("report", [])
+        return report_diff.capture_totals(
+            rows,
+            _DIFF_FIELDS,
+            key_of,
+            frozenset(_sub_devices(rows)),
+            bool(report.get(_DEGRADED_KEY)),
+        )
+
+    def by_signature(report: Dict) -> Optional[report_diff.CaptureTotals]:
+        # A second read of the CSV, so an op code diff doesn't pay for it.
+        signatures = _readable_signatures(registry, handle)
+        if signatures is None:
+            return None
+        return summed(report, lambda row: _signature_key(row, signatures))
+
+    def build(instance: Instance) -> _DiffTotals:
+        report = canonical_report(registry, handle, signposts, keep=keep_report)
+        totals: _DiffTotals = {
+            report_diff.DiffMatch.OP_CODE: summed(report, _op_code_key)
+        }
+        if not keep_report or grouping is report_diff.DiffMatch.SIGNATURE:
+            totals[report_diff.DiffMatch.SIGNATURE] = by_signature(report)
+        if report.get(_DEGRADED_KEY):
+            raise UnkeptSnapshot(totals)
+        return totals
+
+    totals = registry.cached_report(
+        handle,
+        build,
+        variant=CacheVariant.DIFF_TOTALS,
+        scope=None if ignored else signposts,
+    )
+    if (
+        grouping is report_diff.DiffMatch.SIGNATURE
+        and report_diff.DiffMatch.SIGNATURE not in totals
+    ):
+        report = canonical_report(registry, handle, signposts, keep=keep_report)
+        if report.get(_DEGRADED_KEY):
+            # Not kept, as no degraded report's totals are.
+            return {**totals, report_diff.DiffMatch.SIGNATURE: by_signature(report)}
+        # Kept beside the op code totals, so the next signature diff reads no report.
+        totals[report_diff.DiffMatch.SIGNATURE] = by_signature(report)
+    return totals
+
+
+def _measured_fields(calls_by_side: Dict[str, Tuple[int, int]]) -> Dict[str, int]:
+    """Each side's measured calls where any side's figure covers fewer calls than ran,
+    given (measured, calls) by side: without them a partial total reads as a speed-up.
+    """
+    if all(measured == calls for measured, calls in calls_by_side.values()):
+        return {}
+    return {
+        f"measured_{side}": measured for side, (measured, _) in calls_by_side.items()
+    }
+
+
+def _percent_of(move: float, before: float) -> Optional[float]:
+    """A `report_diff.delta` as a percentage of the figure it moved from; None from zero."""
+    return share_percent(move, abs(report_diff.as_answered(before)))
+
+
+def _read_device_facts(instance: Instance) -> Dict[str, object]:
+    # Read as the flags read the device's cores, so the two cannot disagree about it.
+    meta = _device_meta(instance) or DeviceLogMeta()
+    return {
+        "arch": meta.architecture,
+        "clock_mhz": meta.frequency,
+        "max_compute_cores": meta.max_cores,
+    }
+
+
+def _capture_facts(
+    registry: ReportRegistry, handle: str, match: report_diff.DiffMatch
+) -> Dict[str, object]:
+    """What a capture ran on: its device log's header, read once per capture as its
+    rows are, and its CSV's devices; with signatures, how it records tensor sizes."""
+    facts = dict(
+        _per_capture(registry, handle, CacheVariant.CAPTURE_FACTS, _read_device_facts)
+    )
+    try:
+        facts["device_count"] = _signposts(registry, handle).device_count
+    except (DataFormatError, OSError, ValueError):
+        facts["device_count"] = None
+    if match is report_diff.DiffMatch.SIGNATURE:
+        logical = _op_signatures(registry, handle).logical_sizes
+        facts[report_diff.TENSOR_SIZES] = (
+            report_diff.LOGICAL_TENSOR_SIZES
+            if logical
+            else report_diff.PADDED_TENSOR_SIZES
+        )
+    return facts
+
+
+def _compared_facts(
+    registry: ReportRegistry, handles: List[str], match: report_diff.DiffMatch
+) -> Tuple[Dict[str, Dict[str, object]], Dict[str, List[str]]]:
+    """Each fact the captures disagree on, by handle; and each fact some or all of them
+    lack, with the handles that lack it: unknown on every side is not equal."""
+    facts_by_handle = {
+        handle: _capture_facts(registry, handle, match) for handle in handles
+    }
+    compared = (
+        report_diff.COMPARED_FACTS
+        if match is report_diff.DiffMatch.SIGNATURE
+        else report_diff.HARDWARE_FACTS
+    )
+    mismatched: Dict[str, Dict[str, object]] = {}
+    unverified: Dict[str, List[str]] = {}
+    for fact in compared:
+        known = {
+            handle: facts[fact]
+            for handle, facts in facts_by_handle.items()
+            if facts.get(fact) is not None
+        }
+        if len(set(known.values())) > 1:
+            mismatched[fact] = known
+        if len(known) < len(facts_by_handle):
+            unverified[fact] = [
+                handle for handle in facts_by_handle if handle not in known
+            ]
+    return mismatched, unverified
+
+
 def _pairing_caveat(pairing: Dict[str, int], figures: str) -> Optional[str]:
     """Say what did not pair, which is invisible from the paired figures themselves.
 
@@ -851,7 +1120,7 @@ def _spread_rows(
             f"no performance row has id {perf_id!r}; pass a top_ops row's id, "
             "not an operation_id"
         )
-    op_code = row.get("op_code") or row.get("raw_op_code")
+    op_code = _display_op_code(row)
     if is_signpost_row(row):
         raise ValueError(
             f"row {perf_id} is the signpost {op_code!r}, which runs on no core"
@@ -1097,15 +1366,21 @@ def diff_reports(
     limit: Optional[int] = None,
     start_signpost: Optional[str] = None,
     end_signpost: Optional[str] = None,
+    match: str = report_diff.DiffMatch.OP_CODE.value,
+    min_percent: Optional[float] = None,
+    min_delta: Optional[float] = None,
+    repeats_a: Optional[List[str]] = None,
+    repeats_b: Optional[List[str]] = None,
 ) -> Dict[str, object]:
-    """Per-op-code deltas between two reports.
+    """Per-group deltas between two reports, with noise and one-sided groups kept apart.
 
-    Aggregated by op code rather than joined on op id: the question is "did my
-    change help", and a change that adds or reorders ops shifts every id after
-    it, so an id join would report a diff for ops that did not change.
+    Grouped by op code, or raw op code and tensors, rather than joined on op id: the
+    question is "did my change help", and a change that adds or reorders ops shifts
+    every id after it, so an id join would report a diff for ops that did not change.
+    What counts as a change is `report_diff`'s.
 
-    One range applies to both reports, which is the before-and-after case: the
-    same signposts in two runs.
+    One range applies to every capture, which is the before-and-after case: the same
+    signposts in each run.
     """
     require_choice("metric", by, SORTABLE_METRICS)
     # Refused rather than aggregated some other way. A diff groups by op code and
@@ -1120,95 +1395,225 @@ def diff_reports(
             f"report is not meaningful; diff_reports accepts "
             f"{', '.join(sorted(ADDITIVE_METRICS))}. Use top_ops to rank by {by!r}."
         )
-    field = SORTABLE_METRICS[by]
+    require_choice("match", match, report_diff.DIFF_MATCHES)
+    grouping = report_diff.DiffMatch(match)
+    metric = report_diff.DIFF_METRICS[by]
+    thresholds = report_diff.Thresholds(
+        min_percent=report_diff.threshold(
+            "min_percent", min_percent, report_diff.DEFAULT_MIN_PERCENT
+        ),
+        min_delta=report_diff.threshold("min_delta", min_delta, metric.min_delta),
+    )
+    # A signature row runs to a few hundred characters, as an `include` row does.
+    count = bounded(
+        limit,
+        (
+            MAX_DETAILED_LIMIT
+            if grouping is report_diff.DiffMatch.SIGNATURE
+            else MAX_LIMIT
+        ),
+    )
+    # Four lists beside the changes, at a hundred rows each, would pass the answer
+    # budget; their counts say how many more there are.
+    side_count = min(count, MAX_DETAILED_LIMIT)
+    before = report_diff.side_handles("repeats_a", handle_a, repeats_a)
+    after = report_diff.side_handles("repeats_b", handle_b, repeats_b)
+    handles = before + after
+    for handle in handles:
+        _require_performance_report(registry, handle)
+    _require_distinct_captures(registry, handles)
 
     signposts = SignpostRange.of(start_signpost, end_signpost)
-    ignored_a = range_ignored(registry, handle_a, signposts)
-    ignored_b = range_ignored(registry, handle_b, signposts)
-    # Refused rather than caveated: a window compared against a whole report
-    # reports every row outside the window as a change, and this is the response
-    # most likely to be acted on. Both sides ignoring it compares like with like.
-    # Checked, with every other refusal, before either report is generated, so a
-    # refusal costs two reads and names the report it is about.
-    if ignored_a != ignored_b:
-        unsignposted = handle_a if ignored_a else handle_b
+    ignored = [range_ignored(registry, handle, signposts) for handle in handles]
+    # Refused: a window against a whole report shows every row outside it as a change.
+    # Checked with every other refusal, before any report is generated.
+    if any(ignored) and not all(ignored):
+        unsignposted = handles[ignored.index(True)]
         raise ValueError(
             f"{unsignposted!r} holds no signposts, so the range would read it whole "
-            "while the other report is read as a window, and every row outside the "
+            "while another report is read as a window, and every row outside the "
             "window would show as a change. Diff without a range, or against a "
             "capture with the same signposts."
         )
-    if signposts is not None and not ignored_a:
-        check_range(registry, handle_a, signposts)
-        check_range(registry, handle_b, signposts)
-    report_a = canonical_report(registry, handle_a, signposts)
-    report_b = canonical_report(registry, handle_b, signposts)
+    if signposts is not None and not ignored[0]:
+        for handle in handles:
+            check_range(registry, handle, signposts)
+    if grouping is report_diff.DiffMatch.SIGNATURE:
+        for handle in handles:
+            _op_signatures(registry, handle)
 
-    sub_devices: set = set()
-
-    def totals_by_op_code(report: Dict) -> Dict[str, Dict[str, float]]:
-        rows = report.get("report", [])
-        sub_devices.update(_sub_devices(rows))
-        totals: Dict[str, Dict[str, float]] = defaultdict(
-            lambda: {"total": 0.0, "count": 0.0}
-        )
-        for row in rows:
-            value = finite_number(row.get(field))
-            if value is None:
-                continue
-            op_code = str(row.get("op_code") or row.get("raw_op_code") or "").strip()
-            if not op_code:
-                continue
-            totals[op_code]["total"] += value
-            totals[op_code]["count"] += 1
+    def totals_of(handle: str) -> report_diff.CaptureTotals:
+        # A repeat is there for its totals, so only the compared captures keep a report.
+        totals = _diff_totals(
+            registry,
+            handle,
+            signposts,
+            ignored[0],
+            keep_report=handle in (handle_a, handle_b),
+            grouping=grouping,
+        )[grouping]
+        if totals is None:
+            raise ValueError(
+                f"the signatures behind {handle!r} could not be read when its totals "
+                "were; call load_report again for a fresh handle"
+            )
         return totals
 
-    before = totals_by_op_code(report_a)
-    after = totals_by_op_code(report_b)
-
-    changes = []
-    for op_code in set(before) | set(after):
-        before_total = before.get(op_code, {}).get("total", 0.0)
-        after_total = after.get(op_code, {}).get("total", 0.0)
-        changes.append(
-            {
-                "op_code": op_code,
-                f"{by}_before": round(before_total, 3),
-                f"{by}_after": round(after_total, 3),
-                "delta": round(after_total - before_total, 3),
-                "count_before": int(before.get(op_code, {}).get("count", 0)),
-                "count_after": int(after.get(op_code, {}).get("count", 0)),
-            }
-        )
-
-    # Largest movement in either direction: a regression matters as much as a win.
-    changes.sort(
-        key=lambda change: abs(finite_number(change["delta"]) or 0.0), reverse=True
+    totals_by_handle = {handle: totals_of(handle) for handle in handles}
+    side_before = report_diff.Side.of(
+        [totals_by_handle[handle].by_metric[by] for handle in before]
     )
+    side_after = report_diff.Side.of(
+        [totals_by_handle[handle].by_metric[by] for handle in after]
+    )
+    comparison = report_diff.classify(side_before, side_after, thresholds)
 
+    def named(group: Hashable) -> Dict[str, object]:
+        return report_diff.group_fields(group, grouping)
+
+    def change_entry(change: report_diff.Change) -> Dict[str, object]:
+        was, now = change.before, change.after
+        entry: Dict[str, object] = {
+            **named(change.group),
+            f"{by}_before": _rounded(was.total),
+            f"{by}_after": _rounded(now.total),
+            "delta": change.delta,
+            "delta_percent": _percent_of(change.delta, was.total),
+            "count_before": was.count,
+            "count_after": now.count,
+            **_measured_fields(
+                {
+                    "before": (was.measured, was.count),
+                    "after": (now.measured, now.count),
+                }
+            ),
+        }
+        return entry
+
+    def one_sided_entry(
+        group: Hashable, side: report_diff.Side, label: str
+    ) -> Dict[str, object]:
+        figure = side.figures_by_group.get(group)
+        calls = side.calls_by_group[group][0]
+        # With no figure, a capture left every call blank, which measured_ says.
+        measured = (
+            figure.measured
+            if figure is not None
+            else side.least_measured_by_group[group]
+        )
+        return {
+            **named(group),
+            f"{by}_{label}": _rounded(figure.total) if figure is not None else None,
+            f"count_{label}": calls,
+            **_measured_fields({label: (measured, calls)}),
+        }
+
+    def unmeasured_entry(group: Hashable) -> Dict[str, object]:
+        return {
+            **named(group),
+            "count_before": side_before.calls_by_group[group][0],
+            "count_after": side_after.calls_by_group[group][0],
+            "measured_before": side_before.least_measured_by_group[group],
+            "measured_after": side_after.least_measured_by_group[group],
+        }
+
+    changes = [change_entry(change) for change in comparison.changes[:count]]
     result: Dict[str, object] = {
         "metric": by,
         "before": handle_a,
         "after": handle_b,
-        "returned": min(len(changes), bounded(limit)),
-        "changes": changes[: bounded(limit)],
-        "projection": projection(signposts, ignored_a and ignored_b),
-        "grouped_by": "op_code",
+        "grouped_by": grouping.value,
+        "thresholds": {
+            "min_percent": thresholds.min_percent,
+            "min_delta": thresholds.min_delta,
+            "min_delta_unit": metric.unit,
+        },
+        "change_count": len(comparison.changes),
+        "within_threshold_count": comparison.within_threshold_count,
+        "returned": len(changes),
+        "changes": changes,
+        "new_count": len(comparison.new),
+        "new": [
+            one_sided_entry(group, side_after, "after")
+            for group in comparison.new[:side_count]
+        ],
+        "missing_count": len(comparison.missing),
+        "missing": [
+            one_sided_entry(group, side_before, "before")
+            for group in comparison.missing[:side_count]
+        ],
+        "unmeasured_count": len(comparison.unmeasured),
+        "unmeasured": [
+            unmeasured_entry(group) for group in comparison.unmeasured[:side_count]
+        ],
     }
-    result["delta_total"] = round(
-        sum(entry["total"] for entry in after.values())
-        - sum(entry["total"] for entry in before.values()),
-        3,
+    if len(handles) > 2:
+        result.update(
+            {
+                "repeats_before": before[1:],
+                "repeats_after": after[1:],
+                "inconsistent_count": len(comparison.inconsistent),
+                "inconsistent": [
+                    {
+                        **named(group),
+                        "calls_before": list(
+                            side_before.calls_by_group.get(group, (0,) * len(before))
+                        ),
+                        "calls_after": list(
+                            side_after.calls_by_group.get(group, (0,) * len(after))
+                        ),
+                    }
+                    for group in comparison.inconsistent[:side_count]
+                ],
+            }
+        )
+    delta_total = report_diff.delta(side_before.total, side_after.total)
+    result.update(
+        {
+            f"{by}_total_before": _rounded(side_before.total),
+            f"{by}_total_after": _rounded(side_after.total),
+            "delta_total": delta_total,
+            "delta_total_percent": _percent_of(delta_total, side_before.total),
+            "projection": projection(signposts, ignored[0]),
+            "note": report_diff.DIFF_NOTE,
+        }
+    )
+
+    caveats = []
+    mismatched, unverified = _compared_facts(registry, handles, grouping)
+    if mismatched:
+        result["mismatched"] = mismatched
+        caveats.append(report_diff.mismatch_caveat(mismatched))
+    if unverified:
+        result["unverified"] = unverified
+        caveats.append(report_diff.unverified_caveat(unverified))
+    degraded = [handle for handle in handles if totals_by_handle[handle].degraded]
+    if degraded:
+        caveats.append(report_diff.degraded_caveat(degraded))
+    if grouping is report_diff.DiffMatch.SIGNATURE:
+        caveats.append(report_diff.SIGNATURE_NOISE_CAVEAT)
+    if metric.caveat:
+        caveats.append(metric.caveat)
+    if comparison.unmeasured:
+        caveats.append(
+            f"{len(comparison.unmeasured)} groups ran in both reports with no {by} on "
+            "one side, where tt-perf-report left it blank; they are listed under "
+            "unmeasured, and each side's total covers only the calls with a figure."
+        )
+    sub_devices = sorted(
+        set().union(*(totals_by_handle[handle].sub_devices for handle in handles))
     )
     # A delta of two unsound totals is unsound the same way, and this is the
     # response most likely to be acted on -- it answers "did my change help".
     if len(sub_devices) > 1:
-        result["caveat"] = (
-            f"Either report spans {len(sub_devices)} sub-devices "
-            f"({', '.join(sorted(sub_devices))}). Ops on different sub-devices "
+        caveats.append(
+            f"The reports span {len(sub_devices)} sub-devices "
+            f"({', '.join(sub_devices)}). Ops on different sub-devices "
             "can run concurrently, so these summed totals -- and the delta "
             "between them -- overstate elapsed time."
         )
+    if caveats:
+        result["caveat"] = " ".join(caveats)
     return result
 
 

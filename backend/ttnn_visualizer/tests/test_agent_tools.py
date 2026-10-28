@@ -26,8 +26,11 @@ from ttnn_visualizer import csv_queries
 from ttnn_visualizer.agent import handles, server, tools
 from ttnn_visualizer.agent.bounds import MAX_LIMIT
 from ttnn_visualizer.agent.handles import (
+    MAX_SCOPED_DIFF_TOTALS,
     MAX_SCOPED_REPORTS,
+    CacheVariant,
     ReportRegistry,
+    UnkeptSnapshot,
     UnknownHandleError,
     load_report,
 )
@@ -144,7 +147,7 @@ def _signposts_in(*handles):
             if held
             else {}
         )
-        return ResolvedSignposts(names, True)
+        return ResolvedSignposts(names, True, 1)
 
     return patch.object(tools, "_resolve_signposts", side_effect=resolve)
 
@@ -1801,16 +1804,84 @@ class TestScopedSnapshots:
 
         assert built == [1]
 
-    def test_clearing_the_registry_drops_ranged_snapshots_too(self, tmp_path):
+    def test_diff_totals_are_evicted_apart_from_the_reports(self, tmp_path):
+        """Far more of them are kept, oldest first out, and filling them evicts no
+        report."""
         registry = ReportRegistry()
         write_device_log(tmp_path, MODERN_HEADER, [])
         load_report(registry, performance_path=str(tmp_path))
         built = []
-        registry.cached_report("report-1", built.append, scope="x")
+
+        def build(label):
+            def _build(_instance):
+                built.append(label)
+                return label
+
+            return _build
+
+        def totals(scope):
+            registry.cached_report(
+                "report-1", build(scope), variant=CacheVariant.DIFF_TOTALS, scope=scope
+            )
+
+        registry.cached_report("report-1", build("report"), scope="window")
+        for scope in range(MAX_SCOPED_DIFF_TOTALS + 1):
+            totals(scope)
+        built.clear()
+
+        registry.cached_report("report-1", build("report"), scope="window")
+        totals(1)
+        totals(0)
+
+        assert built == [0]
+
+    def test_a_snapshot_not_kept_is_built_again(self, tmp_path):
+        registry = ReportRegistry()
+        write_device_log(tmp_path, MODERN_HEADER, [])
+        load_report(registry, performance_path=str(tmp_path))
+        built = []
+
+        def build(_instance):
+            built.append(len(built))
+            return len(built)
+
+        registry.cached_report("report-1", build, keep=False)
+        registry.cached_report("report-1", build)
+        # Found now, so nothing is built whether or not it would be kept.
+        registry.cached_report("report-1", build, keep=False)
+
+        assert built == [0, 1]
+
+    def test_a_snapshot_its_builder_declines_to_keep_is_built_again(self, tmp_path):
+        registry = ReportRegistry()
+        write_device_log(tmp_path, MODERN_HEADER, [])
+        load_report(registry, performance_path=str(tmp_path))
+        built = []
+
+        def build(_instance):
+            built.append(len(built))
+            raise UnkeptSnapshot(len(built))
+
+        first = registry.cached_report("report-1", build)
+        second = registry.cached_report("report-1", build)
+
+        assert (first, second) == (1, 2)
+
+    # Diff totals are kept apart from ranged reports, and `clear()` reuses
+    # `report-1`, so totals it left would answer a new capture as the old one.
+    @pytest.mark.parametrize(
+        "variant", [CacheVariant.CANONICAL_REPORT, CacheVariant.DIFF_TOTALS]
+    )
+    def test_clearing_the_registry_drops_ranged_snapshots_too(self, tmp_path, variant):
+        registry = ReportRegistry()
+        write_device_log(tmp_path, MODERN_HEADER, [])
+        load_report(registry, performance_path=str(tmp_path))
+        built = []
+        registry.cached_report("report-1", built.append, variant=variant, scope="x")
 
         registry.clear()
         load_report(registry, performance_path=str(tmp_path))
-        registry.cached_report("report-1", built.append, scope="x")
+        registry.cached_report("report-1", built.append, variant=variant, scope="x")
 
         assert len(built) == 2
 
@@ -1949,7 +2020,8 @@ class TestDiffReports:
             result = tools.diff_reports(registry, "report-1", "report-2")
 
         assert result["delta_total"] == 0.0
-        assert all(change["delta"] == 0.0 for change in result["changes"])
+        assert result["changes"] == []
+        assert result["within_threshold_count"] == 1
 
     def test_it_groups_by_op_code_so_a_shifted_id_is_not_a_diff(self, tmp_path):
         """An inserted op renumbers every op after it; an id join would call
@@ -1967,10 +2039,11 @@ class TestDiffReports:
         ):
             result = tools.diff_reports(registry, "report-1", "report-2")
 
-        by_op = {change["op_code"]: change for change in result["changes"]}
-        assert by_op["Matmul"]["delta"] == 0.0
-        assert by_op["Reshard"]["delta"] == 2.0
-        assert by_op["Reshard"]["count_before"] == 0
+        assert result["changes"] == []
+        assert result["within_threshold_count"] == 1
+        assert result["new"] == [
+            {"op_code": "Reshard", "device_time_after": 2.0, "count_after": 1}
+        ]
 
     def test_a_partitioned_diff_carries_the_caveat_too(self, tmp_path):
         """A delta of two unsound totals is unsound the same way — and this is the
