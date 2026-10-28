@@ -119,3 +119,6 @@ ignore_missing_imports = true
 required-version = ">=0.11.0"
 # Use uv-managed Python from .python-version; do not fall back to system Python.
 python-preference = "only-managed"
+# Pillow (via tt-perf-report → matplotlib) only fixes its open security advisories in 13,
+# which needs Python 3.11. Raise the floor where it can install; 3.10 keeps 12.x until it is dropped.
+constraint-dependencies = ["pillow>=13; python_version >= '3.11'"]
