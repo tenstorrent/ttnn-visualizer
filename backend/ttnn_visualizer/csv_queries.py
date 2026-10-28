@@ -11,6 +11,7 @@ import os
 import re
 import sys
 import tempfile
+import threading
 import traceback
 import warnings
 from bisect import bisect_right
@@ -98,17 +99,23 @@ class _BoundedOutput(io.TextIOBase):
         return "".join(self._kept)
 
 
+# Held while `sys.stdout` points at one report's buffer. The redirect is
+# process-wide, so two builds on different threads overlapping it could restore
+# stdout out of order and leave it on a finished build's buffer.
+_PERF_REPORT_OUTPUT_LOCK = threading.Lock()
+
+
 @contextmanager
 def _perf_report_output_bounded():
     """Hold tt-perf-report's printing to a bounded buffer, logged at debug level.
 
-    Redirecting `sys.stdout` is process-wide, as the agent tools' capture already
-    is; the library call it wraps is CPU-bound and does not yield to another
-    greenlet in between.
+    Builds take turns: under the default gevent worker the library call never
+    yields, so the lock is never contended; under threads they already share the
+    GIL for this CPU-bound call.
     """
     output = _BoundedOutput(MAX_PERF_REPORT_OUTPUT_CHARS)
     try:
-        with redirect_stdout(output):
+        with _PERF_REPORT_OUTPUT_LOCK, redirect_stdout(output):
             yield
     finally:
         if output.getvalue().strip():

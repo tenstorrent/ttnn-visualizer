@@ -9,6 +9,8 @@ device its own op code makes every row a pass that prints a warning listing the
 devices it missed. See `MAX_PERFORMANCE_REPORT_DEVICES`.
 """
 
+import sys
+import threading
 from pathlib import Path
 from unittest import mock
 
@@ -17,6 +19,7 @@ from ttnn_visualizer.csv_queries import (
     MAX_PERF_REPORT_OUTPUT_CHARS,
     MAX_PERFORMANCE_REPORT_DEVICES,
     OpsPerformanceReportQueries,
+    _perf_report_output_bounded,
 )
 from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.extensions import db
@@ -100,6 +103,34 @@ def test_the_library_s_warnings_never_reach_stdout(tmp_path, capsys):
         args[0] == "tt-perf-report output: %d further characters dropped"
         for args in logged
     )
+
+
+def test_overlapping_builds_on_threads_leave_stdout_as_they_found_it():
+    """Builds A and B on two threads, B starting while A holds the redirect and
+    finishing after it. Overlapping, B would save A's buffer as the stdout to
+    restore and put it back last, leaving every later print in a finished
+    build's buffer. Taking turns, B waits for A to finish first."""
+    stdout = sys.stdout
+    b_entered, a_exited = threading.Event(), threading.Event()
+
+    def build_a():
+        with _perf_report_output_bounded():
+            # Overlapping, B gets in here; taking turns, it cannot until A is done.
+            b_entered.wait(timeout=0.5)
+        a_exited.set()
+
+    def build_b():
+        with _perf_report_output_bounded():
+            b_entered.set()
+            a_exited.wait(timeout=5)
+
+    threads = [threading.Thread(target=build_a), threading.Thread(target=build_b)]
+    threads[0].start()
+    threads[1].start()
+    for thread in threads:
+        thread.join(timeout=10)
+
+    assert sys.stdout is stdout
 
 
 @pytest.fixture
