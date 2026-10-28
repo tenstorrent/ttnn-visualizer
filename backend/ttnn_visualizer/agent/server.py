@@ -445,7 +445,9 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "largest_free_pct on the most constrained device, the one with "
                 "the smallest largest_free_block; free-space "
                 "figures are an upper bound because buffers excludes circular "
-                "buffers and intra-op tensors). Read tensor_size_unit: a "
+                "buffers and intra-op tensors). l1_pressure is null, with a caveat, "
+                "when the devices rows cannot be attributed to the rank. Read "
+                "tensor_size_unit: a "
                 "tensor size is whole-tensor bytes only where the report carries "
                 "that column, and per bank otherwise. When the handle also holds a "
                 "linked performance report, perf_rows lists the device operations "
@@ -502,7 +504,9 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "bytes per bank and are never "
                 "added across memory types, whose bank counts differ. Comparable to "
                 "l1_bank_size; a device-wide total cannot be derived from the "
-                "response, and the report carries no DRAM capacity."
+                "response, and the report carries no DRAM capacity. device and "
+                "l1_pressure are null, with a caveat, when the devices rows cannot be "
+                "attributed to the rank."
             ),
             "schema": {
                 "type": "object",
