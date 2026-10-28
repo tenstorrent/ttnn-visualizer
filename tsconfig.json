@@ -26,6 +26,11 @@
             ],
             "@blueprintjs": [
                 "./node_modules/@blueprintjs"
+            ],
+            // plotly.js 4 bundles its own types, which split the flat `PlotData` into a per-trace `Data` union.
+            // Keep type-checking against @types/plotly.js until the chart models are migrated; the runtime is still v4.
+            "plotly.js": [
+                "./node_modules/@types/plotly.js"
             ]
         },
         "allowSyntheticDefaultImports": true,
