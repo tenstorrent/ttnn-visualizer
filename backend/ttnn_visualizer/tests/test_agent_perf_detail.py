@@ -1222,7 +1222,21 @@ class TestAnswerSize:
 
     @staticmethod
     def _table(tmp_path, graph_of=None):
-        rows = [dict(row) for _ in range(5) for row in smoke_rows()]
+        smoke = smoke_rows()
+        # Each run starts after the last ends, as a real capture's would: tied host
+        # times would leave tt-perf-report's sort free to interleave the runs.
+        run_span = max(int(row["HOST END TS"]) for row in smoke)
+        rows = [
+            {
+                **row,
+                **{
+                    column: str(int(row[column]) + run * run_span)
+                    for column in ("HOST START TS", "HOST END TS")
+                },
+            }
+            for run in range(5)
+            for row in smoke
+        ]
         seen = set()
         for row in rows:
             row[PROGRAM_HASH_COLUMN] = row["OP CODE"]

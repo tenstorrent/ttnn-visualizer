@@ -1378,8 +1378,13 @@ class OpsPerformanceReportQueries:
         }
         column_indexes = {}
 
+        # The --csv puts a column's unit in its header ("Device Time [μs]"), so a
+        # table name is looked up under the label tt-perf-report writes it with.
+        csv_labels = perf_report.report_csv_column_labels
         for column, header_name in cls.REPORT_COLUMN_HEADERS.items():
-            column_indexes[column] = header_index_by_name.get(header_name)
+            column_indexes[column] = header_index_by_name.get(
+                csv_labels.get(header_name, header_name)
+            )
 
         return column_indexes
 
