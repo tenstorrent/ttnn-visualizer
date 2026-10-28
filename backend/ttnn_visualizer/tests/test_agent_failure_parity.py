@@ -336,8 +336,33 @@ def _curated_fallback_runs() -> List[List[Dict]]:
         **_operation(1, "ttnn.reshape", [unreadable], request="L1"),
         "inputs": [{**unreadable, "id": 11}],
     }
+    # Against an input's 2 at the same address, a count of 3 is no view, so it flags,
+    # and an unreadable shape can't rule a view out. A count of 2 may be a view, so it
+    # doesn't flag where a NaN would: that holds the trim, not just the regex.
+    # JavaScript's `\s` takes a BOM and not U+001C, Python's the reverse.
+    shape_whitespace = [
+        [
+            {
+                **_operation(
+                    1, "ttnn.reshape", [{**_dram(10), "shape": shape}], request="L1"
+                ),
+                "inputs": [{**_dram(11), "shape": "Shape([2])"}],
+            }
+        ]
+        for shape in (
+            "Shape([1,\ufeff3])",
+            "Shape([1,\x1c3])",
+            "Shape([\u00a03 ])",
+            "Shape([1,\ufeff2])",
+            "Shape([\u00a02 ])",
+            # A dimension of whitespace alone is dropped, so these count 2 too.
+            "Shape([2,\ufeff])",
+            "Shape([2,])",
+        )
+    ]
     return [
         [view_like],
+        *shape_whitespace,
         [
             _operation(1, "ttnn.matmul", [], oom_l1),
             _operation(2, "ttnn.matmul", [_dram(1)]),

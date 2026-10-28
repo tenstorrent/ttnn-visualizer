@@ -2,13 +2,13 @@
 #
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-"""Reading a value as the app's JavaScript reads it, shared so every port reads one the
+r"""Reading a value as the app's JavaScript reads it, shared so every port reads one the
 same way. #2219
 
-`Number`, `String` and a template literal, `parseInt`, `parseFloat`, `Math.max`,
-`Number.isFinite`, division and truthiness, as the ports of the app's functions need
-them; mirror a change in the TS each port names. A Python int is a JSON number, which
-JavaScript holds as a double, so each read takes it as one.
+`Number`, `String` and a template literal, `parseInt`, `parseFloat`, `trim` and `\s`,
+`Math.max`, `Number.isFinite`, division and truthiness, as the ports of the app's
+functions need them; mirror a change in the TS each port names. A Python int is a JSON
+number, which JavaScript holds as a double, so each read takes it as one.
 """
 
 import math
@@ -26,8 +26,9 @@ _JS_INT = re.compile(r"[+-]?[0-9]+")
 _JS_DECIMAL = re.compile(rf"[+-]?{_DECIMAL}")
 _JS_RADIX = re.compile(r"0(?:[xX][0-9a-fA-F]+|[oO][0-7]+|[bB][01]+)")
 _JS_INFINITY = re.compile(r"[+-]?Infinity")
-# What `Number`, `parseInt` and `parseFloat` skip; Python's `str.strip` skips another set.
-_JS_WHITESPACE = (
+# JavaScript's whitespace: what `\s`, `trim`, `Number`, `parseInt` and `parseFloat` skip.
+# Python's `\s` and `str.strip` read another set.
+JS_WHITESPACE = (
     "\t\n\v\f\r \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006"
     "\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
 )
@@ -74,7 +75,7 @@ def js_number(value: object) -> float:
         return js_number(js_template(value))
     if not isinstance(value, str):
         return math.nan
-    text = value.strip(_JS_WHITESPACE)
+    text = js_trim(value)
     if text == "":
         return 0.0
     if _JS_INFINITY.fullmatch(text):
@@ -139,6 +140,11 @@ def js_template(value: object) -> str:
     return str(value)
 
 
+def js_trim(text: str) -> str:
+    """`String.prototype.trim`."""
+    return text.strip(JS_WHITESPACE)
+
+
 def js_parse_int(value: object) -> NumberValue:
     """`parseInt(value, 10)`: the leading integer of its string form, else NaN.
 
@@ -146,7 +152,7 @@ def js_parse_int(value: object) -> NumberValue:
     an infinity and one past 2**53 rounds, as in the app. An int has no negative zero,
     so that one stays a float.
     """
-    match = _JS_INT.match(js_template(value).lstrip(_JS_WHITESPACE))
+    match = _JS_INT.match(js_template(value).lstrip(JS_WHITESPACE))
     if not match:
         return math.nan
     number = float(match.group(0))
@@ -157,7 +163,7 @@ def js_parse_int(value: object) -> NumberValue:
 
 def js_parse_float(value: object) -> float:
     """`parseFloat(value)`: the leading decimal of its string form, else NaN."""
-    match = _JS_FLOAT.match(js_template(value).lstrip(_JS_WHITESPACE))
+    match = _JS_FLOAT.match(js_template(value).lstrip(JS_WHITESPACE))
     return float(match.group(0)) if match else math.nan
 
 
@@ -200,6 +206,7 @@ def js_truthy(value: object) -> bool:
 
 
 __all__ = [
+    "JS_WHITESPACE",
     "MISSING",
     "Missing",
     "NumberValue",
@@ -210,5 +217,6 @@ __all__ = [
     "js_parse_float",
     "js_parse_int",
     "js_template",
+    "js_trim",
     "js_truthy",
 ]
