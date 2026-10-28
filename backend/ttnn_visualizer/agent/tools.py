@@ -12,11 +12,12 @@ server-side windowing on the NPE view. #1995
 import contextlib
 import io
 import logging
+import statistics
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
 from enum import Enum
-from typing import Dict, List, Optional, Sequence, Union, cast
+from typing import Dict, List, Optional, Sequence, Set, Tuple, Union, cast
 
 from ttnn_visualizer.agent import perf_detail, perf_flags
 from ttnn_visualizer.agent.bounds import (
@@ -25,7 +26,7 @@ from ttnn_visualizer.agent.bounds import (
     bounded,
     require_choice,
 )
-from ttnn_visualizer.agent.cells import finite_number
+from ttnn_visualizer.agent.cells import finite_number, whole_number
 from ttnn_visualizer.agent.handles import (
     CacheVariant,
     ReportRegistry,
@@ -35,12 +36,16 @@ from ttnn_visualizer.agent.handles import (
 from ttnn_visualizer.csv_queries import (
     MAX_LISTED_SIGNPOSTS,
     SIGNPOST_OP_TYPE,
+    CoreSpan,
+    CoreSpans,
     DegradedPerformanceReport,
     DeviceLogMeta,
     DeviceLogProfilerQueries,
+    DeviceRun,
     OpsPerformanceQueries,
     OpsPerformanceReportQueries,
     ResolvedSignposts,
+    SpanRequest,
     check_signpost_range,
     read_signposts,
     signpost_range_ignored,
@@ -731,23 +736,356 @@ def zone_timings(
             "occurrences only."
         ),
     }
-    # A truncated capture leaves starts open and a capture that begins mid-zone
-    # leaves ends unmatched. Either way the totals describe only what paired,
-    # which is invisible from the totals themselves.
-    if any(pairing.values()):
-        caveat = (
-            f"{pairing['unmatched_starts']} zone starts and "
-            f"{pairing['unmatched_ends']} ends did not pair, so these totals "
-            "cover only the zones that did. A capture stopped mid-run is the "
-            "usual cause."
-        )
-        if pairing["dropped_starts"]:
-            caveat += (
-                f" A further {pairing['dropped_starts']} starts were dropped at "
-                "the open-zone ceiling, which a well-formed capture does not "
-                "reach — treat this log as malformed."
-            )
+    caveat = _pairing_caveat(pairing, "these totals")
+    if caveat:
         result["caveat"] = caveat
+    return result
+
+
+def _pairing_caveat(pairing: Dict[str, int], figures: str) -> Optional[str]:
+    """Say what did not pair, which is invisible from the paired figures themselves.
+
+    A truncated capture leaves starts open and a capture that begins mid-zone
+    leaves ends unmatched. Either way ``figures`` describe only what paired.
+    """
+    if not any(pairing.values()):
+        return None
+    caveat = (
+        f"{pairing['unmatched_starts']} zone starts and "
+        f"{pairing['unmatched_ends']} ends did not pair, so {figures} "
+        "cover only the zones that did. A capture stopped mid-run is the "
+        "usual cause."
+    )
+    if pairing["dropped_starts"]:
+        caveat += (
+            f" A further {pairing['dropped_starts']} starts were dropped at "
+            "the open-zone ceiling, which a well-formed capture does not "
+            "reach — treat this log as malformed."
+        )
+    return caveat
+
+
+CORE_SPREAD_NOTE = (
+    "A core's span runs from its first kernel start to its last kernel end across "
+    "its RISCs, which is how tt-metal measures per-core kernel duration; by_risc "
+    "gives each RISC's own kernel time. imbalance is max over median. Cores are "
+    "compared within the one device each op names, since device clocks are not "
+    "comparable: a merged row is the slowest device's, except an all-gather, "
+    "reduce-scatter or all-reduce, whose row is the first device's but whose "
+    "device_time is the mean across devices, so its core spans need not match it. "
+    "per_core_*_us are the performance CSV's own figures, where it has them. A row "
+    "reads only the zones inside its own firmware cycles, so each replay of a traced "
+    "op is its own. slowest_cores are the device log's NOC coordinates, not logical "
+    "worker coordinates. Times are microseconds."
+)
+
+# Enough to say where the stragglers sit without listing a 130-core grid.
+SLOWEST_CORES = 5
+
+_PERF_PER_CORE_FIELDS = ("per_core_min_us", "per_core_max_us", "per_core_avg_us")
+
+
+def _spread(durations_us: List[float]) -> Dict[str, Optional[float]]:
+    median = statistics.median(durations_us)
+    longest = max(durations_us)
+    return {
+        "min_us": _rounded(min(durations_us)),
+        "median_us": _rounded(median),
+        "max_us": _rounded(longest),
+        # Null rather than infinite: a median of zero cycles has no ratio.
+        "imbalance": round(longest / median, 3) if median else None,
+    }
+
+
+def _core_figures(cores: Dict[tuple, CoreSpan], clock_mhz: float) -> Dict[str, object]:
+    """One op's spread across its cores, and per RISC, in microseconds."""
+    # A megahertz clock ticks once per microsecond, so cycles over MHz is already
+    # microseconds.
+    core_us = {
+        core: (span.end - span.start) / clock_mhz for core, span in cores.items()
+    }
+    risc_us: Dict[str, List[float]] = defaultdict(list)
+    for span in cores.values():
+        for risc, cycles in span.risc_cycles.items():
+            risc_us[risc].append(cycles / clock_mhz)
+    slowest = sorted(core_us.items(), key=lambda item: item[1], reverse=True)
+    return {
+        "cores_in_log": len(cores),
+        "core_span": _spread(list(core_us.values())),
+        "by_risc": {risc: _spread(risc_us[risc]) for risc in sorted(risc_us)},
+        "slowest_cores": [
+            {"x": int(x), "y": int(y), "span_us": _rounded(duration)}
+            for (x, y), duration in slowest[:SLOWEST_CORES]
+        ],
+    }
+
+
+def _spannable(row: Dict) -> bool:
+    """Whether a row is a device op with zones the log could hold."""
+    return (
+        not is_signpost_row(row)
+        and whole_number(row.get("global_call_count")) is not None
+        and whole_number(row.get("device")) is not None
+    )
+
+
+def _spread_rows(
+    rows: List[Dict], perf_id: Optional[str], limit: Optional[int]
+) -> List[Dict]:
+    """The one row asked for, or the costliest device ops by device time."""
+    if perf_id is None:
+        candidates = [
+            row
+            for row in rows
+            if _spannable(row) and finite_number(row.get("device_time")) is not None
+        ]
+        return sorted(
+            candidates,
+            key=lambda row: finite_number(row.get("device_time")) or 0.0,
+            reverse=True,
+        )[: bounded(limit, MAX_DETAILED_LIMIT)]
+
+    row = next((row for row in rows if str(row.get("id")) == str(perf_id)), None)
+    if row is None:
+        raise ValueError(
+            f"no performance row has id {perf_id!r}; pass a top_ops row's id, "
+            "not an operation_id"
+        )
+    op_code = row.get("op_code") or row.get("raw_op_code")
+    if is_signpost_row(row):
+        raise ValueError(
+            f"row {perf_id} is the signpost {op_code!r}, which runs on no core"
+        )
+    if not _spannable(row):
+        raise ValueError(
+            f"row {perf_id} ({op_code}) has no global call count or device, so it is "
+            "a host op with no zones in the device log"
+        )
+    return [row]
+
+
+def _span_request(row: Dict) -> SpanRequest:
+    """A spannable row's run, and its firmware window where it has one."""
+    run = (
+        cast(int, whole_number(row.get("global_call_count"))),
+        cast(int, whole_number(row.get("device"))),
+    )
+    start = whole_number(row.get("device_fw_start_cycle"))
+    end = whole_number(row.get("device_fw_end_cycle"))
+    window = (start, end) if start is not None and end is not None else None
+    if window is not None and window[0] > window[1]:
+        window = None
+    return SpanRequest(run, window)
+
+
+@dataclass(frozen=True)
+class _CoreSpreadIndex:
+    """Every device op's spread, kept per handle so drilling in costs one log read.
+
+    A few hundred bytes an op, where the spans they come from are a core's each.
+    """
+
+    figures: Dict[SpanRequest, Dict[str, object]]
+    zoned: frozenset
+    # Runs where some row's own window held zones: a row of one with an empty
+    # window lost its replay's zones, rather than reading another execution's log.
+    windows_held: frozenset
+    pairing: Dict[DeviceRun, Dict[str, int]]
+    malformed: Dict[int, int]
+    # How many of the report's rows share each run, which a windowless row's
+    # figures pool over.
+    rows_per_run: Dict[DeviceRun, int]
+    # The log's clock and architecture when the figures were read, kept with them:
+    # a log rewritten since must not pair its new clock with the old figures.
+    clock_mhz: int
+    arch: Optional[str]
+
+
+def _core_spread_index(
+    registry: ReportRegistry, handle: str, rows: List[Dict], clock_mhz: int
+) -> _CoreSpreadIndex:
+    def build(instance: Instance) -> _CoreSpreadIndex:
+        requests = [_span_request(row) for row in rows if _spannable(row)]
+        try:
+            with DeviceLogProfilerQueries(instance, stream=True) as queries:
+                read: CoreSpans = queries.query_core_spans(set(requests))
+        except DataFormatError as error:
+            # A log without phases is a deliberate refusal, not an unexpected
+            # failure, and the server records only a ValueError as one.
+            raise ValueError(str(error)) from error
+        meta = DeviceLogProfilerQueries.read_device_meta(instance)
+        held = [request for request, cores in read.spans.items() if cores]
+        return _CoreSpreadIndex(
+            figures={
+                request: _core_figures(read.spans[request], clock_mhz)
+                for request in held
+            },
+            zoned=frozenset(read.zoned),
+            windows_held=frozenset(
+                request.run for request in held if request.window is not None
+            ),
+            pairing=read.pairing,
+            malformed=read.malformed,
+            rows_per_run=dict(Counter(request.run for request in requests)),
+            clock_mhz=clock_mhz,
+            arch=meta.architecture if meta is not None else None,
+        )
+
+    return registry.cached_report(handle, build, variant=CacheVariant.CORE_SPREAD)
+
+
+def _summed_pairing(
+    pairing: Dict[DeviceRun, Dict[str, int]], runs: Set[DeviceRun]
+) -> Dict[str, int]:
+    """The pairing counts of the given runs only."""
+    summed = {"unmatched_starts": 0, "unmatched_ends": 0, "dropped_starts": 0}
+    for run in runs:
+        for name, count in pairing.get(run, {}).items():
+            summed[name] += count
+    return summed
+
+
+def core_spread(
+    registry: ReportRegistry,
+    handle: str,
+    perf_id: Optional[str] = None,
+    limit: Optional[int] = None,
+) -> Dict[str, object]:
+    """How evenly one operation's kernel time fell across the cores that ran it.
+
+    A perf row times an op once, as its slowest core; whether every core took that
+    long or a few stragglers set it is in the device log. The row's global call
+    count is the log's `run host ID` and its device the log's `PCIe slot`, so
+    each op is read on the one device its row came from, and the row's firmware
+    window keeps a traced op's replays, or another run's zones under the same call
+    count, out of it. #2173
+    """
+    _require_performance_report(registry, handle)
+    instance = registry.get(handle)
+    # The cheap refusals first: they need no report generated.
+    if DeviceLogProfilerQueries.device_log_path(instance) is None:
+        raise ValueError(
+            f"{handle!r} has no {DeviceLogProfilerQueries.DEVICE_LOG_FILE} beside its "
+            "performance CSV, so there are no per-core kernel zones to read"
+        )
+    clock_mhz = DeviceLogProfilerQueries.clock_mhz(instance)
+    if clock_mhz is None:
+        raise ValueError(
+            f"{DeviceLogProfilerQueries.DEVICE_LOG_FILE} records no positive "
+            "CHIP_FREQ[MHz] in its first line, so its cycles cannot be read as time"
+        )
+    # A cached report answers without asking where it came from, and the log is
+    # read live: rows of a rewritten CSV would be joined to zones they never had.
+    _require_same_source(registry, handle, instance)
+    report_rows = canonical_report(registry, handle).get("report", [])
+    rows = _spread_rows(report_rows, perf_id, limit)
+    index = _core_spread_index(registry, handle, report_rows, clock_mhz)
+
+    ops: List[Dict[str, object]] = []
+    short = over = absent = outside = lost = pooled = 0
+    for row in rows:
+        request = _span_request(row)
+        figures = index.figures.get(request)
+        perf_cores = whole_number(row.get("cores"))
+        detail = perf_detail.detail_fields(row, (perf_detail.DetailGroup.CORES,))
+        call_count, device = request.run
+        entry: Dict[str, object] = {
+            **project_row(row),
+            "device": device,
+            "global_call_count": call_count,
+            "in_log": figures is not None,
+            **{name: detail.get(name) for name in _PERF_PER_CORE_FIELDS},
+        }
+        if figures is None:
+            if request.run in index.windows_held:
+                lost += 1
+            elif request.run in index.zoned:
+                outside += 1
+            else:
+                absent += 1
+        else:
+            entry.update(figures)
+            cores_in_log = cast(int, figures["cores_in_log"])
+            if perf_cores is not None and cores_in_log < perf_cores:
+                short += 1
+            if perf_cores is not None and cores_in_log > perf_cores:
+                over += 1
+            if request.window is None and index.rows_per_run.get(request.run, 0) > 1:
+                pooled += 1
+        ops.append(entry)
+
+    result: Dict[str, object] = {
+        "handle": handle,
+        "arch": index.arch,
+        "clock_mhz": index.clock_mhz,
+        "returned": len(ops),
+        "ops": ops,
+        "projection": projection(None),
+        "note": CORE_SPREAD_NOTE,
+    }
+    caveats = []
+    if absent:
+        caveats.append(
+            f"{absent} of {len(ops)} operations have no kernel zones in the device "
+            "log for their call count and device (in_log is false): the log covers "
+            "other runs, or it stopped before them."
+        )
+    if outside:
+        caveats.append(
+            f"{outside} of {len(ops)} operations have kernel zones under their call "
+            "count and device, but none inside the row's own firmware cycles "
+            "(in_log is false): the log's zones for that call count belong to "
+            "another execution, so this device log is likely not the one this "
+            "performance CSV was captured with."
+        )
+    if lost:
+        caveats.append(
+            f"{lost} of {len(ops)} operations have no kernel zones inside their own "
+            "firmware cycles, while other rows of their call count and device do "
+            "(in_log is false). A profiler buffer that filled partway through a "
+            "trace drops later replays' zones this way; tt-metal reports that only "
+            "in its host log. A device log from another execution is the other "
+            "cause."
+        )
+    if pooled:
+        caveats.append(
+            f"{pooled} of {len(ops)} operations share their call count and device "
+            "with other rows -- a traced op's replays -- and their rows carry no "
+            "firmware cycles to tell them apart, so their figures pool every such "
+            "row's zones."
+        )
+    if short:
+        caveats.append(
+            f"{short} of {len(ops)} operations recorded kernel zones on fewer cores "
+            "than their row's cores, so their spread covers only the cores that did. "
+            "Dropped "
+            "markers or a truncated capture would cause it; tt-metal reports a full "
+            "profiler buffer only in its host log, never in the device log."
+        )
+    if over:
+        caveats.append(
+            f"{over} of {len(ops)} operations recorded kernel zones on more cores "
+            "than their row's cores, as a DRAM-sharded matmul's helper cores do: "
+            "their median and imbalance mix cores with different roles, while "
+            "max_us and slowest_cores still name the cores that set the time."
+        )
+    runs = {_span_request(row).run for row in rows}
+    malformed = sum(
+        index.malformed.get(run_id, 0) for run_id in {run_id for run_id, _ in runs}
+    )
+    if malformed:
+        caveats.append(
+            f"{malformed} kernel rows of these operations' call counts have a slot, "
+            "core or cycle count that is not a number, and were left out, so the "
+            "figures cover only the rows that were readable."
+        )
+    pairing_caveat = _pairing_caveat(
+        _summed_pairing(index.pairing, runs), "these spans"
+    )
+    if pairing_caveat:
+        caveats.append(pairing_caveat)
+    if caveats:
+        result["caveat"] = " ".join(caveats)
     return result
 
 
@@ -1015,6 +1353,7 @@ __all__ = [
     "BREAKDOWN_GROUPINGS",
     "BreakdownGrouping",
     "CANONICAL_PROJECTION",
+    "CORE_SPREAD_NOTE",
     "DEFAULT_METRIC",
     "MAX_SIGNPOST_NAME_LENGTH",
     "OP_BREAKDOWN_NOTE",
@@ -1024,6 +1363,7 @@ __all__ = [
     "canonical_report",
     "check_range",
     "is_ranged",
+    "core_spread",
     "countable_device_time",
     "diff_reports",
     "empty_detail_fields",
