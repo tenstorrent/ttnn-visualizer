@@ -47,6 +47,7 @@ vi.mock('../src/components/npe/useNPEHandlers', async (importOriginal) => ({
 vi.mock('../src/hooks/useAPI', () => ({ useNodeType: useNodeTypeMock }));
 
 const QUASAR_32_GRID = { x_size: 11, y_size: 8 };
+const BAKED_QUASAR_GRIDS = [QUASAR_32_GRID, { x_size: 12, y_size: 19 }];
 
 const resolved = (overrides: Record<string, unknown> = {}) => ({
     architecture: { arch_name: 'QUASAR', grid: QUASAR_32_GRID },
@@ -103,7 +104,7 @@ describe('NPEView SoC descriptor presentation (#1847)', () => {
                 grid: { x_size: 2, y_size: 3 },
                 cores: undefined,
                 dispatch: undefined,
-                gridMismatch: { baked: QUASAR_32_GRID, reported: { x_size: 2, y_size: 3 } },
+                gridMismatch: { bakedGrids: BAKED_QUASAR_GRIDS, reported: { x_size: 2, y_size: 3 } },
             }),
         );
 
@@ -111,7 +112,7 @@ describe('NPEView SoC descriptor presentation (#1847)', () => {
 
         expect(createToast).toHaveBeenCalledWith(
             SOC_DESCRIPTOR_GRID_MISMATCH_TITLE,
-            expect.stringContaining("This report's grid is 2x3, but the built-in quasar descriptor is 11x8"),
+            expect.stringContaining("This report's grid is 2x3, but the built-in quasar descriptor is 11x8 or 12x19"),
             ToastType.WARNING,
         );
         expect(createToast).not.toHaveBeenCalledWith(
@@ -127,7 +128,7 @@ describe('NPEView SoC descriptor presentation (#1847)', () => {
             resolved({
                 architecture: null,
                 grid: { x_size: 2, y_size: 3 },
-                gridMismatch: { baked: QUASAR_32_GRID, reported: { x_size: 2, y_size: 3 } },
+                gridMismatch: { bakedGrids: BAKED_QUASAR_GRIDS, reported: { x_size: 2, y_size: 3 } },
             }),
         );
         const npeData = makeNpeData(2, 3);
@@ -144,7 +145,7 @@ describe('NPEView SoC descriptor presentation (#1847)', () => {
                 architecture: null,
                 grid: { x_size: 2, y_size: 3 },
                 overrideProblems: ['`grid` must be an object with `x_size` and `y_size`'],
-                gridMismatch: { baked: QUASAR_32_GRID, reported: { x_size: 2, y_size: 3 } },
+                gridMismatch: { bakedGrids: BAKED_QUASAR_GRIDS, reported: { x_size: 2, y_size: 3 } },
             }),
         );
 

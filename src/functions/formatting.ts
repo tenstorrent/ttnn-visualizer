@@ -128,6 +128,10 @@ export const getCoreCountText = (numCores: number): string => `${numCores} ${num
 /** A node grid as "columns x rows", the way SoC descriptors size it. */
 export const formatGridSize = (grid: { x_size: number; y_size: number }): string => `${grid.x_size}x${grid.y_size}`;
 
+/** Alternative grids, as "11x8 or 12x19". */
+export const formatGridSizes = (grids: { x_size: number; y_size: number }[]): string =>
+    grids.map(formatGridSize).join(' or ');
+
 // The CB legend row and the pressure modal both spell out these multipliers.
 // Written twice, they drifted on pluralisation; callers keep their own gating,
 // which genuinely differs, and share only the wording. #1844

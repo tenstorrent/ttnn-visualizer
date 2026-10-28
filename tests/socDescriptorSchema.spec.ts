@@ -6,11 +6,10 @@ import Ajv from 'ajv';
 import { describe, expect, it } from 'vitest';
 
 import socDescriptorSchema from '../src/schemas/npe-soc-descriptor.schema.json';
+import { DeviceArchitecture } from '../src/definitions/DeviceArchitecture';
+import { formatGridSize } from '../src/functions/formatting';
+import { getBakedChipDesigns } from '../src/functions/getChipDesign';
 import { parseSocDescriptorOverride } from '../src/functions/socDescriptorOverride';
-import archWormhole from '../src/assets/data/arch-wormhole.json';
-import archBlackhole from '../src/assets/data/arch-blackhole.json';
-import archQuasar from '../src/assets/data/arch-quasar.json';
-import archGrendel from '../src/assets/data/arch-grendel.json';
 
 const validate = new Ajv({ allErrors: true }).compile(socDescriptorSchema);
 
@@ -21,10 +20,14 @@ const validate = new Ajv({ allErrors: true }).compile(socDescriptorSchema);
  * schema, because a producer would build against it and still be rejected.
  */
 const cases: { label: string; descriptor: unknown; accepted: boolean }[] = [
-    { label: 'baked wormhole', descriptor: archWormhole, accepted: true },
-    { label: 'baked blackhole', descriptor: archBlackhole, accepted: true },
-    { label: 'baked quasar', descriptor: archQuasar, accepted: true },
-    { label: 'baked grendel', descriptor: archGrendel, accepted: true },
+    // Every baked descriptor, so a new one is checked without being listed.
+    ...Object.values(DeviceArchitecture).flatMap((arch) =>
+        getBakedChipDesigns(arch).map((design) => ({
+            label: `baked ${arch} ${formatGridSize(design.grid)}`,
+            descriptor: design,
+            accepted: true,
+        })),
+    ),
     {
         label: 'minimum a producer must write',
         descriptor: { grid: { x_size: 4, y_size: 4 }, functional_workers: ['1-1'] },

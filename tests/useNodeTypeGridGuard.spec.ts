@@ -19,6 +19,11 @@ const quasar2x3Descriptor = {
     dispatch: ['0-2'],
 };
 
+const QUASAR_32_GRID = { x_size: 11, y_size: 8 };
+const QSR3A2_GRID = { x_size: 12, y_size: 19 };
+// Every grid a `quasar` report can be drawn on from a baked descriptor, its default first.
+const BAKED_QUASAR_GRIDS = [QUASAR_32_GRID, QSR3A2_GRID];
+
 afterEach(() => {
     vi.restoreAllMocks();
 });
@@ -52,9 +57,9 @@ describe('useNodeType grid guard (#1847)', () => {
 
         expect(result.current.architecture).toBeNull();
         expect(result.current.cores).toBeUndefined();
-        expect(result.current.gridMismatch).toEqual({ baked: { x_size: 11, y_size: 8 }, reported });
+        expect(result.current.gridMismatch).toEqual({ bakedGrids: BAKED_QUASAR_GRIDS, reported });
         expect(consoleError).toHaveBeenCalledWith(
-            `Baked quasar SoC descriptor is 11x8, but the report's grid is ${reported.x_size}x${reported.y_size}`,
+            `Baked quasar SoC descriptor is 11x8 or 12x19, but the report's grid is ${reported.x_size}x${reported.y_size}`,
         );
         // Not also the generic message: the arch is supported, the grid is not.
         expect(consoleError).not.toHaveBeenCalledWith('Unsupported arch: quasar');
@@ -128,7 +133,7 @@ describe('useNodeType grid guard (#1847)', () => {
 
         expect(result.current.architecture).toBeNull();
         expect(result.current.gridMismatch).toEqual({
-            baked: { x_size: 10, y_size: 12 },
+            bakedGrids: [{ x_size: 10, y_size: 12 }],
             reported: { x_size: 8, y_size: 8 },
         });
     });
@@ -210,7 +215,7 @@ describe('useNodeType with the derived Grendel descriptor (#2130)', () => {
         );
 
         expect(result.current.architecture).toBeNull();
-        expect(result.current.gridMismatch?.baked).toEqual({ x_size: 12, y_size: 8 });
+        expect(result.current.gridMismatch?.bakedGrids).toEqual([{ x_size: 12, y_size: 8 }]);
     });
 
     // UMD reads `quasar` without an `ip_variant` as Grendel (tt-umd#3587); this deliberately doesn't, since no
@@ -223,6 +228,56 @@ describe('useNodeType with the derived Grendel descriptor (#2130)', () => {
         );
 
         expect(result.current.architecture).toBeNull();
-        expect(result.current.gridMismatch?.baked).toEqual({ x_size: 11, y_size: 8 });
+        expect(result.current.gridMismatch?.bakedGrids).toEqual(BAKED_QUASAR_GRIDS);
+    });
+});
+
+describe('useNodeType with the QSR3.A2 descriptor (#2237)', () => {
+    it('draws a quasar report on the 12x19 grid on QSR3.A2, all three dies included', () => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        const { result } = renderHook(() => useNodeType(DeviceArchitecture.QUASAR, undefined, QSR3A2_GRID));
+
+        expect(result.current.gridMismatch).toBeNull();
+        expect(result.current.grid).toEqual(QSR3A2_GRID);
+        expect(result.current.cores).toHaveLength(96);
+        expect(result.current.dram).toHaveLength(12);
+        // [y, x] pairs: each die's dispatch engines, the last die's ending at the bottom row.
+        expect(result.current.dispatch).toHaveLength(9);
+        expect(result.current.dispatch).toContainEqual([18, 1]);
+        expect(consoleError).not.toHaveBeenCalled();
+    });
+
+    it('keeps the same descriptor across renders while the grid is unchanged', () => {
+        // The core-type lists are memoised on the descriptor, and NPE re-renders per playback tick.
+        const { result, rerender } = renderHook(() =>
+            useNodeType(DeviceArchitecture.QUASAR, undefined, { ...QSR3A2_GRID }),
+        );
+        const { architecture, cores } = result.current;
+        rerender();
+
+        expect(result.current.architecture).toBe(architecture);
+        expect(result.current.cores).toBe(cores);
+    });
+
+    // tt-npe embeds the descriptor it ran with, so a rejected one is how a real trace most often lands here.
+    it("falls back to QSR3.A2 when the report's own descriptor is unusable", () => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const unusable = { grid: QSR3A2_GRID, functional_workers: ['99-99'] };
+
+        const { result } = renderHook(() => useNodeType(DeviceArchitecture.QUASAR, unusable, QSR3A2_GRID));
+
+        expect(result.current.overrideProblems).not.toBeNull();
+        expect(result.current.gridMismatch).toBeNull();
+        expect(result.current.cores).toHaveLength(96);
+        expect(consoleError).toHaveBeenCalledWith(expect.stringContaining('Unusable SoC descriptor in report'));
+    });
+
+    it("prefers the report's own descriptor on the QSR3.A2 grid", () => {
+        const descriptor = { grid: QSR3A2_GRID, functional_workers: ['2-2'] };
+
+        const { result } = renderHook(() => useNodeType(DeviceArchitecture.QUASAR, descriptor, QSR3A2_GRID));
+
+        expect(result.current.cores).toEqual([[2, 2]]);
     });
 });

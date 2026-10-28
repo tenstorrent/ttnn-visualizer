@@ -12,7 +12,7 @@ const CORE_COUNT: Record<Exclude<DeviceArchitecture, DeviceArchitecture.UNKNOWN>
     [DeviceArchitecture.GRAYSKULL]: 108,
     [DeviceArchitecture.WORMHOLE]: 64,
     [DeviceArchitecture.BLACKHOLE]: 130, // Mohamed: 130 for BH p150 and 120 for BH p100. P150 is more popular so 130 is good
-    [DeviceArchitecture.QUASAR]: 32, // 32 workers (8 columns × 4 rows); 28 when dispatch runs on Tensix cores
+    [DeviceArchitecture.QUASAR]: 32, // Quasar-32's 8x4 mesh, 28 with Tensix dispatch; QSR3.A2's 96 come from the device log
     [DeviceArchitecture.GRENDEL]: 32, // the same Quasar mesh; both to come from the descriptor (#2130)
 };
 

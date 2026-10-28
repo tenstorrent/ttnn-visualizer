@@ -58,7 +58,7 @@ import { altCongestionColorsAtom } from '../../store/app';
 import GlobalSwitch from '../GlobalSwitch';
 import NPEZoneFilterComponent from './NPEZoneFilterComponent';
 import createToastNotification from '../../functions/createToastNotification';
-import { formatGridSize } from '../../functions/formatting';
+import { formatGridSize, formatGridSizes } from '../../functions/formatting';
 import { ToastType } from '../../definitions/ToastType';
 import { TEST_IDS } from '../../definitions/TestIds';
 import {
@@ -345,7 +345,7 @@ const NPEView = ({
             createToastNotification(
                 SOC_DESCRIPTOR_GRID_MISMATCH_TITLE,
                 `This report's grid is ${formatGridSize(gridMismatch.reported)}, but the built-in ` +
-                    `${npeData.common_info.arch} descriptor is ${formatGridSize(gridMismatch.baked)}, so its cores ` +
+                    `${npeData.common_info.arch} descriptor is ${formatGridSizes(gridMismatch.bakedGrids)}, so its cores ` +
                     'are not labelled. Include the SoC descriptor in the report to label them.',
                 ToastType.WARNING,
             );

@@ -7,6 +7,7 @@ import {
     buildGitCommitUrl,
     formatDuration,
     formatGridSize,
+    formatGridSizes,
     formatNonZeroShareOfTotal,
     formatShareOfTotal,
     formatShortSha,
@@ -128,5 +129,17 @@ describe('getCoreCountText', () => {
 describe('formatGridSize', () => {
     it('writes columns before rows, as SoC descriptors size a grid', () => {
         expect(formatGridSize({ x_size: 11, y_size: 8 })).toBe('11x8');
+    });
+});
+
+describe('formatGridSizes', () => {
+    it('offers each grid as an alternative', () => {
+        expect(formatGridSizes([{ x_size: 10, y_size: 12 }])).toBe('10x12');
+        expect(
+            formatGridSizes([
+                { x_size: 11, y_size: 8 },
+                { x_size: 12, y_size: 19 },
+            ]),
+        ).toBe('11x8 or 12x19');
     });
 });

@@ -68,10 +68,10 @@ import {
     tracingModeAtom,
 } from '../store/app';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
-import { getChipDesign } from '../functions/getChipDesign';
+import { findBakedChipDesign, getBakedChipDesigns, getChipDesign } from '../functions/getChipDesign';
 import { stringToArchitecture } from '../functions/stringToArchitecture';
 import { parseReportedGrid, parseSocDescriptorOverride } from '../functions/socDescriptorOverride';
-import { formatGridSize } from '../functions/formatting';
+import { formatGridSize, formatGridSizes } from '../functions/formatting';
 import { NPEData, NPEManifestEntry, NpeSummary, NpeWindow } from '../model/NPEModel';
 import { GraphBundle } from '../model/MLIRJsonModel';
 import { ChipDesign, ClusterModel, ClusterTopology, MeshData, MeshDescriptorResponse } from '../model/ClusterModel';
@@ -1486,8 +1486,8 @@ export interface ResolvedArchitecture {
     grid: ChipDesign['grid'] | null;
     /** Populated only when a report supplied a descriptor that failed validation. */
     overrideProblems: string[] | null;
-    /** Populated when the baked descriptor was withheld because the report's grid differs from it. */
-    gridMismatch: { baked: ChipDesign['grid']; reported: ChipDesign['grid'] } | null;
+    /** Populated when the baked descriptors were withheld because the report's grid is none of theirs. */
+    gridMismatch: { bakedGrids: ChipDesign['grid'][]; reported: ChipDesign['grid'] } | null;
 }
 
 /**
@@ -1498,8 +1498,9 @@ export interface ResolvedArchitecture {
  * fall back: it is reported, because a descriptor that was offered and rejected is
  * a different problem from one that was never there. See #1776.
  *
- * `reportedGrid` is the grid the report says it was captured on. The baked descriptor
- * is withheld when it differs, since one arch name can cover several grids (#1847).
+ * `reportedGrid` is the grid the report says it was captured on. It picks among the
+ * baked descriptors for the arch, which are withheld when none is on that grid, since
+ * one arch name can cover several grids (#1847, #2237).
  */
 export const useArchitecture = (
     arch: DeviceArchitecture,
@@ -1507,29 +1508,23 @@ export const useArchitecture = (
     reportedGrid?: Partial<ChipDesign['grid']>,
 ): ResolvedArchitecture => {
     const override = useMemo(() => parseSocDescriptorOverride(socDescriptor, arch), [socDescriptor, arch]);
-    // Normalised, so `QUASAR` or `Wormhole_B0` from a producer still finds its descriptor.
-    const baked = getChipDesign(stringToArchitecture(arch));
     const reportedXSize = reportedGrid?.x_size;
     const reportedYSize = reportedGrid?.y_size;
     const reported = useMemo(() => parseReportedGrid(reportedXSize, reportedYSize), [reportedXSize, reportedYSize]);
+    // Normalised, so `QUASAR` or `Wormhole_B0` from a producer still finds its descriptor.
+    const bakedArch = stringToArchitecture(arch);
+    const bakedDesigns = getBakedChipDesigns(bakedArch);
+    const baked = reported ? findBakedChipDesign(bakedArch, reported) : getChipDesign(bakedArch);
 
-    // Quasar's 2x3 and qsr.s1 models also report `quasar`, and must not be drawn on Quasar-32.
+    // Quasar's 2x3 and qsr.s1 models also report `quasar`, and must not be drawn on a baked Quasar part.
     const gridMismatch = useMemo(() => {
-        if (override.status === 'valid' || baked === null || reported === null) {
+        if (override.status === 'valid' || reported === null || baked !== null || bakedDesigns.length === 0) {
             return null;
         }
-        if (baked.grid.x_size === reported.x_size && baked.grid.y_size === reported.y_size) {
-            return null;
-        }
-        return { baked: baked.grid, reported };
-    }, [override.status, baked, reported]);
+        return { bakedGrids: bakedDesigns.map((design) => design.grid), reported };
+    }, [override.status, reported, baked, bakedDesigns]);
 
-    let design: ChipDesign | null = baked;
-    if (override.status === 'valid') {
-        design = override.design;
-    } else if (gridMismatch) {
-        design = null;
-    }
+    const design = override.status === 'valid' ? override.design : baked;
     const grid = design?.grid ?? reported;
     const overrideProblems = override.status === 'invalid' ? override.problems : null;
 
@@ -1543,9 +1538,9 @@ export const useArchitecture = (
             return;
         }
         if (gridMismatch) {
-            // eslint-disable-next-line no-console -- the toast closes after a few seconds; this keeps the two sizes findable.
+            // eslint-disable-next-line no-console -- the toast closes after a few seconds; this keeps the sizes findable.
             console.error(
-                `Baked ${arch} SoC descriptor is ${formatGridSize(gridMismatch.baked)}, ` +
+                `Baked ${arch} SoC descriptor is ${formatGridSizes(gridMismatch.bakedGrids)}, ` +
                     `but the report's grid is ${formatGridSize(gridMismatch.reported)}`,
             );
             return;
