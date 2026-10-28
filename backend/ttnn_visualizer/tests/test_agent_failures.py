@@ -27,7 +27,7 @@ from ttnn_visualizer.agent import (
 )
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
 from ttnn_visualizer.queries import DatabaseQueries
-from ttnn_visualizer.tests.captured_graphs import circular_buffer
+from ttnn_visualizer.tests.captured_graphs import CapturedGraph, circular_buffer
 
 _SCHEMA = """
 CREATE TABLE operations (operation_id int UNIQUE, name text, duration float);
@@ -1402,6 +1402,87 @@ class TestOperationDetail:
         ]
         assert "1 device operation launch whose" in detail["caveat"]
         assert "unknown, not zero" in detail["caveat"]
+
+    @staticmethod
+    def _failed_matmul(tmp_path, ended: bool):
+        """#2218's example: a capture written before tt-metal #53041 leaves the failed
+        launch's scope open."""
+        graph = (
+            CapturedGraph()
+            .start("ttnn::matmul")
+            .start("TilizeDeviceOperation")
+            .free_all()
+            .cb()
+            .end("TilizeDeviceOperation")
+            .start("MatmulDeviceOperation")
+            .free_all()
+            .cb(200)
+            .cb(300)
+        )
+        if ended:
+            graph.capture_end()
+        registry, handle = _report(
+            tmp_path,
+            operations=[(1, "ttnn.matmul")],
+            errors=[(1, "ttnn.matmul", "TT_THROW", _OUT_OF_MEMORY)],
+            graphs=[(1, [node for node in graph.nodes if isinstance(node, dict)])],
+        )
+        return linking.operation_detail(registry, handle, operation_id=1)
+
+    def test_a_failed_launch_left_open_lists_its_buffers_under_it(self, tmp_path):
+        """Read in the modal's order, as every real graph ends with `capture_end`."""
+        detail = self._failed_matmul(tmp_path, ended=True)
+
+        assert detail["error"]["failed_device_operations"] == ["MatmulDeviceOperation"]
+        buffers = detail["circular_buffers"]
+        assert [
+            (operation["name"], operation["circular_buffer_count"])
+            for operation in buffers["device_operations"]
+        ] == [("TilizeDeviceOperation", 1), ("MatmulDeviceOperation", 2)]
+        assert buffers["unlisted_circular_buffer_count"] == 0
+        assert "leaves out" not in (detail.get("caveat") or "")
+
+    def test_a_graph_cut_off_after_a_launch_s_buffers_counts_them_in_the_caveat(
+        self, tmp_path
+    ):
+        """Nothing follows the buffers, so no free-all can be moved after them."""
+        detail = self._failed_matmul(tmp_path, ended=False)
+
+        buffers = detail["circular_buffers"]
+        assert buffers["circular_buffer_count"] == 1
+        assert buffers["unlisted_circular_buffer_count"] == 2
+        assert "leaves out 2 circular buffers" in detail["caveat"]
+        assert "device_operation_count leave them out" in detail["caveat"]
+        assert "unknown, not zero" not in detail["caveat"]
+
+    def test_a_relaunch_and_a_lost_buffer_are_each_a_sentence(self, tmp_path):
+        """Two reasons share the caveat; each ends before the next begins."""
+        graph = (
+            CapturedGraph()
+            .start("ttnn::matmul")
+            .start("UntilizeDeviceOperation")
+            .free_all()
+            .end("UntilizeDeviceOperation")
+            .start("MatmulDeviceOperation")
+            .free_all()
+            .cb()
+            .tensor()
+            .cb(200)
+        )
+        registry, handle = _report(
+            tmp_path,
+            operations=[(1, "ttnn.matmul")],
+            graphs=[(1, [node for node in graph.nodes if isinstance(node, dict)])],
+        )
+
+        detail = linking.operation_detail(registry, handle, operation_id=1)
+
+        assert detail["circular_buffers"]["unlisted_circular_buffer_count"] == 1
+        caveat = detail["caveat"]
+        assert "1 device operation launch whose" in caveat
+        assert "leaves out 1 circular buffer missing" in caveat
+        assert "unknown, not zero. circular_buffers leaves out" in caveat
+        assert caveat.endswith(".")
 
     def test_its_circular_buffers_are_read_from_the_rank_asked_for(self, tmp_path):
         registry, handle = _two_rank_report(

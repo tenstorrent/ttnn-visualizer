@@ -252,12 +252,24 @@ with each name's launch and device counts, and `caveat` says their buffers are u
 rather than zero. A device operation with no circular buffers at all looks the same in the
 graph, so these are most likely, not certainly, cached relaunches.
 
+**A capture written before tt-metal #53041 leaves a failed launch's scope open.** Its
+circular buffers are still listed under that device operation, as the app's view lists
+them: the graph is read in the view's order, which moves each launch's free-all after its
+buffers. That order keeps one snapshot per device operation, so two shapes still leave
+buffers out of the listing: a graph cut off right after a launch's buffers, with no free-all
+to follow, and a launch whose buffers another node splits into two runs, where the second
+run's snapshot replaces the first, as it does in the app. Those are counted in
+`unlisted_circular_buffer_count` rather than listed, once per device section on an older
+mesh capture, and `caveat` says `circular_buffer_count` and `device_operation_count` leave
+them out. For an operation with an error, the failed launch is named in
+`error.failed_device_operations`.
+
 The field is absent when the report has no captured graph for the operation, and withheld
 when its graph cannot be read for the rank asked for, is past the size a tool will read, or
 does not parse; `caveat` then says which. For an operation with an error, the same graph
 names `error.failed_device_operations`, which is withheld alike while the rest of the error
 still answers. A graph that launched no device operation, with no
-`unrecorded_launch_count`, is a real zero.
+`unrecorded_launch_count` and no `unlisted_circular_buffer_count`, is a real zero.
 
 **`memory_profile` reports a floor, not the peak.** It reads the `buffers` table, which
 records tensor allocations only. A circular buffer never appears there, and neither does a
