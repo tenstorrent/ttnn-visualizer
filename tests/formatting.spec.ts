@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     buildGitCommitUrl,
+    describeBakedGrids,
     formatDuration,
     formatGridSize,
     formatGridSizes,
@@ -133,13 +134,25 @@ describe('formatGridSize', () => {
 });
 
 describe('formatGridSizes', () => {
-    it('offers each grid as an alternative', () => {
+    it('lists each grid', () => {
         expect(formatGridSizes([{ x_size: 10, y_size: 12 }])).toBe('10x12');
         expect(
             formatGridSizes([
                 { x_size: 11, y_size: 8 },
                 { x_size: 12, y_size: 19 },
             ]),
-        ).toBe('11x8 or 12x19');
+        ).toBe('11x8 and 12x19');
+    });
+});
+
+describe('describeBakedGrids', () => {
+    it('agrees in number with the descriptors it sizes', () => {
+        expect(describeBakedGrids([{ x_size: 10, y_size: 12 }])).toBe('descriptor is 10x12');
+        expect(
+            describeBakedGrids([
+                { x_size: 11, y_size: 8 },
+                { x_size: 12, y_size: 19 },
+            ]),
+        ).toBe('descriptors are 11x8 and 12x19');
     });
 });

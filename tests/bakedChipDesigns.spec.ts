@@ -32,7 +32,8 @@ describe('baked chip designs', () => {
         );
     });
 
-    // Two parts sharing an arch name and a grid could never be told apart.
+    // Two parts sharing an arch name and a grid could never be told apart. Apart from the list
+    // above, which whoever bakes the next part edits, and could edit to match a duplicate.
     it('bakes each arch on distinct grids', () => {
         expect(new Set(baked.map(({ name }) => name)).size).toBe(baked.length);
     });

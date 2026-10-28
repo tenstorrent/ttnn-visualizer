@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useNodeType } from '../src/hooks/useAPI';
 import { DeviceArchitecture } from '../src/definitions/DeviceArchitecture';
 import npeDemoSingle from '../src/assets/data/npe-demo-single.json';
+import { BAKED_QUASAR_GRIDS, QSR3A2_GRID } from './helpers/quasarGrids';
 
 // The 2x3 Quasar simulator's descriptor, as tt-npe embeds it: another grid reporting `quasar`.
 const quasar2x3Descriptor = {
@@ -18,11 +19,6 @@ const quasar2x3Descriptor = {
     pcie: ['1-2'],
     dispatch: ['0-2'],
 };
-
-const QUASAR_32_GRID = { x_size: 11, y_size: 8 };
-const QSR3A2_GRID = { x_size: 12, y_size: 19 };
-// Every grid a `quasar` report can be drawn on from a baked descriptor, its default first.
-const BAKED_QUASAR_GRIDS = [QUASAR_32_GRID, QSR3A2_GRID];
 
 afterEach(() => {
     vi.restoreAllMocks();
@@ -59,7 +55,7 @@ describe('useNodeType grid guard (#1847)', () => {
         expect(result.current.cores).toBeUndefined();
         expect(result.current.gridMismatch).toEqual({ bakedGrids: BAKED_QUASAR_GRIDS, reported });
         expect(consoleError).toHaveBeenCalledWith(
-            `Baked quasar SoC descriptor is 11x8 or 12x19, but the report's grid is ${reported.x_size}x${reported.y_size}`,
+            `Baked quasar SoC descriptors are 11x8 and 12x19, but the report's grid is ${reported.x_size}x${reported.y_size}`,
         );
         // Not also the generic message: the arch is supported, the grid is not.
         expect(consoleError).not.toHaveBeenCalledWith('Unsupported arch: quasar');
@@ -240,8 +236,11 @@ describe('useNodeType with the QSR3.A2 descriptor (#2237)', () => {
 
         expect(result.current.gridMismatch).toBeNull();
         expect(result.current.grid).toEqual(QSR3A2_GRID);
+        expect(result.current.architecture?.grid).toEqual(QSR3A2_GRID);
         expect(result.current.cores).toHaveLength(96);
         expect(result.current.dram).toHaveLength(12);
+        // [y, x]: the middle die's west DRAM tile, `1-10`.
+        expect(result.current.dram).toContainEqual([10, 1]);
         // [y, x] pairs: each die's dispatch engines, the last die's ending at the bottom row.
         expect(result.current.dispatch).toHaveLength(9);
         expect(result.current.dispatch).toContainEqual([18, 1]);

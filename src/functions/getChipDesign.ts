@@ -31,8 +31,13 @@ const BAKED_DESIGNS_BY_ARCH = new Map<DeviceArchitecture, readonly ChipDesign[]>
     [DeviceArchitecture.GRENDEL, [archGrendel as ChipDesign]],
 ]);
 
+export interface BakedChipDesign {
+    arch: DeviceArchitecture;
+    design: ChipDesign;
+}
+
 /** Every baked descriptor with its arch, each arch's default first. */
-export const getAllBakedChipDesigns = (): { arch: DeviceArchitecture; design: ChipDesign }[] =>
+export const getAllBakedChipDesigns = (): BakedChipDesign[] =>
     [...BAKED_DESIGNS_BY_ARCH].flatMap(([arch, designs]) => designs.map((design) => ({ arch, design })));
 
 /** Every descriptor baked for `arch`, its default first. */

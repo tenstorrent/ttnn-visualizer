@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { DeviceArchitecture } from '../src/definitions/DeviceArchitecture';
 import { findBakedChipDesign, getBakedChipDesigns, getChipDesign } from '../src/functions/getChipDesign';
+import { QSR3A2_GRID, QUASAR_32_GRID } from './helpers/quasarGrids';
 
 // `null`, not an empty stand-in: the stand-in claimed the required fields of `ChipDesign`
 // without having them, so callers each invented their own "did this resolve?" probe
@@ -15,9 +16,6 @@ import { findBakedChipDesign, getBakedChipDesigns, getChipDesign } from '../src/
 // The 8x4 Tensix mesh Quasar-32 and Grendel share, and each QSR3.A2 die repeats.
 const quasarMeshWorkers = (rows: number[]) => rows.flatMap((y) => [2, 3, 4, 5, 6, 7, 8, 9].map((x) => `${x}-${y}`));
 const QUASAR_MESH_WORKERS = quasarMeshWorkers([2, 3, 4, 5]);
-
-const QUASAR_32_GRID = { x_size: 11, y_size: 8 };
-const QSR3A2_GRID = { x_size: 12, y_size: 19 };
 
 describe('getChipDesign', () => {
     it('returns the baked descriptor for a supported arch', () => {
@@ -72,6 +70,14 @@ describe('getChipDesign', () => {
         expect(qsr3a2?.eth).toEqual([]);
         expect(qsr3a2?.pcie).toEqual([]);
         expect(qsr3a2?.arc).toEqual([]);
+        expect(qsr3a2?.harvested_workers).toEqual([]);
+        expect(qsr3a2?.dram_bank_size).toBe(1_073_741_824);
+        expect(qsr3a2?.features).toEqual({
+            unpacker: { version: 1, inline_srca_trans_without_srca_trans_instr: false },
+            math: { dst_size_alignment: 32768 },
+            packer: { version: 1 },
+            overlay: { version: 1 },
+        });
     });
 
     // Derived at tt-umd a5d92b1e58b by decoding `grendel_qsr1_att_map.hpp` words as x = (w & 0x3f) - 2,
@@ -128,6 +134,8 @@ describe('getChipDesign', () => {
     it('finds nothing on a grid no part of the arch is baked on', () => {
         expect(findBakedChipDesign(DeviceArchitecture.QUASAR, { x_size: 2, y_size: 3 })).toBeNull();
         expect(findBakedChipDesign(DeviceArchitecture.QUASAR, { x_size: 12, y_size: 8 })).toBeNull();
+        // Transposed: the same cell count on the wrong axes.
+        expect(findBakedChipDesign(DeviceArchitecture.QUASAR, { x_size: 19, y_size: 12 })).toBeNull();
         expect(findBakedChipDesign(DeviceArchitecture.GRENDEL, QSR3A2_GRID)).toBeNull();
     });
 

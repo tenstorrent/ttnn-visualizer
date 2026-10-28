@@ -14,6 +14,7 @@ import {
     SOC_DESCRIPTOR_UNUSABLE_TITLE,
     UNSUPPORTED_ARCHITECTURE_TITLE,
 } from '../src/definitions/NPEData';
+import { BAKED_QUASAR_GRIDS, QUASAR_32_GRID } from './helpers/quasarGrids';
 
 const { createToast, useNodeTypeMock, chipSizes } = vi.hoisted(() => ({
     createToast: vi.fn(),
@@ -45,9 +46,6 @@ vi.mock('../src/components/npe/useNPEHandlers', async (importOriginal) => ({
     useSelectedTransferGrouping: () => ({ transferListSelectionRendering: new Map(), groupedTransfersByNoCID: {} }),
 }));
 vi.mock('../src/hooks/useAPI', () => ({ useNodeType: useNodeTypeMock }));
-
-const QUASAR_32_GRID = { x_size: 11, y_size: 8 };
-const BAKED_QUASAR_GRIDS = [QUASAR_32_GRID, { x_size: 12, y_size: 19 }];
 
 const resolved = (overrides: Record<string, unknown> = {}) => ({
     architecture: { arch_name: 'QUASAR', grid: QUASAR_32_GRID },
@@ -112,7 +110,9 @@ describe('NPEView SoC descriptor presentation (#1847)', () => {
 
         expect(createToast).toHaveBeenCalledWith(
             SOC_DESCRIPTOR_GRID_MISMATCH_TITLE,
-            expect.stringContaining("This report's grid is 2x3, but the built-in quasar descriptor is 11x8 or 12x19"),
+            expect.stringContaining(
+                "This report's grid is 2x3, but the built-in quasar descriptors are 11x8 and 12x19",
+            ),
             ToastType.WARNING,
         );
         expect(createToast).not.toHaveBeenCalledWith(
@@ -138,8 +138,7 @@ describe('NPEView SoC descriptor presentation (#1847)', () => {
 
         const [, message] =
             createToast.mock.calls.find(([title]) => title === SOC_DESCRIPTOR_GRID_MISMATCH_TITLE) ?? [];
-        expect(message).toContain('descriptor is 10x12, so');
-        expect(message).not.toContain(' or ');
+        expect(message).toContain('the built-in quasar descriptor is 10x12, so');
     });
 
     it('raises the mismatch warning once, not on every render', () => {

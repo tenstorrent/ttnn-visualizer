@@ -128,9 +128,13 @@ export const getCoreCountText = (numCores: number): string => `${numCores} ${num
 /** A node grid as "columns x rows", the way SoC descriptors size it. */
 export const formatGridSize = (grid: { x_size: number; y_size: number }): string => `${grid.x_size}x${grid.y_size}`;
 
-/** Alternative grids, as "11x8 or 12x19". */
+/** Several grids, as "11x8 and 12x19". */
 export const formatGridSizes = (grids: { x_size: number; y_size: number }[]): string =>
-    grids.map(formatGridSize).join(' or ');
+    grids.map(formatGridSize).join(' and ');
+
+/** What an arch's baked descriptors are sized, as "descriptor is 10x12" or "descriptors are 11x8 and 12x19". */
+export const describeBakedGrids = (grids: { x_size: number; y_size: number }[]): string =>
+    `${grids.length === 1 ? 'descriptor is' : 'descriptors are'} ${formatGridSizes(grids)}`;
 
 // The CB legend row and the pressure modal both spell out these multipliers.
 // Written twice, they drifted on pluralisation; callers keep their own gating,

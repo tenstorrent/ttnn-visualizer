@@ -71,7 +71,7 @@ import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 import { findBakedChipDesign, getBakedChipDesigns, getChipDesign } from '../functions/getChipDesign';
 import { stringToArchitecture } from '../functions/stringToArchitecture';
 import { parseReportedGrid, parseSocDescriptorOverride } from '../functions/socDescriptorOverride';
-import { formatGridSize, formatGridSizes } from '../functions/formatting';
+import { describeBakedGrids, formatGridSize } from '../functions/formatting';
 import { NPEData, NPEManifestEntry, NpeSummary, NpeWindow } from '../model/NPEModel';
 import { GraphBundle } from '../model/MLIRJsonModel';
 import { ChipDesign, ClusterModel, ClusterTopology, MeshData, MeshDescriptorResponse } from '../model/ClusterModel';
@@ -1540,7 +1540,7 @@ export const useArchitecture = (
         if (gridMismatch) {
             // eslint-disable-next-line no-console -- the toast closes after a few seconds; this keeps the sizes findable.
             console.error(
-                `Baked ${arch} SoC descriptor is ${formatGridSizes(gridMismatch.bakedGrids)}, ` +
+                `Baked ${arch} SoC ${describeBakedGrids(gridMismatch.bakedGrids)}, ` +
                     `but the report's grid is ${formatGridSize(gridMismatch.reported)}`,
             );
             return;
