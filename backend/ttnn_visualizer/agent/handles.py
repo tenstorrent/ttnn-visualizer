@@ -77,6 +77,8 @@ class CacheVariant(str, Enum):
     DRAM_FALLBACKS = "dram_fallbacks"
     # The L1 peak replay by rank, which reads every operation and captured graph.
     L1_PEAK = "l1_peak"
+    # Every device op's per-core spread, from one read of the device log.
+    CORE_SPREAD = "core_spread"
 
 
 # Snapshots narrowed by a scope -- a signpost range -- kept at once, across every
@@ -416,40 +418,49 @@ def _scan_csv(
     return header, has_data_row
 
 
-def _csv_problem(
+def _checked_csv_header(
     path: Path,
     required: frozenset,
     *,
     encoding: Optional[str] = None,
     skip_preamble: bool = False,
     strip_header: bool = False,
-) -> Optional[str]:
-    """Why the tool reading this CSV would fail on it, or None when it would not.
+) -> Tuple[Optional[str], frozenset]:
+    """Why the tool reading this CSV would fail on it, or None, with the header read.
 
     The keywords mirror how that tool reads the file, so the check refuses
     exactly what the read would: `encoding` is what it decodes with (None is the
     locale's), `skip_preamble` drops a first line it skips, and `strip_header`
-    strips header cells it strips.
+    strips header cells it strips. The header is empty when it could not be read.
     """
     try:
         header, has_data_row = _scan_csv(path, encoding, skip_preamble)
     except OSError as error:
-        return f"unreadable: {error.strerror or error}"
+        return f"unreadable: {error.strerror or error}", frozenset()
     except UnicodeDecodeError as error:
-        return f"not {error.encoding} text (byte {error.start} cannot be decoded)"
+        return (
+            f"not {error.encoding} text (byte {error.start} cannot be decoded)",
+            frozenset(),
+        )
     except csv.Error as error:
-        return f"malformed header: {error}"
+        return f"malformed header: {error}", frozenset()
 
-    if not header:
-        return "empty"
     if strip_header:
         header = [cell.strip() for cell in header]
-    absent = required - set(header)
+    columns = frozenset(header)
+    if not header:
+        return "empty", columns
+    absent = required - columns
     if absent:
-        return f"missing columns: {', '.join(sorted(absent))}"
+        return f"missing columns: {', '.join(sorted(absent))}", columns
     if not has_data_row:
-        return "no data rows"
-    return None
+        return "no data rows", columns
+    return None, columns
+
+
+def _csv_problem(path: Path, required: frozenset) -> Optional[str]:
+    """Why the tool reading this CSV would fail on it, or None when it would not."""
+    return _checked_csv_header(path, required)[0]
 
 
 def _perf_csv_problem(path: Optional[Path]) -> Optional[str]:
@@ -618,22 +629,22 @@ def _hardware(
     return result
 
 
-def _device_log_answerable(instance: Instance) -> bool:
-    """Whether `profile_log_device.csv` decodes cleanly, has the columns `zone_timings`
-    reads, and holds at least one data row. #2184"""
+def _answerable_device_log_columns(instance: Instance) -> Optional[frozenset]:
+    """The header of a `profile_log_device.csv` that decodes cleanly, has the columns
+    `zone_timings` reads and holds at least one data row, or None. #2184"""
     path = DeviceLogProfilerQueries.device_log_path(instance)
     if path is None:
-        return False
+        return None
     # pandas decodes it as UTF-8, `__enter__` skips the `ARCH: …` line, and the
     # header's leading spaces are stripped before any column is looked up.
-    problem = _csv_problem(
+    problem, columns = _checked_csv_header(
         path,
         DeviceLogProfilerQueries.ZONE_TIMINGS_COLUMNS,
         encoding="utf-8",
         skip_preamble=True,
         strip_header=True,
     )
-    return problem is None
+    return columns if problem is None else None
 
 
 def _inventory(instance: Instance, perf_csv: Optional[Path]) -> Dict[str, object]:
@@ -662,7 +673,18 @@ def _inventory(instance: Instance, perf_csv: Optional[Path]) -> Dict[str, object
     )
 
     profiler_path = instance.profiler_path
-    record("zone_timings", _device_log_answerable(instance))
+    device_log_columns = _answerable_device_log_columns(instance)
+    record("zone_timings", device_log_columns is not None)
+    # Joins a perf row to its zones, so it needs both files, durations to spread
+    # (a phase column `query_core_spans` would pair on) and a clock to read their
+    # cycles as time.
+    record(
+        "core_spread",
+        perf_ready
+        and device_log_columns is not None
+        and bool(DeviceLogProfilerQueries.ZONE_PHASE_TOKENS.keys() & device_log_columns)
+        and DeviceLogProfilerQueries.clock_mhz(instance) is not None,
+    )
 
     # Per tool, against the tables it reads. A partial capture can answer
     # `find_operations` and none of the rest, and saying so is the whole point

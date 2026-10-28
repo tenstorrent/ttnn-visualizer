@@ -95,6 +95,7 @@ another rank's operation under the same id.
 | `op_breakdown` | Where the time went, per op or per op category, over the whole report or a signpost range: each group's count, and its device time and op-to-op gap with the share each is of the total. |
 | `program_cache` | Whether programs were built again rather than reused: per op code, its calls, distinct programs, and how many repeat calls hit or missed the program cache. |
 | `zone_timings` | Per-zone, per-RISC totals from `profile_log_device.csv` — firmware and kernel phases, as measured on device. |
+| `core_spread` | How evenly one operation's kernel time fell across the cores that ran it, or the costliest operations': the minimum, median and maximum per-core span and per RISC, the imbalance between them, the slowest cores by coordinate, and how many cores recorded zones against the row's core count. |
 | `diff_reports` | Per-operation-code deltas between two reports, largest movement first, over the whole reports or one signpost range in every capture: only moves past a noise threshold count as changes, operations one report lacks are listed apart, and repeated captures of either side are compared by their median. `match: signature` groups by raw op code and tensors instead. |
 | `find_operations` | Operations matching a name substring or a call-stack substring, with the ids `operation_detail` takes. |
 | `operation_detail` | One operation: its input and output tensors with shape, dtype, layout and memory config, what it had allocated, and the circular buffers each of its device operations allocated, with size per core, core range and device count, with its error and likely DRAM fallback when it has one, and its per-device `l1_pressure` (`fullness_pct`, `free_segments`, `largest_free_block`, `largest_free_pct`). With a linked performance report, also the performance rows it launched, their device time and share of the report's, and the operation's total and slowest row, with the same `include` as `top_ops`. |
@@ -105,8 +106,8 @@ another rank's operation under the same id.
 | `dram_fallbacks` | Operations that likely fell back from L1 to DRAM, inferred from their memory config arguments and from retries after an L1 allocation failure. |
 | `l1_peak` | The run's L1 peak per bank, split into circular buffers, intra-operation tensors, persistent tensors and stale ones, with the operation holding it and the operations closest to it. |
 
-`top_ops`, `op_breakdown`, `program_cache`, `zone_timings` and `diff_reports` read the
-performance CSVs; the operation tools — `find_operations`, `operation_detail`,
+`top_ops`, `op_breakdown`, `program_cache`, `zone_timings`, `core_spread` and `diff_reports`
+read the performance CSVs; the operation tools — `find_operations`, `operation_detail`,
 `memory_profile`, `tensor_flow`, `operation_provenance`, `errors`, `dram_fallbacks` and
 `l1_peak` — read the profiler report's SQLite database;
 `load_report` opens both, since its whole job is saying which of the others apply. A capture can carry either, both, or — as far as these tools are concerned —
@@ -118,7 +119,10 @@ capture has no operation graph and no tensor data, and a performance tool asked 
 loaded without a `performance_path` is refused and says so. `zone_timings` is listed only when
 `profile_log_device.csv` decodes as UTF-8, has every column the tool reads (`timer_id`,
 `zone name`, `run host ID`, `PCIe slot`, `RISC processor type`, `core_x`, `core_y` and
-`time[cycles since reset]`), and has at least one data row. `top_ops`, `op_breakdown` and
+`time[cycles since reset]`), and has at least one data row. `core_spread` is listed only when
+`zone_timings` is, the performance CSV can be reported on, the device log marks zone
+starts and ends in a `type` or `zone phase` column, and its first line names a positive
+`CHIP_FREQ[MHz]`. `top_ops`, `op_breakdown` and
 `program_cache` are listed only when the performance CSV can be reported on, and when it
 cannot, `performance_csv_problem` says why (`empty`, `no data rows`, `missing columns: …`, or
 that it cannot be read or decoded).
@@ -609,6 +613,40 @@ repeat on each — so a zone can report thousands of cores on a multi-device run
 need the device log's `type` column to pair zone starts with ends; a capture without it
 reports occurrence counts only, and a capture that stopped mid-zone reports how many starts
 and ends failed to pair so a partial total does not read as a complete one.
+
+`core_spread` reads each operation on one device only, never pooling devices, since each
+runs its own clock. A performance row's global call count is the device log's `run host ID`
+and its device is the log's `PCIe slot`. That pair does not single out one execution: a
+traced operation's replays share it, and call counts repeat from one capture to the next.
+So a row's zones are only those inside its own `DEVICE FW START CYCLE` to
+`DEVICE FW END CYCLE`, which keeps each replay's figures its own. An operation with zones
+under its call count and device but none inside its firmware cycles has `in_log` false.
+When no row of that call count and device has zones inside its own cycles, the caveat says
+the log belongs to another execution — usually a device log beside a different run's
+performance CSV. When other replays do, it names a profiler buffer that filled partway
+through the trace as the likelier cause, since that drops later replays' zones. A row without firmware cycles takes every zone of its call
+count and device, and when other rows share them its figures pool theirs, which a caveat
+says. On a multi-device report a row is the slowest device's, except an all-gather,
+reduce-scatter or all-reduce, where it is the first device's but its `device_time` is the
+mean across devices, so its core spans need not match it; each operation names its
+`device`. A core's span runs from its first kernel start to its last kernel end across its
+RISCs, which is how tt-metal measures `DEVICE KERNEL DURATION PER CORE`, and the
+performance CSV's own minimum, maximum and average are returned beside it where the capture
+has them. `imbalance` is the maximum over the median. `slowest_cores` name cores by the
+device log's NOC coordinates, not logical worker coordinates: Wormhole's worker (0,0)
+logs as (1,1). An operation with no kernel zones for its call count and device has
+`in_log` false and no figures rather than zeros: the log can cover different runs from the
+CSV, or stop before them. When fewer cores recorded zones than the row reports, the spread
+covers only the cores that did. Dropped markers cause that, and tt-metal reports a full
+profiler buffer in its host log only, never in the device log. When more cores recorded
+zones than the row reports, as a DRAM-sharded matmul's helper cores do, the median and
+`imbalance` mix cores with different roles, while the maximum and `slowest_cores` still
+name the cores that set the time; a caveat says so. Unpaired zones are counted per call
+count and device, not per replay, so an unpaired zone in one replay is reported on every
+replay of that operation. A kernel row whose slot, core or cycle count is not a number is
+left out and counted in a caveat rather than failing the call. The first call on a handle
+reads the whole device log once for every operation in the report, and later calls answer
+from that read, with the clock it was read at.
 
 **A performance row and a profiler operation are linked by order, not by a shared id.**
 Neither report records the other's id, so when a handle is loaded with both, the tools

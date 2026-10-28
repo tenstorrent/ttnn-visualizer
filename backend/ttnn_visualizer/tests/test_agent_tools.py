@@ -167,7 +167,12 @@ class TestReportInventory:
         loaded = load_report(ReportRegistry(), performance_path=str(tmp_path))
 
         assert loaded["handle"] == "report-1"
-        assert set(loaded["answerable"]) == {"top_ops", "op_breakdown", "zone_timings"}
+        assert set(loaded["answerable"]) == {
+            "top_ops",
+            "op_breakdown",
+            "zone_timings",
+            "core_spread",
+        }
         assert set(loaded["unanswerable"]) == {
             # The CSV here has no PROGRAM HASH or PROGRAM CACHE HIT column.
             "program_cache",
@@ -312,6 +317,26 @@ class TestReportInventory:
 
         assert "zone_timings" in loaded["answerable"]
         assert tools.zone_timings(registry, loaded["handle"])["zones"]
+
+    def test_core_spread_needs_both_files(self, tmp_path):
+        """It joins a perf row to its zones, so a device log alone answers nothing."""
+        write_device_log(tmp_path, MODERN_HEADER, ZONED_ROWS)
+
+        loaded = load_report(ReportRegistry(), performance_path=str(tmp_path))
+
+        assert "zone_timings" in loaded["answerable"]
+        assert "core_spread" in loaded["unanswerable"]
+
+    def test_core_spread_needs_zone_starts_and_ends(self, tmp_path):
+        """A log that cannot tell a start from an end has no duration to spread,
+        though `zone_timings` still counts its occurrences."""
+        write_device_log(tmp_path, UNTYPED_HEADER, UNTYPED_ROWS)
+        write_ops_perf(tmp_path, smoke_rows())
+
+        loaded = load_report(ReportRegistry(), performance_path=str(tmp_path))
+
+        assert "zone_timings" in loaded["answerable"]
+        assert "core_spread" in loaded["unanswerable"]
 
     def test_a_non_utf8_device_log_does_not_break_load_report(self, tmp_path):
         """A device log with non-UTF-8 bytes in the preamble, or in a row after the
@@ -2317,6 +2342,7 @@ class TestTransport:
             "op_breakdown",
             "program_cache",
             "zone_timings",
+            "core_spread",
             "diff_reports",
             "find_operations",
             "operation_detail",
@@ -2554,6 +2580,9 @@ class TestTransport:
                 "never a top_ops row's id"
                 in schemas[tool]["operation_id"]["description"]
             )
+        assert (
+            "never an operation_id" in schemas["core_spread"]["perf_id"]["description"]
+        )
 
     def test_op_breakdown_advertises_its_groupings_and_counts_groups(self):
         response = server.handle_message(
@@ -2597,7 +2626,9 @@ class TestTransport:
         assert record.call_args.kwargs["outcome"] is McpToolOutcome.REFUSED
         generate.assert_not_called()
 
-    @pytest.mark.parametrize("tool", ["op_breakdown", "top_ops", "program_cache"])
+    @pytest.mark.parametrize(
+        "tool", ["op_breakdown", "top_ops", "program_cache", "core_spread"]
+    )
     def test_a_performance_tool_on_a_profiler_only_handle_says_why(
         self, tmp_path, tool
     ):
