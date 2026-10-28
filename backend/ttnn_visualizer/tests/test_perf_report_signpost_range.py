@@ -241,9 +241,10 @@ def _wide_csv(odd_host_time=None, odd_device_id=None):
     [
         ({}, 8),
         ({"odd_host_time": "oops"}, 8),
-        # The whole-file parse keeps the column as text: "0" to "7", and "host".
+        # The whole-file parse keeps the column as text: "0" to "7", and "host",
+        # which tt-perf-report does not read as a device, so neither does the count.
         # Not "N/A", which pandas reads as missing in every chunk alike.
-        ({"odd_device_id": "host"}, 9),
+        ({"odd_device_id": "host"}, 8),
     ],
 )
 def test_a_chunked_parse_types_each_column_as_the_whole_file_does(odd, device_count):

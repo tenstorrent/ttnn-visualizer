@@ -141,11 +141,9 @@ describe('useLinkedPerformanceReport', () => {
         expect(getReportRequests()[0].end_signpost).toBeUndefined();
     });
 
-    // The last filter #1812 named to be pinned. It was left following the atom on
-    // the premise that a trace-captured run's traced order is the one that lines up
-    // with the memory report — but that order never reaches the match: this query
-    // pins `mergeDevices: true`, so `merge_device_rows` always runs and ends by
-    // re-sorting on `ORIGINAL_ROW`, overwriting the sort `tracingMode` suppressed.
+    // The last filter #1812 named to be pinned. Since tt-perf-report 1.5.0 a merged
+    // report keeps its host-time sort, so the toggle changes the row sequence link
+    // resolution sees; see the tracingMode note in CONVENTIONS.md.
     it('pins tracing mode off, whatever the tab is showing', async () => {
         renderWithView(() => useLinkedPerformanceReport(), [[tracingModeAtom, true]]);
 

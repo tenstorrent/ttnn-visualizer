@@ -3228,15 +3228,17 @@ wheels = [
 
 [[package]]
 name = "tt-perf-report"
-version = "1.4.0"
+version = "1.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "matplotlib" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "pandas" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d3/0e/f93f11effa4ae64556a1e67fb42ce09388ae41a9013857961563419170aa/tt_perf_report-1.4.0.tar.gz", hash = "sha256:5f24b386ca70cffb4c2e14002c26457360527264caedb29440c6f461445c793a", size = 77722, upload-time = "2026-09-30T17:56:16.077Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c1/88/8db19b4b8e4e0732276cfed55654b22fe5ec42a133ba024815eb4230b936/tt_perf_report-1.5.0.tar.gz", hash = "sha256:ee5912e09a3d63e2ca1f89e75ef36c3f862061d811431ffaf76d06b50dc3c2f3", size = 104249, upload-time = "2026-10-28T16:01:07.199Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/86/12/de4c652455bd1a013943e83cb4cb335da2abfa217d906dbbe729ec5f16bc/tt_perf_report-1.4.0-py3-none-any.whl", hash = "sha256:f53b274f4c0a5e715cacd0970ef09d572093d70b14c339087fd7945db2f09f08", size = 50569, upload-time = "2026-09-30T17:56:14.476Z" },
+    { url = "https://files.pythonhosted.org/packages/1b/21/8c96117c362f700d11e02d577c9019054e74e7456093ec9b887500bb4e23/tt_perf_report-1.5.0-py3-none-any.whl", hash = "sha256:3ffd2c33a9f3ec3dd0cee3e9400ce0af4a7ac3307bac0aea8c5718c320559e41", size = 63763, upload-time = "2026-10-28T16:01:05.846Z" },
 ]
 
 [[package]]
@@ -3296,7 +3298,7 @@ requires-dist = [
     { name = "pydantic-core", specifier = "==2.41.5" },
     { name = "python-dotenv", specifier = "==1.2.2" },
     { name = "pyyaml", specifier = ">=6.0.0,<7.0" },
-    { name = "tt-perf-report", specifier = "==1.4.0" },
+    { name = "tt-perf-report", specifier = "==1.5.0" },
     { name = "zstd", specifier = ">=1.5.7.2,<2.0" },
 ]
 

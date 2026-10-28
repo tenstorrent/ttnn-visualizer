@@ -1147,6 +1147,25 @@ def _kernel_list(entries):
     return "[" + "; ".join(f"'{entry}'" for entry in entries) + "]"
 
 
+def _smoke_runs(count):
+    """The smoke rows `count` times over, each run starting after the last ends, as
+    a real capture's would: tied host times would leave tt-perf-report's sort free
+    to interleave the runs."""
+    smoke = smoke_rows()
+    run_span = max(int(row["HOST END TS"]) for row in smoke)
+    return [
+        {
+            **row,
+            **{
+                column: str(int(row[column]) + run * run_span)
+                for column in ("HOST START TS", "HOST END TS")
+            },
+        }
+        for run in range(count)
+        for row in smoke
+    ]
+
+
 def _dense_rows():
     """Smoke rows at a real report's size, each flagged as often as the view would.
 
@@ -1154,7 +1173,7 @@ def _dense_rows():
     cores, a 20 ns ideal time and a program called again with no cache hit give each
     row low utilisation, underutilised cores and, after its first call, a recompute.
     """
-    rows = [dict(row) for _ in range(5) for row in smoke_rows()]
+    rows = _smoke_runs(5)
     for index, row in enumerate(rows):
         kernels = _DATA_MOVEMENT_KERNELS + ([_SHARDED_READER] if index % 3 == 0 else [])
         if not row["OP CODE"].endswith("DeviceOperation"):
@@ -1222,7 +1241,7 @@ class TestAnswerSize:
 
     @staticmethod
     def _table(tmp_path, graph_of=None):
-        rows = [dict(row) for _ in range(5) for row in smoke_rows()]
+        rows = _smoke_runs(5)
         seen = set()
         for row in rows:
             row[PROGRAM_HASH_COLUMN] = row["OP CODE"]
