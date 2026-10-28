@@ -92,6 +92,25 @@ def test_an_unused_position_is_left_out_and_a_row_with_none_has_no_signature():
     assert host is None
 
 
+def test_a_short_row_reads_the_cells_it_has_and_shifts_no_position():
+    """A row that stops early is read cell by cell rather than all at once, so its
+    signature, and the next row's, are still their own."""
+    short, full = _signatures(
+        OLDER_HEADER,
+        "Relu,1,1,32,32,TILE,BFLOAT16,DEV_0_L1_INTERLEAVED",
+        "Matmul,1,1,32,4096,TILE,BFLOAT16,DEV_0_L1_WIDTH_SHARDED,"
+        "1,1,4096,1024,TILE,BFLOAT8_B,DEV_0_DRAM_INTERLEAVED,"
+        "1,1,32,1024,TILE,BFLOAT16,DEV_0_L1_WIDTH_SHARDED",
+    )
+
+    assert short == "in0 1x1x32x32 TILE BFLOAT16 L1_INTERLEAVED"
+    assert full == (
+        "in0 1x1x32x4096 TILE BFLOAT16 L1_WIDTH_SHARDED; "
+        "in1 1x1x4096x1024 TILE BFLOAT8_B DRAM_INTERLEAVED; "
+        "out0 1x1x32x1024 TILE BFLOAT16 L1_WIDTH_SHARDED"
+    )
+
+
 def test_rows_are_numbered_as_the_report_numbers_them():
     """tt-perf-report numbers a report row by its pandas index: an empty or a
     whitespace-only line is no row, and a quoted newline does not start one."""

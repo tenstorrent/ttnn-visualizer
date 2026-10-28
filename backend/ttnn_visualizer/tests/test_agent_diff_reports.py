@@ -38,6 +38,22 @@ from ttnn_visualizer.tests.test_device_log_columns import (
 )
 
 
+@pytest.fixture(autouse=True)
+def one_device():
+    """A capture with no CSV, as most here are, names one device as a real CSV does:
+    otherwise no capture would record a device count."""
+    read = tools._resolve_signposts
+
+    def resolve(instance):
+        try:
+            return read(instance)
+        except (DataFormatError, OSError):
+            return ResolvedSignposts({}, True, 1)
+
+    with patch.object(tools, "_resolve_signposts", side_effect=resolve):
+        yield
+
+
 def _registry(tmp_path, count=2, preambles=None):
     """`count` handles, `report-1` on, each on its own capture with a device log."""
     registry = ReportRegistry()
@@ -103,7 +119,7 @@ def _side(*captures):
 class TestClassify:
     """`report_diff.classify` alone: where each group goes, with no report behind it."""
 
-    THRESHOLDS = report_diff.Thresholds(percent=5.0, floor=1.0)
+    THRESHOLDS = report_diff.Thresholds(min_percent=5.0, min_delta=1.0)
 
     def test_each_group_lands_in_exactly_one_list(self):
         before = _side(
@@ -359,6 +375,23 @@ class TestThresholds:
             tools.diff_reports(
                 _registry(tmp_path), "report-1", "report-2", match="shape"
             )
+
+    def test_a_threshold_given_as_a_numeric_string_is_read_as_its_number(
+        self, tmp_path
+    ):
+        """As `limit` is: a client that serialises numbers as text still means them."""
+        registry = _registry(tmp_path)
+
+        result = _diff(
+            registry,
+            {"report-1": _ops(Matmul=10.0), "report-2": _ops(Matmul=10.4)},
+            min_percent="5",
+            min_delta="0.1",
+        )
+
+        assert result["thresholds"]["min_percent"] == 5.0
+        assert result["thresholds"]["min_delta"] == 0.1
+        assert result["within_threshold_count"] == 1
 
 
 class TestGroupsOneReportLacks:
@@ -887,6 +920,79 @@ class TestRepeats:
         generate.assert_not_called()
 
 
+class TestRepeatsAtTheEdges:
+    def test_a_new_group_a_repeat_left_blank_says_why_its_figure_is_null(
+        self, tmp_path
+    ):
+        """No capture gave it a figure on that side, which its measured calls say."""
+        registry = _registry(tmp_path, count=3)
+        rows = {
+            "report-1": _ops(Matmul=10.0),
+            "report-2": _ops(Matmul=10.0, Pool=5.0),
+            "report-3": [
+                *_ops(Matmul=10.0),
+                _row(id="3", op_code="Pool", device_time=""),
+            ],
+        }
+
+        result = _diff(registry, rows, repeats_b=["report-3"])
+
+        assert result["new"] == [
+            {
+                "op_code": "Pool",
+                "device_time_after": None,
+                "count_after": 1,
+                "measured_after": 0,
+            }
+        ]
+
+    def test_new_ranks_a_group_with_no_figure_by_its_largest_capture(self, tmp_path):
+        """Pool's 5 µs capture outranks Add's 3 µs median, so a limit of 1 keeps it."""
+        registry = _registry(tmp_path, count=3)
+        rows = {
+            "report-1": _ops(Matmul=10.0),
+            "report-2": _ops(Matmul=10.0, Pool=5.0, Add=3.0),
+            "report-3": [
+                *_ops(Matmul=10.0),
+                _row(id="3", op_code="Pool", device_time=""),
+                _row(id="4", op_code="Add", device_time="3.0"),
+            ],
+        }
+
+        result = _diff(registry, rows, repeats_b=["report-3"], limit=1)
+
+        assert result["new_count"] == 2
+        assert [entry["op_code"] for entry in result["new"]] == ["Pool"]
+
+    def test_a_group_only_a_later_repeat_ran_is_inconsistent_not_new(self, tmp_path):
+        """The side that never ran it gives one zero per capture."""
+        registry = _registry(tmp_path, count=4)
+        rows = {
+            "report-1": _ops(Matmul=10.0),
+            "report-2": _ops(Matmul=10.0),
+            "report-3": _ops(Matmul=10.0),
+            "report-4": _ops(Matmul=10.0, Late=2.0),
+        }
+
+        result = _diff(registry, rows, repeats_a=["report-3"], repeats_b=["report-4"])
+
+        assert result["inconsistent"] == [
+            {"op_code": "Late", "calls_before": [0, 0], "calls_after": [0, 1]}
+        ]
+        assert result["new"] == []
+
+    def test_no_repeats_answers_as_a_plain_diff(self, tmp_path):
+        registry = _registry(tmp_path)
+
+        result = _diff(
+            registry,
+            {"report-1": _ops(Matmul=10.0), "report-2": _ops(Matmul=10.0)},
+            repeats_a=[],
+        )
+
+        assert not {"repeats_before", "repeats_after", "inconsistent"} & set(result)
+
+
 def _degraded_once(handle, window=None):
     """Matmul at 10 µs in report-1 and 20 µs elsewhere; `handle`'s first report, or its
     first of `window`, comes back degraded with every row lost."""
@@ -923,6 +1029,8 @@ class TestDegradedReports:
         assert first["inconsistent"] == [
             {"op_code": "Matmul", "calls_before": [1], "calls_after": [1, 0]}
         ]
+        assert report_diff.degraded_caveat(["report-3"]) in first["caveat"]
+        assert "skipped errors" not in second.get("caveat", "")
         assert [row["device_time"] for row in healthy["report"]] == ["20.0"]
         (change,) = second["changes"]
         assert (change["device_time_before"], change["device_time_after"]) == (
@@ -948,7 +1056,9 @@ class TestDegradedReports:
             healthy = tools.canonical_report(registry, "report-1", window)
             second = tools.diff_reports(registry, "report-1", "report-2", **bounds)
 
+        # The lost row reads as new, which the caveat says it may be.
         assert [entry["op_code"] for entry in first["new"]] == ["Matmul"]
+        assert report_diff.degraded_caveat(["report-1"]) in first["caveat"]
         assert [row["device_time"] for row in healthy["report"]] == ["10.0"]
         (change,) = second["changes"]
         assert (change["device_time_before"], change["device_time_after"]) == (
@@ -1035,12 +1145,12 @@ class TestCapturesOnDifferentHardware:
             "max_compute_cores": ["report-2"],
         }
         assert (
-            "Some captures record no arch, clock_mhz or max_compute_cores"
+            "Not every capture records arch, clock_mhz or max_compute_cores"
             in result["caveat"]
         )
 
-    def test_a_fact_no_capture_records_is_not_named(self, tmp_path):
-        """With nothing to compare, no capture can differ from another on it."""
+    def test_a_fact_no_capture_records_is_unverified_for_every_handle(self, tmp_path):
+        """Unknown on every side is not equal, so silence would read as checked."""
         registry = _registry(tmp_path)
         for capture in ("capture-1", "capture-2"):
             (tmp_path / capture / DeviceLogProfilerQueries.DEVICE_LOG_FILE).unlink()
@@ -1049,7 +1159,16 @@ class TestCapturesOnDifferentHardware:
             registry, {"report-1": _ops(Matmul=10.0), "report-2": _ops(Matmul=10.0)}
         )
 
-        assert "unverified" not in result and "caveat" not in result
+        both = ["report-1", "report-2"]
+        assert result["unverified"] == {
+            "arch": both,
+            "clock_mhz": both,
+            "max_compute_cores": both,
+        }
+        assert (
+            "Not every capture records arch, clock_mhz or max_compute_cores"
+            in result["caveat"]
+        )
 
     def test_an_unreadable_device_count_is_unverified_and_the_diff_answered(
         self, tmp_path
@@ -1068,6 +1187,35 @@ class TestCapturesOnDifferentHardware:
 
         assert result["unverified"] == {"device_count": ["report-2"]}
         assert [change["op_code"] for change in result["changes"]] == ["Matmul"]
+
+    def test_a_repeat_on_other_hardware_and_one_with_no_log_are_both_named(
+        self, tmp_path
+    ):
+        registry = _registry(
+            tmp_path,
+            count=3,
+            preambles=[
+                PREAMBLE,
+                PREAMBLE,
+                PREAMBLE.replace("CHIP_FREQ[MHz]: 1000", "CHIP_FREQ[MHz]: 1350"),
+            ],
+        )
+        (tmp_path / "capture-2" / DeviceLogProfilerQueries.DEVICE_LOG_FILE).unlink()
+        rows = {handle: _ops(Matmul=10.0) for handle in ("report-1", "report-2")}
+        rows["report-3"] = _ops(Matmul=10.0)
+
+        result = _diff(registry, rows, repeats_b=["report-3"])
+
+        assert result["mismatched"] == {
+            "clock_mhz": {"report-1": 1000, "report-3": 1350}
+        }
+        assert result["unverified"] == {
+            "arch": ["report-2"],
+            "clock_mhz": ["report-2"],
+            "max_compute_cores": ["report-2"],
+        }
+        assert "The captures differ in clock_mhz" in result["caveat"]
+        assert "Not every capture records arch" in result["caveat"]
 
 
 class TestMetricCaveats:
@@ -1361,19 +1509,29 @@ class TestSignatures:
 
     def test_a_rewritten_capture_never_mixes_its_signatures_and_rows(self, tmp_path):
         """A signature is found by the position a row names, so both must come from one
-        capture: after a rewrite a diff answers from what it read before, and a range
-        that needs a new read is refused."""
+        capture: after a rewrite a diff answers from what it read before, and one that
+        needs a new read is refused."""
         before = _transpose_reshaped(signposted_rows())
+        rewritten = self._registry(
+            tmp_path / "op-code-first",
+            before,
+            _transpose_reshaped(before, duration_ns=37_000),
+        )
         registry = self._registry(
             tmp_path, before, _transpose_reshaped(before, duration_ns=37_000)
         )
-        tools.diff_reports(registry, "report-1", "report-2")
+        tools.diff_reports(rewritten, "report-1", "report-2")
+        tools.diff_reports(registry, "report-1", "report-2", match="signature")
+        write_ops_perf(tmp_path / "op-code-first" / "after", before[:-1])
         write_ops_perf(tmp_path / "after", before[:-1])
 
         result = tools.diff_reports(registry, "report-1", "report-2", match="signature")
 
         (change,) = result["changes"]
         assert change["signature"].startswith("in0 1x1x64x128")
+        # An op code diff reads no signatures, so they would be read from the rewrite.
+        with pytest.raises(ValueError, match="has changed since it was first read"):
+            tools.diff_reports(rewritten, "report-1", "report-2", match="signature")
         with pytest.raises(ValueError, match="has changed since it was first read"):
             tools.diff_reports(
                 registry,
@@ -1384,35 +1542,57 @@ class TestSignatures:
                 end_signpost="PERF_END",
             )
 
-    def test_a_diff_by_op_code_does_not_need_signatures(self, tmp_path):
-        """They are read beside the totals so the other match reads no report again,
-        but a CSV without them still diffs by op code."""
-        with patch.object(tools, "_read_op_signatures", return_value=None):
-            result = _diff(
-                _registry(tmp_path),
-                {"report-1": _ops(Matmul=10.0), "report-2": _ops(Matmul=20.0)},
+    def test_a_diff_by_op_code_reads_no_signatures(self, tmp_path):
+        """They are a second read of the CSV, which a compared capture leaves to the
+        first signature diff; that one sums them from the reports already kept."""
+        registry = _registry(tmp_path)
+        rows = {"report-1": _ops(Matmul=10.0), "report-2": _ops(Matmul=20.0)}
+        signatures = op_signatures.Signatures(["in0 1x1x32x32"], False)
+
+        with (
+            patch.object(tools, "_read_op_signatures", return_value=signatures) as read,
+            patch.object(
+                tools,
+                "_generate_canonical_report",
+                side_effect=lambda instance, **_: _perf_report(
+                    rows[instance.instance_id]
+                ),
+            ) as generate,
+        ):
+            by_op_code = tools.diff_reports(registry, "report-1", "report-2")
+            read.assert_not_called()
+            by_signature = tools.diff_reports(
+                registry, "report-1", "report-2", match="signature"
             )
 
-        assert [change["op_code"] for change in result["changes"]] == ["Matmul"]
+        assert [change["op_code"] for change in by_op_code["changes"]] == ["Matmul"]
+        assert [change["raw_op_code"] for change in by_signature["changes"]] == [
+            "Matmul"
+        ]
+        assert read.call_count == 2
+        assert generate.call_count == 2
 
     def test_signatures_unreadable_beside_the_totals_are_refused_later(self, tmp_path):
-        """Readable when asked but not when the totals were kept, they would be missing
-        from what the diff compares, so a fresh handle is asked for."""
-        registry = _registry(tmp_path)
-        failures = [OSError("busy"), OSError("busy")]
+        """A repeat's signatures are read with its totals, since its report is dropped
+        after; unreadable then but readable when asked, they would be missing from what
+        the diff compares, so a fresh handle is asked for."""
+        registry = _registry(tmp_path, count=3)
+        failures = [OSError("busy")]
 
         def read(_instance):
             if failures:
                 raise failures.pop()
             return op_signatures.Signatures(["in0 1x1x32x32"], False)
 
-        rows = {"report-1": _ops(Matmul=10.0), "report-2": _ops(Matmul=10.0)}
+        rows = {handle: _ops(Matmul=10.0) for handle in ("report-1", "report-2")}
+        rows["report-3"] = _ops(Matmul=10.0)
         with patch.object(tools, "_read_op_signatures", side_effect=read):
-            _diff(registry, rows)
+            _diff(registry, rows, repeats_b=["report-3"])
+            assert failures == []
             with pytest.raises(
-                ValueError, match="could not be read when its totals were"
+                ValueError, match="'report-3'.*could not be read when its totals were"
             ):
-                _diff(registry, rows, match="signature")
+                _diff(registry, rows, match="signature", repeats_b=["report-3"])
 
     def test_a_long_signature_is_cut_and_its_length_given(self, tmp_path):
         registry = self._registry(
@@ -1463,6 +1643,56 @@ class TestSignatures:
                 tools.diff_reports(registry, "report-1", "report-2", match="signature")
 
         generate.assert_not_called()
+
+
+class TestSignatureKeys:
+    """Which group a row's signature puts it in, through a mocked report."""
+
+    @staticmethod
+    def _diff(tmp_path, rows):
+        registry = _registry(tmp_path)
+        signatures = op_signatures.Signatures(["in0 1x1x32x32"], False)
+        with patch.object(tools, "_read_op_signatures", return_value=signatures):
+            return _diff(registry, rows, match="signature")
+
+    @pytest.mark.parametrize("row_id", [None, "x"])
+    def test_a_row_whose_id_names_no_position_has_an_empty_signature(
+        self, tmp_path, row_id
+    ):
+        rows = {
+            "report-1": [_row(id=row_id, device_time="10.0")],
+            "report-2": [_row(id=row_id, device_time="20.0")],
+        }
+
+        (change,) = self._diff(tmp_path, rows)["changes"]
+
+        assert (change["raw_op_code"], change["signature"]) == ("Matmul", None)
+
+    def test_a_row_with_no_op_code_is_in_no_group(self, tmp_path):
+        unnamed = {"op_code": "", "raw_op_code": ""}
+        rows = {
+            "report-1": [_row(id="2"), _row(id="3", **unnamed, device_time="10.0")],
+            "report-2": [_row(id="2"), _row(id="3", **unnamed, device_time="90.0")],
+        }
+
+        result = self._diff(tmp_path, rows)
+
+        assert result["within_threshold_count"] == 1
+        for listed in ("changes", "new", "missing", "unmeasured"):
+            assert result[listed] == []
+
+    def test_an_op_code_past_the_cut_is_cut_as_a_signature_is(self, tmp_path):
+        long_code = "Matmul" + "x" * report_diff.MAX_SIGNATURE_CHARS
+        rows = {
+            "report-1": [_row(op_code=long_code, device_time="10.0")],
+            "report-2": [_row(op_code=long_code, device_time="20.0")],
+        }
+
+        (change,) = _diff(_registry(tmp_path), rows)["changes"]
+
+        assert change["op_code"] == long_code[: report_diff.MAX_SIGNATURE_CHARS]
+        assert change["op_code_full_length"] == len(long_code)
+        assert len(change["op_code_digest"]) == report_diff.SIGNATURE_DIGEST_CHARS
 
 
 class TestAnswerBudget:

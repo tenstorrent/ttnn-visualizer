@@ -495,11 +495,11 @@ of a tiny figure is mostly jitter: on the second pair a 3.5 µs operation moved 
 0.15 µs. Requiring both is the rule tt-metal's LLK performance regression check applies.
 Both are judged on the figures as the answer gives them, so a move of exactly `min_percent`
 counts.
-`thresholds` names the values used, `changes` lists the changes largest first with
+`thresholds` names the values used, with `min_delta_unit` the unit `min_delta` is in, `changes` lists the changes largest first with
 `delta_percent` beside each `delta`, `change_count` counts them all, `returned` counts
 those listed, and `within_threshold_count` counts the groups both reports hold that moved
-less. `limit` caps `changes` at 100; every other list is capped at 25, and its count says
-how many more there are. Every list breaks a tie by the group's name, so a list cut at its
+less. `limit` caps `changes` at 100, and `new`, `missing`, `unmeasured` and `inconsistent`
+return as many, up to 25 each; each list's count says how many more there are. Every list breaks a tie by the group's name, so a list cut at its
 limit is the same each time it is asked. A move from
 zero has no percentage, so only `min_delta` applies to it. Lower thresholds show smaller
 moves, and 0 for both lists every group that moved at all.
@@ -515,10 +515,11 @@ and a caveat says each side's total covers only the calls with one; a group with
 in either report, such as a host operation's device time, is left out. A change over fewer
 measured calls on one side than calls carries `measured_before` and `measured_after`, since
 its total covers only those, and a `new` or `missing` entry over fewer carries
-`measured_after` or `measured_before` for the same reason.
+`measured_after` or `measured_before` for the same reason, 0 where a capture left every
+call blank and the figure is null.
 
 `repeats_a` and `repeats_b` take further captures of either side, run the same way, up to
-five captures a side. Each figure is then the median of the side's captures, as the LLK
+5 captures a side, and the answer names them under `repeats_before` and `repeats_after`. Each figure is then the median of the side's captures, as the LLK
 check compares repeated runs, which makes a lower threshold safe to read; with two captures
 a side the median is their mean, so three or five resist one outlier. An entry's measured
 calls are the fewest among the captures its median comes from, so a partial capture's sum
@@ -528,13 +529,16 @@ how many calls it made, is listed under
 `inconsistent`, largest first, with `calls_before` and `calls_after` giving each capture's
 calls, rather than compared on unlike work. Each capture may be given once: a handle given
 twice, or two handles loaded on the same capture, is refused. A capture's totals are kept
-per range, by op code and, where its CSV has tensor columns, by signature, so asking again
-with other thresholds, another metric or the other match generates no report; a whole
+per range, by op code and, once a signature diff asks, by signature, so asking again with
+other thresholds, another metric or a match already asked generates no report; a whole
 report's totals stay for the server's life, and a range's for up to 64 captures and ranges,
-the least recently used dropped first. Totals read from a report generated with swallowed
-errors, which may be missing rows by chance, are not kept, so the next call reads that
-report again. The first call generates each capture's report that no tool has read yet,
-which on a single-device capture of 100,000 rows takes about 20 s.
+the least recently used dropped first. Signatures are a second read of the CSV, so an op
+code diff skips them, except for a repeat, whose report is dropped once read. Totals read
+from a report generated with errors tt-perf-report skipped, which may be missing rows by
+chance, are not kept, so the next call reads that report again, and a caveat names the
+capture, since a group it lost reads as new or missing. The first call generates each
+capture's report that no tool has read yet, which on a single-device capture of 100,000
+rows takes about 20 s, so its time grows with repeats.
 The two compared captures' reports then stay loaded, as every handle's does, about 350 MB
 at that size, while a repeat's is read for its totals and dropped.
 
@@ -547,27 +551,30 @@ CSV's `INPUT_n_*` and `OUTPUT_n_*` columns, and names each group by `raw_op_code
 one change rather than a `new` and a `missing`, while summing two configurations of one
 convolution over the same tensors. The device a memory name carries
 (`DEV_1_L1_INTERLEAVED`) is left out, so the copies of one operation across a mesh's devices
-match. Calls are summed per signature, not paired by occurrence, so one slow layer among
-many identical ones moves its signature by its share. A signature holds fewer calls than an
+match. Calls are summed per signature, not paired by occurrence (#2228), so one slow layer
+among many identical ones moves its signature by its share. A signature holds fewer calls than an
 op code, so it moves more between runs of the same code: on the first pair above, three
 two-call shapes of one op code moved by 9–18% while the op code as a whole moved 2.9%, and
 the answer's caveat quotes that before a signature's move is read as a change. A signature
 past 300 characters is cut, `signature_full_length` gives its length, and `signature_digest`
-a digest of the whole signature, so two signatures cut alike are told apart; with signatures
+a digest of the whole signature, so two signatures cut alike are told apart. An op code past
+it is cut the same way, with `op_code_full_length` and `op_code_digest`
+(`raw_op_code_full_length` and `raw_op_code_digest` with signatures). With signatures
 `changes` is capped at 25 rather than 100. A capture whose CSV has no tensor columns, or
 cannot be read, is refused. Older captures record a tile-padded size alone, where newer
 ones record `padded[logical]`, so an operation on a padded tensor has a different signature
-in each; `mismatched` names `tensor_sizes` when the captures differ in it.
+in each; `mismatched` names `tensor_sizes` when the captures differ in it, as `padded` or
+`padded[logical]` by handle.
 
 When the captures' device logs name different architectures, clocks or compute core
 counts, or their CSVs hold rows for different numbers of devices, `mismatched` lists the
 values by handle and a caveat names the facts, saying every delta measures that difference
 too. They are read once per capture, as its rows are, and the device log is read as the
 `flags` group reads its cores, so the two cannot disagree about a device. The diff is still
-answered, since comparing two architectures can be the question. A fact only some captures
-record, as when one has no device log, is listed under `unverified` with the handles that
-record none, and a caveat says whether they match there is unknown; a fact no capture
-records is not named. Every capture is generated by the same tt-perf-report, the release
+answered, since comparing two architectures can be the question. A fact not every capture
+records, as when one has no device log, is listed under `unverified` with the handles that
+record none, and a caveat says whether they match there is unknown. A fact no capture
+records is listed with every handle, since unknown on every side is not equal. Every capture is generated by the same tt-perf-report, the release
 `load_report` names.
 
 Two metrics carry a caveat of their own. Op-to-op gaps are host time between operations,

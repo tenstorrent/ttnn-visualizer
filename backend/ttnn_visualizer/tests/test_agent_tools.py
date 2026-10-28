@@ -147,7 +147,7 @@ def _signposts_in(*handles):
             if held
             else {}
         )
-        return ResolvedSignposts(names, True)
+        return ResolvedSignposts(names, True, 1)
 
     return patch.object(tools, "_resolve_signposts", side_effect=resolve)
 
@@ -1867,16 +1867,21 @@ class TestScopedSnapshots:
 
         assert (first, second) == (1, 2)
 
-    def test_clearing_the_registry_drops_ranged_snapshots_too(self, tmp_path):
+    # Diff totals are kept apart from ranged reports, and `clear()` reuses
+    # `report-1`, so totals it left would answer a new capture as the old one.
+    @pytest.mark.parametrize(
+        "variant", [CacheVariant.CANONICAL_REPORT, CacheVariant.DIFF_TOTALS]
+    )
+    def test_clearing_the_registry_drops_ranged_snapshots_too(self, tmp_path, variant):
         registry = ReportRegistry()
         write_device_log(tmp_path, MODERN_HEADER, [])
         load_report(registry, performance_path=str(tmp_path))
         built = []
-        registry.cached_report("report-1", built.append, scope="x")
+        registry.cached_report("report-1", built.append, variant=variant, scope="x")
 
         registry.clear()
         load_report(registry, performance_path=str(tmp_path))
-        registry.cached_report("report-1", built.append, scope="x")
+        registry.cached_report("report-1", built.append, variant=variant, scope="x")
 
         assert len(built) == 2
 

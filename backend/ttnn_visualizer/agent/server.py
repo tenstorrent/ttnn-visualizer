@@ -162,6 +162,21 @@ _ADDITIVE_METRIC_SCHEMA = {
     "enum": sorted(tools.ADDITIVE_METRICS),
     "description": "Which metric to compare. Summable metrics only.",
 }
+
+
+def _repeats_schema(captures: str, handle: str) -> Dict[str, object]:
+    """One side's `repeats_*` for `diff_reports`."""
+    return {
+        "type": "array",
+        "items": {"type": "string"},
+        "maxItems": report_diff.MAX_CAPTURES_PER_SIDE - 1,
+        "description": (
+            f"Handles of further {captures}, run the same way; each figure on that "
+            f"side is then the median across them and {handle}."
+        ),
+    }
+
+
 _INCLUDE_SCHEMA = {
     "type": "array",
     "items": {
@@ -387,9 +402,10 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "moves are counted in within_threshold_count, and an op only one "
                 "report holds is listed under new or missing, never as a change. "
                 "repeats_a and repeats_b add captures of either side, compared by "
-                "their median. A caveat names any architecture, clock, core count "
-                "or device count the captures differ in, or that only some of them "
-                "record. "
+                "their median; each capture is a report the first call generates, so "
+                "its time grows with repeats, and later calls reuse them. A caveat "
+                "names any architecture, clock, core count or device count the "
+                "captures differ in, or that not every capture records. "
                 "Accepts additive metrics only (device_time, op_to_op_gap, "
                 "total_percent); rank by a rate or a core count with top_ops. A "
                 "signpost range applies to every capture, and signpost_range_ignored "
@@ -407,8 +423,9 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                         **_LIMIT_SCHEMA,
                         "description": (
                             f"Changes to return, capped at {MAX_LIMIT}, or "
-                            f"{MAX_DETAILED_LIMIT} with match signature; the other "
-                            f"lists are capped at {MAX_DETAILED_LIMIT}."
+                            f"{MAX_DETAILED_LIMIT} with match signature. new, "
+                            "missing, unmeasured and inconsistent return as many, "
+                            f"up to {MAX_DETAILED_LIMIT} each."
                         ),
                     },
                     **_SIGNPOST_SCHEMAS,
@@ -447,26 +464,10 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                             + "."
                         ),
                     },
-                    "repeats_a": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "maxItems": report_diff.MAX_CAPTURES_PER_SIDE - 1,
-                        "description": (
-                            "Handles of further baseline captures, run the same way; "
-                            "each figure on that side is then the median across "
-                            "them and handle_a."
-                        ),
-                    },
-                    "repeats_b": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "maxItems": report_diff.MAX_CAPTURES_PER_SIDE - 1,
-                        "description": (
-                            "Handles of further captures after the change, run the "
-                            "same way; each figure on that side is then the median "
-                            "across them and handle_b."
-                        ),
-                    },
+                    "repeats_a": _repeats_schema("baseline captures", "handle_a"),
+                    "repeats_b": _repeats_schema(
+                        "captures after the change", "handle_b"
+                    ),
                 },
                 "required": ["handle_a", "handle_b"],
             },

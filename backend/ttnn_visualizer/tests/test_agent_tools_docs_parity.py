@@ -17,9 +17,9 @@ from pathlib import Path
 from typing import Dict, Set
 
 import pytest
-from ttnn_visualizer.agent import server, tools
+from ttnn_visualizer.agent import report_diff, server, tools
 from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_LIMIT
-from ttnn_visualizer.agent.handles import ReportRegistry
+from ttnn_visualizer.agent.handles import MAX_SCOPED_DIFF_TOTALS, ReportRegistry
 from ttnn_visualizer.agent.perf_detail import DetailGroup
 from ttnn_visualizer.csv_queries import MAX_LISTED_SIGNPOSTS
 from ttnn_visualizer.tests.docs_parity import reject_duplicates
@@ -211,6 +211,87 @@ def test_each_shared_instruction_is_explained_on_the_page(rule, page_phrase):
 
     assert rule in server.INSTRUCTIONS
     assert page_phrase in page
+
+
+def test_the_diff_figures_the_page_states_are_the_enforced_ones():
+    """`diff_reports`' caps and defaults are stated as numbers, so nothing else ties
+    them to the code."""
+    page = " ".join(_read(_AGENT_DOCS).split())
+    min_deltas = {
+        name: f"{metric.min_delta:g}"
+        for name, metric in report_diff.DIFF_METRICS.items()
+    }
+
+    assert f"`limit` caps `changes` at {MAX_LIMIT}" in page
+    assert f"up to {MAX_DETAILED_LIMIT} each" in page
+    assert f"capped at {MAX_DETAILED_LIMIT} rather than {MAX_LIMIT}" in page
+    assert f"up to {report_diff.MAX_CAPTURES_PER_SIDE} captures a side" in page
+    assert f"for up to {MAX_SCOPED_DIFF_TOTALS} captures and ranges" in page
+    assert f"past {report_diff.MAX_SIGNATURE_CHARS} characters is cut" in page
+    assert f"{report_diff.DEFAULT_MIN_PERCENT:g}% unless asked" in page
+    assert (
+        f"{min_deltas['device_time']} µs for device time and op-to-op gap, "
+        f"{min_deltas['total_percent']} percentage points for `total_percent`" in page
+    )
+    assert min_deltas["device_time"] == min_deltas["op_to_op_gap"]
+
+
+@pytest.mark.parametrize(
+    "answer_key",
+    [
+        "thresholds",
+        "min_delta_unit",
+        "within_threshold_count",
+        "new_count",
+        "missing_count",
+        "unmeasured",
+        "inconsistent",
+        "repeats_before",
+        "repeats_after",
+        "mismatched",
+        "unverified",
+        "signature_full_length",
+        "signature_digest",
+        "op_code_digest",
+        report_diff.TENSOR_SIZES,
+        report_diff.LOGICAL_TENSOR_SIZES,
+        report_diff.PADDED_TENSOR_SIZES,
+    ],
+)
+def test_the_page_names_each_diff_answer_key(answer_key):
+    assert f"`{answer_key}`" in " ".join(_read(_AGENT_DOCS).split())
+
+
+@pytest.mark.parametrize(
+    "caveat, page_phrase",
+    [
+        (
+            report_diff.SIGNATURE_NOISE_CAVEAT,
+            "moves more between runs of the same code",
+        ),
+        (
+            report_diff.DIFF_METRICS["op_to_op_gap"].caveat,
+            "including dispatch and a program's compilation on its first call",
+        ),
+        (report_diff.DIFF_METRICS["total_percent"].caveat, "carries the gaps' noise"),
+        (
+            report_diff.mismatch_caveat({"arch": {}}),
+            "saying every delta measures that difference too",
+        ),
+        (
+            report_diff.unverified_caveat({"arch": []}),
+            "unknown on every side is not equal",
+        ),
+        (
+            report_diff.degraded_caveat(["report-1"]),
+            "a group it lost reads as new or missing",
+        ),
+    ],
+)
+def test_the_page_explains_each_diff_caveat(caveat, page_phrase):
+    """Each caveat the answer can carry is one the page explains."""
+    assert caveat
+    assert page_phrase in " ".join(_read(_AGENT_DOCS).split())
 
 
 def test_the_signpost_listing_cap_the_page_states_is_the_enforced_one():

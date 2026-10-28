@@ -75,6 +75,8 @@ MAX_SIGNATURE_CHARS = 300
 SIGNATURE_DIGEST_CHARS = 16
 # Enough for any number or handle list an agent means to pass.
 _MAX_ECHOED_CHARS = 64
+# Every figure an answer gives, and every comparison of them, is to the nanosecond.
+ANSWER_DECIMALS = 3
 
 DIFF_NOTE = (
     "A group is tt-perf-report's op code, which names a matmul's shapes and a conv's "
@@ -98,7 +100,14 @@ SIGNATURE_NOISE_CAVEAT = (
 HARDWARE_FACTS = ("arch", "clock_mhz", "max_compute_cores", "device_count")
 # Whether a capture's CSV records a tensor's logical size beside its padded one.
 TENSOR_SIZES = "tensor_sizes"
+LOGICAL_TENSOR_SIZES = "padded[logical]"
+PADDED_TENSOR_SIZES = "padded"
 COMPARED_FACTS = (*HARDWARE_FACTS, TENSOR_SIZES)
+
+
+def as_answered(figure: float) -> float:
+    """A figure as the answer gives it, which is what a threshold is checked against."""
+    return round(figure, ANSWER_DECIMALS)
 
 
 def _echoed(value: object) -> str:
@@ -111,18 +120,21 @@ def _echoed(value: object) -> str:
 
 @dataclass(frozen=True)
 class Thresholds:
-    percent: float
-    floor: float
+    """How far a group must move to be a change: `min_percent` of its before figure,
+    and `min_delta` in the metric's own unit."""
+
+    min_percent: float
+    min_delta: float
 
     def passes(self, before: float, move: float) -> bool:
         """Whether a move counts as a change: past both thresholds, as tt-metal's LLK
         perf-regression check calls one. A move from zero has no percentage to miss."""
-        if move == 0 or abs(move) < self.floor:
+        if move == 0 or abs(move) < self.min_delta:
             return False
         # On the figures as the answer prints them, since in floats a move of exactly
         # 5% can fall short: 1.13 / 22.6 * 100 is 4.999999999999999.
-        return abs(_exactly(move)) * 100 >= _exactly(self.percent) * abs(
-            _exactly(round(before, 3))
+        return abs(_exactly(move)) * 100 >= _exactly(self.min_percent) * abs(
+            _exactly(as_answered(before))
         )
 
 
@@ -171,10 +183,12 @@ class GroupTotal:
 
 @dataclass(frozen=True)
 class CaptureTotals:
-    """One capture's group totals for every metric, and the sub-devices its rows name."""
+    """One capture's group totals for every metric, the sub-devices its rows name, and
+    whether its report was generated with errors tt-perf-report skipped."""
 
     by_metric: Dict[str, Dict[Hashable, GroupTotal]]
     sub_devices: FrozenSet[str]
+    degraded: bool = False
 
 
 def capture_totals(
@@ -182,6 +196,7 @@ def capture_totals(
     fields: Dict[str, str],
     key_of: Callable[[Dict], Optional[Hashable]],
     sub_devices: FrozenSet[str],
+    degraded: bool = False,
 ) -> CaptureTotals:
     """Sum each metric's `fields[metric]` by group: every row is a call of its group,
     and only a row with a figure adds to the sum."""
@@ -200,7 +215,12 @@ def capture_totals(
             if value is not None:
                 group.total += value
                 group.measured += 1
-    return CaptureTotals(by_metric, sub_devices)
+    return CaptureTotals(by_metric, sub_devices, degraded)
+
+
+def _ran_equally(calls: Tuple[int, ...]) -> bool:
+    """Whether every capture of a side ran a group, and as often."""
+    return len(set(calls)) == 1
 
 
 def _measured_behind_median(totals: List[GroupTotal]) -> int:
@@ -258,7 +278,7 @@ class Side:
         figures = {}
         unmeasured = set()
         for key in keys:
-            if len(set(calls[key])) != 1:
+            if not _ran_equally(calls[key]):
                 continue
             if least_measured[key] == 0:
                 unmeasured.add(key)
@@ -293,7 +313,7 @@ class Side:
     def ran(self, key: Hashable) -> bool:
         """Whether every capture ran the group, and equally often."""
         counts = self.calls_by_group.get(key)
-        return counts is not None and len(set(counts)) == 1
+        return counts is not None and _ran_equally(counts)
 
     def disagrees(self, key: Hashable) -> bool:
         """Whether the side's captures disagree on whether, or how often, it ran."""
@@ -303,7 +323,7 @@ class Side:
 def delta(before: float, after: float) -> float:
     """The move between two figures as the answer rounds them, so equal figures move
     by zero rather than by float noise, and never by a negative zero."""
-    return round(round(after, 3) - round(before, 3), 3) + 0.0
+    return as_answered(as_answered(after) - as_answered(before)) + 0.0
 
 
 @dataclass(frozen=True)
@@ -386,22 +406,24 @@ def classify(before: Side, after: Side, thresholds: Thresholds) -> Comparison:
     )
 
 
+def _cut(name: str, text: str) -> Dict[str, object]:
+    """`text` under `name`, cut at `MAX_SIGNATURE_CHARS` with its length and a digest:
+    two texts can share a cut and a length, and differ only past the cut."""
+    fields: Dict[str, object] = {name: text[:MAX_SIGNATURE_CHARS] or None}
+    if len(text) > MAX_SIGNATURE_CHARS:
+        fields[f"{name}_full_length"] = len(text)
+        digest = hashlib.sha256(text.encode()).hexdigest()
+        fields[f"{name}_digest"] = digest[:SIGNATURE_DIGEST_CHARS]
+    return fields
+
+
 def group_fields(key: Hashable, match: DiffMatch) -> Dict[str, object]:
     """A group as an answer names it. A signature's code is the raw one, which
     tt-perf-report has not suffixed with a matmul's shapes or a conv's config."""
     if match is DiffMatch.OP_CODE:
-        return {"op_code": key}
+        return _cut("op_code", cast(str, key))
     raw_op_code, signature = cast(Tuple[str, str], key)
-    fields: Dict[str, object] = {
-        "raw_op_code": raw_op_code,
-        "signature": signature[:MAX_SIGNATURE_CHARS] or None,
-    }
-    if len(signature) > MAX_SIGNATURE_CHARS:
-        fields["signature_full_length"] = len(signature)
-        # Two signatures can share a cut and a length, and differ only past the cut.
-        digest = hashlib.sha256(signature.encode()).hexdigest()
-        fields["signature_digest"] = digest[:SIGNATURE_DIGEST_CHARS]
-    return fields
+    return {**_cut("raw_op_code", raw_op_code), **_cut("signature", signature)}
 
 
 def _listed(facts: List[str], conjunction: str) -> str:
@@ -431,22 +453,36 @@ def mismatch_caveat(mismatched: Dict[str, Dict[str, object]]) -> str:
 
 
 def unverified_caveat(unverified: Dict[str, List[str]]) -> str:
-    """The facts only some captures record, which the diff could not compare."""
+    """The facts some or every capture lacks, which the diff could not compare."""
     return (
-        f"Some captures record no {_listed(list(unverified), 'or')}, listed by fact "
-        "under unverified, so whether they match the others there is unknown."
+        f"Not every capture records {_listed(list(unverified), 'or')}; unverified "
+        "lists by fact the handles that record none, so whether the captures match "
+        "there is unknown."
+    )
+
+
+def degraded_caveat(handles: List[str]) -> str:
+    """The captures whose report lost rows to errors, which a diff cannot tell apart
+    from ops that did not run."""
+    return (
+        f"tt-perf-report skipped errors generating the report behind "
+        f"{_listed(handles, 'and')}, so it may have lost rows, and a group it lost "
+        "reads as new or missing; the next call reads it again."
     )
 
 
 __all__ = [
+    "ANSWER_DECIMALS",
     "COMPARED_FACTS",
     "DEFAULT_MIN_PERCENT",
     "DIFF_MATCHES",
     "DIFF_METRICS",
     "DIFF_NOTE",
     "HARDWARE_FACTS",
+    "LOGICAL_TENSOR_SIZES",
     "MAX_CAPTURES_PER_SIDE",
     "MAX_SIGNATURE_CHARS",
+    "PADDED_TENSOR_SIZES",
     "SIGNATURE_DIGEST_CHARS",
     "SIGNATURE_NOISE_CAVEAT",
     "TENSOR_SIZES",
@@ -458,8 +494,10 @@ __all__ = [
     "GroupTotal",
     "Side",
     "Thresholds",
+    "as_answered",
     "capture_totals",
     "classify",
+    "degraded_caveat",
     "delta",
     "group_fields",
     "mismatch_caveat",
