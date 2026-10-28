@@ -116,7 +116,7 @@ _CORE_COUNT = {
     DeviceArchitecture.GRAYSKULL: 108,
     DeviceArchitecture.WORMHOLE: 64,
     DeviceArchitecture.BLACKHOLE: 130,
-    DeviceArchitecture.QUASAR: 32,
+    DeviceArchitecture.QUASAR: 32,  # QSR3.A2's 96 come from the device log
     DeviceArchitecture.GRENDEL: 32,
 }
 DEFAULT_MAX_CORES = _CORE_COUNT[DeviceArchitecture.WORMHOLE]

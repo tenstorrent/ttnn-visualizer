@@ -341,6 +341,10 @@ def _curated_max_core_cases() -> List[Dict]:
         _max_core_case({"architecture": 7, "max_cores": None}, ["8"]),
         _max_core_case({"max_cores": 0}, []),
         _max_core_case({"max_cores": 0}, ["200"]),
+        # QSR3.A2 reports `quasar` with 96 cores, above the 32 default.
+        _max_core_case({"architecture": "quasar", "max_cores": 96}, []),
+        _max_core_case({"architecture": "quasar", "max_cores": None}, ["96"]),
+        _max_core_case({"architecture": "quasar", "max_cores": None}, ["48"]),
     ]
     for name in ("grayskull", "QUASAR", "quasar", "grendel", "Blackhole_p150"):
         cases.append(_max_core_case({"architecture": name, "max_cores": None}, ["8"]))
