@@ -182,6 +182,8 @@ class TestThresholds:
             pytest.param(100.0, 105.0, True, id="5% of a long op"),
             pytest.param(1.0, 1.5, False, id="50% but half a microsecond"),
             pytest.param(20.0, 21.0, True, id="exactly 5% and 1 us"),
+            pytest.param(22.6, 23.73, True, id="exactly 5%, which floats put under"),
+            pytest.param(22.6, 23.729, False, id="a nanosecond under 5%"),
             pytest.param(100.0, 90.0, True, id="faster counts as much as slower"),
         ],
     )
@@ -197,6 +199,22 @@ class TestThresholds:
             ["Matmul"] if counted else []
         )
         assert result["within_threshold_count"] == (0 if counted else 1)
+
+    def test_exactly_min_percent_counts_however_its_calls_sum(self, tmp_path):
+        """Summed call by call, 200 calls of 2.3 us come to 460.00000000000153 us."""
+
+        def calls(time):
+            return [
+                _row(id=str(n + 2), op_code="Matmul", device_time=str(time))
+                for n in range(200)
+            ]
+
+        result = _diff(
+            _registry(tmp_path), {"report-1": calls(2.3), "report-2": calls(2.415)}
+        )
+
+        (change,) = result["changes"]
+        assert (change["delta"], change["delta_percent"]) == (23.0, 5.0)
 
     def test_the_answer_says_which_thresholds_it_applied(self, tmp_path):
         result = _diff(
@@ -1090,6 +1108,23 @@ def _transpose_reshaped(rows, duration_ns=None):
     return rows
 
 
+def _every_slot_filled(rows, duration_ns=None):
+    """The smoke capture with every tensor slot of each LayerNorm call a copy of its
+    first input, which runs its signature past the cut, and its kernel time set to
+    `duration_ns`."""
+    rows = [dict(row) for row in rows]
+    for row in rows:
+        if row["OP CODE"] != "LayerNorm":
+            continue
+        for column in list(row):
+            if column.startswith(("INPUT_", "OUTPUT_")):
+                field = column.split("_", 2)[2]
+                row[column] = row[f"INPUT_0_{field}"]
+        if duration_ns is not None:
+            row["DEVICE KERNEL DURATION [ns]"] = str(duration_ns)
+    return rows
+
+
 class TestSignatures:
     """Through the real generator: a signature is found by the CSV position a row's
     report id names, which a mocked report cannot exercise."""
@@ -1122,6 +1157,9 @@ class TestSignatures:
         assert signature_change["signature"].startswith(
             "in0 1x1x64x128 TILE BFLOAT16 DRAM_INTERLEAVED"
         )
+        # Uncut, a signature tells its group apart by itself.
+        assert "signature_full_length" not in signature_change
+        assert "signature_digest" not in signature_change
         assert signature_change["delta_percent"] == pytest.approx(50.0, abs=0.5)
         assert by_signature["grouped_by"] == "signature"
         assert report_diff.SIGNATURE_NOISE_CAVEAT in by_signature["caveat"]
@@ -1377,23 +1415,10 @@ class TestSignatures:
                 _diff(registry, rows, match="signature")
 
     def test_a_long_signature_is_cut_and_its_length_given(self, tmp_path):
-        def every_slot_filled(rows, duration_ns=None):
-            rows = [dict(row) for row in rows]
-            for row in rows:
-                if row["OP CODE"] != "LayerNorm":
-                    continue
-                for column in list(row):
-                    if column.startswith(("INPUT_", "OUTPUT_")):
-                        field = column.split("_", 2)[2]
-                        row[column] = row[f"INPUT_0_{field}"]
-                if duration_ns is not None:
-                    row["DEVICE KERNEL DURATION [ns]"] = str(duration_ns)
-            return rows
-
         registry = self._registry(
             tmp_path,
-            every_slot_filled(smoke_rows()),
-            every_slot_filled(smoke_rows(), duration_ns=30_000),
+            _every_slot_filled(smoke_rows()),
+            _every_slot_filled(smoke_rows(), duration_ns=30_000),
         )
 
         result = tools.diff_reports(registry, "report-1", "report-2", match="signature")
@@ -1401,6 +1426,24 @@ class TestSignatures:
         (change,) = result["changes"]
         assert len(change["signature"]) == report_diff.MAX_SIGNATURE_CHARS
         assert change["signature_full_length"] > report_diff.MAX_SIGNATURE_CHARS
+        assert len(change["signature_digest"]) == report_diff.SIGNATURE_DIGEST_CHARS
+
+    def test_signatures_cut_alike_are_told_apart_by_their_digests(self, tmp_path):
+        """A last output's height moved from 32 to 64 keeps the cut and the length, so
+        only the digest tells the new group from the missing one."""
+        before = _every_slot_filled(smoke_rows())
+        after = [dict(row) for row in before]
+        for row in after:
+            if row["OP CODE"] == "LayerNorm":
+                row["OUTPUT_2_Y"] = "64"
+        registry = self._registry(tmp_path, before, after)
+
+        result = tools.diff_reports(registry, "report-1", "report-2", match="signature")
+
+        (added,), (gone,) = result["new"], result["missing"]
+        named = ("raw_op_code", "signature", "signature_full_length")
+        assert [added[field] for field in named] == [gone[field] for field in named]
+        assert added["signature_digest"] != gone["signature_digest"]
 
     def test_a_capture_without_tensor_columns_is_refused_before_generating(
         self, tmp_path

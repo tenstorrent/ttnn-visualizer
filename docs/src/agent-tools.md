@@ -481,6 +481,8 @@ metric's unit: 1 µs for device time and op-to-op gap, 0.1 percentage points for
 `total_percent`. The floor keeps a small operation's jitter from counting, since a percentage
 of a tiny figure is mostly jitter: on the second pair a 3.5 µs operation moved 4.3%, by
 0.15 µs. Requiring both is the rule tt-metal's LLK performance regression check applies.
+Both are judged on the figures as the answer gives them, so a move of exactly `min_percent`
+counts.
 `thresholds` names the values used, `changes` lists the changes largest first with
 `delta_percent` beside each `delta`, `change_count` counts them all, `returned` counts
 those listed, and `within_threshold_count` counts the groups both reports hold that moved
@@ -538,7 +540,8 @@ many identical ones moves its signature by its share. A signature holds fewer ca
 op code, so it moves more between runs of the same code: on the first pair above, three
 two-call shapes of one op code moved by 9–18% while the op code as a whole moved 2.9%, and
 the answer's caveat quotes that before a signature's move is read as a change. A signature
-past 300 characters is cut, and `signature_full_length` gives its length; with signatures
+past 300 characters is cut, `signature_full_length` gives its length, and `signature_digest`
+a digest of the whole signature, so two signatures cut alike are told apart; with signatures
 `changes` is capped at 25 rather than 100. A capture whose CSV has no tensor columns, or
 cannot be read, is refused. Older captures record a tile-padded size alone, where newer
 ones record `padded[logical]`, so an operation on a padded tensor has a different signature

@@ -8,8 +8,10 @@ medians over repeated captures.
 Pure: `tools.diff_reports` reads the reports, and this decides what their totals say.
 """
 
+import hashlib
 from dataclasses import dataclass
 from enum import Enum
+from fractions import Fraction
 from statistics import median
 from typing import Callable, Dict, FrozenSet, Hashable, List, Optional, Tuple, cast
 
@@ -69,6 +71,8 @@ DEFAULT_MIN_PERCENT = 5.0
 MAX_CAPTURES_PER_SIDE = 5
 # A local MoE expert op's 30 tensors run to 1,550 characters of signature.
 MAX_SIGNATURE_CHARS = 300
+# 64 bits: two of a report's signatures sharing a digest is vanishingly unlikely.
+SIGNATURE_DIGEST_CHARS = 16
 # Enough for any number or handle list an agent means to pass.
 _MAX_ECHOED_CHARS = 64
 
@@ -115,7 +119,16 @@ class Thresholds:
         perf-regression check calls one. A move from zero has no percentage to miss."""
         if move == 0 or abs(move) < self.floor:
             return False
-        return before == 0 or abs(move) / abs(before) * 100 >= self.percent
+        # On the figures as the answer prints them, since in floats a move of exactly
+        # 5% can fall short: 1.13 / 22.6 * 100 is 4.999999999999999.
+        return abs(_exactly(move)) * 100 >= _exactly(self.percent) * abs(
+            _exactly(round(before, 3))
+        )
+
+
+def _exactly(figure: float) -> Fraction:
+    """The decimal a figure prints as, which float arithmetic only approximates."""
+    return Fraction(repr(figure))
 
 
 def threshold(name: str, value: object, default: float) -> float:
@@ -385,6 +398,9 @@ def group_fields(key: Hashable, match: DiffMatch) -> Dict[str, object]:
     }
     if len(signature) > MAX_SIGNATURE_CHARS:
         fields["signature_full_length"] = len(signature)
+        # Two signatures can share a cut and a length, and differ only past the cut.
+        digest = hashlib.sha256(signature.encode()).hexdigest()
+        fields["signature_digest"] = digest[:SIGNATURE_DIGEST_CHARS]
     return fields
 
 
@@ -431,6 +447,7 @@ __all__ = [
     "HARDWARE_FACTS",
     "MAX_CAPTURES_PER_SIDE",
     "MAX_SIGNATURE_CHARS",
+    "SIGNATURE_DIGEST_CHARS",
     "SIGNATURE_NOISE_CAVEAT",
     "TENSOR_SIZES",
     "CaptureTotals",
