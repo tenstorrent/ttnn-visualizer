@@ -17,7 +17,7 @@ import { makeRawPerfRow } from './helpers/perfRowFixtures';
 // op_to_op_gap, cores, dram, dram_percent, flops, flops_percent, ...) reach the frontend as strings.
 // enrichRowData converts those strings into the typed values the table renders. These tests verify
 // that conversion faithfully reflects the values tt-perf-report produced — including the >6.5µs
-// high-dispatch flag, which mirrors tt-perf-report's Op-to-Op Gap threshold (perf_report.py:1052).
+// high-dispatch flag, which mirrors tt-perf-report's Op-to-Op Gap threshold (perf_report.py, color_row).
 
 describe('enrichRowData — typed conversion of tt-perf-report values', () => {
     it('parses numeric columns into numbers', () => {

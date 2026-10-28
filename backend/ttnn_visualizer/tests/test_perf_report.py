@@ -12,6 +12,7 @@ import zipfile
 from pathlib import Path
 from unittest import mock
 
+from tt_perf_report import perf_report
 from ttnn_visualizer.csv_queries import OpsPerformanceReportQueries
 from ttnn_visualizer.models import Instance
 
@@ -28,32 +29,42 @@ KERNEL_DURATION_KEYS = [
     "erisc_kernel_duration",
 ]
 
-REPORT_HEADER = [
-    "ID",
-    "Total %",
-    "Bound",
-    "OP Code",
-    "Device",
-    "Device Time",
-    "Op-to-Op Gap",
-    "Cores",
-    "DRAM",
-    "DRAM %",
-    "FLOPs",
-    "FLOPs %",
-    "Math Fidelity",
-    "Output Datatype",
-    "Input 0 Datatype",
-    "Input 1 Datatype",
-    "DRAM Sharded",
-    "Input 0 Memory",
-    "Inner Dim Block Size",
-    "Output Subblock H",
-    "Output Subblock W",
-    "Global Call Count",
-    "Advice",
-    "Raw OP Code",
-]
+
+def _csv_header(table_names):
+    """Table column names as tt-perf-report's --csv writes them, units and all."""
+    return [
+        perf_report.report_csv_column_labels.get(name, name) for name in table_names
+    ]
+
+
+REPORT_HEADER = _csv_header(
+    [
+        "ID",
+        "Total %",
+        "Bound",
+        "OP Code",
+        "Device",
+        "Device Time",
+        "Op-to-Op Gap",
+        "Cores",
+        "DRAM",
+        "DRAM %",
+        "FLOPs",
+        "FLOPs %",
+        "Math Fidelity",
+        "Output Datatype",
+        "Input 0 Datatype",
+        "Input 1 Datatype",
+        "DRAM Sharded",
+        "Input 0 Memory",
+        "Inner Dim Block Size",
+        "Output Subblock H",
+        "Output Subblock W",
+        "Global Call Count",
+        "Advice",
+        "Raw OP Code",
+    ]
+)
 
 
 @contextlib.contextmanager
@@ -205,36 +216,38 @@ class TestPerfReportKernelDurationSchemaCompatibility(unittest.TestCase):
                 "",
             ]
         )
-        report_header = [
-            "ID",
-            "Total [%]",
-            "Bound",
-            "OP Code",
-            "Device",
-            "Device Time [μs]",
-            "Op-to-Op Gap [μs]",
-            "Cores",
-            "DRAM [GB/s]",
-            "DRAM [%]",
-            "FLOPs [TFLOPs]",
-            "FLOPs [%]",
-            "Math Fidelity",
-            "Output Datatype",
-            "Input 0 Datatype",
-            "Input 1 Datatype",
-            "DRAM Sharded",
-            "Input 0 Memory",
-            "Inner Dim Block Size",
-            "Output Subblock H",
-            "Output Subblock W",
-            "Global Call Count",
-            "Sub Device ID",
-            "Available Cores",
-            "Op Category",
-            "Bound Analysis",
-            "Advice",
-            "Raw OP Code",
-        ]
+        report_header = _csv_header(
+            [
+                "ID",
+                "Total %",
+                "Bound",
+                "OP Code",
+                "Device",
+                "Device Time",
+                "Op-to-Op Gap",
+                "Cores",
+                "DRAM",
+                "DRAM %",
+                "FLOPs",
+                "FLOPs %",
+                "Math Fidelity",
+                "Output Datatype",
+                "Input 0 Datatype",
+                "Input 1 Datatype",
+                "DRAM Sharded",
+                "Input 0 Memory",
+                "Inner Dim Block Size",
+                "Output Subblock H",
+                "Output Subblock W",
+                "Global Call Count",
+                "Sub Device ID",
+                "Available Cores",
+                "Op Category",
+                "Bound Analysis",
+                "Advice",
+                "Raw OP Code",
+            ]
+        )
         report_row = [
             "2",
             "1.0",
@@ -378,6 +391,29 @@ class TestPerfReportSignpostOpType(unittest.TestCase):
         # The device row alongside it must not be tarred with the same value, or
         # the frontend filter would drop real operations.
         self.assertEqual(op_types.get("Matmul"), "tt_dnn_device")
+
+
+class TestPerfReportCsvLabels(unittest.TestCase):
+    """The --csv writes some columns under a label carrying their unit."""
+
+    def test_every_column_resolves_under_the_library_s_labels(self):
+        header = _csv_header(OpsPerformanceReportQueries.REPORT_COLUMN_HEADERS.values())
+
+        indexes = OpsPerformanceReportQueries._resolve_report_column_indexes(header)
+
+        self.assertEqual(
+            [column for column, index in indexes.items() if index is None], []
+        )
+
+    def test_every_labelled_column_is_one_the_report_reads(self):
+        # A label for a column the report does not know is either a rename the
+        # header map missed or a new column to decide on; Overlap is the latter,
+        # and is not read yet.
+        read = set(OpsPerformanceReportQueries.REPORT_COLUMN_HEADERS.values())
+
+        self.assertEqual(
+            set(perf_report.report_csv_column_labels) - read - {"Overlap"}, set()
+        )
 
 
 class TestPerfReportCsvEscaping(unittest.TestCase):

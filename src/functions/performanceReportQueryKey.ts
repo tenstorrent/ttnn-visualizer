@@ -24,16 +24,10 @@ export interface PerformanceReportParams {
  * query key, so following the tab's grouping control would blank the link
  * report on every switch, which is the failure this exists to prevent (#1812).
  *
- * `tracingMode` is pinned too. It suppresses a single
- * `sort_values(by="HOST START TS")` in `tt-perf-report` (`perf_report.py:3686`),
- * and since 1.5.0 that order survives merging: `merge_device_rows` keeps each
- * merged op at the earliest pre-merge position of its devices' rows
- * (`perf_report.py:3201`, `:3301`) rather than re-sorting on `ORIGINAL_ROW`. So
- * the toggle changes the row sequence link resolution sees, and following it
- * would let a view control move the answer (#1812). Pinned off, links read
- * host-start order; see CONVENTIONS.md on what that means for trace-captured
- * runs. Line numbers are against the pinned `tt-perf-report` version in
- * `pyproject.toml`; re-check them when it moves.
+ * `tracingMode` is pinned too: since tt-perf-report 1.5.0 it changes the order
+ * of a merged report's rows, so following it would let a view control move the
+ * answer (#1812). Pinned off, links read host-start order. The tracingMode note
+ * in CONVENTIONS.md has the mechanism and what it means for trace-captured runs.
  *
  * Every value is the performance tab's own default, so while the tab sits at
  * those defaults link resolution shares its cache entry and costs nothing. Move

@@ -85,6 +85,14 @@ def test_report_generation_yields_rows(generated_report):
     assert len(generated_report) > 0
 
 
+def test_every_report_column_is_found_in_the_real_output(generated_report):
+    """A header tt-perf-report renames resolves to nothing, and its field quietly
+    drops from every row: the table shows a blank column rather than an error."""
+    for row in generated_report:
+        missing = set(OpsPerformanceReportQueries.REPORT_COLUMN_HEADERS) - set(row)
+        assert not missing, f"row {row.get('id')} lacks {sorted(missing)}"
+
+
 def test_device_log_preamble_parses(client, fixture_instance):
     """Line 1 is kept verbatim because the meta endpoint regexes it directly."""
     response = client.get(META_ENDPOINT, query_string={"instanceId": fixture_instance})

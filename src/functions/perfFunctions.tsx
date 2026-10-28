@@ -472,7 +472,7 @@ export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColo
     }
 
     if (key === ColumnKeys.MathFidelity && typeof keyValue === 'string') {
-        // tt-perf-report only evaluates fidelity for Matmul / OptimizedConvNew ops (perf_report.py:1055-1056).
+        // tt-perf-report only evaluates fidelity for Matmul / OptimizedConvNew ops (perf_report.py, color_row).
         const isFidelityEvaluatedOp =
             row.raw_op_code.includes('Matmul') || row.raw_op_code.includes('OptimizedConvNew');
 
@@ -503,7 +503,7 @@ export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColo
     }
 
     if (key === ColumnKeys.OpToOpGap) {
-        // tt-perf-report only ever colours this cell red (gap > 6.5µs); a missing gap stays neutral (perf_report.py:1052).
+        // tt-perf-report only ever colours this cell red (gap > 6.5µs); a missing gap stays neutral (perf_report.py, color_row).
         return typeof keyValue === 'number' ? getOpToOpGapColour(keyValue) : DEFAULT_CELL_COLOUR;
     }
 
@@ -605,7 +605,7 @@ export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
     );
 };
 
-// Mirrors tt-perf-report evaluate_fidelity() (perf_report.py:535-556).
+// Mirrors tt-perf-report evaluate_fidelity() (perf_report.py).
 const INTEGER_DATATYPES = ['UINT8', 'UINT16', 'INT32', 'UINT32'];
 const MANTISSA_BITS: Record<string, number> = {
     FLOAT32: 23,

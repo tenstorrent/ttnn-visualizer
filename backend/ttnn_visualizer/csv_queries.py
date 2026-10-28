@@ -81,7 +81,7 @@ def _stacked_report_plot_skipped():
     buffer (hundreds of MB on a large capture) lives until the cyclic GC runs; not
     drawing at all also saves most of the generation time. tt-perf-report has no
     option for this, so it clears the module's `HAS_MATPLOTLIB`, which only
-    `plot_stacked_report` reads (1.4.0); the stacked CSV is written before the plot.
+    `plot_stacked_report` reads (1.5.0); the stacked CSV is written before the plot.
     The tests pin the flag, in case an upstream rename silently brings the plot back.
     """
     has_matplotlib = perf_report.HAS_MATPLOTLIB
@@ -176,6 +176,14 @@ MAX_OPEN_ZONE_STARTS = 200_000
 # report is about 22 MB of JSON, so a worker can keep roughly 90 MB alive for its
 # lifetime. Each `group_by` value is its own entry with a full copy of the rows.
 MAX_CACHED_PERFORMANCE_REPORTS = 4
+
+# Ceiling on distinct `DEVICE ID`s in a performance CSV. tt-perf-report 1.5.0's
+# overlap sweep scans every row once per device, so its cost is rows x devices:
+# a crafted file naming a device per row is quadratic, and 80k such rows already
+# take three times as long as under 1.4.0. A real capture names at most a few
+# hundred devices, even merged across hosts; at this ceiling a 1 GiB upload's
+# sweep stays within seconds.
+MAX_PERFORMANCE_REPORT_DEVICES = 4096
 
 
 @dataclass
@@ -1552,6 +1560,7 @@ class OpsPerformanceReportQueries:
         check_signpost_range(
             resolved_signposts, options.start_signpost, options.end_signpost
         )
+        check_device_count(resolved_signposts)
 
         # Determine if we should skip stacked report
         data_row_count = len(csv_lines) - 1
@@ -1915,6 +1924,18 @@ def read_signposts(
         raise DataFormatError(
             f"could not read the report's signposts: {error}"
         ) from error
+
+
+def check_device_count(signposts: ResolvedSignposts) -> None:
+    """Refuse a capture naming more devices than any real one, before generating."""
+    if (
+        signposts.device_count is not None
+        and signposts.device_count > MAX_PERFORMANCE_REPORT_DEVICES
+    ):
+        raise DataFormatError(
+            f"the report names {signposts.device_count} devices, more than the "
+            f"{MAX_PERFORMANCE_REPORT_DEVICES} a performance report can have"
+        )
 
 
 def signpost_range_ignored(

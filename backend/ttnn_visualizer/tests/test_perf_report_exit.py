@@ -18,7 +18,7 @@ REPORT_ENDPOINT = "/api/performance/perf-results/report"
 INSTANCE_ID = "pytest-perf-exit"
 CSV_NAME = "ops_perf_results_missing_device_id.csv"
 
-# tt-perf-report 1.4.0 exits in `merge_perf_traces` when this column is absent.
+# tt-perf-report 1.5.0 exits in `merge_perf_traces` when this column is absent.
 MISSING_DEVICE_ID_CSV = "OP CODE,OP TYPE,GLOBAL CALL COUNT\nMatmul,tt_dnn_device,1\n"
 
 
