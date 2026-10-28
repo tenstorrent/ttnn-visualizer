@@ -149,6 +149,13 @@ _OPERATION_ID_SCHEMA = {
         "operation_id gives it; never a top_ops row's id."
     ),
 }
+_PERF_ID_SCHEMA = {
+    "type": ["string", "integer"],
+    "description": (
+        "A performance row's id, as a top_ops row's id or any *_perf_id gives it; "
+        "never an operation_id."
+    ),
+}
 _ADDITIVE_METRIC_SCHEMA = {
     "type": "string",
     "enum": sorted(tools.ADDITIVE_METRICS),
@@ -331,6 +338,41 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
             },
             "handler": lambda arguments: tools.zone_timings(registry, **arguments),
         },
+        McpToolName.CORE_SPREAD: {
+            "title": "Per-core kernel spread",
+            "description": (
+                "How evenly an op's kernel time fell across the cores that ran it, "
+                "from profile_log_device.csv: min, median and max per-core span and "
+                "per RISC, max over median as imbalance, and the slowest cores by "
+                "coordinate. Each op is read on the one device its row came from, "
+                "never pooled across devices. Takes one perf_id, or ranks the "
+                f"costliest ops by device time, capped at {MAX_DETAILED_LIMIT}. The "
+                "first call on a handle reads the whole device log; later calls "
+                "answer from that read."
+            ),
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "handle": {"type": "string"},
+                    "perf_id": {
+                        **_PERF_ID_SCHEMA,
+                        "description": (
+                            f"{_PERF_ID_SCHEMA['description']} Omit it for the "
+                            "costliest ops by device time."
+                        ),
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": (
+                            f"Ops to return, capped at {MAX_DETAILED_LIMIT}. Applies "
+                            "only when perf_id is omitted."
+                        ),
+                    },
+                },
+                "required": ["handle"],
+            },
+            "handler": lambda arguments: tools.core_spread(registry, **arguments),
+        },
         McpToolName.DIFF_REPORTS: {
             "title": "Compare two reports",
             "description": (
@@ -423,7 +465,9 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "graph: how many, each one's bytes per core, core range and device "
                 "count. A graph records a program's circular buffers only at its "
                 "first launch, so unrecorded_device_operations counts the launches it "
-                "recorded none for, whose buffers are unknown, not zero. allocations "
+                "recorded none for, whose buffers are unknown, not zero; "
+                "unlisted_circular_buffer_count counts buffers missing from their "
+                "device operation's snapshot, which the listing leaves out. allocations "
                 "and memory_profile leave circular buffers out. It is absent when the "
                 "report has no graph for the operation, and caveat says when it is "
                 "withheld."

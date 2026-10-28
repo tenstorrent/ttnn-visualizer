@@ -336,8 +336,33 @@ def _curated_fallback_runs() -> List[List[Dict]]:
         **_operation(1, "ttnn.reshape", [unreadable], request="L1"),
         "inputs": [{**unreadable, "id": 11}],
     }
+    # Against an input's 2 at the same address, a count of 3 is no view, so it flags,
+    # and an unreadable shape can't rule a view out. A count of 2 may be a view, so it
+    # doesn't flag where a NaN would: that holds the trim, not just the regex.
+    # JavaScript's `\s` takes a BOM and not U+001C, Python's the reverse.
+    shape_whitespace = [
+        [
+            {
+                **_operation(
+                    1, "ttnn.reshape", [{**_dram(10), "shape": shape}], request="L1"
+                ),
+                "inputs": [{**_dram(11), "shape": "Shape([2])"}],
+            }
+        ]
+        for shape in (
+            "Shape([1,\ufeff3])",
+            "Shape([1,\x1c3])",
+            "Shape([\u00a03 ])",
+            "Shape([1,\ufeff2])",
+            "Shape([\u00a02 ])",
+            # A dimension of whitespace alone is dropped, so these count 2 too.
+            "Shape([2,\ufeff])",
+            "Shape([2,])",
+        )
+    ]
     return [
         [view_like],
+        *shape_whitespace,
         [
             _operation(1, "ttnn.matmul", [], oom_l1),
             _operation(2, "ttnn.matmul", [_dram(1)]),
@@ -992,6 +1017,75 @@ def _circular_buffer_cases(rng: random.Random) -> List[Dict]:
     ]
 
 
+def _curated_order_graphs() -> List[List[object]]:
+    return [
+        # #2218: a failed launch's scope never closes, and its free moves after its
+        # buffers because `capture_end` follows them.
+        CapturedGraph()
+        .start("ttnn::matmul")
+        .start("Tilize")
+        .free_all()
+        .cb()
+        .end()
+        .start("Matmul")
+        .free_all()
+        .cb("200")
+        .cb("300")
+        .capture_end()
+        .nodes,
+        # The same cut off after its buffers: nothing follows them, so their free is
+        # dropped.
+        CapturedGraph().start("Matmul").free_all().cb().cb("200").nodes,
+        # A tensor splits one scope's buffers, so its free follows each run.
+        CapturedGraph()
+        .start("Conv")
+        .free_all()
+        .cb()
+        .tensor()
+        .cb("200")
+        .end()
+        .capture_end()
+        .nodes,
+        # A cached relaunch allocates nothing, so its free is dropped.
+        CapturedGraph().start("Matmul").free_all().end().capture_end().nodes,
+        # A free outside any scope, keyed as the app keys it.
+        CapturedGraph().free_all().cb().start("Late").cb("200").end().nodes,
+        # A parent that allocates before its child launches.
+        CapturedGraph()
+        .start("UpSample")
+        .free_all()
+        .cb()
+        .start("HaloDeviceOperation")
+        .free_all()
+        .cb("200")
+        .end()
+        .end()
+        .capture_end()
+        .nodes,
+    ]
+
+
+def _order_case(nodes: List[object]) -> Dict:
+    position_by_node = {id(node): index for index, node in enumerate(nodes)}
+    return {
+        "nodes": nodes,
+        "order": [
+            position_by_node[id(node)]
+            for node in circular_buffers.sort_by_buffer_deallocation(nodes)
+        ],
+    }
+
+
+def _device_operation_order_cases(rng: random.Random) -> List[Dict]:
+    graphs = _curated_order_graphs()
+    for _ in range(40):
+        nodes = _cb_graph(rng)
+        if rng.random() < 0.5:
+            nodes.append({"id": len(nodes), "node_type": "capture_end", "params": {}})
+        graphs.append(nodes)
+    return [_order_case(nodes) for nodes in graphs]
+
+
 def _generate_golden() -> Dict:
     rng = random.Random(_SEED)
     return {
@@ -1007,6 +1101,7 @@ def _generate_golden() -> Dict:
         "l1Peak": _l1_peak_cases(rng),
         "topOperations": _top_operation_cases(rng),
         "circularBuffers": _circular_buffer_cases(rng),
+        "deviceOperationOrder": _device_operation_order_cases(rng),
     }
 
 
@@ -1099,6 +1194,14 @@ def test_the_golden_exercises_every_branch():
     }
     assert taken_at == {"circular_buffer_deallocate_all", "function_end"}
     assert any(len(case["snapshots"]) > 1 for case in golden["circularBuffers"])
+    # The sort moves a free, follows two runs with one, and drops one.
+    orders = [case["order"] for case in golden["deviceOperationOrder"]]
+    assert any(order != sorted(order) for order in orders)
+    assert any(len(order) > len(set(order)) for order in orders)
+    assert any(
+        len(set(order)) < len(case["nodes"])
+        for case, order in zip(golden["deviceOperationOrder"], orders)
+    )
 
 
 def _snapshot_triggers(nodes: List[Dict]) -> List[int]:

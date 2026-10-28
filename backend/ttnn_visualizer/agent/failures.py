@@ -802,6 +802,17 @@ def operation_failure_fields(
                     "cached program relaunched; the graph records a program's "
                     "buffers only at its first launch, so they are unknown, not zero"
                 )
+            unlisted = buffers["unlisted_circular_buffer_count"]
+            if unlisted:
+                unlisted_buffers = "buffer" if unlisted == 1 else "buffers"
+                withheld.append(
+                    f"circular_buffers leaves out {unlisted} circular "
+                    f"{unlisted_buffers} missing from their device operation's "
+                    "snapshot, as a graph cut off mid-launch or a launch whose buffers "
+                    "run in two batches leaves them, so "
+                    "circular_buffer_count and device_operation_count leave them out "
+                    "and their bytes per core are unknown"
+                )
     if all(
         queries.has_table(table) for table in TOOL_TABLES[McpToolName.DRAM_FALLBACKS]
     ) and _attributable(queries, scope, _FALLBACK_TABLES, withheld, "dram_fallback"):
@@ -809,7 +820,12 @@ def operation_failure_fields(
         fallback = report.by_operation_id.get(operation.operation_id)
         if fallback is not None:
             fields["dram_fallback"] = fallback
-    return fields, " ".join(withheld) or None
+    return fields, " ".join(_sentence(entry) for entry in withheld) or None
+
+
+def _sentence(text: str) -> str:
+    # Several reasons share one caveat; unended, they would run into each other.
+    return text if text.endswith(".") else f"{text}."
 
 
 def _attributable(

@@ -18,6 +18,7 @@ class McpToolName(str, Enum):
     OP_BREAKDOWN = "op_breakdown"
     PROGRAM_CACHE = "program_cache"
     ZONE_TIMINGS = "zone_timings"
+    CORE_SPREAD = "core_spread"
     DIFF_REPORTS = "diff_reports"
     FIND_OPERATIONS = "find_operations"
     OPERATION_DETAIL = "operation_detail"
