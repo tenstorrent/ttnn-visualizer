@@ -37,34 +37,47 @@ def _csv_header(table_names):
     ]
 
 
-REPORT_HEADER = _csv_header(
-    [
-        "ID",
-        "Total %",
-        "Bound",
-        "OP Code",
-        "Device",
-        "Device Time",
-        "Op-to-Op Gap",
-        "Cores",
-        "DRAM",
-        "DRAM %",
-        "FLOPs",
-        "FLOPs %",
-        "Math Fidelity",
-        "Output Datatype",
-        "Input 0 Datatype",
-        "Input 1 Datatype",
-        "DRAM Sharded",
-        "Input 0 Memory",
-        "Inner Dim Block Size",
-        "Output Subblock H",
-        "Output Subblock W",
-        "Global Call Count",
-        "Advice",
-        "Raw OP Code",
-    ]
-)
+# The table columns the fake reports below write.
+REPORT_TABLE_COLUMNS = [
+    "ID",
+    "Total %",
+    "Bound",
+    "OP Code",
+    "Device",
+    "Device Time",
+    "Op-to-Op Gap",
+    "Cores",
+    "DRAM",
+    "DRAM %",
+    "FLOPs",
+    "FLOPs %",
+    "Math Fidelity",
+    "Output Datatype",
+    "Input 0 Datatype",
+    "Input 1 Datatype",
+    "DRAM Sharded",
+    "Input 0 Memory",
+    "Inner Dim Block Size",
+    "Output Subblock H",
+    "Output Subblock W",
+    "Global Call Count",
+    "Advice",
+    "Raw OP Code",
+]
+
+# Further columns the header-name test writes, ahead of "Advice".
+LATER_TABLE_COLUMNS = [
+    "Sub Device ID",
+    "Available Cores",
+    "Op Category",
+    "Bound Analysis",
+]
+
+REPORT_HEADER = _csv_header(REPORT_TABLE_COLUMNS)
+
+# Labels tt-perf-report writes that the report deliberately does not read yet.
+# Overlap is new in 1.5.0; whether to show it is #2240.
+UNREAD_CSV_LABELS = frozenset({"Overlap"})
 
 
 @contextlib.contextmanager
@@ -216,37 +229,11 @@ class TestPerfReportKernelDurationSchemaCompatibility(unittest.TestCase):
                 "",
             ]
         )
+        advice = REPORT_TABLE_COLUMNS.index("Advice")
         report_header = _csv_header(
-            [
-                "ID",
-                "Total %",
-                "Bound",
-                "OP Code",
-                "Device",
-                "Device Time",
-                "Op-to-Op Gap",
-                "Cores",
-                "DRAM",
-                "DRAM %",
-                "FLOPs",
-                "FLOPs %",
-                "Math Fidelity",
-                "Output Datatype",
-                "Input 0 Datatype",
-                "Input 1 Datatype",
-                "DRAM Sharded",
-                "Input 0 Memory",
-                "Inner Dim Block Size",
-                "Output Subblock H",
-                "Output Subblock W",
-                "Global Call Count",
-                "Sub Device ID",
-                "Available Cores",
-                "Op Category",
-                "Bound Analysis",
-                "Advice",
-                "Raw OP Code",
-            ]
+            REPORT_TABLE_COLUMNS[:advice]
+            + LATER_TABLE_COLUMNS
+            + REPORT_TABLE_COLUMNS[advice:]
         )
         report_row = [
             "2",
@@ -394,7 +381,14 @@ class TestPerfReportSignpostOpType(unittest.TestCase):
 
 
 class TestPerfReportCsvLabels(unittest.TestCase):
-    """The --csv writes some columns under a label carrying their unit."""
+    """The --csv writes some columns under a label carrying their unit.
+
+    These build their header from the same label map the report reads, so they
+    catch the report ignoring the map, not the library writing headers the map
+    does not name. That is
+    `test_smoke_perf_fixture.test_every_report_column_is_found_in_the_real_output`,
+    which reads tt-perf-report's real output.
+    """
 
     def test_every_column_resolves_under_the_library_s_labels(self):
         header = _csv_header(OpsPerformanceReportQueries.REPORT_COLUMN_HEADERS.values())
@@ -407,13 +401,20 @@ class TestPerfReportCsvLabels(unittest.TestCase):
 
     def test_every_labelled_column_is_one_the_report_reads(self):
         # A label for a column the report does not know is either a rename the
-        # header map missed or a new column to decide on; Overlap is the latter,
-        # and is not read yet.
+        # header map missed or a new column to decide on.
         read = set(OpsPerformanceReportQueries.REPORT_COLUMN_HEADERS.values())
 
         self.assertEqual(
-            set(perf_report.report_csv_column_labels) - read - {"Overlap"}, set()
+            set(perf_report.report_csv_column_labels) - read - UNREAD_CSV_LABELS,
+            set(),
         )
+
+    def test_an_unread_label_is_still_unread(self):
+        # Reading one of these is the decision its issue tracks: remove it from
+        # UNREAD_CSV_LABELS then, so the check above covers it again.
+        read = set(OpsPerformanceReportQueries.REPORT_COLUMN_HEADERS.values())
+
+        self.assertEqual(UNREAD_CSV_LABELS & read, set())
 
 
 class TestPerfReportCsvEscaping(unittest.TestCase):

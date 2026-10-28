@@ -4,6 +4,7 @@
 
 import argparse
 import csv
+import io
 import json
 import logging
 import os
@@ -14,7 +15,7 @@ import traceback
 import warnings
 from bisect import bisect_right
 from collections import Counter, defaultdict
-from contextlib import contextmanager
+from contextlib import contextmanager, redirect_stdout
 from dataclasses import dataclass
 from functools import lru_cache
 from io import StringIO
@@ -71,6 +72,51 @@ def _close_figures_opened_since(open_before: Set[int]) -> None:
     """
     for figure_number in set(plt.get_fignums()) - open_before:
         plt.close(figure_number)
+
+
+class _BoundedOutput(io.TextIOBase):
+    """A text sink keeping only its first `limit` characters."""
+
+    def __init__(self, limit: int):
+        self._limit = limit
+        self._kept: List[str] = []
+        self._size = 0
+        self.dropped = 0
+
+    def writable(self) -> bool:
+        return True
+
+    def write(self, text: str) -> int:
+        room = self._limit - self._size
+        if room > 0:
+            self._kept.append(text[:room])
+            self._size += min(len(text), room)
+        self.dropped += max(0, len(text) - max(room, 0))
+        return len(text)
+
+    def getvalue(self) -> str:
+        return "".join(self._kept)
+
+
+@contextmanager
+def _perf_report_output_bounded():
+    """Hold tt-perf-report's printing to a bounded buffer, logged at debug level.
+
+    Redirecting `sys.stdout` is process-wide, as the agent tools' capture already
+    is; the library call it wraps is CPU-bound and does not yield to another
+    greenlet in between.
+    """
+    output = _BoundedOutput(MAX_PERF_REPORT_OUTPUT_CHARS)
+    try:
+        with redirect_stdout(output):
+            yield
+    finally:
+        if output.getvalue().strip():
+            logger.debug("tt-perf-report output: %s", output.getvalue().strip())
+        if output.dropped:
+            logger.debug(
+                "tt-perf-report output: %d further characters dropped", output.dropped
+            )
 
 
 @contextmanager
@@ -177,13 +223,21 @@ MAX_OPEN_ZONE_STARTS = 200_000
 # lifetime. Each `group_by` value is its own entry with a full copy of the rows.
 MAX_CACHED_PERFORMANCE_REPORTS = 4
 
-# Ceiling on distinct `DEVICE ID`s in a performance CSV. tt-perf-report 1.5.0's
-# overlap sweep scans every row once per device, so its cost is rows x devices:
-# a crafted file naming a device per row is quadratic, and 80k such rows already
-# take three times as long as under 1.4.0. A real capture names at most a few
-# hundred devices, even merged across hosts; at this ceiling a 1 GiB upload's
-# sweep stays within seconds.
-MAX_PERFORMANCE_REPORT_DEVICES = 4096
+# Ceiling on distinct `DEVICE ID`s in a performance CSV. Two tt-perf-report passes
+# cost rows x devices: `merge_device_rows` walks every device for each op it
+# merges, in Python, and 1.5.0's overlap sweep scans every row once per device. A
+# real capture merges one op per device per pass, which is linear, but a crafted
+# file giving each device its own op code makes every row a pass. Measured, such a
+# row costs about 0.34 us per device on top of the ~110-175 us an honest row costs,
+# so at this ceiling a crafted upload costs about twice what an honest one of the
+# same size does. The upload limit bounds the size; this bounds the amplification.
+# A Galaxy is 32 devices, so this is eight of them in one CSV.
+MAX_PERFORMANCE_REPORT_DEVICES = 256
+
+# tt-perf-report's output kept per report, for the debug log. It prints a warning
+# per merge pass, listing every device the op is missing from, so a crafted file
+# can print gigabytes; the rest is dropped.
+MAX_PERF_REPORT_OUTPUT_CHARS = 64 * 1024
 
 
 @dataclass
@@ -1560,7 +1614,7 @@ class OpsPerformanceReportQueries:
         check_signpost_range(
             resolved_signposts, options.start_signpost, options.end_signpost
         )
-        check_device_count(resolved_signposts)
+        _check_device_count(resolved_signposts)
 
         # Determine if we should skip stacked report
         data_row_count = len(csv_lines) - 1
@@ -1598,7 +1652,7 @@ class OpsPerformanceReportQueries:
 
             open_figures = set(plt.get_fignums())
             try:
-                with _stacked_report_plot_skipped():
+                with _stacked_report_plot_skipped(), _perf_report_output_bounded():
                     perf_report.generate_perf_report(
                         [csv_file],
                         start_signpost,
@@ -1824,7 +1878,8 @@ class ResolvedSignposts:
 
     positions_by_name: Dict[str, List[int]]
     sorted_by_host_time: bool
-    # Distinct `DEVICE ID`s the rows name, or None when the CSV has no such column.
+    # Distinct finite `DEVICE ID`s the rows name, read as numbers as tt-perf-report
+    # reads them, or None when the CSV has no such column.
     device_count: Optional[int] = None
 
     def _in_bound_order(self) -> List[Tuple[str, List[int]]]:
@@ -1900,11 +1955,12 @@ def resolve_signposts(
         for position, name in zip(signposts.index, signposts[_OP_CODE_COLUMN]):
             positions_by_name[str(name)].append(int(position))
 
-    device_count = (
-        int(rows[_DEVICE_ID_COLUMN].nunique())
-        if _DEVICE_ID_COLUMN in rows.columns
-        else None
-    )
+    device_count = None
+    if _DEVICE_ID_COLUMN in rows.columns:
+        # "1" and "1.0" are one device to the library, and text it cannot read as
+        # a number none, so they are counted as it counts them.
+        device_ids = pd.to_numeric(rows[_DEVICE_ID_COLUMN], errors="coerce")
+        device_count = int(device_ids[np.isfinite(device_ids)].nunique())
     return ResolvedSignposts(dict(positions_by_name), sorted_by_host_time, device_count)
 
 
@@ -1926,7 +1982,7 @@ def read_signposts(
         ) from error
 
 
-def check_device_count(signposts: ResolvedSignposts) -> None:
+def _check_device_count(signposts: ResolvedSignposts) -> None:
     """Refuse a capture naming more devices than any real one, before generating."""
     if (
         signposts.device_count is not None
