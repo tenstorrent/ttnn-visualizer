@@ -842,8 +842,8 @@ class TestMemoryProfile:
         assert result["device"]["geometry_from_device"] == 1
 
     def test_a_repeated_device_id_is_read_as_its_last_row_everywhere(self, loaded):
-        """As `fetchDevices` keeps it. The device block read the first row while
-        `l1_pressure` kept the last, so one answer described two geometries."""
+        """As `fetchDevices` keeps it, so the device block and `l1_pressure` describe
+        one geometry."""
         sql = _REPORT_SQL + """
         INSERT INTO devices (
             device_id, worker_l1_size, l1_num_banks, l1_bank_size,
@@ -861,6 +861,44 @@ class TestMemoryProfile:
         assert {
             row["usable_bytes"] for row in profile["l1_pressure"]["operations"]
         } == {1000000}
+
+    def test_a_repeated_device_id_keeps_its_first_position(self, loaded):
+        """Geometry comes from the first device listed, read as its last row."""
+        sql = _REPORT_SQL + """
+        DELETE FROM devices;
+        INSERT INTO devices (
+            device_id, worker_l1_size, l1_num_banks, l1_bank_size,
+            num_compute_cores, total_l1_for_tensors
+        ) VALUES (1, 1499136, 64, 1370848, 64, 0),
+                 (0, 1499136, 64, 1370848, 64, 0),
+                 (1, 1499136, 64, 1000000, 64, 0);
+        """
+        registry, handle = loaded(sql, name="repeated-first-device")
+
+        device = agent_operations.memory_profile(registry, handle)["device"]
+
+        assert device["devices"] == 2
+        assert device["geometry_from_device"] == 1
+        assert device["l1_bank_size"] == 1000000
+
+    def test_a_later_row_without_l1_geometry_displaces_one_with_it(self, loaded):
+        """The last row wins even when it is the emptier one, as in `fetchDevices`."""
+        sql = _REPORT_SQL + """
+        INSERT INTO devices (
+            device_id, worker_l1_size, l1_num_banks, l1_bank_size,
+            num_compute_cores, total_l1_for_tensors
+        ) VALUES (0, NULL, 64, NULL, 64, 0);
+        """
+        registry, handle = loaded(sql, name="geometry-less-device")
+
+        profile = agent_operations.memory_profile(registry, handle)
+        detail = agent_operations.operation_detail(registry, handle, 2)
+
+        assert profile["device"]["devices"] == 1
+        assert profile["l1_pressure"] is None
+        assert detail["l1_pressure"] is None
+        for caveat in (profile["caveat"], detail["caveat"]):
+            assert agent_operations.NO_L1_GEOMETRY_CAVEAT in caveat
 
     def test_an_integer_buffer_type_column_is_named(self, loaded):
         """Older reports store `buffer_type` as the enum's value."""
@@ -1897,12 +1935,13 @@ class TestRankScope:
     def test_l1_figures_from_devices_that_cannot_be_attributed_to_a_rank_are_withheld(
         self, loaded
     ):
-        """With `rank` on `buffers` and not on `devices`, every rank's L1 pressure was
-        measured on whichever rank's device row came last. The footprints are still
-        attributable, so both tools answer and withhold what `devices` decides."""
+        """With `rank` on `buffers` and not on `devices`, no device row can be tied to
+        a rank. The footprints still can, so both tools answer and withhold what
+        `devices` decides."""
         registry, handle = loaded(_UNRANKED_DEVICES_SQL, name="unranked-devices")
 
-        for rank, size in ((0, 1024), (1, 8192)):
+        # No rank reads rank 0, the call an agent most often makes.
+        for rank, read_as, size in ((None, 0, 1024), (0, 0, 1024), (1, 1, 8192)):
             detail = agent_operations.operation_detail(registry, handle, 1, rank=rank)
             profile = agent_operations.memory_profile(registry, handle, rank=rank)
 
@@ -1914,7 +1953,7 @@ class TestRankScope:
             assert profile["l1_pressure"] is None
             assert "device and l1_pressure are withheld" in profile["caveat"]
             for caveat in (detail["caveat"], profile["caveat"]):
-                assert f"cannot be attributed to rank {rank}" in caveat
+                assert f"cannot be attributed to rank {read_as}" in caveat
                 assert agent_operations.NO_L1_GEOMETRY_CAVEAT not in caveat
 
         # Null for want of buffer rows, whatever the devices say.
@@ -1929,6 +1968,29 @@ class TestRankScope:
         dram = agent_operations.memory_profile(registry, handle, rank=1)
         assert dram["device"] is None
         assert "device is withheld" in dram["caveat"]
+
+    @pytest.mark.parametrize(
+        "buffer_type, withheld",
+        [("L1", "device and l1_pressure are withheld"), ("DRAM", "device is withheld")],
+    )
+    def test_a_filtered_profile_withholds_only_the_fields_it_reports(
+        self, loaded, buffer_type, withheld
+    ):
+        """`l1_pressure` is named only when the call reports L1."""
+        registry, handle = loaded(
+            _UNRANKED_DEVICES_SQL
+            + "INSERT INTO buffers VALUES (1, 0, 500, 2048, 'DRAM', 0, 1);",
+            name=f"unranked-devices-{buffer_type}",
+        )
+
+        profile = agent_operations.memory_profile(
+            registry, handle, rank=1, buffer_type=buffer_type
+        )
+
+        assert list(profile["memory_by_buffer_type"]) == [buffer_type]
+        assert withheld in profile["caveat"]
+        if buffer_type == "DRAM":
+            assert "l1_pressure" not in profile["caveat"]
 
     def test_an_empty_devices_table_without_rank_is_read_as_empty(self, loaded):
         """No row of it can be misattributed, so it answers as on a single-host report."""

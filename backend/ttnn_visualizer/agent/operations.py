@@ -230,6 +230,12 @@ def unattributable_reason(
     )
 
 
+def withheld_caveat(fields: Sequence[str], reason: str) -> str:
+    """The sentence a caveat carries for `fields` withheld because of `reason`."""
+    verb = "is" if len(fields) == 1 else "are"
+    return f"{' and '.join(fields)} {verb} withheld: {reason}."
+
+
 def _buffer_type_name(value: object) -> str:
     """A stored `buffer_type` by name, whether or not it became a `BufferType`.
 
@@ -541,6 +547,19 @@ def _attributable_devices(
     devices = scoped_devices(queries, scope)
     reason = unattributable_reason(queries, scope, "devices") if devices else None
     return ([] if reason else devices), reason
+
+
+def _device_caveat(
+    fields: Sequence[str],
+    unattributable: Optional[str],
+    windows: Dict[int, L1Window],
+) -> Optional[str]:
+    """Why the device-derived `fields` are null: withheld, else no L1 geometry."""
+    if unattributable:
+        return withheld_caveat(fields, unattributable)
+    if "l1_pressure" in fields and not windows:
+        return NO_L1_GEOMETRY_CAVEAT
+    return None
 
 
 def _device_capacity(devices: Sequence[Device]) -> Dict[str, object]:
@@ -1003,17 +1022,13 @@ def operation_detail(
         **_caveats(scope, {buffer.device_id for buffer in buffers}),
     }
     result.update(added)
-    if not buffers:
-        result["caveat"] = joined_caveat(
-            result.get("caveat"),
-            "l1_pressure is null because no buffer rows were recorded for this operation.",
-        )
-    elif devices_unattributable:
-        result["caveat"] = joined_caveat(
-            result.get("caveat"), f"l1_pressure is withheld: {devices_unattributable}."
-        )
-    elif not windows:
-        result["caveat"] = joined_caveat(result.get("caveat"), NO_L1_GEOMETRY_CAVEAT)
+    device_caveat = (
+        _device_caveat(["l1_pressure"], devices_unattributable, windows)
+        if buffers
+        else "l1_pressure is null because no buffer rows were recorded for this operation."
+    )
+    if device_caveat:
+        result["caveat"] = joined_caveat(result.get("caveat"), device_caveat)
     if withheld:
         result["caveat"] = joined_caveat(result.get("caveat"), withheld)
     return result
@@ -1071,6 +1086,7 @@ def memory_profile(
             )
         }
         device_rows, devices_unattributable = _attributable_devices(queries, scope)
+        # `_device_capacity([])` answers `devices: 0`, so withheld goes by the reason.
         capacity = None if devices_unattributable else _device_capacity(device_rows)
         cap = bounded(limit)
         l1_windows = _device_l1_windows(device_rows)
@@ -1187,18 +1203,12 @@ def memory_profile(
         **scope.as_response(),
         **_caveats(scope, devices=devices),
     }
-    if devices_unattributable:
-        withheld_fields = (
-            "device and l1_pressure are"
-            if BufferType.L1.name in by_type
-            else "device is"
-        )
-        result["caveat"] = joined_caveat(
-            result.get("caveat"),
-            f"{withheld_fields} withheld: {devices_unattributable}.",
-        )
-    elif BufferType.L1.name in by_type and not l1_windows:
-        result["caveat"] = joined_caveat(result.get("caveat"), NO_L1_GEOMETRY_CAVEAT)
+    device_fields = (
+        ["device", "l1_pressure"] if BufferType.L1.name in by_type else ["device"]
+    )
+    device_caveat = _device_caveat(device_fields, devices_unattributable, l1_windows)
+    if device_caveat:
+        result["caveat"] = joined_caveat(result.get("caveat"), device_caveat)
     return result
 
 
@@ -1345,6 +1355,10 @@ __all__ = [
     "profiler_db",
     "rank_caveat",
     "rank_scope",
+    "refuse_unattributable",
     "scoped",
+    "scoped_devices",
     "tensor_flow",
+    "unattributable_reason",
+    "withheld_caveat",
 ]

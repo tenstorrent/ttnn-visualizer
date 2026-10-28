@@ -14,6 +14,7 @@ operation.
 
 import csv
 import json
+import re
 import sqlite3
 import tempfile
 from pathlib import Path
@@ -1133,6 +1134,42 @@ class TestGraphReading:
         assert link.status is LinkStatus.UNAVAILABLE
         assert f"`{table}`" in (link.reason or "")
         assert not link.operation_by_perf_id
+
+    def test_a_detail_whose_device_and_failure_rows_span_ranks_still_answers(
+        self, linked, tmp_path
+    ):
+        """The link is refused, and each field it cannot attribute is withheld in one
+        caveat, a sentence apiece."""
+        path = _write_ranked_profiler(tmp_path / "ranked", _GRAPHS)
+        connection = sqlite3.connect(Path(path) / "db.sqlite")
+        try:
+            connection.executescript("""
+                ALTER TABLE devices DROP COLUMN rank;
+                INSERT INTO buffers VALUES (2, 0, 100, 1024, 'L1', 0, 1);
+                CREATE TABLE errors (
+                    operation_id int, operation_name text, error_type text,
+                    error_message text, stack_trace text, timestamp text
+                );
+                CREATE TABLE operation_arguments (
+                    operation_id int, name text, value text
+                );
+                INSERT INTO errors
+                VALUES (2, 'ttnn.matmul', 'TT_THROW', 'failed', '', '');
+                INSERT INTO operation_arguments VALUES (2, 'memory_config', NULL);
+                """)
+            connection.commit()
+        finally:
+            connection.close()
+        registry, handle, _ = linked(profiler_path=path)
+
+        detail = linking.operation_detail(registry, handle, 2, rank=1)
+
+        assert detail["operation_link"]["status"] == LinkStatus.UNAVAILABLE.value
+        assert detail["l1_pressure"] is None
+        caveat = detail["caveat"]
+        assert operations.NO_L1_GEOMETRY_CAVEAT not in caveat
+        withheld = re.findall(r"(\w+) is withheld: [^.]*\.", caveat)
+        assert sorted(withheld) == ["dram_fallback", "error", "l1_pressure"]
 
 
 class TestOperationDetailLink:

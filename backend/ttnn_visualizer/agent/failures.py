@@ -46,6 +46,7 @@ from ttnn_visualizer.agent.operations import (
     scoped,
     scoped_devices,
     unattributable_reason,
+    withheld_caveat,
 )
 from ttnn_visualizer.agent.scope_outcomes import failed_device_operation_names
 from ttnn_visualizer.agent.tool_names import McpToolName
@@ -838,7 +839,7 @@ def _attributable(
     """Whether `field` can be read for the rank; if not, `withheld` says why."""
     reason = unattributable_reason(queries, scope, *tables)
     if reason is not None:
-        withheld.append(f"{field} is withheld: {reason}")
+        withheld.append(withheld_caveat([field], reason))
     return reason is None
 
 
