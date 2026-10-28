@@ -234,10 +234,13 @@ class TestSummarise:
         scope's end, finding a snapshot already taken, keeps the first. No local capture
         has two batches in one scope."""
         nodes = _device_operation().cb().free_all().cb(200).end().nodes
+        summary = summarise(nodes)
 
-        (snapshot,) = summarise(nodes).snapshots
+        (snapshot,) = summary.snapshots
 
         assert [row.address for row in snapshot.allocations] == [100]
+        # Not silently: the batch the snapshot leaves out is counted.
+        assert summary.unlisted_count == 1
 
     def test_a_buffer_outside_any_scope_is_never_snapshotted(self):
         nodes = CapturedGraph().cb().free_all().nodes
@@ -624,6 +627,59 @@ class TestUnlistedCount:
 
     def test_buffers_allocated_outside_any_scope_are_not_counted(self):
         assert summarise(CapturedGraph().cb().nodes).unlisted_count == 0
+
+
+class TestSplitRuns:
+    """In the modal's order a node between a launch's buffers splits them into runs,
+    each followed by the launch's free-all; only the last run's snapshot is kept."""
+
+    def test_a_replaced_run_is_counted_on_a_launch_that_closed(self):
+        """Raw order lists both; the modal lists the second alone."""
+        nodes = (
+            CapturedGraph()
+            .start("Conv")
+            .free_all()
+            .cb()
+            .tensor()
+            .cb(200)
+            .end()
+            .capture_end()
+            .nodes
+        )
+
+        response = operation_circular_buffers(nodes)
+
+        assert _listed(nodes) == [("Conv", 1)]
+        assert response["unlisted_circular_buffer_count"] == 1
+
+    def test_a_second_run_cut_off_after_its_scope_s_snapshot_is_counted(self):
+        nodes = (
+            CapturedGraph()
+            .start("ttnn::matmul")
+            .start("Matmul")
+            .free_all()
+            .cb()
+            .tensor()
+            .cb(300)
+            .nodes
+        )
+
+        response = operation_circular_buffers(nodes)
+
+        assert _listed(nodes) == [("Matmul", 1)]
+        assert response["unlisted_circular_buffer_count"] == 1
+
+    def test_an_older_mesh_capture_counts_once_per_device_section(self):
+        """Each device's section is its own launch, so a lost one is counted per
+        device, not folded as the listing is."""
+        graph = CapturedGraph().start("ttnn::matmul")
+        for device in [0, 1]:
+            graph.start("Matmul").free_all(device).cb(200, device_id=device)
+
+        response = operation_circular_buffers(graph.nodes)
+
+        assert _listed(graph.nodes) == [("Matmul", 1)]
+        assert response["unlisted_circular_buffer_count"] == 1
 
 
 class TestResponse:

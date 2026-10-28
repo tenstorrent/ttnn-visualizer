@@ -69,9 +69,10 @@ CIRCULAR_BUFFERS_NOTE = (
     "gives its length. A graph records a program's circular buffers only at its "
     "first launch: a relaunch from the program cache frees and allocates none, so a "
     "device operation that freed but recorded no buffers is counted under "
-    "unrecorded_device_operations, not as one that used none. Buffers a graph cut "
-    "off mid-launch leaves no free-all after are counted in "
-    "unlisted_circular_buffer_count, not listed. At most "
+    "unrecorded_device_operations, not as one that used none. Buffers missing from "
+    "their device operation's snapshot, because the graph was cut off mid-launch or a "
+    "later run of that operation's buffers replaced it, are counted in "
+    "unlisted_circular_buffer_count, once per device section, not listed. At most "
     f"{MAX_LIMIT} rows are listed, {MAX_DETAILED_LIMIT} when include is set; the "
     "counts cover them all."
 )
@@ -213,8 +214,9 @@ class Summary:
     allocating_operation_ids: Set[object] = field(default_factory=set)
     # In the order they first freed.
     launches: List[Launch] = field(default_factory=list)
-    # Buffers dropped before any snapshot of the scope that allocated them. Not in the
-    # app, which drops them silently. #2218
+    # Buffers missing from the last snapshot of the scope that allocated them: a graph
+    # cut off before one was taken, or a later run of the scope's buffers that replaced
+    # it. Not in the app, which drops them silently. #2218
     unlisted_count: int = 0
 
     def unrecorded(self) -> List[Launch]:
@@ -248,7 +250,9 @@ def summarise(nodes: Sequence[object]) -> Summary:
     snapshots: Dict[object, Snapshot] = {}
     allocating: Set[object] = set()
     launches: Dict[object, Launch] = {}
-    unlisted_count = 0
+    # By scope, the buffers its snapshot holds; a later snapshot replaces both.
+    listed: Dict[object, Set[int]] = {}
+    allocated: List[_Live] = []
     scopes: List[_Scope] = []
     bytes_by_device_core: Dict[str, NumberValue] = {}
     unattributed_by_device: Dict[str, NumberValue] = {}
@@ -284,16 +288,7 @@ def summarise(nodes: Sequence[object]) -> Summary:
                 for entry in live
             ],
         )
-
-    def count_unlisted() -> None:
-        # As `live` is dropped. A missing owner id is None here, so `snapshots`' raw keys
-        # match every owner that is checked.
-        nonlocal unlisted_count
-        unlisted_count += sum(
-            entry.row.allocate_operation_id is not None
-            and entry.row.allocate_operation_id not in snapshots
-            for entry in live
-        )
+        listed[scope.id] = {id(entry) for entry in live}
 
     # The app's loop starts past the first node, which a capture makes `capture_start`.
     for node in nodes[1:]:
@@ -365,6 +360,7 @@ def summarise(nodes: Sequence[object]) -> Summary:
                     {device_key},
                 )
                 live.append(entry)
+                allocated.append(entry)
                 live_by_slot[slot] = entry
 
         if node_type == _DEALLOCATE_ALL:
@@ -381,7 +377,6 @@ def summarise(nodes: Sequence[object]) -> Summary:
                 for entry in live
             ):
                 snapshot(current)
-            count_unlisted()
             bytes_by_device_core.clear()
             unattributed_by_device.clear()
             live = []
@@ -396,7 +391,13 @@ def summarise(nodes: Sequence[object]) -> Summary:
             if scopes:
                 scopes.pop()
 
-    count_unlisted()
+    # A missing owner id is None here, so `listed`'s raw keys match every owner that
+    # is checked.
+    unlisted_count = sum(
+        entry.row.allocate_operation_id is not None
+        and id(entry) not in listed.get(entry.row.allocate_operation_id, ())
+        for entry in allocated
+    )
     return Summary(
         list(snapshots.values()),
         allocating,

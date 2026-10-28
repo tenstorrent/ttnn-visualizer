@@ -823,6 +823,7 @@ ${getMemoryAddress(bufferCondensed.address, this.options.showHex)} <br /> ${form
         return operations;
     }
 
+    // Mirrored in `backend/ttnn_visualizer/agent/circular_buffers.py` (`sort_by_buffer_deallocation`). #2218
     // eslint-disable-next-line class-methods-use-this
     sortDeviceOperationsByBufferDeallocation(deviceOperations: Node[]): Node[] {
         const circularBufferDeallocations: Map<number, Node> = new Map();

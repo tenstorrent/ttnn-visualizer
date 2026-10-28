@@ -808,8 +808,9 @@ def operation_failure_fields(
                 unlisted_buffers = "buffer" if unlisted == 1 else "buffers"
                 withheld.append(
                     f"circular_buffers leaves out {unlisted} circular "
-                    f"{unlisted_buffers} the graph allocated with no free-all after "
-                    "them, as a graph cut off mid-launch leaves them, so "
+                    f"{unlisted_buffers} missing from their device operation's "
+                    "snapshot, as a graph cut off mid-launch or a launch whose buffers "
+                    "run in two batches leaves them, so "
                     "circular_buffer_count and device_operation_count leave them out "
                     "and their bytes per core are unknown"
                 )

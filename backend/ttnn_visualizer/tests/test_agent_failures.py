@@ -1455,6 +1455,35 @@ class TestOperationDetail:
         assert "device_operation_count leave them out" in detail["caveat"]
         assert "unknown, not zero" not in detail["caveat"]
 
+    def test_a_relaunch_and_a_lost_buffer_are_each_a_sentence(self, tmp_path):
+        """Two reasons share the caveat; each ends before the next begins."""
+        graph = (
+            CapturedGraph()
+            .start("ttnn::matmul")
+            .start("UntilizeDeviceOperation")
+            .free_all()
+            .end("UntilizeDeviceOperation")
+            .start("MatmulDeviceOperation")
+            .free_all()
+            .cb()
+            .tensor()
+            .cb(200)
+        )
+        registry, handle = _report(
+            tmp_path,
+            operations=[(1, "ttnn.matmul")],
+            graphs=[(1, [node for node in graph.nodes if isinstance(node, dict)])],
+        )
+
+        detail = linking.operation_detail(registry, handle, operation_id=1)
+
+        assert detail["circular_buffers"]["unlisted_circular_buffer_count"] == 1
+        caveat = detail["caveat"]
+        assert "1 device operation launch whose" in caveat
+        assert "leaves out 1 circular buffer missing" in caveat
+        assert "unknown, not zero. circular_buffers leaves out" in caveat
+        assert caveat.endswith(".")
+
     def test_its_circular_buffers_are_read_from_the_rank_asked_for(self, tmp_path):
         registry, handle = _two_rank_report(
             tmp_path,

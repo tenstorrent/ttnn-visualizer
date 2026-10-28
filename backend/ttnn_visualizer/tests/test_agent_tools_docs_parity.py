@@ -166,6 +166,7 @@ def test_the_page_carries_the_failed_launch_caveat():
 
     assert "leaves a failed launch's scope open" in page
     assert "`unlisted_circular_buffer_count`" in page
+    assert "the second run's snapshot replaces the first" in page
 
 
 def test_the_page_carries_the_core_spread_caveats():
