@@ -11,13 +11,14 @@ A port of `src/functions/getDramFallbacks.ts` and the constants in
 import re
 from dataclasses import dataclass, field
 from enum import Enum
-from math import nan, prod
+from math import prod
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from ttnn_visualizer.agent.allocation_failures import (
     BANK_KINDS,
     is_l1_buffer_type,
 )
+from ttnn_visualizer.agent.js_values import JS_WHITESPACE, js_number, js_trim
 from ttnn_visualizer.models import L1_BUFFER_TYPES, BufferType, Tensor
 from ttnn_visualizer.utils import (
     MEMORY_CONFIG_PATTERN,
@@ -36,8 +37,10 @@ RETRY_WINDOW_OPERATIONS = 3
 
 # An L1 intermediate says nothing about where the output goes.
 _IGNORED_ARGUMENT = re.compile(r"intermediate")
-# `\Z` and ASCII digits, as JavaScript reads `$` and `\d`.
-_SHAPE = re.compile(r"^(?:Shape|torch\.Size)\(\[([0-9,\s]*)\]\)\Z")
+# `\Z`, ASCII digits and JavaScript's whitespace, as JavaScript reads `$`, `\d` and `\s`.
+_SHAPE = re.compile(
+    r"^(?:Shape|torch\.Size)\(\[([0-9," + re.escape(JS_WHITESPACE) + r"]*)\]\)\Z"
+)
 
 
 @dataclass
@@ -68,10 +71,9 @@ def _element_count(shape: object) -> Optional[float]:
     match = _SHAPE.match(shape) if isinstance(shape, str) else None
     if match is None:
         return None
-    parts = [part.strip() for part in match.group(1).split(",") if part.strip()]
     # `Number("1 2")` is NaN, and a NaN count differs from every other.
     return prod(
-        float(part) if part.isascii() and part.isdigit() else nan for part in parts
+        js_number(part) for part in match.group(1).split(",") if js_trim(part) != ""
     )
 
 
