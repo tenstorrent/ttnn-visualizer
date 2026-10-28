@@ -3,6 +3,7 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 
+import dataclasses
 import sqlite3
 import tempfile
 import unittest
@@ -476,6 +477,26 @@ class TestDatabaseQueries(unittest.TestCase):
             for tensor in self.db_queries.query_tensors()
         }
         self.assertEqual(results, {1: [100], 2: [200, None, 300]})
+
+    def test_query_tensors_can_skip_the_joins_that_find_a_size(self):
+        """Without them `size` is None where `tensors` has no column for it, and every
+        other field matches the full read."""
+        self.connection.executescript("""
+            CREATE TABLE device_tensors (tensor_id int, device_id int, address int);
+            INSERT INTO tensors VALUES (1, '(2,2)', 'float32', 'NCHW', 'default', 0, 100, 0);
+            INSERT INTO device_tensors VALUES (1, 0, 100);
+            INSERT INTO device_tensors VALUES (1, 1, 500);
+            INSERT INTO input_tensors VALUES (5, 0, 1);
+            INSERT INTO input_tensors VALUES (6, 0, 1);
+            INSERT INTO buffers VALUES (5, 0, 100, 1024, 0);
+            """)
+
+        (full,) = self.db_queries.query_tensors()
+        (lean,) = self.db_queries.query_tensors(size_from_buffers=False)
+
+        self.assertEqual(full.size, 1024)
+        self.assertIsNone(lean.size)
+        self.assertEqual(dataclasses.replace(full, size=None), lean)
 
     def test_query_input_tensors(self):
         self.connection.execute("INSERT INTO input_tensors VALUES (1, 0, 1)")

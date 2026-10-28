@@ -11,10 +11,11 @@ import { selectedAddressAtom } from '../src/store/app';
 import { TestProviders } from './helpers/TestProviders';
 import { BufferFocusProbe } from './helpers/BufferFocusProbe';
 import { getBufferFocusProbe, pressAndRelease } from './helpers/bufferFocus';
+import { topologyQueryResult } from './helpers/clusterTopologyFixtures';
 
 vi.mock('../src/hooks/useAPI', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../src/hooks/useAPI')>()),
-    useGetClusterTopology: () => ({ data: undefined, isLoading: true, isError: false, error: null }),
+    useGetClusterTopology: () => topologyQueryResult(undefined, { isLoading: true }),
 }));
 
 // Stands in for Operation Details or Buffer Summary, which the topology view opens over.

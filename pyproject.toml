@@ -1,7 +1,7 @@
 [project]
 name = "ttnn_visualizer"
 authors = []
-version = "0.108.0"
+version = "0.109.0"
 description = "TT-NN Visualizer"
 readme = "README.md"
 license = "Apache-2.0"
@@ -21,7 +21,7 @@ dependencies = [
     "pydantic==2.12.5",
     "python-dotenv==1.2.2",
     "PyYAML>=6.0.0,<7.0",
-    "tt-perf-report==1.4.0",
+    "tt-perf-report==1.5.0",
     "zstd>=1.5.7.2,<2.0",
 ]
 
@@ -32,7 +32,7 @@ classifiers = [
 
 [dependency-groups]
 dev = [
-    "black==26.3.1",
+    "black==26.10.1",
     "isort==6.0.1",
     "mypy==2.0.0",
     "playwright==1.58.0",

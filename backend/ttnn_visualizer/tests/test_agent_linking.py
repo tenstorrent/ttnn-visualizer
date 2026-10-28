@@ -14,6 +14,7 @@ operation.
 
 import csv
 import json
+import re
 import sqlite3
 import tempfile
 from pathlib import Path
@@ -23,9 +24,11 @@ from unittest.mock import patch
 import pytest
 from ttnn_visualizer.agent import (
     app_links,
+    bounds,
     linking,
     operations,
     perf_detail,
+    scope_outcomes,
     server,
     tools,
 )
@@ -336,7 +339,7 @@ class TestMatcherParity:
         ],
     )
     def test_device_operation_names_match_the_frontend_filter(self, name, expected):
-        assert linking.is_device_operation(name) is expected
+        assert scope_outcomes.is_device_operation(name) is expected
 
 
 class TestFailedDeviceOperations:
@@ -1132,6 +1135,42 @@ class TestGraphReading:
         assert f"`{table}`" in (link.reason or "")
         assert not link.operation_by_perf_id
 
+    def test_a_detail_whose_device_and_failure_rows_span_ranks_still_answers(
+        self, linked, tmp_path
+    ):
+        """The link is refused, and each field it cannot attribute is withheld in one
+        caveat, a sentence apiece."""
+        path = _write_ranked_profiler(tmp_path / "ranked", _GRAPHS)
+        connection = sqlite3.connect(Path(path) / "db.sqlite")
+        try:
+            connection.executescript("""
+                ALTER TABLE devices DROP COLUMN rank;
+                INSERT INTO buffers VALUES (2, 0, 100, 1024, 'L1', 0, 1);
+                CREATE TABLE errors (
+                    operation_id int, operation_name text, error_type text,
+                    error_message text, stack_trace text, timestamp text
+                );
+                CREATE TABLE operation_arguments (
+                    operation_id int, name text, value text
+                );
+                INSERT INTO errors
+                VALUES (2, 'ttnn.matmul', 'TT_THROW', 'failed', '', '');
+                INSERT INTO operation_arguments VALUES (2, 'memory_config', NULL);
+                """)
+            connection.commit()
+        finally:
+            connection.close()
+        registry, handle, _ = linked(profiler_path=path)
+
+        detail = linking.operation_detail(registry, handle, 2, rank=1)
+
+        assert detail["operation_link"]["status"] == LinkStatus.UNAVAILABLE.value
+        assert detail["l1_pressure"] is None
+        caveat = detail["caveat"]
+        assert operations.NO_L1_GEOMETRY_CAVEAT not in caveat
+        withheld = re.findall(r"(\w+) is withheld: [^.]*\.", caveat)
+        assert sorted(withheld) == ["dram_fallback", "error", "l1_pressure"]
+
 
 class TestOperationDetailLink:
     def test_it_lists_the_rows_an_operation_launched(self, linked):
@@ -1511,7 +1550,7 @@ class TestLinkBounds:
     def test_a_captured_graph_past_the_bound_is_not_read(self, linked):
         registry, handle, _ = linked()
 
-        with patch.object(linking, "MAX_CAPTURED_GRAPH_CHARS", 10):
+        with patch.object(bounds, "MAX_CAPTURED_GRAPH_CHARS", 10):
             link = linking.operation_link(registry, handle)
 
         assert link.status is LinkStatus.UNAVAILABLE
@@ -1533,7 +1572,7 @@ class TestLinkBounds:
             connection.close()
         registry, handle, _ = linked(profiler_path=path)
 
-        with patch.object(linking, "MAX_CAPTURED_GRAPH_CHARS", rank_zero_size):
+        with patch.object(bounds, "MAX_CAPTURED_GRAPH_CHARS", rank_zero_size):
             link = linking.operation_link(registry, handle)
 
         assert link.status is LinkStatus.LINKED
@@ -1541,7 +1580,7 @@ class TestLinkBounds:
 
     def test_the_bound_is_far_past_any_real_capture(self):
         """Pinned as a literal: lowering it is a policy change, not a refactor."""
-        assert linking.MAX_CAPTURED_GRAPH_CHARS == 1 << 30
+        assert bounds.MAX_CAPTURED_GRAPH_CHARS == 1 << 30
 
     @pytest.mark.parametrize("directory", [tempfile.gettempdir(), "/tmp"])
     def test_a_reason_does_not_carry_the_temp_directory(

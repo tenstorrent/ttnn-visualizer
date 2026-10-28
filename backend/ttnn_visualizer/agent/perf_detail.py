@@ -23,7 +23,7 @@ from typing import (
     Tuple,
 )
 
-from ttnn_visualizer.agent.cells import finite_number
+from ttnn_visualizer.agent.cells import finite_number, whole_number
 from ttnn_visualizer.csv_queries import PROGRAM_CACHE_HIT_COLUMN, PROGRAM_HASH_COLUMN
 
 
@@ -37,6 +37,7 @@ class DetailGroup(str, Enum):
     CACHE = "cache"
     KERNELS = "kernels"
     ADVICE = "advice"
+    FLAGS = "flags"
 
 
 # How tt-perf-report and pandas spell an empty cell.
@@ -66,7 +67,7 @@ def _microseconds(nanoseconds: object) -> Optional[float]:
 _UNMODELLED_NS = 1.0
 
 
-def _is_unmodelled(nanoseconds: object) -> bool:
+def is_unmodelled(nanoseconds: object) -> bool:
     return _number(nanoseconds) == _UNMODELLED_NS
 
 
@@ -76,11 +77,6 @@ _FIDELITY = re.compile(r"(LoFi|HiFi[234])$")
 def _fidelity(value: object) -> Optional[str]:
     match = _FIDELITY.match(_text(value) or "")
     return match.group(1) if match else None
-
-
-def _count(value: object) -> Optional[int]:
-    number = _number(value)
-    return None if number is None else int(number)
 
 
 def _flag(value: object) -> Optional[bool]:
@@ -124,7 +120,7 @@ class _Field(NamedTuple):
     filled_by: Optional[str] = None
 
     def value(self, row: Dict) -> object:
-        if self.model_column and _is_unmodelled(row.get(self.model_column)):
+        if self.model_column and is_unmodelled(row.get(self.model_column)):
             return None
         return self.read(row.get(self.column))
 
@@ -144,9 +140,9 @@ _FIELDS: Dict[DetailGroup, Tuple[_Field, ...]] = {
         _Field("output_datatype", "output_datatype", _text),
         _Field("input_0_memory", "input_0_memory", _text),
         _Field("dram_sharded", "dram_sharded", _flag),
-        _Field("inner_dim_block_size", "inner_dim_block_size", _count),
-        _Field("output_subblock_h", "output_subblock_h", _count),
-        _Field("output_subblock_w", "output_subblock_w", _count),
+        _Field("inner_dim_block_size", "inner_dim_block_size", whole_number),
+        _Field("output_subblock_h", "output_subblock_h", whole_number),
+        _Field("output_subblock_w", "output_subblock_w", whole_number),
     ),
     DetailGroup.UTILISATION: (
         _Field("dram_gb_per_s", "dram", _number),
@@ -202,7 +198,7 @@ _FIELDS: Dict[DetailGroup, Tuple[_Field, ...]] = {
         ),
     ),
     DetailGroup.CORES: (
-        _Field("available_cores", "available_cores", _count),
+        _Field("available_cores", "available_cores", whole_number),
         _Field(
             "first_to_last_start_us", "device_kernel_first_to_last_start", _microseconds
         ),
@@ -224,18 +220,18 @@ _FIELDS: Dict[DetailGroup, Tuple[_Field, ...]] = {
             _microseconds,
             filled_by=_DISPATCH_CORES,
         ),
-        _Field("metal_trace_id", "metal_trace_id", _count, filled_by=_TRACED),
+        _Field("metal_trace_id", "metal_trace_id", whole_number, filled_by=_TRACED),
         _Field(
             "metal_trace_replay_session_id",
             "metal_trace_replay_session_id",
-            _count,
+            whole_number,
             filled_by=_TRACED,
         ),
     ),
     DetailGroup.CACHE: (
         _Field("program_hash", "hash", _text),
         _Field("program_cache_hit", "cache_hit", _flag),
-        _Field("global_call_count", "global_call_count", _count),
+        _Field("global_call_count", "global_call_count", whole_number),
     ),
     DetailGroup.KERNELS: (
         _Field("compute_kernels", "compute_kernel_source", _listed),
@@ -244,6 +240,8 @@ _FIELDS: Dict[DetailGroup, Tuple[_Field, ...]] = {
         _Field("data_movement_kernel_hashes", "data_movement_kernel_hash", _listed),
     ),
     DetailGroup.ADVICE: (_Field("advice", "advice", _advice),),
+    # No column: `perf_flags` reads the row against the whole report and the device.
+    DetailGroup.FLAGS: (),
 }
 
 _NOT_A_COLUMN = "not among this report's columns, so no capture option fills it here"
@@ -342,9 +340,14 @@ def empty_in_report(
     }
 
 
+def has_fields(groups: Sequence[DetailGroup]) -> bool:
+    """Whether any group asked for adds detail fields, which `flags` alone does not."""
+    return any(_FIELDS[group] for group in groups)
+
+
 def summary(groups: Sequence[DetailGroup], empty: EmptyFields) -> Dict[str, object]:
     """What an answer with detail fields says about them."""
-    if not groups:
+    if not has_fields(groups):
         return {}
     return {
         "included": [group.value for group in groups],
@@ -360,6 +363,8 @@ __all__ = [
     "detail_fields",
     "empty_fields",
     "empty_in_report",
+    "has_fields",
+    "is_unmodelled",
     "parse_include",
     "summary",
 ]

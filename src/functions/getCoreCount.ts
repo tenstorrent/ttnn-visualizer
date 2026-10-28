@@ -7,11 +7,12 @@ import { TypedPerfTableRow } from '../model/PerfTable';
 import { stringToArchitecture } from './stringToArchitecture';
 
 // Core counts don't match documentation exactly because there are 1 or 2 rows of harvested cores, so they are not considered as working cores
+// Mirrored as `_CORE_COUNT` in `backend/ttnn_visualizer/agent/perf_flags.py`.
 const CORE_COUNT: Record<Exclude<DeviceArchitecture, DeviceArchitecture.UNKNOWN>, number> = {
     [DeviceArchitecture.GRAYSKULL]: 108,
     [DeviceArchitecture.WORMHOLE]: 64,
     [DeviceArchitecture.BLACKHOLE]: 130, // Mohamed: 130 for BH p150 and 120 for BH p100. P150 is more popular so 130 is good
-    [DeviceArchitecture.QUASAR]: 32, // 32 workers (8 columns × 4 rows); 28 when dispatch runs on Tensix cores
+    [DeviceArchitecture.QUASAR]: 32, // Quasar-32's 8x4 mesh, 28 with Tensix dispatch; QSR3.A2's 96 come from the device log
     [DeviceArchitecture.GRENDEL]: 32, // the same Quasar mesh; both to come from the descriptor (#2130)
 };
 
@@ -31,6 +32,7 @@ function getArchitectureDefaultCores(architecture: DeviceArchitecture): number {
     return CORE_COUNT[architecture];
 }
 
+// Mirrored as `core_count` in `backend/ttnn_visualizer/agent/perf_flags.py`.
 function getCoreCount(architecture: DeviceArchitecture, data: TypedPerfTableRow[]): number {
     const architectureDefault = getArchitectureDefaultCores(architecture);
     let highestCoreCount = 0;
@@ -50,7 +52,10 @@ function getCoreCount(architecture: DeviceArchitecture, data: TypedPerfTableRow[
     return highestCoreCount > architectureDefault ? highestCoreCount : architectureDefault;
 }
 
-/** Resolve device capacity for utilisation heuristics and UI core count display. */
+/**
+ * Resolve device capacity for utilisation heuristics and UI core count display.
+ * Mirrored as `resolve_max_cores` in `backend/ttnn_visualizer/agent/perf_flags.py`.
+ */
 export function resolveMaxCores(deviceMeta: DeviceMetaLike | null | undefined, rows: TypedPerfTableRow[]): number {
     // The device log's raw `ARCH:` token: normalised, so an unrecognised one still honours the rows' core counts.
     const architecture = stringToArchitecture(deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE);

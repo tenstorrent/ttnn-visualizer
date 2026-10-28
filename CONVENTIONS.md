@@ -227,9 +227,9 @@ Use **`null`** when you mean “no value yet” or “cleared” in values you o
 
 #### Read on use when the value is needed before the stylesheet is guaranteed to have applied
 
-`GRAPH_COLORS` is an object literal, so its `cssVar()` calls resolve **once, at module evaluation**. That is fine for a value first read during a user interaction, but a module imported before the stylesheet applies captures empty strings for good.
+`GRAPH_COLORS` is an object literal, so its `cssVar()` calls resolve **once, when the module is first evaluated** — not when a property is first read. Every later reader gets whatever the stylesheet declared at that moment, so a module evaluated before the stylesheet applies captures empty strings for good.
 
-Where that risk is real, expose a **getter** instead of a property and keep everything else about the flow — `getPerfChartChrome()` in `src/definitions/PlotConfigurations.ts` is the reference: the properties still live in `_base.scss`, components still never see a literal, but each call re-reads.
+Where that risk is real, expose a **getter** instead of a property and keep everything else about the flow — `getPerfChartChrome()` in `src/definitions/PlotConfigurations.ts` is the reference, and `getL1PeakColours()` in `src/definitions/L1PeakDecomposition.ts` follows it: the properties still live in `_base.scss`, components still never see a literal, but each call re-reads.
 
 ```ts
 export const getPerfChartChrome = (): PerfChartChrome => ({
@@ -238,7 +238,9 @@ export const getPerfChartChrome = (): PerfChartChrome => ({
 });
 ```
 
-Prefer `GRAPH_COLORS` by default; reach for a getter only when import-time evaluation is a genuine hazard, and say so in a docstring, because the repeat `getComputedStyle` read is not free — call it once per render pass, not per element.
+**This is one rule with two shapes, not two competing mechanisms, and there is no third shape.** The object and the getters share the whole flow and differ only in when the read happens. Prefer `GRAPH_COLORS` by default. What makes reading at load safe is `src/main.tsx` importing `./index.scss` before any app module, so a module reached only through the app tree from `main.tsx` may read at load. A module that can also be evaluated outside that tree — imported directly by a test, a worker or a script — takes a getter, and its docstring says where. `tests/PlotConfigurations.spec.ts` is the case in point: it sets the properties on `:root` and calls `getPerfChartChrome()`, where a test that renders `GRAPH_COLORS` has to mock the module instead. The repeat `getComputedStyle` read is not free, so call a getter once per mount, not per render or per element — for example, resolve it in a `useMemo` with an empty dependency list. Settled in #1911.
+
+Either shape fails the same way: `cssVar` returns `''` for a property nobody declared, with no error, so a rename in a stylesheet leaves a graph drawn in no colour. `tests/cssCustomProperties.spec.ts` checks that every name `src/` passes to `cssVar` is declared under `src/scss/`, which means `cssVar` may only be called with a quoted literal name: a computed argument, a reference passed as a value or an aliased import fails it, naming the line. Its header says what it does not check.
 
 ### Same rule for magic layout numbers
 
@@ -538,7 +540,9 @@ Link status is a property of the reports, not of the current view. Resolving it 
 
 Build both keys through `src/functions/performanceReportQueryKey.ts` rather than assembling one inline, so the two cannot drift into keying on different filters. **Every** filter is pinned, so `getLinkedPerformanceReportParams()` takes no arguments — a view control that needs threading through it is a sign the call site wants `usePerformanceReport` instead.
 
-`tracingMode` was the last carve-out, and it was removed on a mistaken premise: that a trace-captured run's traced order is the one that lines up with the memory report, so pinning it would make those pairs unlinkable. It doesn't reach the match. `tracingMode` only suppresses a `HOST START TS` sort in `tt-perf-report` (`perf_report.py:2168`), and because the link query pins `mergeDevices: true`, `merge_device_rows` always runs and ends by re-sorting on `ORIGINAL_ROW` — raw CSV order (`perf_report.py:1947-1949`). The merge re-sort overwrites the tracing branch, so for a single-device report the sequence is identical either way.
+`tracingMode` was the last carve-out, and pinning it matters more since tt-perf-report 1.5.0. `tracingMode` suppresses the `HOST START TS` sort in `generate_perf_report`. Up to 1.4.0, `merge_device_rows` ended by re-sorting on `ORIGINAL_ROW`, so on the link query's merged path the row sequence was raw CSV order whatever the toggle said. 1.5.0 keeps the pre-merge order instead: `merge_device_rows` records each row's position as `_REPORT_ORDER`, a merged op takes the earliest of its devices' positions, and `_restore_report_order` sorts on that. The sort now survives the merge, so tracing off gives host-start order and tracing on gives raw CSV order, on a single-device report as on any other. Following the toggle would therefore move the link answer, which is exactly what pinning prevents. `backend/ttnn_visualizer/tests/test_perf_report_merge_order.py` pins this, so a release that changes it fails there rather than leaving this section wrong.
+
+The pinned value is off, so link resolution sees host-start order. The carve-out existed because a trace-captured run's host start times are capture times, and its traced (raw) order was thought to be the one that lines up with the memory report. Under 1.4.0 that worry could not arise; under 1.5.0 it can, and host-start order has not yet been checked against a real trace-captured pair. If such a pair fails to link, this is the first place to look.
 
 Two consequences worth knowing before touching this. Pinning `tracingMode` **adds** Tracing mode to the controls whose toggle forks the link query onto a second `perf-results/report` build for the session, so it makes #1886 more pressing, not less. And `merge_device_rows` pairs per-device queues positionally, so on a multi-device report a changed input order can still change which physical row represents a merged op — pinning makes that deterministic rather than eliminating it.
 
@@ -1175,6 +1179,8 @@ New tools go in that package and follow both. Adding one to a Flask route instea
 
 So registration is half of adding a tool. The other half is the row in that table saying what it answers, and, where the answer needs one to be read correctly, the caveat in the prose. A tool that is registered but undocumented is invisible to the client that would have chosen it; a caveat that reaches only the response is one an agent has already acted without by the time it reads it.
 
+The same split applies before a call. A rule every tool shares — call `load_report` first, which id is which, the units — goes once in `server.INSTRUCTIONS`, which a client puts in the system prompt ahead of any call. A caveat particular to one tool stays in that tool's description, where it is read as the tool is chosen. Restating a shared rule in each description spends every client's context on it, and moving a tool's own caveat into the instructions hides it from a client that does not show them.
+
 Two things make this sharper than ordinary documentation drift. #2035 puts that page inside the application, at which point a missing row is a hole a user sees rather than a stale file in a repository. And the surface has drifted here before: #2034 was a caveat that was *wrong on the page itself* — `agent-tools.md` told an agent that `memory_profile`'s peak answered the out-of-memory question, which it did not, because the table it reads holds neither circular buffers nor tensors allocated and freed inside one operation.
 
 That sets the bar. What is owed is an accurate row and an accurate caveat, not merely a present one — a missing tool is one an agent never calls, while a wrong caveat is one it acts on.
@@ -1393,7 +1399,7 @@ SERVER_MODE = _parse_env_bool("SERVER_MODE", False)
 
 A second copy of the token list drifts, and **both drift directions fail silently**: add a spelling to one and the other rejects a value the rest of the app honours; remove one and it starts meaning `False`. If a caller needs to know that a value was a typo, take `None` from `parse_bool` — don't re-implement the membership test.
 
-This holds outside `settings.py` too: `create_app`'s root-log-level check, the gunicorn `--reload` check, and `devtools/npe_render_probe.py`'s `SERVER_MODE` refusal all call `str_to_bool`. A dev tool that refuses on a *wider* set than the app looks harmless and isn't — it means the two disagree about what the deployment is.
+This holds outside `settings.py` too: `_is_dev_debug_requested()` in `app.py` (the one read of bare `DEBUG`, behind both the root log level and gunicorn `--reload`) and `devtools/npe_render_probe.py`'s `SERVER_MODE` refusal all call `str_to_bool`. A dev tool that refuses on a *wider* set than the app looks harmless and isn't — it means the two disagree about what the deployment is.
 
 #### The vocabulary is deliberately narrow, and matched across three consumers
 
@@ -1433,7 +1439,9 @@ Settings that parse more richly than their type register a named parser in `_ENV
 
 #### `_ENV_ALIASES` where the variable isn't named after the attribute
 
-Every setting that reads a variable at all reads one named after its attribute, which is right for all of them but `DEBUG`: it is fed by `FLASK_DEBUG`, because a bare `DEBUG` is the log-level knob (see the entry under [Known inconsistencies](#known-inconsistencies)). `USAGE_RECORDING_ACTIVE` is the other departure and is not an alias — it reads no variable of its own at all; see [the descriptor rules below](#the-loop-walks-the-mro-and-skips-derived-settings). `_ENV_ALIASES` maps the attribute to the variable that owns it and `_env_name_for` is the single reader, so the aliased spelling is written once. Without it, `DEBUG=true` — what `pnpm flask:start-debug` sets — turned on Flask's debug mode under `FLASK_ENV=production`, which suppresses the catch-all error handler and returns tracebacks. Add an entry here rather than a special case in the loop if another setting ever grows a differently-named variable.
+Every setting that reads a variable at all reads one named after its attribute, which is right for all of them but `DEBUG`: it is fed by `FLASK_DEBUG`, because a bare `DEBUG` is the development knob (below). `USAGE_RECORDING_ACTIVE` is the other departure and is not an alias — it reads no variable of its own at all; see [the descriptor rules below](#the-loop-walks-the-mro-and-skips-derived-settings). `_ENV_ALIASES` maps the attribute to the variable that owns it and `_env_name_for` is the single reader, so the aliased spelling is written once. Without it, `DEBUG=true` — what `pnpm flask:start-debug` sets — turned on Flask's debug mode under `FLASK_ENV=production`, which suppresses the catch-all error handler and returns tracebacks. Add an entry here rather than a special case in the loop if another setting ever grows a differently-named variable.
+
+**The two names are deliberate, and both stay.** `FLASK_DEBUG` is Flask's own variable for its debug mode, so it keeps the name every Flask user and `.vscode/launch.json` already know. The bare `DEBUG` variable is not a config setting at all: it is the development knob `pnpm flask:start-debug` sets, read only through `_is_dev_debug_requested()` in `app.py`, and it means debug-level logging plus gunicorn `--reload`. Unlike the attribute, `SERVER_MODE` does not switch it off, so a hosted deployment that sets it still logs at debug level and reloads on file changes: it is for development only. Renaming either would break whoever sets it today, and no single new name would describe what bare `DEBUG` does. Read the name at the call site rather than assuming. (#1922)
 
 #### The loop walks the MRO and skips derived settings
 
@@ -1521,12 +1529,3 @@ Adding or tightening a requirement fails two tests until you update them, and th
 **Thresholds that carry a policy decision need at least one test pinning the literal value.** Every `SECRET_KEY` case was written as `"x" * MIN_HOSTED_SECRET_KEY_BYTES`, so when #2003 changed the constant, none of them failed. A test derived from the constant under test cannot detect a change to it.
 
 **The release PR reports enforcement boundaries, not just row edits.** `scripts/startup_requirements_diff.py` compares the documented table *and* the release version at each ref. A requirement staged in `1.0.0` with `enforced_from: 2.0.0` has an identical row on both sides; the release that bumps the version to `2.0.0` is the one it starts refusing boots on, and it is announced under **Now enforced** with nothing in the diff to trigger it.
-
----
-
-## Known inconsistencies
-
-These exist in the codebase today and don't yet have a single canonical answer. Reviewers should flag new code that goes either direction without considering both. Each entry names the inconsistency, the direction new code takes, and its tracking issue; the rule itself lives in the section above that owns it.
-
-- **Two accessors for CSS-custom-property colours.** `GRAPH_COLORS` resolves at module load; `getPerfChartChrome()` re-reads per call. Both are legitimate and both keep the literal in `_base.scss` — pick per [No hex literals in TS/TSX](#no-hex-literals-in-tstsx), and don't add a third mechanism. (#1911)
-- **`DEBUG` and `FLASK_DEBUG` are different knobs with confusable names.** `FLASK_DEBUG` feeds the `DEBUG` *config* value (Flask's debug mode); the `DEBUG` *environment variable* raises the root log level and is what `pnpm flask:start-debug` sets. Both are in `.env.sample`. Read the name at the call site rather than assuming. (#1922)

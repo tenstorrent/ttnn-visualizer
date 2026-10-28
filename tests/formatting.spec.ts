@@ -5,8 +5,10 @@
 import { describe, expect, it } from 'vitest';
 import {
     buildGitCommitUrl,
+    describeBakedGrids,
     formatDuration,
     formatGridSize,
+    formatGridSizes,
     formatNonZeroShareOfTotal,
     formatShareOfTotal,
     formatShortSha,
@@ -128,5 +130,29 @@ describe('getCoreCountText', () => {
 describe('formatGridSize', () => {
     it('writes columns before rows, as SoC descriptors size a grid', () => {
         expect(formatGridSize({ x_size: 11, y_size: 8 })).toBe('11x8');
+    });
+});
+
+describe('formatGridSizes', () => {
+    it('lists each grid', () => {
+        expect(formatGridSizes([{ x_size: 10, y_size: 12 }])).toBe('10x12');
+        expect(
+            formatGridSizes([
+                { x_size: 11, y_size: 8 },
+                { x_size: 12, y_size: 19 },
+            ]),
+        ).toBe('11x8 and 12x19');
+    });
+});
+
+describe('describeBakedGrids', () => {
+    it('agrees in number with the descriptors it sizes', () => {
+        expect(describeBakedGrids([{ x_size: 10, y_size: 12 }])).toBe('descriptor is 10x12');
+        expect(
+            describeBakedGrids([
+                { x_size: 11, y_size: 8 },
+                { x_size: 12, y_size: 19 },
+            ]),
+        ).toBe('descriptors are 11x8 and 12x19');
     });
 });

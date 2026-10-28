@@ -10,7 +10,7 @@ import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
  *
  * Three states rather than `ChipDesign | null`, because absent and malformed
  * need different answers: absent falls back to the baked lookup (when the report's
- * grid matches it), malformed must say so. Collapsing them is how an unusable
+ * grid matches one of them), malformed must say so. Collapsing them is how an unusable
  * override would render as an empty grid — the failure #1776 is about.
  */
 export type SocDescriptorOverride =

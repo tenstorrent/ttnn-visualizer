@@ -24,6 +24,7 @@ from ttnn_visualizer.csv_queries import (
     OpsPerformanceReportQueries,
     ResolvedSignposts,
 )
+from ttnn_visualizer.tests.captured_graphs import CapturedGraph
 from ttnn_visualizer.tests.smoke_capture import smoke_rows, write_ops_perf
 from ttnn_visualizer.tests.test_agent_linking import _graph, _write_profiler
 from ttnn_visualizer.tests.test_agent_tools import _perf_report
@@ -95,6 +96,8 @@ FIELD_NAMES = {
         "data_movement_kernel_hashes",
     ],
     DetailGroup.ADVICE: ["advice"],
+    # Its one field, `flags`, is `perf_flags`', read against the whole report.
+    DetailGroup.FLAGS: [],
 }
 
 # What `empty_in_report` says fills a field whose column is there; the rest are empty.
@@ -685,7 +688,9 @@ class TestProgramCache:
         # A 0% would read as every repeat missing.
         assert result["repeat_hit_percent"] is None
         assert "2 of 2 repeat calls recorded no cache result" in result["caveat"]
-        assert "performance view counts them as misses" in result["caveat"]
+        assert "there is no hit percentage." in result["caveat"]
+        # The table footer leaves them out too (#2169), so the caveat no longer contrasts it.
+        assert "counts them as misses" not in result["caveat"]
         # Nothing says these missed, so nothing says the cache was off.
         assert "program cache disabled" not in result["caveat"]
 
@@ -706,6 +711,7 @@ class TestProgramCache:
         assert result["repeat_unrecorded"] == 1
         assert result["repeat_hit_percent"] == 50.0
         assert "1 of 3 repeat calls recorded no cache result" in result["caveat"]
+        assert "the hit percentage is out of the rest." in result["caveat"]
 
     def test_every_recorded_repeat_missing_still_says_the_cache_may_have_been_off(
         self, handle_with
@@ -1104,6 +1110,121 @@ ANSWER_BUDGET_BYTES = 75_000
 
 ALL_GROUPS = [group.value for group in DetailGroup]
 
+# A real matmul's kernels (2026_08_19_16_47_08, row 325): kernel lists are most of a
+# detailed row, and the smoke capture's are a fraction of a real report's.
+_COMPUTE_KERNEL = (
+    "ttnn/cpp/ttnn/operations/matmul/device/kernels/compute/"
+    "bmm_large_block_zm_fused_bias_activation.cpp",
+    "bmm_large_block_zm_fused_bias_activation/13541336121582845819/",
+)
+_DATAFLOW = "ttnn/cpp/ttnn/operations/matmul/device/kernels/dataflow/"
+_DATA_MOVEMENT_KERNELS = [
+    (
+        f"{_DATAFLOW}reader_bmm_tile_layout_in0_receiver.cpp",
+        "reader_bmm_tile_layout_in0_receiver/7412344114578890896/",
+    ),
+    (
+        f"{_DATAFLOW}reader_bmm_tile_layout_in1_receiver_writer_padding.cpp",
+        "reader_bmm_tile_layout_in1_receiver_writer_padding/6147085516725974914/",
+    ),
+    (
+        f"{_DATAFLOW}reader_bmm_tile_layout_in1_sender_writer_padding.cpp",
+        "reader_bmm_tile_layout_in1_sender_writer_padding/12433275300672697615/",
+    ),
+    (
+        f"{_DATAFLOW}reader_bmm_tile_layout_in0_sender_padding.cpp",
+        "reader_bmm_tile_layout_in0_sender_padding/10430792387788596414/",
+    ),
+]
+# A dram-sharded matmul's fifth reader, on every third row.
+_SHARDED_READER = (
+    f"{_DATAFLOW}reader_bmm_tile_layout_in1_sender_dram_sharded.cpp",
+    "reader_bmm_tile_layout_in1_sender_dram_sharded/3305941238877262011/",
+)
+
+
+def _kernel_list(entries):
+    return "[" + "; ".join(f"'{entry}'" for entry in entries) + "]"
+
+
+def _smoke_runs(count):
+    """The smoke rows `count` times over, each run starting after the last ends, as
+    a real capture's would: tied host times would leave tt-perf-report's sort free
+    to interleave the runs."""
+    smoke = smoke_rows()
+    run_span = max(int(row["HOST END TS"]) for row in smoke)
+    return [
+        {
+            **row,
+            **{
+                column: str(int(row[column]) + run * run_span)
+                for column in ("HOST START TS", "HOST END TS")
+            },
+        }
+        for run in range(count)
+        for row in smoke
+    ]
+
+
+def _dense_rows():
+    """Smoke rows at a real report's size, each flagged as often as the view would.
+
+    Equal device times and no op-to-op gaps put every row over the impact gate; a few
+    cores, a 20 ns ideal time and a program called again with no cache hit give each
+    row low utilisation, underutilised cores and, after its first call, a recompute.
+    """
+    rows = _smoke_runs(5)
+    for index, row in enumerate(rows):
+        kernels = _DATA_MOVEMENT_KERNELS + ([_SHARDED_READER] if index % 3 == 0 else [])
+        if not row["OP CODE"].endswith("DeviceOperation"):
+            row["OP CODE"] += "DeviceOperation"
+        row.update(
+            {
+                "COMPUTE KERNEL SOURCE": _kernel_list([_COMPUTE_KERNEL[0]]),
+                "COMPUTE KERNEL HASH": _kernel_list([_COMPUTE_KERNEL[1]]),
+                "DATA MOVEMENT KERNEL SOURCE": _kernel_list(
+                    path for path, _ in kernels
+                ),
+                "DATA MOVEMENT KERNEL HASH": _kernel_list(key for _, key in kernels),
+                "DEVICE KERNEL DURATION [ns]": "8000",
+                "DEVICE FW DURATION [ns]": "8000",
+                "OP TO OP LATENCY [ns]": "0",
+                "PM IDEAL [ns]": "20",
+                "CORE COUNT": "4",
+                PROGRAM_HASH_COLUMN: str(5186395005779690972 + len(row["OP CODE"])),
+                PROGRAM_CACHE_HIT_COLUMN: "False",
+            }
+        )
+    return rows
+
+
+def _linked_table(tmp_path, rows, graph_of=None):
+    """A tool table over `rows` and one profiler operation that launched all of them,
+    whose graph is `graph_of` the launched op codes."""
+    write_ops_perf(tmp_path / "perf", rows)
+    performance_only = ReportRegistry()
+    handle = load_report(performance_only, performance_path=str(tmp_path / "perf"))
+    launched = [
+        row["raw_op_code"]
+        for row in tools.canonical_report(performance_only, handle["handle"])["report"]
+    ]
+    profiler_path = _write_profiler(
+        tmp_path / "profiler",
+        {
+            1: (
+                graph_of(launched)
+                if graph_of
+                else _graph("ttnn.model", *launched, nested=False)
+            )
+        },
+        operations=[(1, "ttnn.model")],
+    )
+    registry = ReportRegistry()
+    load_report(
+        registry, performance_path=str(tmp_path / "perf"), profiler_path=profiler_path
+    )
+    return server._tool_table(registry)
+
 
 class TestAnswerSize:
     """Unmocked `tools/call`s on a linked capture: the detailed-row cap is for these."""
@@ -1116,7 +1237,11 @@ class TestAnswerSize:
     def table(self, tmp_path):
         """Five smoke runs, one profiler operation launching all of them, and one
         repeat call that missed the program cache."""
-        rows = [dict(row) for _ in range(5) for row in smoke_rows()]
+        return self._table(tmp_path)
+
+    @staticmethod
+    def _table(tmp_path, graph_of=None):
+        rows = _smoke_runs(5)
         seen = set()
         for row in rows:
             row[PROGRAM_HASH_COLUMN] = row["OP CODE"]
@@ -1127,29 +1252,16 @@ class TestAnswerSize:
         first_repeat = len(rows) // 5
         for row in rows[first_repeat : first_repeat + 2]:
             row[PROGRAM_CACHE_HIT_COLUMN] = "False"
-        write_ops_perf(tmp_path / "perf", rows)
+        return _linked_table(tmp_path, rows, graph_of)
 
-        performance_only = ReportRegistry()
-        handle = load_report(performance_only, performance_path=str(tmp_path / "perf"))
-        launched = [
-            row["raw_op_code"]
-            for row in tools.canonical_report(performance_only, handle["handle"])[
-                "report"
-            ]
-        ]
-        profiler_path = _write_profiler(
-            tmp_path / "profiler",
-            {1: _graph("ttnn.model", *launched, nested=False)},
-            operations=[(1, "ttnn.model")],
-        )
+    @pytest.fixture
+    def dense(self, tmp_path):
+        """Rows as long and as flagged as a real report's: the budget's worst case.
 
-        registry = ReportRegistry()
-        load_report(
-            registry,
-            performance_path=str(tmp_path / "perf"),
-            profiler_path=profiler_path,
-        )
-        return server._tool_table(registry)
+        Indented, the real linked pair (`2026_08_19_16_47_08` with `bge_m3_aug19_1645`)
+        once went past the budget with flags, and so did this table.
+        """
+        return _linked_table(tmp_path, _dense_rows())
 
     def _call(self, table, name, arguments):
         response = server.handle_message(
@@ -1171,21 +1283,73 @@ class TestAnswerSize:
         json.dumps(payload, allow_nan=False)
         return payload
 
-    def test_top_ops_with_every_group_fits_the_budget(self, table):
+    @staticmethod
+    def _assert_dense(rows):
+        """The table is only the worst case while its rows stay this flagged."""
+        assert len(rows) == MAX_DETAILED_LIMIT
+        assert sum(len(row["flags"]) for row in rows) >= 2.5 * len(rows)
+        assert all(len(row["data_movement_kernels"]) >= 4 for row in rows)
+
+    def test_top_ops_with_every_group_fits_the_budget(self, dense):
         result = self._call(
-            table, "top_ops", {"limit": MAX_LIMIT, "include": ALL_GROUPS}
+            dense, "top_ops", {"limit": MAX_LIMIT, "include": ALL_GROUPS}
         )
 
         assert result["returned"] == MAX_DETAILED_LIMIT
         assert result["operation_link"]["status"] == "linked"
+        self._assert_dense(result["ops"])
 
-    def test_operation_detail_with_every_group_fits_the_budget(self, table):
+    def test_operation_detail_with_every_group_fits_the_budget(self, dense):
+        result = self._call(
+            dense, "operation_detail", {"operation_id": 1, "include": ALL_GROUPS}
+        )
+
+        assert result["perf_row_count"] > MAX_DETAILED_LIMIT
+        self._assert_dense(result["perf_rows"])
+        # Every row of the operation carries it, past the cap as well as within it.
+        assert (
+            result["flag_basis"]["flagged_rows"]["low_utilisation"]
+            == result["perf_row_count"]
+        )
+
+    def test_operation_detail_with_long_circular_buffer_ranges_fits_the_budget(
+        self, tmp_path
+    ):
+        """Every core its own rectangle, as Blackhole captures write a range, on more
+        circular buffers than the row cap lists."""
+        long_range = (
+            "{"
+            + ", ".join(
+                f"[(x={x},y={y}) - (x={x},y={y})]" for x in range(13) for y in range(10)
+            )
+            + "}"
+        )
+
+        def graph_of(launched):
+            graph = CapturedGraph().start("ttnn.model")
+            for name in launched:
+                graph.start(name).free_all()
+                for address in range(4):
+                    graph.cb(1000 + address, core_range_set=long_range)
+                graph.end(name)
+            return json.dumps(graph.end("ttnn.model").nodes)
+
+        table = self._table(tmp_path, graph_of)
+
         result = self._call(
             table, "operation_detail", {"operation_id": 1, "include": ALL_GROUPS}
         )
 
+        buffers = result["circular_buffers"]
         assert len(result["perf_rows"]) == MAX_DETAILED_LIMIT
-        assert result["perf_row_count"] > MAX_DETAILED_LIMIT
+        assert buffers["truncated"] is True
+        assert buffers["circular_buffer_count"] > MAX_DETAILED_LIMIT
+        assert (
+            sum(
+                len(entry["circular_buffers"]) for entry in buffers["device_operations"]
+            )
+            == MAX_DETAILED_LIMIT
+        )
 
     def test_program_cache_fits_the_budget_and_names_the_missing_operation(self, table):
         result = self._call(table, "program_cache", {"limit": MAX_LIMIT})

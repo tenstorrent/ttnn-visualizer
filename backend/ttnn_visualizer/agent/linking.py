@@ -23,7 +23,6 @@ This module sits above `tools` and `operations` and is the only one that reads b
 which is what keeps those two from importing each other.
 """
 
-import json
 import logging
 import re
 import sqlite3
@@ -31,31 +30,25 @@ import tempfile
 from collections import Counter
 from dataclasses import dataclass, field
 from enum import Enum
+from functools import partial
 from typing import Dict, List, NamedTuple, Optional, Sequence, Set, Tuple
 
 from tt_perf_report.perf_report import HOST_OP_MARKER
-from ttnn_visualizer.agent import operations, perf_detail, tools
-from ttnn_visualizer.agent.bounds import MAX_LIMIT
+from ttnn_visualizer.agent import failures, operations, perf_detail, perf_flags, tools
+from ttnn_visualizer.agent.bounds import (
+    MAX_LIMIT,
+    GraphTooLargeError,
+    ensure_graph_readable,
+)
+from ttnn_visualizer.agent.captured_graph import UnreadableGraphError, parse_graph
 from ttnn_visualizer.agent.handles import CacheVariant, ReportRegistry
-from ttnn_visualizer.csv_queries import SIGNPOST_OP_TYPE
+from ttnn_visualizer.agent.scope_outcomes import is_device_operation, scope_pairing
 from ttnn_visualizer.models import Instance
 
 logger = logging.getLogger(__name__)
 
 # Microseconds, as tt-perf-report writes `device_time`.
 DEVICE_TIME_UNIT = "us"
-
-# The captured graph a link will read, at the one rank it links: the size query takes
-# the read's own rank filter. `query_device_operations` holds every graph at once, so
-# this is checked in SQL before any is loaded. Across 85 local captures the largest
-# total is 55.6 MB, so the bound is ~18x anything seen: it refuses a pathological
-# file, never a real one.
-MAX_CAPTURED_GRAPH_CHARS = 1 << 30
-
-# How tt-metal marks a `function_end` that closed a scope whose launch threw. Graph
-# params are strings; only `program_cache_hit` is converted when serialised. A boolean
-# is accepted too, in case a later serialiser converts it -- the app reads it the same.
-_ABORTED_PARAM_VALUE = "true"
 
 
 class LinkStatus(str, Enum):
@@ -143,16 +136,6 @@ class OperationLink:
         return response
 
 
-def is_device_operation(name: str) -> bool:
-    """`isDeviceOperation` in `src/functions/filterOperations.ts`, kept identical."""
-    return (
-        name != ""
-        and "(torch)" not in name
-        and "::" not in name
-        and "ttnn." not in name
-    )
-
-
 def _align(
     device_operations: Sequence[DeviceOperation], rows: Sequence[Dict]
 ) -> List[Dict]:
@@ -237,7 +220,7 @@ def match_device_operations(
     graph always pass; the check guards orders assembled any other way. The raw orders are tried before either collapse, so a
     spurious collapsed prefix cannot pre-empt a complete end-order match.
     """
-    alignable = [row for row in rows if row.get("op_type") != SIGNPOST_OP_TYPE]
+    alignable = [row for row in rows if not tools.is_signpost_row(row)]
 
     first = _attempt(function_start, alignable, MatchedOn.FUNCTION_START)
     if first:
@@ -253,14 +236,6 @@ def match_device_operations(
             function_end, alignable, MatchedOn.FUNCTION_END_COLLAPSED, num_devices
         )
     )
-
-
-class UnreadableGraphError(ValueError):
-    """A captured graph that is not a JSON list of nodes."""
-
-
-class GraphTooLargeError(ValueError):
-    """More captured graph than the link will hold in memory to read."""
 
 
 def _redacted(error: Exception) -> str:
@@ -291,12 +266,7 @@ def _device_operation_names(raw: Optional[str]) -> Dict[NodeOrder, List[str]]:
     names: Dict[NodeOrder, List[str]] = {order: [] for order in NodeOrder}
     if not raw:
         return names
-    try:
-        nodes = json.loads(raw)
-    except ValueError as error:
-        raise UnreadableGraphError(str(error)) from None
-    if not isinstance(nodes, list):
-        raise UnreadableGraphError("not a list of nodes")
+    nodes = parse_graph(raw)
 
     lifecycle: List[Tuple[NodeOrder, str, Dict]] = []
     for node in nodes:
@@ -318,21 +288,15 @@ def _device_operation_names(raw: Optional[str]) -> Dict[NodeOrder, List[str]]:
         name = params.get("name") if isinstance(params, dict) else None
         if not isinstance(name, str) or not isinstance(params, dict):
             raise UnreadableGraphError(f"a {order.value} node carries no name")
-        lifecycle.append((order, name, params))
+        lifecycle.append((order, name, node))
 
-    open_starts: List[Tuple[str, int]] = []
-    completed: Set[int] = set()
-    for index, (order, name, params) in enumerate(lifecycle):
-        if order is NodeOrder.FUNCTION_START:
-            open_starts.append((name, index))
-            continue
-        for position in range(len(open_starts) - 1, -1, -1):
-            if open_starts[position][0] == name:
-                aborted = params.get("aborted")
-                if aborted is not True and aborted != _ABORTED_PARAM_VALUE:
-                    completed.update((open_starts[position][1], index))
-                del open_starts[position]
-                break
+    start_by_end, aborted_ends = scope_pairing([node for _, _, node in lifecycle])
+    completed: Set[int] = {
+        index
+        for end, start in start_by_end.items()
+        if end not in aborted_ends
+        for index in (start, end)
+    }
 
     for index, (order, name, _) in enumerate(lifecycle):
         if index in completed and is_device_operation(name):
@@ -363,7 +327,7 @@ def is_host_op_row(row: Dict) -> bool:
 
 def _pairable(row: Dict) -> bool:
     """A row a device operation could pair with: host ops and signposts launch none."""
-    return not is_host_op_row(row) and row.get("op_type") != SIGNPOST_OP_TYPE
+    return not is_host_op_row(row) and not tools.is_signpost_row(row)
 
 
 def _canonical_rows(registry: ReportRegistry, handle: str) -> List[Dict]:
@@ -371,7 +335,7 @@ def _canonical_rows(registry: ReportRegistry, handle: str) -> List[Dict]:
 
 
 def _unlinked_reason(row: Dict) -> UnlinkedReason:
-    if row.get("op_type") == SIGNPOST_OP_TYPE:
+    if tools.is_signpost_row(row):
         return UnlinkedReason.SIGNPOST
     if is_host_op_row(row):
         return UnlinkedReason.HOST_OP
@@ -419,12 +383,7 @@ def _read_profiler_side(
         # the device count would sum the ranks.
         operations.refuse_unattributable(queries, scope, "captured_graph", "devices")
         graph_filters = operations.scoped(queries, "captured_graph", scope)
-        graph_size = queries.query_captured_graph_size(filters=graph_filters)
-        if graph_size > MAX_CAPTURED_GRAPH_CHARS:
-            raise GraphTooLargeError(
-                f"this capture holds {graph_size:,} characters of captured graph, "
-                f"past the {MAX_CAPTURED_GRAPH_CHARS:,} the link will read"
-            )
+        ensure_graph_readable(queries, graph_filters, "the link")
         operation_ids = {
             operation.operation_id
             for operation in queries.query_operations(
@@ -449,14 +408,7 @@ def _read_profiler_side(
         # Distinct ids, as the app counts them: `fetchDevices` drops repeated device
         # ids (#425) before the count reaches the matcher, and a raw row count would
         # expect a different number of copies per operation from the collapse.
-        num_devices = len(
-            {
-                device.device_id
-                for device in queries.query_devices(
-                    filters=operations.scoped(queries, "devices", scope)
-                )
-            }
-        )
+        num_devices = len(operations.scoped_devices(queries, scope))
     return scope.rank, names_by_operation, num_devices, has_graph
 
 
@@ -642,7 +594,7 @@ RANGED_LINK_NOTE = (
 def top_ops(
     registry: ReportRegistry,
     handle: str,
-    by: str = "device_time",
+    by: str = tools.DEFAULT_METRIC,
     limit: Optional[int] = None,
     start_signpost: Optional[str] = None,
     end_signpost: Optional[str] = None,
@@ -685,13 +637,6 @@ def top_ops(
     return result
 
 
-def _share_percent(device_time: Optional[float], total: float) -> Optional[float]:
-    """Percent of `total`, to three significant figures so a sliver stays non-zero."""
-    if device_time is None or total <= 0:
-        return None
-    return float(f"{device_time / total * 100:.3g}")
-
-
 def _device_time_summary(
     rows: Sequence[Dict], report_total: float
 ) -> Dict[str, object]:
@@ -707,7 +652,7 @@ def _device_time_summary(
     slowest, _ = max(timed, key=lambda pair: pair[1])
     return {
         "device_time": round(total, 3),
-        "device_time_share_percent": _share_percent(total, report_total),
+        "device_time_share_percent": tools.share_percent(total, report_total),
         "slowest_perf_id": slowest.get("id"),
     }
 
@@ -722,7 +667,16 @@ def operation_detail(
     """`operations.operation_detail`, with the performance rows it launched."""
     groups = perf_detail.parse_include(include)
     result = operations.operation_detail(
-        registry, handle, operation_id=operation_id, rank=rank
+        registry,
+        handle,
+        operation_id=operation_id,
+        rank=rank,
+        detail_fields=partial(
+            failures.operation_failure_fields,
+            registry,
+            handle,
+            circular_buffer_limit=tools.row_limit(MAX_LIMIT, groups),
+        ),
     )
     link = operation_link(registry, handle)
     if link.status is LinkStatus.LINKED and result.get("rank") != link.rank:
@@ -740,13 +694,15 @@ def operation_detail(
     if link.status is LinkStatus.LINKED:
         rows = link.perf_rows_by_operation.get(int(operation_id), [])
         empty = tools.empty_detail_fields(registry, handle, groups)
+        flag_inputs = tools.read_flag_inputs(registry, handle, groups)
         result["perf_rows"] = [
             {
                 **tools.project_row(row),
-                "device_time_share_percent": _share_percent(
+                "device_time_share_percent": tools.share_percent(
                     tools.countable_device_time(row), link.report_device_time_total
                 ),
                 **perf_detail.detail_fields(row, groups, empty),
+                **perf_flags.flag_fields(row, flag_inputs),
             }
             for row in rows[: tools.row_limit(MAX_LIMIT, groups)]
         ]
@@ -756,6 +712,10 @@ def operation_detail(
         result["device_time_unit"] = DEVICE_TIME_UNIT
         result["projection"] = tools.projection(None)
         result.update(perf_detail.summary(groups, empty))
+        flagged = perf_flags.flagged_rows(
+            rows, flag_inputs, key=("operation", link.rank, int(operation_id))
+        )
+        result.update(perf_flags.summary(flag_inputs, flagged))
         if rows:
             result.update(_device_time_summary(rows, link.report_device_time_total))
             result["report_device_time_total"] = round(link.report_device_time_total, 3)
@@ -796,7 +756,6 @@ def program_cache(
 
 __all__ = [
     "DEVICE_TIME_UNIT",
-    "MAX_CAPTURED_GRAPH_CHARS",
     "PROGRAM_CACHE_LINK_NOTE",
     "TOP_OPS_LINK_NOTE",
     "DeviceOperation",
@@ -808,7 +767,6 @@ __all__ = [
     "UnlinkedRows",
     "collapse_multidevice_operations",
     "device_operation_orders",
-    "is_device_operation",
     "is_host_op_row",
     "match_device_operations",
     "operation_detail",

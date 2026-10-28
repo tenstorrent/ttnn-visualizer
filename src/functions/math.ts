@@ -138,6 +138,7 @@ const CORE_COORD_RE = /\(x=(\d+),y=(\d+)\)|(\d+)-(\d+)/g;
  * Expand a core_range_set string to the deduplicated list of (x,y) cores it covers.
  * Accepts both `{[(x=N,y=N) - (x=N,y=N)]}` (legacy) and `{[N-N - N-N]}` (modern),
  * multi-rectangle unions, and `{}`.
+ * Mirrored as `cores_in_range` in `backend/ttnn_visualizer/agent/circular_buffers.py`.
  */
 // A mesh op repeats one `core_range_set` string per device, so the parse below
 // runs identically N times for the N devices this expansion exists to

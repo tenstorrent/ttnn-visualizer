@@ -20,6 +20,7 @@ import { showHexAtom } from '../../store/app';
 import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
 import { getPerfChartChrome } from '../../definitions/PlotConfigurations';
 import { useL1PeakDecomposition } from '../../hooks/useL1PeakDecomposition';
+import { getTopL1PeakOperations } from '../../functions/l1PeakDecomposition';
 import { useDevices, useOperationsList } from '../../hooks/useAPI';
 import ROUTES from '../../definitions/Routes';
 import 'styles/components/L1PeakComposition.scss';
@@ -46,33 +47,7 @@ function L1PeakComposition() {
         [result],
     );
 
-    const topOperations = useMemo(() => {
-        // resnet50 runs the same layer stack three times, so an undeduped ranking spends all
-        // ten rows on one loop body — operations 130 and 229 are byte-identical. Keep the first
-        // occurrence of each distinct composition and note how many it stands for.
-        const byComposition = new Map<string, { entry: (typeof ordered)[number]; alsoAt: number[] }>();
-
-        [...ordered]
-            .sort((left, right) => right.totalBytes - left.totalBytes)
-            .forEach((entry) => {
-                const key = [
-                    entry.totalBytes,
-                    entry.circularBufferBytes,
-                    entry.intermediateTensorBytes,
-                    entry.persistentTensorBytes,
-                    entry.staleTensorBytes,
-                ].join(':');
-                const seen = byComposition.get(key);
-
-                if (seen) {
-                    seen.alsoAt.push(entry.operationId);
-                } else {
-                    byComposition.set(key, { entry, alsoAt: [] });
-                }
-            });
-
-        return [...byComposition.values()].slice(0, TOP_OPERATION_COUNT);
-    }, [ordered]);
+    const topOperations = useMemo(() => getTopL1PeakOperations(ordered, TOP_OPERATION_COUNT), [ordered]);
 
     // Every plotted and listed value carries its own precision, and a lower operation can be a
     // ceiling while the peak happens to have one resident.

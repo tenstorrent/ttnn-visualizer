@@ -563,6 +563,7 @@ function useDeviceOperationsFullRenderModel(args: {
                     // forward-compat with future tt-metal emit changes. #1651
                     const rawGlobalFlag = cb.globally_allocated as unknown;
                     const isGloballyAllocated = rawGlobalFlag === '1' || rawGlobalFlag === 1;
+                    // Restated as `select_read` in `backend/ttnn_visualizer/agent/circular_buffers.py`. #2185
                     const currentDeviceOp = deviceOpIdStack[deviceOpIdStack.length - 1];
                     const cbSnapshot = currentDeviceOp ? cbPressureByOpId.get(currentDeviceOp.id) : undefined;
                     operationContent = (

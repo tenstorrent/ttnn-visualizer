@@ -10,6 +10,24 @@ The current link status is indicated in the UI when both a memory and performanc
 **Failed link**
 <img width="876" height="684" alt="Reports cannot be linked" src="https://github.com/user-attachments/assets/c2925a7f-6d42-40ae-b5d0-1191f93aefc1" />
 
+## Finding linked reports in the report pickers
+
+The report pickers list reports newest first, and nothing in the pickers reorders them:
+
+- Local reports are ordered by when their folder was last modified. Uploading a report counts as a modification.
+- Remote reports are ordered by when they were last modified on the remote machine.
+- When only the locally synced copies of remote reports can be listed, they are ordered by when they were synced. A copy with no record of its sync is ordered by when its folder was last modified.
+
+Some cases do not follow this order yet ([#2209](https://github.com/tenstorrent/ttnn-visualizer/issues/2209)):
+
+- Reports with the same time can appear in any order. On the hosted app that order can change when the app restarts. Remote times are recorded to the second, so the ranks of one multi-host run often share one.
+- After you sync a single remote report, it keeps its place in the list until the list is fetched again.
+- On remote machines whose `stat` command is not the GNU version, such as macOS, every remote report gets the same time, so the list is not in date order.
+
+Once the active report of the other kind has been linked, or has failed to link, with at least one report, each row carries a link badge: linked, failed to link, or not yet known. A memory report picker shows its badges against the active performance report, and a performance report picker shows them against the active memory report. An active report that has never been paired shows no badges.
+
+To list only the reports linked to the active one, press the link button in the picker's filter box. It works together with the text filter, and it appears only while the picker is showing badges. If the badges go away, the button turns off.
+
 ## Allocation failures in the performance view
 
 When the linked memory report records allocation failures, the performance table lists them in a callout above it. See [Allocation failures](allocation-failures.md), under "In the performance view".

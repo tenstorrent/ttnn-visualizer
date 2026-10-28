@@ -2,6 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
+// Mirrored in `backend/ttnn_visualizer/agent/dram_fallbacks.py`.
+
 /** How a likely L1-to-DRAM fallback was inferred. tt-metal records none of them. */
 export enum DramFallbackSignal {
     ARGUMENT_MISMATCH = 'argument_mismatch',

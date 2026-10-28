@@ -3,11 +3,11 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
-import { enrichRowData } from '../src/functions/enrichPerfRowData';
-import { LinkedOperationData, PerfTableRow } from '../src/model/PerfTable';
+import { enrichRowData, getRepeatCacheOutcome } from '../src/functions/enrichPerfRowData';
+import { LinkedOperationData, PerfTableRow, TypedPerfTableRow } from '../src/model/PerfTable';
 import { BufferType } from '../src/model/BufferType';
 import { DeviceOperationLayoutTypes } from '../src/model/APIData';
-import { BoundAnalysis } from '../src/definitions/PerfTable';
+import { BoundAnalysis, RepeatCacheOutcome } from '../src/definitions/PerfTable';
 import { OperationCategories } from '../src/definitions/StackedPerfTable';
 import { makeAllocationFailure } from './helpers/allocationFailure';
 import { makeDramFallback } from './helpers/dramFallback';
@@ -17,7 +17,7 @@ import { makeRawPerfRow } from './helpers/perfRowFixtures';
 // op_to_op_gap, cores, dram, dram_percent, flops, flops_percent, ...) reach the frontend as strings.
 // enrichRowData converts those strings into the typed values the table renders. These tests verify
 // that conversion faithfully reflects the values tt-perf-report produced — including the >6.5µs
-// high-dispatch flag, which mirrors tt-perf-report's Op-to-Op Gap threshold (perf_report.py:1052).
+// high-dispatch flag, which mirrors tt-perf-report's Op-to-Op Gap threshold (perf_report.py, color_row).
 
 describe('enrichRowData — typed conversion of tt-perf-report values', () => {
     it('parses numeric columns into numbers', () => {
@@ -243,4 +243,26 @@ describe('enrichRowData — typed conversion of tt-perf-report values', () => {
             expect(row.dram_fallback).toBeNull();
         });
     });
+});
+
+// `program_cache` in backend/ttnn_visualizer/agent/tools.py restates this rule by hand, so these cases
+// are the ones its tests should agree with.
+describe('getRepeatCacheOutcome', () => {
+    const repeatRow = (overrides: Partial<TypedPerfTableRow>): TypedPerfTableRow =>
+        ({ hash: 'abc123', isFirstHashOccurrence: false, cache_hit: true, ...overrides }) as TypedPerfTableRow;
+
+    it.each([
+        ['a first call', { isFirstHashOccurrence: true }, null],
+        ['a hashless row', { hash: null }, null],
+        ['an empty hash', { hash: '' }, null],
+        ['a repeat that hit', { cache_hit: true }, RepeatCacheOutcome.HIT],
+        ['a repeat that missed', { cache_hit: false }, RepeatCacheOutcome.MISS],
+        ['a repeat with no recorded result', { cache_hit: null }, RepeatCacheOutcome.UNRECORDED],
+        ['a repeat missing its cache result', { cache_hit: undefined }, RepeatCacheOutcome.UNRECORDED],
+    ] as [string, Partial<TypedPerfTableRow>, RepeatCacheOutcome | null][])(
+        'classifies %s',
+        (_label, overrides, expected) => {
+            expect(getRepeatCacheOutcome(repeatRow(overrides))).toBe(expected);
+        },
+    );
 });
