@@ -40,6 +40,12 @@ describe('resolveMaxCores', () => {
         },
     );
 
+    // QSR3.A2 reports `quasar` too, so its 96 cores must win over the 32 default.
+    it("takes a Quasar part's larger core count from the device log or the rows", () => {
+        expect(resolveMaxCores({ architecture: DeviceArchitecture.QUASAR, max_cores: 96 }, [])).toBe(96);
+        expect(resolveMaxCores({ architecture: DeviceArchitecture.QUASAR }, [makeRow(96)])).toBe(96);
+    });
+
     // The device log's `ARCH:` token reaches here raw, so casing must not change the default.
     it('normalises the device log arch before looking up its default', () => {
         expect(resolveMaxCores({ architecture: 'QUASAR' as DeviceArchitecture }, [makeRow(8)])).toBe(32);

@@ -6,9 +6,8 @@ import Ajv from 'ajv';
 import { describe, expect, it } from 'vitest';
 
 import socDescriptorSchema from '../src/schemas/npe-soc-descriptor.schema.json';
-import { DeviceArchitecture } from '../src/definitions/DeviceArchitecture';
 import { formatGridSize } from '../src/functions/formatting';
-import { getBakedChipDesigns } from '../src/functions/getChipDesign';
+import { getAllBakedChipDesigns } from '../src/functions/getChipDesign';
 import { parseSocDescriptorOverride } from '../src/functions/socDescriptorOverride';
 
 const validate = new Ajv({ allErrors: true }).compile(socDescriptorSchema);
@@ -21,13 +20,11 @@ const validate = new Ajv({ allErrors: true }).compile(socDescriptorSchema);
  */
 const cases: { label: string; descriptor: unknown; accepted: boolean }[] = [
     // Every baked descriptor, so a new one is checked without being listed.
-    ...Object.values(DeviceArchitecture).flatMap((arch) =>
-        getBakedChipDesigns(arch).map((design) => ({
-            label: `baked ${arch} ${formatGridSize(design.grid)}`,
-            descriptor: design,
-            accepted: true,
-        })),
-    ),
+    ...getAllBakedChipDesigns().map(({ arch, design }) => ({
+        label: `baked ${arch} ${formatGridSize(design.grid)}`,
+        descriptor: design,
+        accepted: true,
+    })),
     {
         label: 'minimum a producer must write',
         descriptor: { grid: { x_size: 4, y_size: 4 }, functional_workers: ['1-1'] },

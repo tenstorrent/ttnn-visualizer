@@ -4,16 +4,18 @@
 
 import { describe, expect, it } from 'vitest';
 import { DeviceArchitecture } from '../src/definitions/DeviceArchitecture';
-import { getBakedChipDesigns, getChipDesign } from '../src/functions/getChipDesign';
+import { getAllBakedChipDesigns, getChipDesign } from '../src/functions/getChipDesign';
 import { resolveMaxCores } from '../src/functions/getCoreCount';
 import { formatGridSize } from '../src/functions/formatting';
 import { parseSocDescriptorOverride } from '../src/functions/socDescriptorOverride';
 import { ChipDesign } from '../src/model/ClusterModel';
 
 // Every baked descriptor, so a new one is held to these rules without being listed.
-const baked = Object.values(DeviceArchitecture).flatMap((arch) =>
-    getBakedChipDesigns(arch).map((design) => ({ arch, design, name: `${arch} ${formatGridSize(design.grid)}` })),
-);
+const baked = getAllBakedChipDesigns().map(({ arch, design }) => ({
+    arch,
+    design,
+    name: `${arch} ${formatGridSize(design.grid)}`,
+}));
 
 const NODE_LISTS = ['functional_workers', 'dram', 'eth', 'pcie', 'arc', 'router_only', 'dispatch'] as const;
 

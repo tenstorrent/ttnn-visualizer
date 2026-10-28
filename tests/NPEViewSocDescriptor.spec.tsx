@@ -123,6 +123,25 @@ describe('NPEView SoC descriptor presentation (#1847)', () => {
         expect(chipSizes.at(-1)).toEqual({ width: 2, height: 3 });
     });
 
+    it('names a single baked grid without an alternative', () => {
+        useNodeTypeMock.mockReturnValue(
+            resolved({
+                architecture: null,
+                grid: { x_size: 2, y_size: 3 },
+                cores: undefined,
+                dispatch: undefined,
+                gridMismatch: { bakedGrids: [{ x_size: 10, y_size: 12 }], reported: { x_size: 2, y_size: 3 } },
+            }),
+        );
+
+        render(<NPEView npeData={makeNpeData(2, 3)} />);
+
+        const [, message] =
+            createToast.mock.calls.find(([title]) => title === SOC_DESCRIPTOR_GRID_MISMATCH_TITLE) ?? [];
+        expect(message).toContain('descriptor is 10x12, so');
+        expect(message).not.toContain(' or ');
+    });
+
     it('raises the mismatch warning once, not on every render', () => {
         useNodeTypeMock.mockReturnValue(
             resolved({

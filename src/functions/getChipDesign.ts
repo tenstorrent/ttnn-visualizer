@@ -14,7 +14,7 @@ const NO_DESIGNS: readonly ChipDesign[] = [];
 
 // The default first: it is the one assumed when no grid picks another. One arch name can cover
 // several parts, as QSR3.A2 reports `quasar` like Quasar-32, so only the grid tells them apart. #2237
-const BAKED_DESIGNS = new Map<DeviceArchitecture, readonly ChipDesign[]>([
+const BAKED_DESIGNS_BY_ARCH = new Map<DeviceArchitecture, readonly ChipDesign[]>([
     [DeviceArchitecture.WORMHOLE, [archWormhole as ChipDesign]],
     [DeviceArchitecture.BLACKHOLE, [archBlackhole as ChipDesign]],
     [
@@ -31,9 +31,13 @@ const BAKED_DESIGNS = new Map<DeviceArchitecture, readonly ChipDesign[]>([
     [DeviceArchitecture.GRENDEL, [archGrendel as ChipDesign]],
 ]);
 
+/** Every baked descriptor with its arch, each arch's default first. */
+export const getAllBakedChipDesigns = (): { arch: DeviceArchitecture; design: ChipDesign }[] =>
+    [...BAKED_DESIGNS_BY_ARCH].flatMap(([arch, designs]) => designs.map((design) => ({ arch, design })));
+
 /** Every descriptor baked for `arch`, its default first. */
 export const getBakedChipDesigns = (arch: DeviceArchitecture): readonly ChipDesign[] =>
-    BAKED_DESIGNS.get(arch) ?? NO_DESIGNS;
+    BAKED_DESIGNS_BY_ARCH.get(arch) ?? NO_DESIGNS;
 
 // `null` rather than an empty-object stand-in: `ChipDesign` declares `arch_name`, `grid`,
 // `eth` and `pcie` as required, so a stand-in claims fields it doesn't have and pushes every
