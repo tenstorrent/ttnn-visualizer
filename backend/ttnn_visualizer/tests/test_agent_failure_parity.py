@@ -355,6 +355,9 @@ def _curated_fallback_runs() -> List[List[Dict]]:
             "Shape([\u00a03 ])",
             "Shape([1,\ufeff2])",
             "Shape([\u00a02 ])",
+            # A dimension of whitespace alone is dropped, so these count 2 too.
+            "Shape([2,\ufeff])",
+            "Shape([2,])",
         )
     ]
     return [
