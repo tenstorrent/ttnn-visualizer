@@ -40,10 +40,20 @@ function renderField({ values = [], disabledValues }: RenderOptions = {}) {
     return updateHandler;
 }
 
-/** The options only exist while the MultiSelect popover is open. */
+/**
+ * The options only exist while the MultiSelect popover is open. Blueprint opens it on a click only
+ * if the input has focus by then, which a real click gives it but `fireEvent.click` does not.
+ */
 const openSelect = async () => {
-    fireEvent.click(screen.getByPlaceholderText(PLACEHOLDER));
+    const input = screen.getByPlaceholderText(PLACEHOLDER);
+
+    input.focus();
+    fireEvent.click(input);
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+    await waitFor(
+        () => expect(screen.getByRole('combobox')).toHaveAttribute('aria-expanded', 'true'),
+        WAIT_FOR_OPTIONS,
+    );
 };
 
 /**

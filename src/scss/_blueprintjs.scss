@@ -62,7 +62,8 @@ $pt-intent-text-colors: (
                 $green2,
                 $white,
             ),
-            // Blueprint has always drawn solid warning buttons in its own oranges with dark text
+            // Blueprint has always drawn solid warning buttons in its own oranges with dark text.
+            // _blueprintjs-parity.scss also reads these for the hover, pressed and disabled fills.
             'warning': (
                     $orange5,
                     $orange4,
@@ -256,7 +257,9 @@ $pt-intent-text-colors: (
 
 // Overrides for BlueprintJS which cannot be done via SASS variables
 .bp6-dark {
-    // $dark-hover-text-color in blueprint.js cannot currently be overridden, but also this colour applies to all intents
+    // Blueprint's hover and pressed text colour maps are shared by minimal and outlined buttons, but standalone
+    // minimal and outlined primary buttons need different colours here. Buttons inside a minimal or outlined
+    // group carry neither class, so they keep the map colours.
     .bp6-button {
         &.bp6-minimal {
             &.bp6-intent-primary {
