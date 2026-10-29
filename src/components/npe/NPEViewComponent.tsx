@@ -48,6 +48,7 @@ import { NODE_SIZE, getLines, resetRouteColors } from './drawingApi';
 import NPETimelineComponent from './NPETimelineComponent';
 import ActiveTransferDetails from './ActiveTransferDetails';
 import { useNodeType } from '../../hooks/useAPI';
+import useObservedWidth from '../../hooks/useObservedWidth';
 import { DeviceArchitecture } from '../../definitions/DeviceArchitecture';
 import { CLUSTER_COORDS } from '../../model/ClusterModel';
 import NPEMetadata from './NPEMetadata';
@@ -154,6 +155,9 @@ const NPEView = ({
     const [selectedZoneAddress, setSelectedZoneAddress] = useState<NPE_COORDINATES | null>(null);
     const [expandedZoneMap, setExpandedZoneMap] = useState<Record<RootzoneStateKey, boolean>>({});
     const [canvasWidth, setCanvasWidth] = useState(window.innerWidth);
+    // Remount the sliders when their widths change, so they convert pointer positions at the new size
+    const [zoomSliderRef, zoomSliderWidth] = useObservedWidth();
+    const [scrubberRef, scrubberWidth] = useObservedWidth();
     const [isShowingAllTransfers, setIsShowingAllTransfers] = useState<boolean>(false);
     const [isAnnotatingCores, setIsAnnotatingCores] = useState<boolean>(true);
     const [nocFilter, setNocFilter] = useState<NoCType | null>(null);
@@ -709,9 +713,10 @@ const NPEView = ({
                             }}
                         />
 
-                        <div>
+                        <div ref={zoomSliderRef}>
                             Zoom
                             <Slider
+                                key={zoomSliderWidth}
                                 handleHtmlProps={{ 'aria-label': 'Zoom' }}
                                 min={0.1}
                                 max={2}
@@ -724,8 +729,12 @@ const NPEView = ({
                         </div>
                     </div>
                 </ButtonGroup>
-                <div style={{ position: 'relative', width: `${switchWidth}px` }}>
+                <div
+                    ref={scrubberRef}
+                    style={{ position: 'relative', width: `${switchWidth}px` }}
+                >
                     <Slider
+                        key={scrubberWidth}
                         handleHtmlProps={{ 'aria-label': 'Timeline scrubber' }}
                         min={0}
                         max={npeData.timestep_data.length - 1}

@@ -54,6 +54,7 @@ import {
     getOperationLateDeallocationCount,
 } from '../../functions/lateDeallocation';
 import useMemoryZoomRange from '../../hooks/useMemoryZoomRange';
+import useObservedWidth from '../../hooks/useObservedWidth';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -73,6 +74,8 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
     const { selectedTensorId, selectedAddress, updateBufferFocus } = useBufferFocus();
 
     const [zoomedInViewMainMemory, setZoomedInViewMainMemory] = useState(false);
+    // Remounts the zoom slider when its width changes, so it converts pointer positions at the new size
+    const [zoomSliderRef, zoomSliderWidth] = useObservedWidth();
     const [showCircularBuffer, setShowCircularBuffer] = useState(false);
     const [showL1Small, setShowL1Small] = useState(false);
     const [tensixFullVisualisationOpen, setTensixFullVisualisationOpen] = useState(false);
@@ -412,8 +415,12 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
                                         memoryZoomEnd={memorySizeL1}
                                         configuration={L1RenderZoomoutConfiguration}
                                     />
-                                    <div className='zoom-range-wrap'>
+                                    <div
+                                        className='zoom-range-wrap'
+                                        ref={zoomSliderRef}
+                                    >
                                         <RangeSlider
+                                            key={zoomSliderWidth}
                                             min={plotZoomRangeMin}
                                             max={plotZoomRangeMax}
                                             disabled={!zoomedInViewMainMemory}

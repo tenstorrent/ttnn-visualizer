@@ -21,6 +21,7 @@ import {
 } from '../store/app';
 import ROUTES from '../definitions/Routes';
 import 'styles/components/RangeSlider.scss';
+import useObservedWidth from '../hooks/useObservedWidth';
 import {
     useGetClusterDescription,
     useGetDeviceOperationListPerf,
@@ -54,6 +55,9 @@ function Range() {
     const hasSignpostRange = signpostRange.some((signpost) => signpost !== null);
     const [isUserOpChange, setIsUserOpChange] = useState(false);
     const [isUserPerfChange, setIsUserPerfChange] = useState(false);
+    // The panel mounts collapsed, so each slider remounts once it can measure its track
+    const [perfSliderRef, perfSliderWidth] = useObservedWidth();
+    const [opSliderRef, opSliderWidth] = useObservedWidth();
 
     const { data: operations } = useOperationsList();
     const { data: perfData, error: perfDataError } = usePerformanceReport(activeReportFolderName);
@@ -254,8 +258,12 @@ function Range() {
                     </div>
 
                     {perfMin && perfMax && selectedPerformanceRange && (
-                        <div className='slider-container'>
+                        <div
+                            className='slider-container'
+                            ref={perfSliderRef}
+                        >
                             <RangeSlider
+                                key={perfSliderWidth}
                                 value={selectedPerformanceRange}
                                 onChange={(value) => {
                                     setSelectedPerformanceRange(value);
@@ -333,8 +341,12 @@ function Range() {
                 )}
 
                 {opMin && opMax && selectedOperationRange && (
-                    <div className='slider-container'>
+                    <div
+                        className='slider-container'
+                        ref={opSliderRef}
+                    >
                         <RangeSlider
+                            key={opSliderWidth}
                             value={selectedOperationRange}
                             onChange={(value) => {
                                 setSelectedOperationRange(value);

@@ -14,11 +14,12 @@ $dark-warning-background-base: $tt-yellow;
 $dark-danger-background-base: $tt-red-accent;
 $dark-success-intent-color: $green4; // from BlueprintJS
 
-// Shade-6 colours from @blueprintjs/colors 5.1.x, which Blueprint 6.6 used for minimal active text
-$bp-legacy-blue6: #99c4ff;
-$bp-legacy-green6: #7cd7a2;
-$bp-legacy-orange6: #f5c186;
-$bp-legacy-red6: #ffa1a4;
+// Blueprint's own shade-6 colours ($blue6 etc. in core's _variables-extended.scss), which 6.6 used for minimal
+// active text. Written out because a `with (…)` block can't read the module it configures.
+$bp-blue6: #99c4ff;
+$bp-green6: #7cd7a2;
+$bp-orange6: #f5c186;
+$bp-red6: #ffa1a4;
 
 // Blueprint 6.6 elevation shadows; 6.7 redesigned them
 $bp-legacy-drop-shadow: rgba($black, 0.2);
@@ -104,10 +105,10 @@ $pt-intent-text-colors: (
             'default': color-mix(in srgb, var(--bp-intent-default-hover) 46%, var(--bp-palette-white)),
         ),
     $button-dark-minimal-active-text-colors: (
-        'primary': $bp-legacy-blue6,
-        'success': $bp-legacy-green6,
-        'warning': $bp-legacy-orange6,
-        'danger': $bp-legacy-red6,
+        'primary': $bp-blue6,
+        'success': $bp-green6,
+        'warning': $bp-orange6,
+        'danger': $bp-red6,
         'default': color-mix(in srgb, var(--bp-intent-default-active) 46%, var(--bp-palette-white)),
     ),
     $pt-intent-colors: $pt-intent-text-colors,
@@ -168,22 +169,22 @@ $pt-intent-text-colors: (
         'primary': (
             $blue3,
             $blue5,
-            $bp-legacy-blue6,
+            $bp-blue6,
         ),
         'success': (
             $green3,
             $green5,
-            $bp-legacy-green6,
+            $bp-green6,
         ),
         'warning': (
             $orange3,
             $orange5,
-            $bp-legacy-orange6,
+            $bp-orange6,
         ),
         'danger': (
             $red3,
             $red5,
-            $bp-legacy-red6,
+            $bp-red6,
         ),
     ),
     $pt-elevation-shadow-0: 0 0 0 1px rgba($black, 0.15),

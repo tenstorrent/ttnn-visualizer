@@ -9,6 +9,11 @@
 // Selectors and rule order mirror Blueprint 6.6, which keeps specificity unchanged: our own component styles
 // still win, or lose, against these rules exactly as they did against 6.6. Only the dark theme is covered,
 // because the app always renders with `bp6-dark` on <body>, and only components the app uses.
+//
+// Checked against @blueprintjs/core 6.21. This reads Sass variables Blueprint keeps only for backward
+// compatibility and plans to remove in its next major, so a Blueprint upgrade means re-checking this file:
+// tests/blueprintParityStyles.spec.ts fails on a new core minor as a reminder. #2252 tracks replacing it with
+// theming through Blueprint's --bp-* design tokens.
 
 @use 'sass:list';
 @use 'sass:map';
@@ -180,6 +185,13 @@ $intents: ('primary', 'success', 'warning', 'danger');
 // Buttons
 
 .bp6-button {
+    // Icon-only buttons pull their icon out to centre it. 6.7 narrowed this to an icon that is a direct child,
+    // so an icon wrapped in a span, such as a Tooltip target, lost the margin.
+    .bp6-icon:first-child:last-child,
+    .bp6-spinner + .bp6-icon:last-child {
+        margin: 0 calc(-1 * calc(calc(var(--bp-surface-spacing) * 7.5) - calc(var(--bp-surface-spacing) * 4)) * 0.5);
+    }
+
     .bp6-dark &:not([class*='bp6-intent-']) {
         @include dark-button;
 

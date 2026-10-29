@@ -52,7 +52,7 @@ import {
     getEditConnectionLabel,
 } from './helpers/remoteConnectionSelectors';
 import { SshConfigHostsQueryResult, noSshConfigResult } from './helpers/sshConfigFixtures';
-import testForPortal from './helpers/testForPortal';
+import testForPortal, { openPopover } from './helpers/testForPortal';
 import { TestProviders } from './helpers/TestProviders';
 import { runsWithoutFingerprints } from './helpers/reportLinkFixtures';
 import { ReportLinkRunsById } from '../src/definitions/ReportLinks';
@@ -1959,8 +1959,7 @@ const editConnection = async (connection: RemoteConnection) => {
     );
 
     // Edit is a per-row action inside the connection dropdown, so the row has to be on screen.
-    fireEvent.click(getConnectionTrigger(connection));
-    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+    await openPopover(getConnectionTrigger(connection), WAIT_FOR_OPTIONS);
     fireEvent.click(await screen.findByLabelText(getEditConnectionLabel(connection), {}, WAIT_FOR_OPTIONS));
     await waitFor(() => expect(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_NAME })).toBeTruthy());
 };

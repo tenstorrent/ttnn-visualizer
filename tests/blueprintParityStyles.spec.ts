@@ -112,9 +112,29 @@ const BLUEPRINT_6_6_VALUES: [string, string, string][] = [
         'box-shadow',
         `0 0 0 1px hsl(215, 3%, 38%), inset 0 0 0 1px rgba(255, 255, 255, 0.2), ${DARK_DROP_SHADOW_3}`,
     ],
+    // 6.6 matched icons wrapped in a span, such as a Tooltip target; 6.7 only matches direct children
+    [
+        '.bp6-button .bp6-icon:first-child:last-child',
+        'margin',
+        '0 calc(-1 * (var(--bp-surface-spacing) * 7.5 - var(--bp-surface-spacing) * 4) * 0.5)',
+    ],
 ];
 
+// The parity layer was checked against this release; see the header of _blueprintjs-parity.scss
+const CHECKED_BLUEPRINT_CORE = '6.21';
+
 describe('Blueprint 6.6 dark-theme parity', () => {
+    it(`was checked against the installed @blueprintjs/core (${CHECKED_BLUEPRINT_CORE})`, () => {
+        const { version } = JSON.parse(
+            readFileSync(join(ROOT, 'node_modules/@blueprintjs/core/package.json'), 'utf8'),
+        ) as { version: string };
+
+        expect(
+            version.split('.').slice(0, 2).join('.'),
+            'Blueprint changed: re-check src/scss/_blueprintjs-parity.scss against it, then update this version',
+        ).toBe(CHECKED_BLUEPRINT_CORE);
+    });
+
     it.each(BLUEPRINT_6_6_VALUES)('%s keeps its 6.6 %s', (selector, property, expected) => {
         expect(winningDeclaration(selector, property)?.value).toBe(expected);
     });
