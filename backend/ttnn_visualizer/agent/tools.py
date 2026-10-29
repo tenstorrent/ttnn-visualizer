@@ -357,6 +357,13 @@ def _resolve_signposts(instance: Instance) -> ResolvedSignposts:
         return read_signposts(csv_file, low_memory=True)
 
 
+def _short_names(
+    named: Sequence[Tuple[str, int]], max_length: int
+) -> List[Tuple[str, int]]:
+    """The names, with their counts and in order, short enough to show an agent."""
+    return [entry for entry in named if len(entry[0]) <= max_length]
+
+
 def with_signposts(
     registry: ReportRegistry, loaded: Dict[str, object]
 ) -> Dict[str, object]:
@@ -375,7 +382,7 @@ def with_signposts(
         return {**loaded, "signposts_problem": str(error)}
     named = resolved.occurrences()
     # A longer name cannot be passed back as a bound, and is the capture's text, not ours.
-    usable = [entry for entry in named if len(entry[0]) <= MAX_SIGNPOST_NAME_LENGTH]
+    usable = _short_names(named, MAX_SIGNPOST_NAME_LENGTH)
     result: Dict[str, object] = {
         **loaded,
         "signpost_count": len(named),
@@ -1357,7 +1364,7 @@ def core_spread(
 
 
 # Zone names a refusal lists, most started first.
-MAX_LISTED_ZONES = 20
+MAX_LISTED_ZONES = MAX_LISTED_SIGNPOSTS
 # A zone name longer than this is the capture's text, not ours: it is not listed, and a
 # zone asked for by such a name is refused, as a signpost's is.
 MAX_ZONE_NAME_LENGTH = MAX_SIGNPOST_NAME_LENGTH
@@ -1406,13 +1413,18 @@ def _interval_figures(
     }
 
 
-def _repeats_figures(timelines: Sequence[ZoneRepeats], clock_mhz: int) -> Dict:
-    """What `by_device` and `by_core_risc` both give, over some timelines together."""
+def _repeats_figures(
+    timelines: Sequence[ZoneRepeats],
+    clock_mhz: int,
+    figures: Optional[Dict[str, Optional[float]]] = None,
+) -> Dict:
+    """What `by_device` and `by_core_risc` both give, over some timelines together;
+    ``figures`` are their interval figures where already read."""
     return {
         "occurrences": sum(repeats.occurrences for repeats in timelines),
         "runs": sum(repeats.runs for repeats in timelines),
         "intervals": sum(len(repeats.intervals) for repeats in timelines),
-        **_interval_figures(timelines, clock_mhz),
+        **(figures or _interval_figures(timelines, clock_mhz)),
         "runs_at_marker_limit": sum(repeats.full_runs for repeats in timelines),
     }
 
@@ -1422,7 +1434,7 @@ def _unreadable_zone(zone: str, read: ZoneIntervals) -> str:
         f"{zone!r} starts {read.zone_starts[zone]} times in "
         f"{DeviceLogProfilerQueries.DEVICE_LOG_FILE}, but none could be read: "
         f"{read.malformed_starts} have a slot, core, run or cycle count that is not a "
-        f"number, and {read.untracked_starts} lie on core-RISC timelines past the "
+        f"finite number, and {read.untracked_starts} lie on core-RISC timelines past the "
         f"{MAX_ZONE_TIMELINES} followed at once"
     )
 
@@ -1431,11 +1443,7 @@ def _unknown_zone(zone: str, read: ZoneIntervals) -> str:
     log = DeviceLogProfilerQueries.DEVICE_LOG_FILE
     if not read.zone_starts:
         return f"{log} records no zone starts, so there is no {zone!r} to time"
-    listable = [
-        (name, count)
-        for name, count in read.zone_starts.most_common()
-        if len(name) <= MAX_ZONE_NAME_LENGTH
-    ]
+    listable = _short_names(read.zone_starts.most_common(), MAX_ZONE_NAME_LENGTH)
     named = ", ".join(
         f"{name!r} ({count})" for name, count in listable[:MAX_LISTED_ZONES]
     )
@@ -1506,29 +1514,35 @@ def zone_intervals(
 
     # Ranked on the figures as shown, so a tie the answer shows is broken by the
     # maximum it shows; only the timelines returned are built into entries.
-    order = {
+    figures_by_timeline = {
         timeline: _interval_figures([repeats], clock_mhz)
         for timeline, repeats in read.timelines.items()
         if repeats.intervals
     }
     ranked = sorted(
-        order,
+        figures_by_timeline,
         key=lambda timeline: (
-            -cast(float, order[timeline]["median_us"]),
-            -cast(float, order[timeline]["max_us"]),
+            -cast(float, figures_by_timeline[timeline]["median_us"]),
+            -cast(float, figures_by_timeline[timeline]["max_us"]),
             timeline,
         ),
     )
-    shown = [
-        {
-            "device": slot,
-            "x": x,
-            "y": y,
-            "risc": risc,
-            **_repeats_figures([read.timelines[(slot, x, y, risc)]], clock_mhz),
-        }
-        for slot, x, y, risc in ranked[:count]
-    ]
+    shown = []
+    for timeline in ranked[:count]:
+        slot, x, y, risc = timeline
+        shown.append(
+            {
+                "device": slot,
+                "x": x,
+                "y": y,
+                "risc": risc,
+                **_repeats_figures(
+                    [read.timelines[timeline]],
+                    clock_mhz,
+                    figures_by_timeline[timeline],
+                ),
+            }
+        )
     meta = DeviceLogProfilerQueries.read_device_meta(instance)
     result: Dict[str, object] = {
         "handle": handle,
@@ -1630,7 +1644,7 @@ def _zone_interval_caveats(zone: str, read: ZoneIntervals, recurring: int) -> Li
     if read.malformed:
         caveats.append(
             f"{read.malformed} rows have a slot, core, run or cycle count that is not a "
-            "number, and were left out."
+            "finite number, and were left out."
         )
     if read.untracked:
         caveats.append(
@@ -2044,11 +2058,11 @@ __all__ = [
     "CORE_SPREAD_NOTE",
     "DEFAULT_METRIC",
     "MAX_SIGNPOST_NAME_LENGTH",
+    "MAX_ZONE_NAME_LENGTH",
     "OP_BREAKDOWN_NOTE",
     "PROGRAM_CACHE_NOTE",
     "SORTABLE_METRICS",
     "SignpostRange",
-    "MAX_ZONE_NAME_LENGTH",
     "ZONE_INTERVALS_NOTE",
     "canonical_report",
     "check_range",

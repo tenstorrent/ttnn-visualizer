@@ -1037,6 +1037,17 @@ class DeviceLogProfilerQueries:
                 return column, start_token, end_token
         return None, "", ""
 
+    def _required_zone_phase(self, purpose: str, needs: str) -> Tuple[str, str, str]:
+        """`_zone_phase` for a query that cannot read a log without one: ``needs`` says
+        what the log then lacks."""
+        phase_column, start_token, end_token = self._zone_phase(purpose)
+        if phase_column is None:
+            raise DataFormatError(
+                f"{self.DEVICE_LOG_FILE} marks no zone starts or ends (neither a "
+                f"`type` nor a `zone phase` column), so {needs}"
+            )
+        return phase_column, start_token, end_token
+
     def _zone_chunks(self, columns: List[str]) -> Iterator[pd.DataFrame]:
         """The log in `CSV_CHUNK_SIZE` chunks, holding only ``columns``.
 
@@ -1214,15 +1225,10 @@ class DeviceLogProfilerQueries:
         core or cycles is not a finite number is left out and counted rather than
         failing every operation's read.
         """
-        phase_column, start_token, end_token = self._zone_phase(
-            "split into per-core kernel spans"
-        )
         # Spread is a spread of durations, and without a phase there are none.
-        if phase_column is None:
-            raise DataFormatError(
-                f"{self.DEVICE_LOG_FILE} marks no zone starts or ends (neither a "
-                "`type` nor a `zone phase` column), so it holds no kernel durations"
-            )
+        phase_column, start_token, end_token = self._required_zone_phase(
+            "split into per-core kernel spans", "it holds no kernel durations"
+        )
 
         spans: Dict[SpanRequest, Dict[Tuple[int, int], CoreSpan]] = {
             request: {} for request in requests
@@ -1301,17 +1307,12 @@ class DeviceLogProfilerQueries:
         arrive: at a kernel start, which also parts a traced op's replays, or a new run
         host ID. The trace columns are not read: they can change partway through a run.
         """
-        phase_column, start_token, end_token = self._zone_phase(
-            "read for zone intervals"
+        phase_column, start_token, end_token = self._required_zone_phase(
+            "read for zone intervals", "no zone start can be told apart"
         )
-        if phase_column is None:
-            raise DataFormatError(
-                f"{self.DEVICE_LOG_FILE} marks no zone starts or ends (neither a "
-                "`type` nor a `zone phase` column), so no zone start can be told apart"
-            )
         columns = list(self._ZONE_COLUMNS) + [phase_column]
         # Each kept row's flags ride beside its cells, named apart from any log column.
-        row_columns = [*columns, "_kernel_start", "_marker"]
+        row_columns = [*columns, "_kernel_start", "_marker", "_flush"]
         number_columns = [*self._SPAN_NUMBER_COLUMNS, "run host ID"]
 
         timelines: Dict[RiscTimeline, ZoneRepeats] = {}
@@ -1339,8 +1340,9 @@ class DeviceLogProfilerQueries:
             names = chunk["zone name"].astype(str).str.strip()
             phases = chunk[phase_column].astype(str).str.strip()
             starts = phases == start_token
-            timestamped = timestamped or bool(
-                phases.str.startswith(TIMESTAMPED_PHASE_PREFIX).any()
+            timestamped = timestamped or (
+                not reserved_zone
+                and bool(phases.str.startswith(TIMESTAMPED_PHASE_PREFIX).any())
             )
             for name, count in names[starts].value_counts().items():
                 if (
@@ -1355,6 +1357,13 @@ class DeviceLogProfilerQueries:
             reserved = names.str.endswith(RESERVED_ZONE_SUFFIXES)
             kernel_starts = names.str.endswith(KERNEL_ZONE_SUFFIX) & starts
             markers = ~reserved & (starts | (phases == end_token))
+            if reserved_zone:
+                # Nothing counts markers for a zone the cap never cuts.
+                markers = markers & False
+            flushes = markers & names.str.startswith(PROFILER_ZONE_PREFIX)
+            accumulated = accumulated or bool(
+                (flushes & names.isin(ACCUMULATE_FLUSH_ZONES)).any()
+            )
             wanted = names == zone
             kept = kernel_starts | markers | wanted
             chunk = chunk[kept].assign(
@@ -1366,6 +1375,7 @@ class DeviceLogProfilerQueries:
                     phase_column: phases[kept],
                     "_kernel_start": kernel_starts[kept],
                     "_marker": markers[kept],
+                    "_flush": flushes[kept],
                 }
             )
 
@@ -1387,6 +1397,7 @@ class DeviceLogProfilerQueries:
                 phase,
                 kernel_start,
                 marker,
+                flush,
             ) in zip(*(chunk[column].tolist() for column in row_columns)):
                 timeline = (slot, x, y, risc)
                 run = open_runs.get(timeline)
@@ -1400,10 +1411,9 @@ class DeviceLogProfilerQueries:
                     close(timeline, run)
                     run = open_runs[timeline] = _OpenRun(run_id, seq=run.seq + 1)
 
-                if marker and name.startswith(PROFILER_ZONE_PREFIX):
+                if flush:
                     run.markers = 0
                     run.flush_pending = run.flush_pending or name != zone
-                    accumulated = accumulated or name in ACCUMULATE_FLUSH_ZONES
                 elif marker:
                     run.markers += 1
                     run.full = run.full or run.markers >= L1_ZONE_MARKER_CAPACITY

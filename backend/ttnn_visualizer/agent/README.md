@@ -47,6 +47,10 @@ printf '%s\n' \
   | uv run ttnn-visualizer-mcp
 ```
 
+`BRISC-KERNEL` is in every capture, but a kernel zone starts once per run, so that call
+answers with no intervals and a caveat; name a zone `zone_timings` lists that recurs within
+a run, such as a loop's, to see intervals.
+
 The database tools take a profiler directory instead, and a report with both is loaded in
 one call:
 

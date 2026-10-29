@@ -709,8 +709,8 @@ start replaced before its end counts as unpaired. A zone the log does not start 
 with the zones it does, most started first, leaving out any name longer than 256
 characters, which is the capture's text, not the tool's; a zone asked for by a longer name
 is refused. A zone whose every start was unreadable is refused with how many had a cell
-that is not a number and how many lay past the 200,000 core-RISC timelines followed at
-once.
+that is not a finite number and how many lay past the 200,000 core-RISC timelines followed
+at once.
 
 **A performance row and a profiler operation are linked by order, not by a shared id.**
 Neither report records the other's id, so when a handle is loaded with both, the tools

@@ -362,9 +362,10 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "such as one placed once per loop iteration, from "
                 "profile_log_device.csv: the median, min and max per device and per "
                 "core's RISC, never pooled across devices. A run begins at each kernel "
-                "start, so dispatch between runs is never an interval. Says when a "
-                "RISC's zones filled the device profiler's L1 buffer, which holds up to "
-                f"{L1_ZONE_MARKER_CAPACITY // 2} zones per kernel run."
+                "start or new run host ID, so dispatch between runs is never an "
+                "interval. Says when a RISC's zones filled the device profiler's L1 "
+                f"buffer, which holds {L1_ZONE_MARKER_CAPACITY // 2} zones between "
+                "flushes."
             ),
             "schema": {
                 "type": "object",

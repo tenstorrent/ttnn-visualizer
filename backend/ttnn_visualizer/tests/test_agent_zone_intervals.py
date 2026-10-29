@@ -10,6 +10,7 @@ way the reader must: at kernel starts and at changes of run host ID or trace rep
 #2155
 """
 
+from itertools import zip_longest
 from typing import List
 from unittest.mock import patch
 
@@ -91,7 +92,8 @@ class TestIntervals:
         assert "caveat" not in answer
 
     def test_each_risc_is_its_own_timeline(self, tmp_path):
-        """Interleaved in time, a BRISC start and an NCRISC start are never an interval."""
+        """Their starts alternate in time, but a BRISC start and an NCRISC start are
+        never an interval."""
         rows = [
             *_run(0, 1, 1, "BRISC", 0, [100, 2100]),
             *_run(0, 1, 1, "NCRISC", 0, [600, 3600]),
@@ -103,6 +105,35 @@ class TestIntervals:
             entry["risc"]: entry["median_us"] for entry in answer["by_core_risc"]
         }
         assert figures == {"BRISC": 2.0, "NCRISC": 3.0}
+
+    def test_runs_hold_when_timelines_interleave_in_the_file(self, tmp_path):
+        """One pass holds each timeline's open run, so a kernel start on one RISC must
+        not end another's run, wherever their rows fall in the file."""
+        brisc = [
+            *_run(0, 1, 1, "BRISC", 0, [100, 1100, 2100]),
+            *_run(0, 1, 1, "BRISC", 50_000, [50_100, 52_100]),
+        ]
+        ncrisc = _run(0, 1, 1, "NCRISC", 0, [150, 3150, 6150])
+        other_device = _run(1, 1, 1, "BRISC", 0, [100, 1600])
+        (tmp_path / "contiguous").mkdir()
+        (tmp_path / "alternating").mkdir()
+
+        contiguous = _intervals(
+            tmp_path / "contiguous", [*brisc, *ncrisc, *other_device]
+        )
+        alternating = _intervals(
+            tmp_path / "alternating",
+            [
+                row
+                for rows in zip_longest(brisc, ncrisc, other_device)
+                for row in rows
+                if row
+            ],
+        )
+
+        assert alternating["by_core_risc"] == contiguous["by_core_risc"]
+        assert alternating["by_device"] == contiguous["by_device"]
+        assert [entry["runs"] for entry in contiguous["by_core_risc"]] == [1, 1, 2]
 
     def test_devices_never_pool(self, tmp_path):
         """The same core on two devices: each device's clock is its own, so neither its
@@ -140,6 +171,41 @@ class TestIntervals:
             "max_us": 3.0,
             "runs_at_marker_limit": 0,
         }
+
+    def test_a_median_tied_once_rounded_ranks_the_larger_maximum_first(self, tmp_path):
+        """Ranked on the figures shown: 1000.5 cycles shows as 1.0 us, as 1000 does."""
+        rows = [
+            *_run(0, 1, 1, "BRISC", 0, [100, 1100, 2101]),
+            *_run(0, 2, 1, "BRISC", 0, [100, 1100, 2100, 3100, 4600]),
+        ]
+
+        answer = _intervals(tmp_path, rows)
+
+        assert [
+            (entry["x"], entry["median_us"], entry["max_us"])
+            for entry in answer["by_core_risc"]
+        ] == [(2, 1.0, 1.5), (1, 1.0, 1.001)]
+
+    def test_devices_past_the_cap_are_counted(self, tmp_path):
+        rows = [
+            *_run(0, 1, 1, "BRISC", 0, [100, 1100]),
+            *_run(1, 1, 1, "BRISC", 0, [100, 1100]),
+        ]
+
+        with patch.object(tools, "MAX_LIMIT", 1):
+            answer = _intervals(tmp_path, rows)
+
+        assert (answer["device_count"], len(answer["by_device"])) == (2, 1)
+
+    def test_padded_cells_are_read_stripped(self, tmp_path):
+        rows = [
+            row.replace(",BRISC,", ", BRISC ,").replace(f",{LOOP},", f", {LOOP} ,")
+            for row in _run(0, 1, 1, "BRISC", 0, [100, 1100])
+        ]
+
+        (timeline,) = _intervals(tmp_path, rows)["by_core_risc"]
+
+        assert (timeline["risc"], timeline["intervals"]) == ("BRISC", 1)
 
     def test_a_tied_median_ranks_the_larger_maximum_first(self, tmp_path):
         rows = [
@@ -438,6 +504,44 @@ class TestMarkerLimit:
 
         assert answer["by_core_risc"][0]["runs_at_marker_limit"] == 1
 
+    def test_a_full_run_stays_counted_after_a_flush(self, tmp_path):
+        loops = _every(100, 1000, self.CAPACITY // 2 + 2)
+        rows = _run(0, 1, 1, "BRISC", 0, loops)
+        flush = loops[self.CAPACITY // 2] - 500
+        at = 1 + 2 * (self.CAPACITY // 2)
+        rows[at:at] = _zone(
+            0, 1, 1, "BRISC", flush, flush + 10, zone="PROFILER-NOC-QUICK-PUSH"
+        )
+
+        answer = _intervals(tmp_path, rows)
+
+        assert answer["by_core_risc"][0]["runs_at_marker_limit"] == 1
+
+    def test_timestamped_rows_do_not_count_toward_the_limit(self, tmp_path):
+        rows = _run(0, 1, 1, "NCRISC", 0, _every(100, 1000, self.CAPACITY // 2 - 1))
+        rows[1:1] = [
+            modern_row(0, 1, 1, "NCRISC", 50 + index, "", "TS_DATA")
+            for index in range(4)
+        ]
+
+        answer = _intervals(tmp_path, rows)
+
+        assert answer["by_core_risc"][0]["runs_at_marker_limit"] == 0
+        assert "This log also records timestamped data" in answer["caveat"]
+
+    def test_a_kernel_zone_carries_no_marker_limit_caveats(self, tmp_path):
+        """The limit never cuts a zone with a slot of its own, so neither timestamped
+        data nor accumulate mode can make it miss one."""
+        rows = _run(0, 1, 1, "BRISC", 0, [100, 1100])
+        rows[1:1] = [
+            modern_row(0, 1, 1, "BRISC", 50, "", "TS_DATA"),
+            *_zone(0, 1, 1, "BRISC", 60, 70, zone="PROFILER-DRAM-PUSH"),
+        ]
+
+        answer = _intervals(tmp_path, rows, zone="BRISC-KERNEL")
+
+        assert "runs_at_marker_limit" not in answer["caveat"]
+
     def test_a_kernel_zone_is_never_cut_short(self, tmp_path):
         rows = _run(0, 1, 1, "ERISC", 0, _every(100, 1000, self.CAPACITY // 2))
 
@@ -522,6 +626,31 @@ class TestGaps:
 
         assert "1 starts and 1 ends of 'LOOP' did not pair" in answer["caveat"]
 
+    def test_a_firmware_zone_across_dispatches_has_no_intervals(self, tmp_path):
+        """Each start falls in the run before its own kernel start: three runs, none
+        holding two starts, and pairs kept by run host ID."""
+        rows = []
+        for start in (0, 10_000, 20_000):
+            rows += [
+                modern_row(0, 1, 1, "BRISC", start, "BRISC-FW", "ZONE_START"),
+                *_run(0, 1, 1, "BRISC", start + 10, [start + 100]),
+                modern_row(0, 1, 1, "BRISC", start + 500, "BRISC-FW", "ZONE_END"),
+            ]
+
+        answer = _intervals(tmp_path, rows, zone="BRISC-FW")
+
+        (device,) = answer["by_device"]
+        assert (
+            device["runs"],
+            device["median_us"],
+            device["runs_at_marker_limit"],
+        ) == (
+            3,
+            None,
+            0,
+        )
+        assert "did not pair" not in answer["caveat"]
+
     def test_a_firmware_zone_pairs_across_its_kernel_start(self, tmp_path):
         """Its start comes before the kernel start that opens its run."""
         rows = [
@@ -562,8 +691,9 @@ class TestGaps:
         answer = _intervals(tmp_path, rows)
 
         assert answer["by_core_risc"][0]["intervals"] == 2
-        assert "1 rows have a slot, core, run or cycle count that is not a number" in (
-            answer["caveat"]
+        assert (
+            "1 rows have a slot, core, run or cycle count that is not a finite number"
+            in (answer["caveat"])
         )
 
     def test_starts_past_the_open_start_ceiling_say_the_log_is_malformed(
@@ -609,7 +739,7 @@ class TestRefusals:
 
         assert str(refusal.value) == (
             "'LOOP' starts 2 times in profile_log_device.csv, but none could be read: "
-            "2 have a slot, core, run or cycle count that is not a number, and 0 lie "
+            "2 have a slot, core, run or cycle count that is not a finite number, and 0 lie "
             "on core-RISC timelines past the 200000 followed at once"
         )
 
@@ -624,7 +754,7 @@ class TestRefusals:
             _intervals(tmp_path, rows)
 
         assert str(refusal.value).endswith(
-            ": 0 have a slot, core, run or cycle count that is not a number, and 2 lie "
+            ": 0 have a slot, core, run or cycle count that is not a finite number, and 2 lie "
             "on core-RISC timelines past the 0 followed at once"
         )
 
