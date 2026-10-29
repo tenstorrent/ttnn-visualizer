@@ -47,7 +47,9 @@ from ttnn_visualizer.agent.handles import (
     perf_csv_columns,
 )
 from ttnn_visualizer.csv_queries import (
+    L1_ZONE_MARKER_CAPACITY,
     MAX_LISTED_SIGNPOSTS,
+    MAX_ZONE_TIMELINES,
     REPORT_ROW_ID_OFFSET,
     SIGNPOST_OP_TYPE,
     CoreSpan,
@@ -60,7 +62,10 @@ from ttnn_visualizer.csv_queries import (
     OpsPerformanceReportQueries,
     ResolvedSignposts,
     SpanRequest,
+    ZoneIntervals,
+    ZoneRepeats,
     check_signpost_range,
+    interval_statistics,
     read_signposts,
     signpost_range_ignored,
 )
@@ -1358,6 +1363,229 @@ def core_spread(
     return result
 
 
+# Zone names a refusal lists, most started first.
+MAX_LISTED_ZONES = 20
+
+ZONE_INTERVALS_NOTE = (
+    "An interval runs from one start of the zone to its next start on the same core's "
+    "RISC within one run: for a zone placed once per loop iteration, one iteration's "
+    "time. A run begins at each kernel start, which also parts a traced op's replays, "
+    "and at each change of run host ID, so dispatch between runs is never an interval. "
+    "Devices are never pooled, since each runs its own clock: by_device gives each "
+    "device's intervals, and by_core_risc ranks the core-RISC timelines that have "
+    "intervals by median interval, slowest first. Cores are the device log's NOC "
+    "coordinates. Times are microseconds."
+)
+
+
+def _interval_figures(
+    timelines: Sequence[ZoneRepeats], clock_mhz: int
+) -> Dict[str, Optional[float]]:
+    """The median, min and max of some timelines' intervals together, in µs."""
+    statistics = interval_statistics(timelines)
+    if statistics is None:
+        return {"median_us": None, "min_us": None, "max_us": None}
+    median, least, most = statistics
+    return {
+        "median_us": _rounded(median / clock_mhz),
+        "min_us": _rounded(least / clock_mhz),
+        "max_us": _rounded(most / clock_mhz),
+    }
+
+
+def _unknown_zone(zone: str, zone_starts: Counter) -> str:
+    log = DeviceLogProfilerQueries.DEVICE_LOG_FILE
+    if not zone_starts:
+        return f"{log} records no zone starts, so there is no {zone!r} to time"
+    named = ", ".join(
+        f"{name!r} ({count})"
+        for name, count in zone_starts.most_common(MAX_LISTED_ZONES)
+    )
+    unlisted = len(zone_starts) - MAX_LISTED_ZONES
+    return (
+        f"no zone named {zone!r} starts in {log}. Its zones by starts, most first: "
+        f"{named}" + (f", and {unlisted} more" if unlisted > 0 else "")
+    )
+
+
+def zone_intervals(
+    registry: ReportRegistry, handle: str, zone: str, limit: Optional[int] = None
+) -> Dict[str, object]:
+    """How long a zone that recurs within a run takes from one start to the next.
+
+    A zone placed once per loop iteration gives the iteration's steady-state time, read
+    per device, core and RISC and never pooled across devices. #2155
+    """
+    _require_performance_report(registry, handle)
+    if not isinstance(zone, str) or not zone.strip():
+        raise ValueError("zone must name a zone the device log records")
+    name = zone.strip()
+    instance = registry.get(handle)
+    if DeviceLogProfilerQueries.device_log_path(instance) is None:
+        raise ValueError(
+            f"{handle!r} has no {DeviceLogProfilerQueries.DEVICE_LOG_FILE} beside its "
+            "performance CSV, so there are no zones to time"
+        )
+    clock_mhz = DeviceLogProfilerQueries.clock_mhz(instance)
+    if clock_mhz is None:
+        raise ValueError(
+            f"{DeviceLogProfilerQueries.DEVICE_LOG_FILE} records no positive "
+            "CHIP_FREQ[MHz] in its first line, so its cycles cannot be read as time"
+        )
+    try:
+        with DeviceLogProfilerQueries(instance, stream=True) as queries:
+            read: ZoneIntervals = queries.query_zone_intervals(name)
+    except DataFormatError as error:
+        # The server records only a ValueError as a refusal.
+        raise ValueError(str(error)) from error
+    if not read.timelines:
+        raise ValueError(_unknown_zone(name, read.zone_starts))
+
+    by_device: Dict[int, List[Tuple[Tuple[int, int, str], ZoneRepeats]]] = defaultdict(
+        list
+    )
+    for (slot, x, y, risc), repeats in read.timelines.items():
+        by_device[slot].append(((x, y, risc), repeats))
+
+    devices = []
+    for slot in sorted(by_device):
+        timelines = by_device[slot]
+        devices.append(
+            {
+                "device": slot,
+                "cores": len({(x, y) for (x, y, _), _ in timelines}),
+                "occurrences": sum(repeats.occurrences for _, repeats in timelines),
+                "runs": sum(repeats.runs for _, repeats in timelines),
+                "intervals": sum(len(repeats.intervals) for _, repeats in timelines),
+                **_interval_figures([repeats for _, repeats in timelines], clock_mhz),
+                "runs_at_marker_limit": sum(
+                    repeats.full_runs for _, repeats in timelines
+                ),
+            }
+        )
+
+    ranked = []
+    for (slot, x, y, risc), repeats in read.timelines.items():
+        if not repeats.intervals:
+            continue
+        ranked.append(
+            {
+                "device": slot,
+                "x": x,
+                "y": y,
+                "risc": risc,
+                "occurrences": repeats.occurrences,
+                "runs": repeats.runs,
+                "intervals": len(repeats.intervals),
+                **_interval_figures([repeats], clock_mhz),
+                "runs_at_marker_limit": repeats.full_runs,
+            }
+        )
+    ranked.sort(
+        key=lambda entry: (
+            -cast(float, entry["median_us"]),
+            -cast(float, entry["max_us"]),
+            entry["device"],
+            entry["x"],
+            entry["y"],
+            entry["risc"],
+        )
+    )
+    shown = ranked[: bounded(limit)]
+    meta = DeviceLogProfilerQueries.read_device_meta(instance)
+    result: Dict[str, object] = {
+        "handle": handle,
+        "zone": name,
+        "arch": meta.architecture if meta is not None else None,
+        "clock_mhz": clock_mhz,
+        "device_count": len(devices),
+        "by_device": devices[:MAX_LIMIT],
+        "timeline_count": len(ranked),
+        "returned": len(shown),
+        "by_core_risc": shown,
+        "note": ZONE_INTERVALS_NOTE,
+    }
+
+    caveats = _zone_interval_caveats(name, read, len(ranked))
+    if caveats:
+        result["caveat"] = " ".join(caveats)
+    return result
+
+
+def _zone_interval_caveats(zone: str, read: ZoneIntervals, recurring: int) -> List[str]:
+    caveats = []
+    timelines = len(read.timelines)
+    if not recurring:
+        caveats.append(
+            f"{zone!r} never started twice in one run on any core's RISC, so it has no "
+            "intervals: a firmware or kernel zone marks each run once, and a zone "
+            "inside a loop needs two iterations in one run."
+        )
+    elif recurring < timelines:
+        caveats.append(
+            f"{timelines - recurring} of {timelines} core-RISC timelines started "
+            f"{zone!r} at most once a run, so they have no intervals and are not ranked."
+        )
+    full_runs = sum(repeats.full_runs for repeats in read.timelines.values())
+    if full_runs:
+        full_timelines = sum(
+            1 for repeats in read.timelines.values() if repeats.full_runs
+        )
+        caveats.append(
+            f"On {full_runs} runs across {full_timelines} core-RISC timelines, the zones "
+            f"a RISC recorded filled its L1 profiler buffer: {L1_ZONE_MARKER_CAPACITY} "
+            f"markers ({L1_ZONE_MARKER_CAPACITY // 2} zones) since the run began or the "
+            "profiler last flushed it (runs_at_marker_limit). tt-metal records no zone "
+            "while the buffer is full, so those runs can be missing occurrences from "
+            "then until the run ended or the profiler flushed; the intervals they "
+            "recorded are still the zone's."
+        )
+    if read.accumulated:
+        caveats.append(
+            "This log holds PROFILER-DRAM-PUSH or PROFILER-NOC-FLUSH zones, which "
+            "tt-metal writes only in its accumulate mode, where one L1 buffer spans "
+            "several runs: runs_at_marker_limit can miss a run whose zones it cut short."
+        )
+    pairing = read.pairing
+    if pairing["unmatched_starts"] or pairing["unmatched_ends"]:
+        caveats.append(
+            f"{pairing['unmatched_starts']} starts and {pairing['unmatched_ends']} ends "
+            f"of {zone!r} did not pair, so markers were dropped or the capture stopped "
+            "mid-zone. An interval across a dropped start spans two occurrences, which "
+            "max_us would show."
+        )
+    if pairing["dropped_starts"]:
+        caveats.append(
+            f"{pairing['dropped_starts']} starts went unpaired past the open-zone "
+            "ceiling, which a well-formed capture does not reach: treat this log as "
+            "malformed."
+        )
+    if read.across_flush:
+        caveats.append(
+            f"{read.across_flush} intervals of {zone!r} spanned one of the device "
+            "profiler's own zones, such as a flush of its full buffer partway through a "
+            "run, and were left out, since they time the profiler as well."
+        )
+    if read.out_of_order:
+        caveats.append(
+            f"{read.out_of_order} starts of {zone!r} came before the start ahead of "
+            "them in their run. tt-metal writes each RISC's markers in time order, so "
+            "this log was written some other way, and those intervals are left out."
+        )
+    if read.malformed:
+        caveats.append(
+            f"{read.malformed} rows have a slot, core, run or cycle count that is not a "
+            "number, and were left out."
+        )
+    if read.untracked:
+        caveats.append(
+            f"{read.untracked} rows belong to core-RISC timelines past the "
+            f"{MAX_ZONE_TIMELINES} followed at once, which a well-formed capture does "
+            "not reach, and were left out: treat this log as malformed."
+        )
+    return caveats
+
+
 def diff_reports(
     registry: ReportRegistry,
     handle_a: str,
@@ -1765,6 +1993,7 @@ __all__ = [
     "PROGRAM_CACHE_NOTE",
     "SORTABLE_METRICS",
     "SignpostRange",
+    "ZONE_INTERVALS_NOTE",
     "canonical_report",
     "check_range",
     "is_ranged",
@@ -1784,5 +2013,6 @@ __all__ = [
     "share_percent",
     "top_ops",
     "with_signposts",
+    "zone_intervals",
     "zone_timings",
 ]

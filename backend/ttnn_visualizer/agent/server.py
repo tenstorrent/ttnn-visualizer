@@ -35,6 +35,7 @@ from ttnn_visualizer.agent.handles import (
     load_report,
 )
 from ttnn_visualizer.agent.tool_names import McpToolName
+from ttnn_visualizer.csv_queries import L1_ZONE_MARKER_CAPACITY
 from ttnn_visualizer.event_logging import (
     EventLogEvent,
     McpToolOutcome,
@@ -353,6 +354,41 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "required": ["handle"],
             },
             "handler": lambda arguments: tools.zone_timings(registry, **arguments),
+        },
+        McpToolName.ZONE_INTERVALS: {
+            "title": "Recurring zone intervals",
+            "description": (
+                "Start-to-start intervals of a zone that recurs within one kernel run, "
+                "such as one placed once per loop iteration, from "
+                "profile_log_device.csv: the median, min and max per device and per "
+                "core's RISC, never pooled across devices. A run begins at each kernel "
+                "start, so dispatch between runs is never an interval. Says when a "
+                "RISC's zones filled the device profiler's L1 buffer, which holds up to "
+                f"{L1_ZONE_MARKER_CAPACITY // 2} zones per kernel run."
+            ),
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "handle": {"type": "string"},
+                    "zone": {
+                        "type": "string",
+                        "description": (
+                            "The zone's name as profile_log_device.csv records it. A "
+                            "name the log never starts is refused with the zones it "
+                            "does start."
+                        ),
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": (
+                            "Core-RISC timelines to return, slowest median interval "
+                            f"first, capped at {MAX_LIMIT}."
+                        ),
+                    },
+                },
+                "required": ["handle", "zone"],
+            },
+            "handler": lambda arguments: tools.zone_intervals(registry, **arguments),
         },
         McpToolName.CORE_SPREAD: {
             "title": "Per-core kernel spread",

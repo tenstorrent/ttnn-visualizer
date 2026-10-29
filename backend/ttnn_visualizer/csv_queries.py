@@ -14,10 +14,11 @@ import tempfile
 import threading
 import traceback
 import warnings
+from array import array
 from bisect import bisect_right
 from collections import Counter, defaultdict
 from contextlib import contextmanager, redirect_stdout
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 from io import StringIO
 from pathlib import Path
@@ -26,6 +27,7 @@ from typing import (
     Callable,
     Dict,
     Hashable,
+    Iterable,
     Iterator,
     List,
     Literal,
@@ -222,6 +224,19 @@ CSV_CHUNK_SIZE = 50_000
 # than kept, so the total reports what it could pair and says what it dropped.
 MAX_OPEN_ZONE_STARTS = 200_000
 
+# Zone markers, a start and an end each, a RISC's L1 profiler buffer holds per kernel
+# run beside the firmware and kernel zones' slots: PROFILER_L1_OPTIONAL_MARKER_COUNT.
+L1_ZONE_MARKER_CAPACITY = 250
+# The device profiler's own zones, such as a full buffer's flush partway through a run.
+PROFILER_ZONE_PREFIX = "PROFILER-"
+# Flushes tt-metal writes only in accumulate mode, where one buffer spans several runs.
+ACCUMULATE_FLUSH_ZONES = frozenset({"PROFILER-DRAM-PUSH", "PROFILER-NOC-FLUSH"})
+# Ceiling on core-RISC timelines followed at once: one per slot, core and RISC, so about
+# 21k on the widest local capture, where a malformed log can start one on every row.
+MAX_ZONE_TIMELINES = 200_000
+# Distinct zone names counted for a refusal to list; a malformed log can name every row.
+MAX_COUNTED_ZONE_NAMES = 1_000
+
 # Serialised reports kept per process. The cache is shared by every user, instance
 # and comparison report the worker serves, so four entries only cover one session's
 # toggle-back path (a linked report, the current view and two recent filter shapes)
@@ -326,6 +341,69 @@ class CoreSpans:
     # Kernel rows of a requested run ID left out for a slot, core or cycle count that
     # is not a finite number, by run host ID: the slot itself may be what is broken.
     malformed: Dict[int, int]
+
+
+# One core's RISC on one device: `(PCIe slot, core_x, core_y, RISC processor type)`.
+RiscTimeline = Tuple[int, int, int, str]
+
+
+@dataclass
+class ZoneRepeats:
+    """One zone's starts on one RISC timeline, and the cycles between them in a run."""
+
+    occurrences: int = 0
+    # Runs the zone started in, and those whose zone markers filled the L1 buffer.
+    runs: int = 0
+    full_runs: int = 0
+    intervals: "array[int]" = field(default_factory=lambda: array("q"))
+
+
+def interval_statistics(
+    timelines: Iterable[ZoneRepeats],
+) -> Optional[Tuple[float, int, int]]:
+    """The median, min and max cycles of some timelines' intervals together."""
+    cycles = [
+        np.frombuffer(repeats.intervals, dtype=np.int64)
+        for repeats in timelines
+        if repeats.intervals
+    ]
+    if not cycles:
+        return None
+    pooled = np.concatenate(cycles)
+    return float(np.median(pooled)), int(pooled.min()), int(pooled.max())
+
+
+@dataclass
+class _OpenRun:
+    """What a RISC timeline's current run has recorded, as far as the log has read."""
+
+    run_id: int
+    # Zone markers since the run began or the profiler last flushed, which empties it.
+    markers: int = 0
+    full: bool = False
+    # A profiler zone since the zone last started, which would taint the next interval.
+    flush_pending: bool = False
+    starts: int = 0
+    last_start: Optional[int] = None
+
+
+@dataclass
+class ZoneIntervals:
+    """What `query_zone_intervals` read of one zone."""
+
+    timelines: Dict[RiscTimeline, ZoneRepeats]
+    # Starts per zone name across the log, for a refusal to list.
+    zone_starts: Counter
+    pairing: Dict[str, int]
+    # Intervals left out: across one of the profiler's own zones, or out of time order.
+    across_flush: int
+    out_of_order: int
+    # Whether the log holds an accumulate-mode flush, which the per-run count misreads.
+    accumulated: bool
+    # Rows left out for a slot, core, run or cycle count that is not a finite number.
+    malformed: int
+    # Rows of timelines past `MAX_ZONE_TIMELINES`, which were not followed.
+    untracked: int
 
 
 class _ZonePairer:
@@ -1190,6 +1268,135 @@ class DeviceLogProfilerQueries:
             zoned=zoned,
             pairing=cast(Dict[DeviceRun, Dict[str, int]], pairer.pairing_by_group()),
             malformed=dict(malformed),
+        )
+
+    def query_zone_intervals(self, zone: str) -> ZoneIntervals:
+        """Cycles from each start of ``zone`` to its next in one run, per RISC timeline.
+
+        tt-metal writes each RISC's markers in time order, so a run ends as its rows
+        arrive: at a kernel start, which also parts a traced op's replays, or a new run
+        host ID. The trace columns are not read: they can change partway through a run.
+        """
+        phase_column, start_token, end_token = self._zone_phase(
+            "read for zone intervals"
+        )
+        if phase_column is None:
+            raise DataFormatError(
+                f"{self.DEVICE_LOG_FILE} marks no zone starts or ends (neither a "
+                "`type` nor a `zone phase` column), so no zone start can be told apart"
+            )
+        columns = list(self._ZONE_COLUMNS) + [phase_column]
+        # Each kept row's flags ride beside its cells, named apart from any log column.
+        row_columns = [*columns, "_kernel_start", "_marker"]
+        number_columns = [*self._SPAN_NUMBER_COLUMNS, "run host ID"]
+
+        timelines: Dict[RiscTimeline, ZoneRepeats] = {}
+        open_runs: Dict[RiscTimeline, _OpenRun] = {}
+        zone_starts: Counter = Counter()
+        pairer = _ZonePairer(start_token, end_token)
+        across_flush = out_of_order = malformed = untracked = 0
+        accumulated = False
+        # A firmware or kernel zone has its own slot, so a full buffer never cuts it.
+        reserved_zone = zone.endswith(("-FW", "-KERNEL"))
+
+        def close(timeline: RiscTimeline, run: _OpenRun) -> None:
+            if not run.starts:
+                return
+            repeats = timelines[timeline]
+            repeats.runs += 1
+            if run.full and not reserved_zone:
+                repeats.full_runs += 1
+
+        for chunk in self._zone_chunks(columns):
+            names = chunk["zone name"].astype(str).str.strip()
+            phases = chunk[phase_column].astype(str).str.strip()
+            starts = phases == start_token
+            for name, count in names[starts].value_counts().items():
+                if name in zone_starts or len(zone_starts) < MAX_COUNTED_ZONE_NAMES:
+                    zone_starts[name] += count
+            # Firmware and kernel zones have slots of their own, outside the L1 cap.
+            reserved = names.str.endswith(("-FW", "-KERNEL"))
+            kernel_starts = names.str.endswith("-KERNEL") & starts
+            markers = ~reserved & (starts | (phases == end_token))
+            kept = kernel_starts | markers | (names == zone)
+            chunk = chunk[kept].assign(
+                **{
+                    "zone name": names[kept],
+                    phase_column: phases[kept],
+                    "_kernel_start": kernel_starts[kept],
+                    "_marker": markers[kept],
+                }
+            )
+
+            numbers = chunk[number_columns].apply(pd.to_numeric, errors="coerce")
+            finite = np.isfinite(numbers.to_numpy(dtype=float)).all(axis=1)
+            malformed += int((~finite).sum())
+            chunk = chunk[finite].assign(
+                **{
+                    column: numbers[column][finite].astype("int64")
+                    for column in number_columns
+                }
+            )
+
+            for (
+                name,
+                risc,
+                slot,
+                x,
+                y,
+                run_id,
+                cycles,
+                phase,
+                kernel_start,
+                marker,
+            ) in zip(*(chunk[column].tolist() for column in row_columns)):
+                timeline = (slot, x, y, str(risc).strip())
+                run = open_runs.get(timeline)
+                if run is None:
+                    if len(open_runs) >= MAX_ZONE_TIMELINES:
+                        untracked += 1
+                        continue
+                    run = open_runs[timeline] = _OpenRun(run_id)
+                elif run.run_id != run_id or kernel_start:
+                    close(timeline, run)
+                    run = open_runs[timeline] = _OpenRun(run_id)
+
+                if marker and name.startswith(PROFILER_ZONE_PREFIX):
+                    run.markers = 0
+                    run.flush_pending = run.flush_pending or name != zone
+                    accumulated = accumulated or name in ACCUMULATE_FLUSH_ZONES
+                elif marker:
+                    run.markers += 1
+                    run.full = run.full or run.markers >= L1_ZONE_MARKER_CAPACITY
+                if name != zone:
+                    continue
+                pairer.offer((timeline, run_id), phase, cycles)
+                if phase != start_token:
+                    continue
+                repeats = timelines.setdefault(timeline, ZoneRepeats())
+                repeats.occurrences += 1
+                run.starts += 1
+                if run.last_start is not None:
+                    if run.flush_pending:
+                        across_flush += 1
+                    elif cycles >= run.last_start:
+                        repeats.intervals.append(cycles - run.last_start)
+                    else:
+                        out_of_order += 1
+                run.flush_pending = False
+                run.last_start = cycles
+
+        for timeline, run in open_runs.items():
+            close(timeline, run)
+        return ZoneIntervals(
+            timelines=timelines,
+            zone_starts=zone_starts,
+            pairing=pairer.pairing(self.DEVICE_LOG_FILE),
+            across_flush=across_flush,
+            out_of_order=out_of_order,
+            accumulated=accumulated,
+            malformed=malformed,
+            untracked=untracked,
         )
 
     @staticmethod
