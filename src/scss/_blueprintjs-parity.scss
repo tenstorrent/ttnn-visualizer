@@ -227,10 +227,6 @@ $intents: ('primary', 'success', 'warning', 'danger');
 $warning-button-states: map.get(blueprint.$button-intent-states, 'warning');
 
 .bp6-button.bp6-intent-warning {
-    &:not(.bp6-disabled).bp6-icon > svg {
-        fill: rgba($dark-gray1, 0.7);
-    }
-
     // Separate :not()s keep Blueprint's specificity; :not(a, b, c) would count as a single class
     /* stylelint-disable-next-line selector-not-notation */
     &:not(.bp6-disabled):not(.bp6-minimal):not(.bp6-outlined) {
@@ -254,12 +250,6 @@ $warning-button-states: map.get(blueprint.$button-intent-states, 'warning');
     &.bp6-minimal,
     &.bp6-outlined {
         background: none;
-
-        .bp6-dark & {
-            &:not(.bp6-disabled).bp6-icon > svg {
-                fill: $orange5;
-            }
-        }
     }
 }
 
