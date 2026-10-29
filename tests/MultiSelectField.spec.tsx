@@ -6,6 +6,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import MultiSelectField from '../src/components/MultiSelectField';
+import openMultiSelect from './helpers/openMultiSelect';
 import testForPortal from './helpers/testForPortal';
 
 const PLACEHOLDER = 'Select Value...';
@@ -40,20 +41,10 @@ function renderField({ values = [], disabledValues }: RenderOptions = {}) {
     return updateHandler;
 }
 
-/**
- * The options only exist while the MultiSelect popover is open. Blueprint opens it on a click only
- * if the input has focus by then, which a real click gives it but `fireEvent.click` does not.
- */
+/** The options only exist while the MultiSelect popover is open, and render inside its portal. */
 const openSelect = async () => {
-    const input = screen.getByPlaceholderText(PLACEHOLDER);
-
-    input.focus();
-    fireEvent.click(input);
+    await openMultiSelect(PLACEHOLDER);
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
-    await waitFor(
-        () => expect(screen.getByRole('combobox')).toHaveAttribute('aria-expanded', 'true'),
-        WAIT_FOR_OPTIONS,
-    );
 };
 
 /**

@@ -5,11 +5,9 @@
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { compile } from 'sass';
-// @ts-expect-error don't have types declaration for node-build-scripts
-import { sassNodeModulesLoadPaths } from '@blueprintjs/node-build-scripts';
 import { describe, expect, it } from 'vitest';
-// @ts-expect-error don't have types declaration for legacySassSvgInlinerFactory
-import { legacySassSvgInlinerFactory } from '../src/libs/blueprintjs/legacySassSvgInlinerFactory';
+// @ts-expect-error don't have types declaration for sassOptions
+import { createSassOptions } from '../src/libs/blueprintjs/sassOptions';
 
 // Blueprint 6.7+ draws its dark theme from --bp-* design tokens, and _blueprintjs-parity.scss puts the
 // Blueprint 6.6 rendering back. These checks pin a sample of the restored values, as Blueprint 6.6 compiled
@@ -32,18 +30,8 @@ const normaliseSelector = (selector: string) =>
         .replace(/=(["'])([^"']*)\1/g, '=$2')
         .trim();
 
-const compileBlueprintStyles = () =>
-    compile(join(ROOT, STYLESHEETS[0]), {
-        loadPaths: sassNodeModulesLoadPaths,
-        quietDeps: true,
-        silenceDeprecations: ['import', 'global-builtin', 'color-functions'],
-        functions: {
-            'svg-icon($path, $selectors: null)': legacySassSvgInlinerFactory(join(ROOT, 'src/libs/blueprintjs/icons'), {
-                optimize: true,
-                encodingFormat: 'uri',
-            }),
-        },
-    }).css;
+// The same options Vite builds with, so these checks see the CSS that ships
+const compileBlueprintStyles = () => compile(join(ROOT, STYLESHEETS[0]), createSassOptions(ROOT)).css;
 
 /** Every top-level declaration, keyed by `selector|property`, keeping only the last one in source order. */
 const indexDeclarations = (css: string) => {

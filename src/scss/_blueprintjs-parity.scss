@@ -68,8 +68,7 @@ $intents: ('primary', 'success', 'warning', 'danger');
     }
 }
 
-// The intent rules are emitted again after the dark minimal rules so that, as in 6.6, they win the ties
-@mixin minimal-button {
+@mixin minimal-button-dark {
     .bp6-dark & {
         background: blueprint.$dark-minimal-button-background-color;
         box-shadow: none;
@@ -104,14 +103,49 @@ $intents: ('primary', 'success', 'warning', 'danger');
             }
         }
     }
+}
+
+// The dark half of Blueprint's pt-button-minimal-intent, emitted after the dark minimal rules above so that,
+// as in 6.6, the intent colours win the ties with them. Blueprint's light half never decides a colour under
+// bp6-dark, so it is not repeated.
+@mixin minimal-button-intent-dark($intent) {
+    $intent-color: map.get(blueprint.$button-intent-colors, $intent);
+    $text-color: map.get(blueprint.$button-dark-intent-text-colors, $intent);
+
+    .bp6-dark & {
+        color: $text-color;
+
+        &:hover {
+            background-color: color-mix(in oklch, $intent-color 20%, transparent);
+            color: map.get(blueprint.$button-dark-minimal-hover-text-colors, $intent);
+        }
+
+        @include pressed {
+            background-color: color-mix(in oklch, $intent-color 30%, transparent);
+            color: map.get(blueprint.$button-dark-minimal-active-text-colors, $intent);
+        }
+
+        @include disabled {
+            background: none;
+            color: color-mix(in oklch, $text-color 50%, transparent);
+
+            &.bp6-active {
+                background-color: color-mix(in oklch, $intent-color 30%, transparent);
+            }
+        }
+    }
+
+    .bp6-button-spinner .bp6-spinner-head {
+        stroke: map.get(blueprint.$pt-intent-text-colors, $intent);
+    }
+}
+
+@mixin minimal-button {
+    @include minimal-button-dark;
 
     @each $intent in $intents {
         &.bp6-intent-#{$intent} {
-            @include blueprint.pt-button-minimal-intent($intent);
-
-            .bp6-button-spinner .bp6-spinner-head {
-                stroke: map.get(blueprint.$pt-intent-text-colors, $intent);
-            }
+            @include minimal-button-intent-dark($intent);
         }
     }
 }
@@ -278,8 +312,9 @@ a.bp6-button {
         }
     }
 
+    // HTMLSelect has no intent prop, so only the generic minimal rules can match
     &.bp6-minimal select {
-        @include minimal-button;
+        @include minimal-button-dark;
     }
 }
 
@@ -295,6 +330,18 @@ a.bp6-button {
 }
 
 // Text inputs
+
+// Shared by text inputs and the file input; the transparent rings are what the focus ring transitions from
+@mixin dark-input {
+    box-shadow:
+        0 0 0 0 rgba($blue5, 0),
+        0 0 0 0 rgba($blue5, 0),
+        blueprint.$pt-dark-input-box-shadow;
+
+    @include disabled {
+        color: blueprint.$pt-dark-text-color-disabled;
+    }
+}
 
 @mixin dark-input-intent($color) {
     box-shadow:
@@ -321,14 +368,7 @@ a.bp6-button {
 
 .bp6-input {
     .bp6-dark & {
-        box-shadow:
-            0 0 0 0 rgba($blue5, 0),
-            0 0 0 0 rgba($blue5, 0),
-            blueprint.$pt-dark-input-box-shadow;
-
-        @include disabled {
-            color: blueprint.$pt-dark-text-color-disabled;
-        }
+        @include dark-input;
 
         @each $intent, $color in blueprint.$pt-dark-input-intent-box-shadow-colors {
             &.bp6-intent-#{$intent} {
@@ -408,14 +448,7 @@ a.bp6-button {
 
 .bp6-file-upload-input {
     .bp6-dark & {
-        box-shadow:
-            0 0 0 0 rgba($blue5, 0),
-            0 0 0 0 rgba($blue5, 0),
-            blueprint.$pt-dark-input-box-shadow;
-
-        @include disabled {
-            color: blueprint.$pt-dark-text-color-disabled;
-        }
+        @include dark-input;
 
         &::after {
             background-color: blueprint.$dark-button-background-color;
