@@ -10,6 +10,7 @@ way the reader must: at kernel starts and at changes of run host ID or trace rep
 #2155
 """
 
+import json
 from itertools import zip_longest
 from typing import List
 from unittest.mock import patch
@@ -90,6 +91,7 @@ class TestIntervals:
         assert answer["clock_mhz"] == 1000
         assert answer["arch"] == "wormhole_b0"
         assert "caveat" not in answer
+        assert "by_core_risc_unlisted_too_long" not in answer
 
     def test_each_risc_is_its_own_timeline(self, tmp_path):
         """Their starts alternate in time, but a BRISC start and an NCRISC start are
@@ -232,6 +234,36 @@ class TestIntervals:
         assert [entry["x"] for entry in answer["by_core_risc"]] == [2, 3]
         assert answer["returned"] == 2
         assert answer["timeline_count"] == 3
+
+    def test_a_risc_name_too_long_to_show_is_counted_rather_than_listed(self, tmp_path):
+        """Its intervals still count in its device's figures, which name no RISC."""
+        at_bound = "R" * tools.MAX_RISC_NAME_LENGTH
+        rows = [
+            *_run(0, 1, 1, f"{at_bound}R", 0, [100, 3100]),
+            *_run(0, 2, 1, at_bound, 0, [100, 2100]),
+            *_run(0, 3, 1, "BRISC", 0, [100, 1100]),
+        ]
+
+        answer = _intervals(tmp_path, rows, limit=1)
+
+        assert [(entry["x"], entry["risc"]) for entry in answer["by_core_risc"]] == [
+            (2, at_bound)
+        ]
+        assert answer["by_core_risc_unlisted_too_long"] == 1
+        assert answer["timeline_count"] == 3
+        assert answer["by_device"][0]["max_us"] == 3.0
+        assert f"{at_bound}R" not in json.dumps(answer)
+
+    def test_a_zone_only_on_risc_names_too_long_to_show_still_has_device_figures(
+        self, tmp_path
+    ):
+        long_risc = "R" * (tools.MAX_RISC_NAME_LENGTH + 1)
+
+        answer = _intervals(tmp_path, _run(0, 1, 1, long_risc, 0, [100, 1100]))
+
+        assert (answer["by_core_risc"], answer["returned"]) == ([], 0)
+        assert answer["by_core_risc_unlisted_too_long"] == 1
+        assert answer["by_device"][0]["median_us"] == 1.0
 
     def test_the_zone_name_is_matched_whole(self, tmp_path):
         rows = [

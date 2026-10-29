@@ -748,6 +748,14 @@ def program_cache(
     return result
 
 
+# A zone name longer than this is the capture's text, not ours: no zone tool shows it, and
+# a zone asked for by such a name is refused, as a signpost's is.
+MAX_ZONE_NAME_LENGTH = MAX_SIGNPOST_NAME_LENGTH
+# A RISC name longer than this is the capture's text too; tt-metal's longest,
+# QUASAR_NEO3_TRISC3, is 18 characters.
+MAX_RISC_NAME_LENGTH = 32
+
+
 def zone_timings(
     registry: ReportRegistry, handle: str, limit: Optional[int] = None
 ) -> Dict[str, object]:
@@ -755,12 +763,20 @@ def zone_timings(
     instance = registry.get(handle)
     metadata = DeviceLogProfilerQueries.read_capture_metadata(instance)
     clock_mhz = finite_number(metadata.get("CHIP_FREQ[MHz]"))
+    count = bounded(limit)
 
     with DeviceLogProfilerQueries(instance, stream=True) as queries:
-        summary, pairing = queries.query_zone_summary(limit=bounded(limit))
+        summary, pairing = queries.query_zone_summary()
+    # Taken whole, so the limit counts only entries whose names can be shown.
+    listable = [
+        entry
+        for entry in summary
+        if len(str(entry["zone"])) <= MAX_ZONE_NAME_LENGTH
+        and len(str(entry["risc"])) <= MAX_RISC_NAME_LENGTH
+    ]
 
     zones = []
-    for entry in summary:
+    for entry in listable[:count]:
         total_cycles = entry["total_cycles"]
         zones.append(
             {
@@ -792,6 +808,8 @@ def zone_timings(
             "occurrences only."
         ),
     }
+    if len(listable) < len(summary):
+        result["zones_unlisted_too_long"] = len(summary) - len(listable)
     caveat = _pairing_caveat(pairing, "these totals")
     if caveat:
         result["caveat"] = caveat
@@ -1091,15 +1109,19 @@ def _core_figures(cores: Dict[tuple, CoreSpan], clock_mhz: float) -> Dict[str, o
         for risc, cycles in span.risc_cycles.items():
             risc_us[risc].append(cycles / clock_mhz)
     slowest = sorted(core_us.items(), key=lambda item: item[1], reverse=True)
-    return {
+    listed = sorted(risc for risc in risc_us if len(risc) <= MAX_RISC_NAME_LENGTH)
+    figures: Dict[str, object] = {
         "cores_in_log": len(cores),
         "core_span": _spread(list(core_us.values())),
-        "by_risc": {risc: _spread(risc_us[risc]) for risc in sorted(risc_us)},
+        "by_risc": {risc: _spread(risc_us[risc]) for risc in listed},
         "slowest_cores": [
             {"x": int(x), "y": int(y), "span_us": _rounded(duration)}
             for (x, y), duration in slowest[:SLOWEST_CORES]
         ],
     }
+    if len(listed) < len(risc_us):
+        figures["by_risc_unlisted_too_long"] = len(risc_us) - len(listed)
+    return figures
 
 
 def _spannable(row: Dict) -> bool:
@@ -1365,9 +1387,6 @@ def core_spread(
 
 # Zone names a refusal lists, most started first.
 MAX_LISTED_ZONES = MAX_LISTED_SIGNPOSTS
-# A zone name longer than this is the capture's text, not ours: it is not listed, and a
-# zone asked for by such a name is refused, as a signpost's is.
-MAX_ZONE_NAME_LENGTH = MAX_SIGNPOST_NAME_LENGTH
 
 ZONE_INTERVALS_NOTE = (
     "An interval runs from one start of the zone to its next start on the same core's "
@@ -1527,8 +1546,11 @@ def zone_intervals(
             timeline,
         ),
     )
+    listable = [
+        timeline for timeline in ranked if len(timeline[3]) <= MAX_RISC_NAME_LENGTH
+    ]
     shown = []
-    for timeline in ranked[:count]:
+    for timeline in listable[:count]:
         slot, x, y, risc = timeline
         shown.append(
             {
@@ -1556,6 +1578,8 @@ def zone_intervals(
         "by_core_risc": shown,
         "note": ZONE_INTERVALS_NOTE,
     }
+    if len(listable) < len(ranked):
+        result["by_core_risc_unlisted_too_long"] = len(ranked) - len(listable)
 
     caveats = _zone_interval_caveats(name, read, len(ranked))
     if caveats:
@@ -2057,6 +2081,7 @@ __all__ = [
     "CANONICAL_PROJECTION",
     "CORE_SPREAD_NOTE",
     "DEFAULT_METRIC",
+    "MAX_RISC_NAME_LENGTH",
     "MAX_SIGNPOST_NAME_LENGTH",
     "MAX_ZONE_NAME_LENGTH",
     "OP_BREAKDOWN_NOTE",
