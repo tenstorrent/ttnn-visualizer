@@ -35,13 +35,12 @@ import getServerConfig from '../functions/getServerConfig';
 import { PerfTableRow } from '../model/PerfTable';
 import { DeviceOperationMapping, DeviceOperationOrderCandidates } from '../model/DeviceOperationMapping';
 import { matchDeviceOperationOrdersToPerf } from '../functions/deviceOperationMatching';
-import { getSiblingOpIds, groupDeviceRowsLikeMerge } from '../functions/deviceRowGroups';
+import { getDeviceRowOpIds } from '../functions/deviceRowOpIds';
 import { getOpIdByPerfId } from '../functions/enrichPerfRowData';
 import memoiseLatest from '../functions/memoiseLatest';
 import {
     PerformanceReportParams,
     getLinkedPerformanceReportParams,
-    getLinkedUnmergedPerformanceReportParams,
     getPerformanceComparisonReportQueryKey,
     getPerformanceReportQueryKey,
 } from '../functions/performanceReportQueryKey';
@@ -1321,9 +1320,6 @@ const useViewPerformanceReportParams = (): PerformanceReportParams => {
 // scope for a stable identity; the query key is hashed structurally, so this is for
 // readers rather than for React Query.
 const LINKED_PERFORMANCE_REPORT_PARAMS: PerformanceReportParams = Object.freeze(getLinkedPerformanceReportParams());
-const LINKED_UNMERGED_PERFORMANCE_REPORT_PARAMS: PerformanceReportParams = Object.freeze(
-    getLinkedUnmergedPerformanceReportParams(),
-);
 
 const usePerformanceReportQuery = (name: string | null, params: PerformanceReportParams) => {
     const location = useAtomValue(performanceReportLocationAtom);
@@ -1370,37 +1366,31 @@ export const useLinkedPerformanceReport = () => {
  * @description `useOpToPerfIdFiltered` extended onto unmerged rows, for joining
  * the performance table. With devices unmerged, every per-device row of a linked
  * operation gets an entry, not only the one the merge kept (#2084). With devices
- * merged, or until the unmerged report arrives, this is `useOpToPerfIdFiltered`
- * unchanged. No unmerged report is requested while merged, or while no operation
- * is linked.
+ * merged this is `useOpToPerfIdFiltered` unchanged.
+ *
+ * The per-device rows come from the linked report's `device_row_ids`, so this
+ * requests nothing of its own: the linked report is already resident whenever an
+ * operation is linked (#2177).
  */
 export const useOpToPerfIdForPerfTable = () => {
-    const name = useAtomValue(activePerformanceReportFolderNameAtom);
     const mergeDevices = useAtomValue(mergeDevicesAtom);
     const opIdsMap = useOpToPerfIdFiltered();
-    // With no linked operations there is nothing to extend, so a performance-only
-    // session never fetches the whole-run unmerged report.
-    const { data: unmerged } = usePerformanceReportQuery(
-        mergeDevices || opIdsMap.length === 0 ? null : name,
-        LINKED_UNMERGED_PERFORMANCE_REPORT_PARAMS,
-    );
-    // Re-merging disables the query by nulling `name`, which moves it to a key that never
-    // held data, so `unmerged` is already empty then.
-    const unmergedRows = unmerged?.report;
+    const { data: linked } = useLinkedPerformanceReport();
+    const linkedRows = mergeDevices ? null : linked?.report;
 
     return useMemo(() => {
-        if (!unmergedRows?.length) {
+        if (!linkedRows?.length || opIdsMap.length === 0) {
             return opIdsMap;
         }
 
-        const siblingOpIdByPerfId = getSiblingOpIds(groupDeviceRowsLikeMerge(unmergedRows), getOpIdByPerfId(opIdsMap));
+        const deviceRowOpIds = getDeviceRowOpIds(linkedRows, getOpIdByPerfId(opIdsMap));
 
-        if (siblingOpIdByPerfId.size === 0) {
+        if (deviceRowOpIds.size === 0) {
             return opIdsMap;
         }
 
-        return [...opIdsMap, ...[...siblingOpIdByPerfId].map(([perfId, opId]) => ({ opId, perfId }))];
-    }, [opIdsMap, unmergedRows]);
+        return [...opIdsMap, ...[...deviceRowOpIds].map(([perfId, opId]) => ({ opId, perfId }))];
+    }, [opIdsMap, linkedRows]);
 };
 
 interface ComparisonReportResult {

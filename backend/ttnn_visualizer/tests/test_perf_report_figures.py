@@ -39,6 +39,7 @@ def _options(**overrides) -> _PerformanceReportOptions:
         group_by=queries.DEFAULT_GROUP_BY,
         no_stacked_report=queries.DEFAULT_NO_STACKED_REPORT,
         detail_columns=queries.DEFAULT_DETAIL_COLUMNS,
+        device_row_ids=queries.DEFAULT_DEVICE_ROW_IDS,
     )
     return _PerformanceReportOptions(**{**defaults, **overrides})
 

@@ -63,6 +63,9 @@ export interface PerfTableRow {
     missing?: boolean;
     hash: string | null;
     cache_hit: boolean | null;
+    // Merged reports only: the id of every per-device row this row stands for, its own
+    // included, as tt-perf-report's merge grouped them (#2177).
+    device_row_ids?: number[];
 }
 
 export interface TypedPerfTableRow extends Omit<

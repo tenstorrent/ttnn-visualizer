@@ -39,6 +39,7 @@ import { useAllocationFailures } from '../src/hooks/useAllocationFailures';
 import { AtomProvider, type AtomProviderInitialValues } from './helpers/atomProvider';
 import axiosInstance from '../src/libs/axiosInstance';
 import Endpoints from '../src/definitions/Endpoints';
+import type { PerfTableRow } from '../src/model/PerfTable';
 
 vi.mock('../src/libs/axiosInstance', () => ({
     default: {
@@ -253,8 +254,14 @@ const unmergedRows = DEVICE_OP_NAMES.flatMap((name, index) =>
  * against unmerged `2, 3, 4, 5` would invent a second id space in which unmerged
  * row 3 (Matmul on device 1) collides with merged row 3 (Softmax) — a join the
  * real report cannot produce, and a false alarm for whoever reads the fixture next.
+ *
+ * Each carries the per-device rows it stands for, as the backend reads them from
+ * the merge (#2177).
  */
-const mergedRows = DEVICE_OP_NAMES.map((_name, index) => unmergedRows[index * NUM_DEVICES]!);
+const mergedRows = DEVICE_OP_NAMES.map((_name, index) => ({
+    ...unmergedRows[index * NUM_DEVICES]!,
+    device_row_ids: unmergedRows.slice(index * NUM_DEVICES, (index + 1) * NUM_DEVICES).map(({ id }) => Number(id)),
+}));
 
 const memoryOperations = DEVICE_OP_NAMES.map((name, index) => ({
     id: index + 1,
@@ -562,12 +569,11 @@ describe('report matching under a filtered performance tab', () => {
         const opIdByPerfId = new Map(result.current.map(({ perfId, opId }) => [perfId, opId]));
 
         expect(Object.fromEntries(opIdByPerfId)).toEqual({ '2': 1, '3': 1, '4': 2, '5': 2 });
-        expect(getReportRequests()).toContainEqual(
-            expect.objectContaining({ merge_devices: false, hide_host_ops: true, tracing_mode: false }),
-        );
+        // #2177: the per-device rows come from the linked report, not a whole-run unmerged one.
+        expect(getReportRequests().every((params) => params.merge_devices)).toBe(true);
     });
 
-    it('groups from the whole run, whatever else the tab is filtering', async () => {
+    it('links from the whole run, whatever else the tab is filtering', async () => {
         const { result } = renderWithView(
             () => useOpToPerfIdForPerfTable(),
             [[activeProfilerReportAtom, ACTIVE_REPORT], ...FILTERED_VIEW],
@@ -575,11 +581,10 @@ describe('report matching under a filtered performance tab', () => {
 
         await waitFor(() => expect(result.current).toHaveLength(unmergedRows.length));
 
-        const unmergedRequests = getReportRequests().filter((params) => !params.merge_devices);
-
-        expect(unmergedRequests).toHaveLength(1);
-        expect(unmergedRequests[0]).toMatchObject({ hide_host_ops: true, tracing_mode: false });
-        expect(unmergedRequests[0]?.start_signpost).toBeUndefined();
+        expect(getReportRequests()).toEqual([
+            expect.objectContaining({ merge_devices: true, hide_host_ops: true, tracing_mode: false }),
+        ]);
+        expect(getReportRequests()[0]?.start_signpost).toBeUndefined();
     });
 
     it('leaves the merged lookup untouched, and asks for no unmerged report, while devices are merged', async () => {
@@ -594,7 +599,7 @@ describe('report matching under a filtered performance tab', () => {
         expect(getReportRequests().every((params) => params.merge_devices)).toBe(true);
     });
 
-    it('asks for no unmerged report when no operation is linked', async () => {
+    it('links nothing, and asks for no unmerged report, when no operation is linked', async () => {
         const { result } = renderWithView(
             () => [useOpToPerfIdForPerfTable(), useLinkedPerformanceReport()] as const,
             [[mergeDevicesAtom, false]],
@@ -606,42 +611,26 @@ describe('report matching under a filtered performance tab', () => {
         expect(getReportRequests().every((params) => params.merge_devices)).toBe(true);
     });
 
-    it('falls back to the merged lookup when the unmerged report fails', async () => {
+    /** Serves the merged report with `rows` in place of the fixture's merged rows. */
+    const serveMergedRows = (rows: PerfTableRow[]) => {
         const serveReports = vi.mocked(axiosInstance.get).getMockImplementation()!;
 
         vi.mocked(axiosInstance.get).mockImplementation((url: string, config?: unknown) =>
             url.includes(Endpoints.PERFORMANCE_RESULTS_REPORT) &&
-            !(config as { params: RequestParams }).params.merge_devices
-                ? Promise.reject(new Error('unmerged report failed'))
+            (config as { params: RequestParams }).params.merge_devices
+                ? Promise.resolve({ data: { report: [...rows], stacked_report: [], signposts: [] } })
                 : serveReports(url, config as Parameters<typeof serveReports>[1]),
         );
+    };
 
-        const { result } = renderWithView(
-            () => [useOpToPerfIdForPerfTable(), useOpToPerfIdFiltered()] as const,
-            [
-                [activeProfilerReportAtom, ACTIVE_REPORT],
-                [mergeDevicesAtom, false],
-            ],
-        );
-
-        await waitFor(() => {
-            expect(result.current[1]).toHaveLength(DEVICE_OP_NAMES.length);
-            expect(getReportRequests().some((params) => !params.merge_devices)).toBe(true);
-        });
-
-        expect(result.current[0]).toBe(result.current[1]);
-    });
-
-    // A single-device run has no siblings, so consumers memoised on the lookup keep their result.
-    it('hands back the merged lookup itself when the unmerged rows have no siblings', async () => {
-        const serveReports = vi.mocked(axiosInstance.get).getMockImplementation()!;
-
-        vi.mocked(axiosInstance.get).mockImplementation((url: string, config?: unknown) =>
-            url.includes(Endpoints.PERFORMANCE_RESULTS_REPORT) &&
-            !(config as { params: RequestParams }).params.merge_devices
-                ? Promise.resolve({ data: { report: [...mergedRows], stacked_report: [], signposts: [] } })
-                : serveReports(url, config as Parameters<typeof serveReports>[1]),
-        );
+    // Consumers memoised on the lookup keep their result when there is nothing to add.
+    it.each([
+        // The backend could not read the merge's members, so it sent none.
+        ['carry no members', DEVICE_OP_NAMES.map((_name, index) => unmergedRows[index * NUM_DEVICES]!)],
+        // A single-device run: each merged row stands only for itself.
+        ['stand only for themselves', mergedRows.map((row) => ({ ...row, device_row_ids: [Number(row.id)] }))],
+    ])('hands back the merged lookup itself when the merged rows %s', async (_label, rows) => {
+        serveMergedRows(rows as PerfTableRow[]);
 
         const { result } = renderWithView(
             () => [useOpToPerfIdForPerfTable(), useOpToPerfIdFiltered(), useIsFetching()] as const,
@@ -651,17 +640,16 @@ describe('report matching under a filtered performance tab', () => {
             ],
         );
 
-        // Settled, so the unmerged rows have reached the hook rather than being still in flight.
+        // Settled, so the merged rows have reached the hook rather than being still in flight.
         await waitFor(() => {
             expect(result.current[1]).toHaveLength(DEVICE_OP_NAMES.length);
-            expect(getReportRequests().some((params) => !params.merge_devices)).toBe(true);
             expect(result.current[2]).toBe(0);
         });
 
         expect(result.current[0]).toBe(result.current[1]);
     });
 
-    it('shares the tab’s own request when only devices are unmerged', async () => {
+    it('adds no request beside the tab’s own when only devices are unmerged', async () => {
         const { result } = renderWithView(() => {
             const name = useAtomValue(activePerformanceReportFolderNameAtom);
 
