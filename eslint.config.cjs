@@ -259,6 +259,14 @@ module.exports = defineConfig([
         },
     },
     {
+        // Vite's native config loader runs these through Node's ESM resolver, which needs real file extensions.
+        files: ['vite.config.ts', 'vitest.config.ts'],
+
+        rules: {
+            'import/extensions': ['warn', 'always', { ignorePackages: true }],
+        },
+    },
+    {
         files: ['**/*.cjs'],
 
         languageOptions: {
