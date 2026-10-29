@@ -314,8 +314,23 @@ class TestRuns:
         answer = _intervals(tmp_path, rows)
 
         assert [entry["x"] for entry in answer["by_core_risc"]] == [1]
-        assert "1 of 2 core-RISC timelines started 'LOOP' at most once a run" in (
-            answer["caveat"]
+        assert answer["caveat"] == (
+            "1 of 2 core-RISC timelines have no usable intervals of 'LOOP', so they "
+            "are not ranked."
+        )
+
+    def test_a_zone_whose_every_interval_is_left_out_is_not_said_never_to_recur(
+        self, tmp_path
+    ):
+        rows = _run(0, 1, 1, "BRISC", 0, [100, 1100])
+        rows[3:3] = _zone(0, 1, 1, "BRISC", 500, 510, zone="PROFILER-NOC-QUICK-PUSH")
+
+        answer = _intervals(tmp_path, rows)
+
+        assert answer["by_core_risc"] == []
+        assert answer["caveat"].startswith(
+            "'LOOP' started more than once in a run, but none of its intervals is "
+            "usable: each was left out for a reason given below. 1 intervals of"
         )
 
     def test_a_pre_rename_log_reads_begin_and_end(self, tmp_path):
@@ -453,6 +468,15 @@ def _cycles(row: str) -> int:
 
 
 class TestGaps:
+    def test_timestamped_data_is_said_to_share_the_buffer(self, tmp_path):
+        rows = _run(0, 1, 1, "NCRISC", 0, [100, 1100])
+        rows.insert(2, _marker(0, 1, 1, "NCRISC", 150, "", "TS_DATA"))
+
+        answer = _intervals(tmp_path, rows)
+
+        assert answer["by_core_risc"][0]["intervals"] == 1
+        assert answer["caveat"].startswith("This log also records timestamped data")
+
     def test_unpaired_starts_and_ends_are_said(self, tmp_path):
         rows = _run(0, 1, 1, "BRISC", 0, [100, 1100])[:-1] + [
             _marker(0, 1, 1, "BRISC", 2100, LOOP, "ZONE_START"),
@@ -464,6 +488,45 @@ class TestGaps:
         assert answer["by_core_risc"][0]["occurrences"] == 3
         assert "1 starts and 0 ends of 'LOOP' did not pair" in answer["caveat"]
 
+    def test_a_start_replaced_before_its_end_is_unpaired(self, tmp_path):
+        rows = [
+            _marker(0, 1, 1, "BRISC", 0, "BRISC-KERNEL", "ZONE_START"),
+            _marker(0, 1, 1, "BRISC", 100, LOOP, "ZONE_START"),
+            *_zone(0, 1, 1, "BRISC", 1100, 1200),
+            _marker(0, 1, 1, "BRISC", 1300, "BRISC-KERNEL", "ZONE_END"),
+        ]
+
+        answer = _intervals(tmp_path, rows)
+
+        assert "1 starts and 0 ends of 'LOOP' did not pair" in answer["caveat"]
+
+    def test_zones_never_pair_across_runs(self, tmp_path):
+        """A start whose end was lost and an end whose start was lost, in two runs of
+        one run host ID, are two unpaired markers, not one zone."""
+        rows = [
+            *_run(0, 1, 1, "BRISC", 0, [100, 1100])[:-1],
+            _marker(0, 1, 1, "BRISC", 2100, LOOP, "ZONE_START"),
+            _marker(0, 1, 1, "BRISC", 3000, "BRISC-KERNEL", "ZONE_END"),
+            _marker(0, 1, 1, "BRISC", 50_000, "BRISC-KERNEL", "ZONE_START"),
+            _marker(0, 1, 1, "BRISC", 50_200, LOOP, "ZONE_END"),
+        ]
+
+        answer = _intervals(tmp_path, rows)
+
+        assert "1 starts and 1 ends of 'LOOP' did not pair" in answer["caveat"]
+
+    def test_a_firmware_zone_pairs_across_its_kernel_start(self, tmp_path):
+        """Its start comes before the kernel start that opens its run."""
+        rows = [
+            _marker(0, 1, 1, "BRISC", 0, "BRISC-FW", "ZONE_START"),
+            *_run(0, 1, 1, "BRISC", 10, [100]),
+            _marker(0, 1, 1, "BRISC", 500, "BRISC-FW", "ZONE_END"),
+        ]
+
+        answer = _intervals(tmp_path, rows, zone="BRISC-FW")
+
+        assert "did not pair" not in answer["caveat"]
+
     def test_a_start_out_of_time_order_is_left_out(self, tmp_path):
         rows = _run(0, 1, 1, "BRISC", 0, [100, 3100, 2100])
 
@@ -472,6 +535,17 @@ class TestGaps:
         assert answer["by_core_risc"][0]["intervals"] == 1
         assert "1 starts of 'LOOP' came before the start ahead of them" in (
             answer["caveat"]
+        )
+
+    def test_the_next_interval_runs_from_the_last_start_kept(self, tmp_path):
+        rows = _run(0, 1, 1, "BRISC", 0, [100, 3100, 2100, 4100])
+
+        (timeline,) = _intervals(tmp_path, rows)["by_core_risc"]
+
+        assert (timeline["intervals"], timeline["min_us"], timeline["max_us"]) == (
+            2,
+            1.0,
+            3.0,
         )
 
     def test_rows_that_are_not_numbers_are_left_out_and_counted(self, tmp_path):
@@ -500,6 +574,18 @@ class TestGaps:
 
 
 class TestRefusals:
+    def test_a_zone_whose_starts_were_all_unreadable_says_so(self, tmp_path):
+        rows = _run(0, 1, 1, "BRISC", 0, [100, 1100])
+        rows[1] = _marker(0, 1, 1, "BRISC", "x", LOOP, "ZONE_START")
+        rows[3] = _marker(0, 1, 1, "BRISC", "y", LOOP, "ZONE_START")
+
+        with pytest.raises(ValueError) as refusal:
+            _intervals(tmp_path, rows)
+
+        assert str(refusal.value).startswith(
+            "'LOOP' starts 2 times in profile_log_device.csv, but none could be read"
+        )
+
     def test_an_unknown_zone_names_the_zones_the_log_starts(self, tmp_path):
         rows = [
             *_run(0, 1, 1, "BRISC", 0, [100, 1100, 2100]),

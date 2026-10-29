@@ -378,6 +378,8 @@ class _OpenRun:
     """What a RISC timeline's current run has recorded, as far as the log has read."""
 
     run_id: int
+    # The run's place on its timeline, so one run's zones never pair another's.
+    seq: int = 0
     # Zone markers since the run began or the profiler last flushed, which empties it.
     markers: int = 0
     full: bool = False
@@ -400,6 +402,8 @@ class ZoneIntervals:
     out_of_order: int
     # Whether the log holds an accumulate-mode flush, which the per-run count misreads.
     accumulated: bool
+    # Whether the log records timestamped data, which shares the buffer with zones.
+    timestamped: bool
     # Rows left out for a slot, core, run or cycle count that is not a finite number.
     malformed: int
     # Rows of timelines past `MAX_ZONE_TIMELINES`, which were not followed.
@@ -1295,9 +1299,13 @@ class DeviceLogProfilerQueries:
         zone_starts: Counter = Counter()
         pairer = _ZonePairer(start_token, end_token)
         across_flush = out_of_order = malformed = untracked = 0
-        accumulated = False
+        accumulated = timestamped = False
+        displaced = 0
         # A firmware or kernel zone has its own slot, so a full buffer never cuts it.
         reserved_zone = zone.endswith(("-FW", "-KERNEL"))
+        # A firmware zone starts before the kernel start that opens its run, so it pairs
+        # by run host ID; any other zone pairs within its own run.
+        firmware_zone = zone.endswith("-FW")
 
         def close(timeline: RiscTimeline, run: _OpenRun) -> None:
             if not run.starts:
@@ -1311,6 +1319,7 @@ class DeviceLogProfilerQueries:
             names = chunk["zone name"].astype(str).str.strip()
             phases = chunk[phase_column].astype(str).str.strip()
             starts = phases == start_token
+            timestamped = timestamped or bool(phases.str.startswith("TS_").any())
             for name, count in names[starts].value_counts().items():
                 if name in zone_starts or len(zone_starts) < MAX_COUNTED_ZONE_NAMES:
                     zone_starts[name] += count
@@ -1359,7 +1368,7 @@ class DeviceLogProfilerQueries:
                     run = open_runs[timeline] = _OpenRun(run_id)
                 elif run.run_id != run_id or kernel_start:
                     close(timeline, run)
-                    run = open_runs[timeline] = _OpenRun(run_id)
+                    run = open_runs[timeline] = _OpenRun(run_id, seq=run.seq + 1)
 
                 if marker and name.startswith(PROFILER_ZONE_PREFIX):
                     run.markers = 0
@@ -1370,31 +1379,40 @@ class DeviceLogProfilerQueries:
                     run.full = run.full or run.markers >= L1_ZONE_MARKER_CAPACITY
                 if name != zone:
                     continue
-                pairer.offer((timeline, run_id), phase, cycles)
+                key = (timeline, run_id if firmware_zone else run.seq)
                 if phase != start_token:
+                    pairer.offer(key, phase, cycles)
                     continue
+                # The pairer keeps one open start a key, so a start replaced unended
+                # would otherwise go uncounted.
+                displaced += key in pairer.open_starts
+                pairer.offer(key, phase, cycles)
                 repeats = timelines.setdefault(timeline, ZoneRepeats())
                 repeats.occurrences += 1
                 run.starts += 1
+                if run.last_start is not None and cycles < run.last_start:
+                    out_of_order += 1
+                    continue
                 if run.last_start is not None:
                     if run.flush_pending:
                         across_flush += 1
-                    elif cycles >= run.last_start:
-                        repeats.intervals.append(cycles - run.last_start)
                     else:
-                        out_of_order += 1
+                        repeats.intervals.append(cycles - run.last_start)
                 run.flush_pending = False
                 run.last_start = cycles
 
         for timeline, run in open_runs.items():
             close(timeline, run)
+        pairing = pairer.pairing(self.DEVICE_LOG_FILE)
+        pairing["unmatched_starts"] += displaced
         return ZoneIntervals(
             timelines=timelines,
             zone_starts=zone_starts,
-            pairing=pairer.pairing(self.DEVICE_LOG_FILE),
+            pairing=pairing,
             across_flush=across_flush,
             out_of_order=out_of_order,
             accumulated=accumulated,
+            timestamped=timestamped,
             malformed=malformed,
             untracked=untracked,
         )

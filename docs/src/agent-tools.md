@@ -686,7 +686,7 @@ starts once per run, as a firmware or kernel zone does, has none. The `trace id`
 `trace id counter` cells are not read: on a real capture they fill in partway through a
 run. tt-metal writes each RISC's markers in time order, which lets the log be read in one
 pass holding one open run per RISC; a start earlier than the one before it is left out and
-counted in a caveat. An interval that spans one of the device profiler's own zones, named
+counted in a caveat, and the next interval runs from the last start kept. An interval that spans one of the device profiler's own zones, named
 `PROFILER-…`, such as `PROFILER-NOC-QUICK-PUSH` when it flushes a full buffer partway
 through a run, is left out and counted too, since it times the profiler as well. A RISC's
 L1 profiler buffer holds 250 zone markers per kernel run, a start and an end each, beside
@@ -696,13 +696,17 @@ whose zone markers reached 250 since it began or since the profiler last flushed
 `runs_at_marker_limit`, and a caveat says it can be missing occurrences from then until the
 run ended or the profiler flushed; a firmware or kernel zone has a slot of its own and never
 counts. Only zone markers are counted, so a
-run that also records timestamped data fills the buffer short of that and goes uncounted.
+run that also records timestamped data fills the buffer short of that and goes uncounted;
+a log with timestamped data (`TS_` rows, such as NoC traces) gets a caveat saying so.
 The count follows tt-metal's default profiler mode, where each kernel run starts with an
 empty buffer. In its accumulate mode (`TT_METAL_PROFILER_ACCUMULATE`) one buffer spans
 several runs, so the count can miss a run; such a log holds `PROFILER-DRAM-PUSH` or
 `PROFILER-NOC-FLUSH` zones, and a caveat says so. Starts and ends of the zone that did not pair are
 counted in a caveat, since an interval across a dropped start spans two occurrences. A zone
-the log does not start is refused with the zones it does, most started first.
+pairs only within its run, except a firmware zone, which starts before the kernel start
+that opens its run, and a start replaced before its end counts as unpaired. A zone the log
+does not start is refused with the zones it does, most started first, and one whose every
+start was unreadable is refused saying so.
 
 **A performance row and a profiler operation are linked by order, not by a shared id.**
 Neither report records the other's id, so when a handle is loaded with both, the tools

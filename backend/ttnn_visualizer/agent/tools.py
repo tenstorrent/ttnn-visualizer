@@ -1439,6 +1439,15 @@ def zone_intervals(
         # The server records only a ValueError as a refusal.
         raise ValueError(str(error)) from error
     if not read.timelines:
+        unreadable = read.zone_starts.get(name, 0)
+        if unreadable:
+            raise ValueError(
+                f"{name!r} starts {unreadable} times in "
+                f"{DeviceLogProfilerQueries.DEVICE_LOG_FILE}, but none could be read: "
+                "each has a slot, core, run or cycle count that is not a number, or "
+                f"lies on a core-RISC timeline past the {MAX_ZONE_TIMELINES} followed "
+                "at once"
+            )
         raise ValueError(_unknown_zone(name, read.zone_starts))
 
     by_device: Dict[int, List[Tuple[Tuple[int, int, str], ZoneRepeats]]] = defaultdict(
@@ -1515,16 +1524,25 @@ def zone_intervals(
 def _zone_interval_caveats(zone: str, read: ZoneIntervals, recurring: int) -> List[str]:
     caveats = []
     timelines = len(read.timelines)
-    if not recurring:
+    # A run counts once per start's timeline, so more starts than runs means a repeat.
+    repeated = any(
+        repeats.occurrences > repeats.runs for repeats in read.timelines.values()
+    )
+    if not repeated:
         caveats.append(
             f"{zone!r} never started twice in one run on any core's RISC, so it has no "
             "intervals: a firmware or kernel zone marks each run once, and a zone "
             "inside a loop needs two iterations in one run."
         )
+    elif not recurring:
+        caveats.append(
+            f"{zone!r} started more than once in a run, but none of its intervals is "
+            "usable: each was left out for a reason given below."
+        )
     elif recurring < timelines:
         caveats.append(
-            f"{timelines - recurring} of {timelines} core-RISC timelines started "
-            f"{zone!r} at most once a run, so they have no intervals and are not ranked."
+            f"{timelines - recurring} of {timelines} core-RISC timelines have no usable "
+            f"intervals of {zone!r}, so they are not ranked."
         )
     full_runs = sum(repeats.full_runs for repeats in read.timelines.values())
     if full_runs:
@@ -1545,6 +1563,13 @@ def _zone_interval_caveats(zone: str, read: ZoneIntervals, recurring: int) -> Li
             "This log holds PROFILER-DRAM-PUSH or PROFILER-NOC-FLUSH zones, which "
             "tt-metal writes only in its accumulate mode, where one L1 buffer spans "
             "several runs: runs_at_marker_limit can miss a run whose zones it cut short."
+        )
+    if read.timestamped:
+        caveats.append(
+            "This log also records timestamped data (TS_ rows, such as NoC traces), "
+            "which shares the L1 buffer with zones but is not counted, so a run can "
+            "fill it short of the count: runs_at_marker_limit can miss a run that lost "
+            "zones."
         )
     pairing = read.pairing
     if pairing["unmatched_starts"] or pairing["unmatched_ends"]:
