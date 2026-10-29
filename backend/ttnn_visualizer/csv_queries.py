@@ -33,6 +33,7 @@ from typing import (
     Literal,
     NamedTuple,
     Optional,
+    Sequence,
     Set,
     Tuple,
     Union,
@@ -229,6 +230,13 @@ MAX_OPEN_ZONE_STARTS = 200_000
 L1_ZONE_MARKER_CAPACITY = 250
 # The device profiler's own zones, such as a full buffer's flush partway through a run.
 PROFILER_ZONE_PREFIX = "PROFILER-"
+# The firmware's own zones, in slots of their own, as tt-metal's device analyses match
+# them: a firmware zone wraps each run, and a kernel zone starts it.
+FIRMWARE_ZONE_SUFFIX = "-FW"
+KERNEL_ZONE_SUFFIX = "-KERNEL"
+RESERVED_ZONE_SUFFIXES = (FIRMWARE_ZONE_SUFFIX, KERNEL_ZONE_SUFFIX)
+# How a timestamped data row's `type` begins (TS_DATA and kin); it shares the buffer.
+TIMESTAMPED_PHASE_PREFIX = "TS_"
 # Flushes tt-metal writes only in accumulate mode, where one buffer spans several runs.
 ACCUMULATE_FLUSH_ZONES = frozenset({"PROFILER-DRAM-PUSH", "PROFILER-NOC-FLUSH"})
 # Ceiling on core-RISC timelines followed at once: one per slot, core and RISC, so about
@@ -347,7 +355,7 @@ class CoreSpans:
 RiscTimeline = Tuple[int, int, int, str]
 
 
-@dataclass
+@dataclass(slots=True)
 class ZoneRepeats:
     """One zone's starts on one RISC timeline, and the cycles between them in a run."""
 
@@ -373,7 +381,21 @@ def interval_statistics(
     return float(np.median(pooled)), int(pooled.min()), int(pooled.max())
 
 
-@dataclass
+def _whole_number_rows(
+    chunk: pd.DataFrame, columns: Sequence[str]
+) -> Tuple[pd.DataFrame, np.ndarray]:
+    """The rows whose ``columns`` all read as finite numbers, those columns as int64,
+    and the mask that chose them, so each caller counts the rest its own way."""
+    numbers = chunk[list(columns)].apply(pd.to_numeric, errors="coerce")
+    finite = np.isfinite(numbers.to_numpy(dtype=float)).all(axis=1)
+    # A blank cell elsewhere makes pandas read a column as floats; keys stay ints.
+    whole = chunk[finite].assign(
+        **{column: numbers[column][finite].astype("int64") for column in columns}
+    )
+    return whole, finite
+
+
+@dataclass(slots=True)
 class _OpenRun:
     """What a RISC timeline's current run has recorded, as far as the log has read."""
 
@@ -394,8 +416,10 @@ class ZoneIntervals:
     """What `query_zone_intervals` read of one zone."""
 
     timelines: Dict[RiscTimeline, ZoneRepeats]
-    # Starts per zone name across the log, for a refusal to list.
+    # Starts per zone name across the log, for a refusal to list, and whether names past
+    # `MAX_COUNTED_ZONE_NAMES` went uncounted; the zone asked for is always counted.
     zone_starts: Counter
+    zone_names_capped: bool
     pairing: Dict[str, int]
     # Intervals left out: across one of the profiler's own zones, or out of time order.
     across_flush: int
@@ -408,6 +432,9 @@ class ZoneIntervals:
     malformed: int
     # Rows of timelines past `MAX_ZONE_TIMELINES`, which were not followed.
     untracked: int
+    # The zone's own starts left out for either reason, which a refusal reports.
+    malformed_starts: int
+    untracked_starts: int
 
 
 class _ZonePairer:
@@ -792,7 +819,7 @@ class DeviceLogProfilerQueries:
     # fact, neither required: a current capture writes `type` as ZONE_START /
     # ZONE_END, and a pre-rename one `zone phase` as begin/end (`PRE_RENAME_HEADER`
     # pins that shape). The agent inventory reads this too, so it never lists a
-    # log `core_spread` would refuse.
+    # log `core_spread` or `zone_intervals` would refuse.
     ZONE_PHASE_TOKENS: Dict[str, Tuple[str, str]] = {
         "type": ("ZONE_START", "ZONE_END"),
         "zone phase": ("begin", "end"),
@@ -1062,8 +1089,8 @@ class DeviceLogProfilerQueries:
         """The device clock the log's first line names, or None where it names none.
 
         A zero clock is none: no cycle count can be read as time against it. The
-        agent's inventory and `core_spread` both ask this, so the tool is listed
-        exactly when it can read cycles as time.
+        agent's inventory, `core_spread` and `zone_intervals` all ask this, so each
+        tool is listed exactly when it can read cycles as time.
         """
         meta = cls.read_device_meta(instance)
         return meta.frequency if meta is not None and meta.frequency else None
@@ -1226,23 +1253,16 @@ class DeviceLogProfilerQueries:
             # BRISC-, NCRISC- and TRISC-KERNEL: the firmware zones wrap them, and
             # tt-metal's per-core figures read the kernels.
             chunk = chunk[
-                chunk["zone name"].astype(str).str.strip().str.endswith("-KERNEL")
+                chunk["zone name"]
+                .astype(str)
+                .str.strip()
+                .str.endswith(KERNEL_ZONE_SUFFIX)
             ]
-            numbers = chunk[list(self._SPAN_NUMBER_COLUMNS)].apply(
-                pd.to_numeric, errors="coerce"
-            )
-            finite = np.isfinite(numbers.to_numpy(dtype=float)).all(axis=1)
+            whole, finite = _whole_number_rows(chunk, self._SPAN_NUMBER_COLUMNS)
             if not finite.all():
                 malformed.update(chunk["run host ID"][~finite].astype(int).tolist())
-            # Whole numbers from here, so a blank cell elsewhere in a column, which
-            # makes pandas read it as floats, still keys and reports as ints.
-            kept = chunk[finite]
-            chunk = kept.assign(
-                **{
-                    column: numbers[column][finite].astype("int64")
-                    for column in self._SPAN_NUMBER_COLUMNS
-                },
-                **{"run host ID": kept["run host ID"].astype("int64")},
+            chunk = whole.assign(
+                **{"run host ID": whole["run host ID"].astype("int64")}
             )
             for zone, risc, slot, x, y, run_id, cycles, phase in zip(
                 *(chunk[column].tolist() for column in columns)
@@ -1299,13 +1319,13 @@ class DeviceLogProfilerQueries:
         zone_starts: Counter = Counter()
         pairer = _ZonePairer(start_token, end_token)
         across_flush = out_of_order = malformed = untracked = 0
-        accumulated = timestamped = False
-        displaced = 0
+        malformed_starts = untracked_starts = displaced = 0
+        accumulated = timestamped = zone_names_capped = False
         # A firmware or kernel zone has its own slot, so a full buffer never cuts it.
-        reserved_zone = zone.endswith(("-FW", "-KERNEL"))
+        reserved_zone = zone.endswith(RESERVED_ZONE_SUFFIXES)
         # A firmware zone starts before the kernel start that opens its run, so it pairs
         # by run host ID; any other zone pairs within its own run.
-        firmware_zone = zone.endswith("-FW")
+        firmware_zone = zone.endswith(FIRMWARE_ZONE_SUFFIX)
 
         def close(timeline: RiscTimeline, run: _OpenRun) -> None:
             if not run.starts:
@@ -1319,33 +1339,42 @@ class DeviceLogProfilerQueries:
             names = chunk["zone name"].astype(str).str.strip()
             phases = chunk[phase_column].astype(str).str.strip()
             starts = phases == start_token
-            timestamped = timestamped or bool(phases.str.startswith("TS_").any())
+            timestamped = timestamped or bool(
+                phases.str.startswith(TIMESTAMPED_PHASE_PREFIX).any()
+            )
             for name, count in names[starts].value_counts().items():
-                if name in zone_starts or len(zone_starts) < MAX_COUNTED_ZONE_NAMES:
+                if (
+                    name == zone
+                    or name in zone_starts
+                    or len(zone_starts) < MAX_COUNTED_ZONE_NAMES
+                ):
                     zone_starts[name] += count
+                else:
+                    zone_names_capped = True
             # Firmware and kernel zones have slots of their own, outside the L1 cap.
-            reserved = names.str.endswith(("-FW", "-KERNEL"))
-            kernel_starts = names.str.endswith("-KERNEL") & starts
+            reserved = names.str.endswith(RESERVED_ZONE_SUFFIXES)
+            kernel_starts = names.str.endswith(KERNEL_ZONE_SUFFIX) & starts
             markers = ~reserved & (starts | (phases == end_token))
-            kept = kernel_starts | markers | (names == zone)
+            wanted = names == zone
+            kept = kernel_starts | markers | wanted
             chunk = chunk[kept].assign(
                 **{
                     "zone name": names[kept],
+                    "RISC processor type": chunk["RISC processor type"][kept]
+                    .astype(str)
+                    .str.strip(),
                     phase_column: phases[kept],
                     "_kernel_start": kernel_starts[kept],
                     "_marker": markers[kept],
                 }
             )
 
-            numbers = chunk[number_columns].apply(pd.to_numeric, errors="coerce")
-            finite = np.isfinite(numbers.to_numpy(dtype=float)).all(axis=1)
+            whole, finite = _whole_number_rows(chunk, number_columns)
             malformed += int((~finite).sum())
-            chunk = chunk[finite].assign(
-                **{
-                    column: numbers[column][finite].astype("int64")
-                    for column in number_columns
-                }
+            malformed_starts += int(
+                (~finite & (wanted & starts)[kept].to_numpy()).sum()
             )
+            chunk = whole
 
             for (
                 name,
@@ -1359,11 +1388,12 @@ class DeviceLogProfilerQueries:
                 kernel_start,
                 marker,
             ) in zip(*(chunk[column].tolist() for column in row_columns)):
-                timeline = (slot, x, y, str(risc).strip())
+                timeline = (slot, x, y, risc)
                 run = open_runs.get(timeline)
                 if run is None:
                     if len(open_runs) >= MAX_ZONE_TIMELINES:
                         untracked += 1
+                        untracked_starts += name == zone and phase == start_token
                         continue
                     run = open_runs[timeline] = _OpenRun(run_id)
                 elif run.run_id != run_id or kernel_start:
@@ -1408,6 +1438,7 @@ class DeviceLogProfilerQueries:
         return ZoneIntervals(
             timelines=timelines,
             zone_starts=zone_starts,
+            zone_names_capped=zone_names_capped,
             pairing=pairing,
             across_flush=across_flush,
             out_of_order=out_of_order,
@@ -1415,6 +1446,8 @@ class DeviceLogProfilerQueries:
             timestamped=timestamped,
             malformed=malformed,
             untracked=untracked,
+            malformed_starts=malformed_starts,
+            untracked_starts=untracked_starts,
         )
 
     @staticmethod

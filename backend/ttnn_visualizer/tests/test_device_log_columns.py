@@ -87,6 +87,16 @@ PRE_RENAME_ROWS = [
 ]
 
 
+def modern_row(
+    slot, x, y, risc, cycles, zone, phase, run=1024, trace="", counter=""
+) -> str:
+    """One row in `MODERN_HEADER`'s layout."""
+    return (
+        f"{slot},{x},{y},{risc},1,{cycles},0,{run},{trace},{counter},"
+        f"{zone},{phase},1,k.cc,"
+    )
+
+
 def write_device_log(directory: Path, header: str, rows: list[str]) -> Path:
     """Write the layout the reader expects: preamble line, header, rows.
 

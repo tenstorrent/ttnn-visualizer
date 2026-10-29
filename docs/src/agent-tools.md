@@ -108,9 +108,9 @@ another rank's operation under the same id.
 | `l1_peak` | The run's L1 peak per bank, split into circular buffers, intra-operation tensors, persistent tensors and stale ones, with the operation holding it and the operations closest to it. |
 
 `top_ops`, `op_breakdown`, `program_cache`, `zone_timings`, `zone_intervals`, `core_spread`
-and `diff_reports` read the performance CSVs; the operation tools — `find_operations`, `operation_detail`,
-`memory_profile`, `tensor_flow`, `operation_provenance`, `errors`, `dram_fallbacks` and
-`l1_peak` — read the profiler report's SQLite database;
+and `diff_reports` read the performance CSVs; the operation tools — `find_operations`,
+`operation_detail`, `memory_profile`, `tensor_flow`, `operation_provenance`, `errors`,
+`dram_fallbacks` and `l1_peak` — read the profiler report's SQLite database;
 `load_report` opens both, since its whole job is saying which of the others apply. A capture can carry either, both, or — as far as these tools are concerned —
 neither, which is what makes `load_report`'s answer worth reading first.
 
@@ -123,10 +123,10 @@ loaded without a `performance_path` is refused and says so. `zone_timings` is li
 `time[cycles since reset]`), and has at least one data row. `zone_intervals` is listed only
 when `zone_timings` is, the device log marks zone starts and ends in a `type` or
 `zone phase` column, and its first line names a positive `CHIP_FREQ[MHz]`. `core_spread`
-is listed only when `zone_intervals` is and the performance CSV can be reported on. `top_ops`, `op_breakdown` and
-`program_cache` are listed only when the performance CSV can be reported on, and when it
-cannot, `performance_csv_problem` says why (`empty`, `no data rows`, `missing columns: …`, or
-that it cannot be read or decoded).
+is listed only when `zone_intervals` is and the performance CSV can be reported on.
+`top_ops`, `op_breakdown` and `program_cache` are listed only when the performance CSV can
+be reported on, and when it cannot, `performance_csv_problem` says why (`empty`,
+`no data rows`, `missing columns: …`, or that it cannot be read or decoded).
 Each database tool is checked against the tables it actually reads, so a truncated
 capture that holds `operations` but not `buffers` is reported as answering
 `find_operations` and nothing else, rather than advertising every tool and failing most
@@ -676,37 +676,41 @@ from that read, with the clock it was read at.
 
 `zone_intervals` times a zone that recurs within one kernel run. An interval runs from one
 start of the zone to its next start on the same core's RISC, so for a zone placed once per
-loop iteration it is one iteration's time. Devices are read apart, never pooled, since each
-runs its own clock: `by_device` gives each device's median, minimum and maximum interval,
-and `by_core_risc` ranks the core-RISC timelines that have intervals by median interval,
-slowest first, up to `limit`, with `timeline_count` counting them all. A run begins at
-each kernel start, which also parts a traced operation's replays, and at each change of
-`run host ID`, so the dispatch between two runs is never an interval, and a zone that
-starts once per run, as a firmware or kernel zone does, has none. The `trace id` and
+loop iteration it is one iteration's time. Devices are read apart, never pooled, since
+each runs its own clock: `by_device` gives each device's median, minimum and maximum
+interval, and `by_core_risc` ranks the core-RISC timelines that have intervals by median
+interval, slowest first, up to `limit`, with `timeline_count` counting them all. A run
+begins at each kernel start, which also parts a traced operation's replays, and at each
+change of `run host ID`, so the dispatch between two runs is never an interval, and a zone
+that starts once per run, as a firmware or kernel zone does, has none. The `trace id` and
 `trace id counter` cells are not read: on a real capture they fill in partway through a
 run. tt-metal writes each RISC's markers in time order, which lets the log be read in one
 pass holding one open run per RISC; a start earlier than the one before it is left out and
-counted in a caveat, and the next interval runs from the last start kept. An interval that spans one of the device profiler's own zones, named
-`PROFILER-…`, such as `PROFILER-NOC-QUICK-PUSH` when it flushes a full buffer partway
-through a run, is left out and counted too, since it times the profiler as well. A RISC's
-L1 profiler buffer holds 250 zone markers per kernel run, a start and an end each, beside
-the firmware and kernel zones' own slots, and records nothing past them until the run
-ends or the profiler flushes it, so one run shows at most 125 zones between flushes. A run
-whose zone markers reached 250 since it began or since the profiler last flushed counts in
-`runs_at_marker_limit`, and a caveat says it can be missing occurrences from then until the
-run ended or the profiler flushed; a firmware or kernel zone has a slot of its own and never
-counts. Only zone markers are counted, so a
-run that also records timestamped data fills the buffer short of that and goes uncounted;
-a log with timestamped data (`TS_` rows, such as NoC traces) gets a caveat saying so.
-The count follows tt-metal's default profiler mode, where each kernel run starts with an
-empty buffer. In its accumulate mode (`TT_METAL_PROFILER_ACCUMULATE`) one buffer spans
-several runs, so the count can miss a run; such a log holds `PROFILER-DRAM-PUSH` or
-`PROFILER-NOC-FLUSH` zones, and a caveat says so. Starts and ends of the zone that did not pair are
-counted in a caveat, since an interval across a dropped start spans two occurrences. A zone
-pairs only within its run, except a firmware zone, which starts before the kernel start
-that opens its run, and a start replaced before its end counts as unpaired. A zone the log
-does not start is refused with the zones it does, most started first, and one whose every
-start was unreadable is refused saying so.
+counted in a caveat, and the next interval runs from the last start kept. An interval that
+spans one of the device profiler's own zones, named `PROFILER-…`, such as
+`PROFILER-NOC-QUICK-PUSH` when it flushes a full buffer partway through a run, is left out
+and counted too, since it times the profiler as well. A RISC's L1 profiler buffer holds
+250 zone markers per kernel run, a start and an end each, beside the firmware and kernel
+zones' own slots, and records nothing past them until the run ends or the profiler flushes
+it, so one run shows at most 125 zones between flushes. A run whose zone markers reached
+250 since it began or since the profiler last flushed counts in `runs_at_marker_limit`,
+and a caveat says it can be missing occurrences from then until the run ended or the
+profiler flushed; a firmware or kernel zone has a slot of its own and never counts. Only
+zone markers are counted, so a run that also records timestamped data fills the buffer
+short of that and goes uncounted; a log with timestamped data (`TS_` rows, such as NoC
+traces) gets a caveat saying so. The count follows tt-metal's default profiler mode, where
+each kernel run starts with an empty buffer. In its accumulate mode
+(`TT_METAL_PROFILER_ACCUMULATE`) one buffer spans several runs, so the count can miss a
+run; such a log holds `PROFILER-DRAM-PUSH` or `PROFILER-NOC-FLUSH` zones, and a caveat
+says so. Starts and ends of the zone that did not pair are counted in a caveat, since an
+interval across a dropped start spans two occurrences. A zone pairs only within its run,
+except a firmware zone, which starts before the kernel start that opens its run, and a
+start replaced before its end counts as unpaired. A zone the log does not start is refused
+with the zones it does, most started first, leaving out any name longer than 256
+characters, which is the capture's text, not the tool's; a zone asked for by a longer name
+is refused. A zone whose every start was unreadable is refused with how many had a cell
+that is not a number and how many lay past the 200,000 core-RISC timelines followed at
+once.
 
 **A performance row and a profiler operation are linked by order, not by a shared id.**
 Neither report records the other's id, so when a handle is loaded with both, the tools

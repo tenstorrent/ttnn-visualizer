@@ -27,6 +27,7 @@ from ttnn_visualizer.tests.test_agent_tools import (
 from ttnn_visualizer.tests.test_device_log_columns import (
     MODERN_HEADER,
     PRE_RENAME_HEADER,
+    modern_row,
     write_device_log,
 )
 
@@ -35,28 +36,21 @@ RUN = 1024
 LOOP = "LOOP"
 
 
-def _marker(slot, x, y, risc, cycles, zone, phase, run=RUN, trace="", counter=""):
-    return (
-        f"{slot},{x},{y},{risc},1,{cycles},0,{run},{trace},{counter},"
-        f"{zone},{phase},1,k.cc,"
-    )
-
-
 def _zone(slot, x, y, risc, start, end, zone=LOOP, **ids):
     return [
-        _marker(slot, x, y, risc, start, zone, "ZONE_START", **ids),
-        _marker(slot, x, y, risc, end, zone, "ZONE_END", **ids),
+        modern_row(slot, x, y, risc, start, zone, "ZONE_START", **ids),
+        modern_row(slot, x, y, risc, end, zone, "ZONE_END", **ids),
     ]
 
 
 def _run(slot, x, y, risc, kernel_start, loop_starts, zone=LOOP, width=100, **ids):
     """One kernel run on one RISC, with ``zone`` starting at each of ``loop_starts``."""
     kernel = f"{risc.split('_')[0]}-KERNEL"
-    rows = [_marker(slot, x, y, risc, kernel_start, kernel, "ZONE_START", **ids)]
+    rows = [modern_row(slot, x, y, risc, kernel_start, kernel, "ZONE_START", **ids)]
     for start in loop_starts:
         rows += _zone(slot, x, y, risc, start, start + width, zone=zone, **ids)
     end = max(loop_starts, default=kernel_start) + width + 1
-    rows.append(_marker(slot, x, y, risc, end, kernel, "ZONE_END", **ids))
+    rows.append(modern_row(slot, x, y, risc, end, kernel, "ZONE_END", **ids))
     return rows
 
 
@@ -147,6 +141,19 @@ class TestIntervals:
             "runs_at_marker_limit": 0,
         }
 
+    def test_a_tied_median_ranks_the_larger_maximum_first(self, tmp_path):
+        rows = [
+            *_run(0, 1, 1, "BRISC", 0, [100, 1100, 2100, 4100]),
+            *_run(0, 2, 1, "BRISC", 0, [100, 1100, 2100, 5100]),
+        ]
+
+        answer = _intervals(tmp_path, rows)
+
+        assert [(entry["x"], entry["max_us"]) for entry in answer["by_core_risc"]] == [
+            (2, 3.0),
+            (1, 2.0),
+        ]
+
     def test_timelines_rank_slowest_first_and_are_capped(self, tmp_path):
         rows = [
             *_run(0, 1, 1, "BRISC", 0, [100, 1100]),
@@ -224,11 +231,11 @@ class TestRuns:
         profiler's flush, partway through one zone of one kernel run."""
         flushed = {"trace": 0, "counter": 1}
         rows = [
-            _marker(0, 1, 1, "NCRISC", 0, "NCRISC-KERNEL", "ZONE_START"),
+            modern_row(0, 1, 1, "NCRISC", 0, "NCRISC-KERNEL", "ZONE_START"),
             *_zone(0, 1, 1, "NCRISC", 100, 200),
-            _marker(0, 1, 1, "NCRISC", 1100, LOOP, "ZONE_START"),
+            modern_row(0, 1, 1, "NCRISC", 1100, LOOP, "ZONE_START"),
             *_zone(0, 1, 1, "NCRISC", 1150, 1480, zone="PROFILER-NOC-QUICK-SEND")[:1],
-            _marker(
+            modern_row(
                 0,
                 1,
                 1,
@@ -238,10 +245,10 @@ class TestRuns:
                 "ZONE_END",
                 **flushed,
             ),
-            _marker(0, 1, 1, "NCRISC", 1500, LOOP, "ZONE_END", **flushed),
+            modern_row(0, 1, 1, "NCRISC", 1500, LOOP, "ZONE_END", **flushed),
             *_zone(0, 1, 1, "NCRISC", 2100, 2200, **flushed),
             *_zone(0, 1, 1, "NCRISC", 3100, 3200, **flushed),
-            _marker(0, 1, 1, "NCRISC", 3300, "NCRISC-KERNEL", "ZONE_END", **flushed),
+            modern_row(0, 1, 1, "NCRISC", 3300, "NCRISC-KERNEL", "ZONE_END", **flushed),
         ]
 
         answer = _intervals(tmp_path, rows)
@@ -393,9 +400,9 @@ class TestMarkerLimit:
 
     def test_firmware_and_kernel_zones_have_slots_of_their_own(self, tmp_path):
         rows = [
-            _marker(0, 1, 1, "ERISC", 0, "ERISC-FW", "ZONE_START"),
+            modern_row(0, 1, 1, "ERISC", 0, "ERISC-FW", "ZONE_START"),
             *_run(0, 1, 1, "ERISC", 10, _every(100, 1000, self.CAPACITY // 2 - 1)),
-            _marker(0, 1, 1, "ERISC", 10**9, "ERISC-FW", "ZONE_END"),
+            modern_row(0, 1, 1, "ERISC", 10**9, "ERISC-FW", "ZONE_END"),
         ]
 
         answer = _intervals(tmp_path, rows)
@@ -470,7 +477,7 @@ def _cycles(row: str) -> int:
 class TestGaps:
     def test_timestamped_data_is_said_to_share_the_buffer(self, tmp_path):
         rows = _run(0, 1, 1, "NCRISC", 0, [100, 1100])
-        rows.insert(2, _marker(0, 1, 1, "NCRISC", 150, "", "TS_DATA"))
+        rows.insert(2, modern_row(0, 1, 1, "NCRISC", 150, "", "TS_DATA"))
 
         answer = _intervals(tmp_path, rows)
 
@@ -479,8 +486,8 @@ class TestGaps:
 
     def test_unpaired_starts_and_ends_are_said(self, tmp_path):
         rows = _run(0, 1, 1, "BRISC", 0, [100, 1100])[:-1] + [
-            _marker(0, 1, 1, "BRISC", 2100, LOOP, "ZONE_START"),
-            _marker(0, 1, 1, "BRISC", 3000, "BRISC-KERNEL", "ZONE_END"),
+            modern_row(0, 1, 1, "BRISC", 2100, LOOP, "ZONE_START"),
+            modern_row(0, 1, 1, "BRISC", 3000, "BRISC-KERNEL", "ZONE_END"),
         ]
 
         answer = _intervals(tmp_path, rows)
@@ -490,10 +497,10 @@ class TestGaps:
 
     def test_a_start_replaced_before_its_end_is_unpaired(self, tmp_path):
         rows = [
-            _marker(0, 1, 1, "BRISC", 0, "BRISC-KERNEL", "ZONE_START"),
-            _marker(0, 1, 1, "BRISC", 100, LOOP, "ZONE_START"),
+            modern_row(0, 1, 1, "BRISC", 0, "BRISC-KERNEL", "ZONE_START"),
+            modern_row(0, 1, 1, "BRISC", 100, LOOP, "ZONE_START"),
             *_zone(0, 1, 1, "BRISC", 1100, 1200),
-            _marker(0, 1, 1, "BRISC", 1300, "BRISC-KERNEL", "ZONE_END"),
+            modern_row(0, 1, 1, "BRISC", 1300, "BRISC-KERNEL", "ZONE_END"),
         ]
 
         answer = _intervals(tmp_path, rows)
@@ -505,10 +512,10 @@ class TestGaps:
         one run host ID, are two unpaired markers, not one zone."""
         rows = [
             *_run(0, 1, 1, "BRISC", 0, [100, 1100])[:-1],
-            _marker(0, 1, 1, "BRISC", 2100, LOOP, "ZONE_START"),
-            _marker(0, 1, 1, "BRISC", 3000, "BRISC-KERNEL", "ZONE_END"),
-            _marker(0, 1, 1, "BRISC", 50_000, "BRISC-KERNEL", "ZONE_START"),
-            _marker(0, 1, 1, "BRISC", 50_200, LOOP, "ZONE_END"),
+            modern_row(0, 1, 1, "BRISC", 2100, LOOP, "ZONE_START"),
+            modern_row(0, 1, 1, "BRISC", 3000, "BRISC-KERNEL", "ZONE_END"),
+            modern_row(0, 1, 1, "BRISC", 50_000, "BRISC-KERNEL", "ZONE_START"),
+            modern_row(0, 1, 1, "BRISC", 50_200, LOOP, "ZONE_END"),
         ]
 
         answer = _intervals(tmp_path, rows)
@@ -518,9 +525,9 @@ class TestGaps:
     def test_a_firmware_zone_pairs_across_its_kernel_start(self, tmp_path):
         """Its start comes before the kernel start that opens its run."""
         rows = [
-            _marker(0, 1, 1, "BRISC", 0, "BRISC-FW", "ZONE_START"),
+            modern_row(0, 1, 1, "BRISC", 0, "BRISC-FW", "ZONE_START"),
             *_run(0, 1, 1, "BRISC", 10, [100]),
-            _marker(0, 1, 1, "BRISC", 500, "BRISC-FW", "ZONE_END"),
+            modern_row(0, 1, 1, "BRISC", 500, "BRISC-FW", "ZONE_END"),
         ]
 
         answer = _intervals(tmp_path, rows, zone="BRISC-FW")
@@ -550,7 +557,7 @@ class TestGaps:
 
     def test_rows_that_are_not_numbers_are_left_out_and_counted(self, tmp_path):
         rows = _run(0, 1, 1, "BRISC", 0, [100, 1100, 2100])
-        rows.insert(3, _marker(0, 1, 1, "BRISC", "x", LOOP, "ZONE_START"))
+        rows.insert(3, modern_row(0, 1, 1, "BRISC", "x", LOOP, "ZONE_START"))
 
         answer = _intervals(tmp_path, rows)
 
@@ -558,6 +565,24 @@ class TestGaps:
         assert "1 rows have a slot, core, run or cycle count that is not a number" in (
             answer["caveat"]
         )
+
+    def test_starts_past_the_open_start_ceiling_say_the_log_is_malformed(
+        self, tmp_path
+    ):
+        rows = [
+            modern_row(0, 1, 1, "BRISC", 0, "BRISC-KERNEL", "ZONE_START"),
+            modern_row(0, 1, 1, "BRISC", 100, LOOP, "ZONE_START"),
+            modern_row(0, 2, 1, "BRISC", 0, "BRISC-KERNEL", "ZONE_START"),
+            modern_row(0, 2, 1, "BRISC", 100, LOOP, "ZONE_START"),
+        ]
+
+        with patch.object(csv_queries, "MAX_OPEN_ZONE_STARTS", 1):
+            answer = _intervals(tmp_path, rows)
+
+        assert (
+            "1 starts went unpaired past the open-zone ceiling, which a well-formed "
+            "capture does not reach: treat this log as malformed."
+        ) in answer["caveat"]
 
     def test_timelines_past_the_ceiling_are_left_out_and_counted(self, tmp_path):
         rows = [
@@ -576,14 +601,92 @@ class TestGaps:
 class TestRefusals:
     def test_a_zone_whose_starts_were_all_unreadable_says_so(self, tmp_path):
         rows = _run(0, 1, 1, "BRISC", 0, [100, 1100])
-        rows[1] = _marker(0, 1, 1, "BRISC", "x", LOOP, "ZONE_START")
-        rows[3] = _marker(0, 1, 1, "BRISC", "y", LOOP, "ZONE_START")
+        rows[1] = modern_row(0, 1, 1, "BRISC", "x", LOOP, "ZONE_START")
+        rows[3] = modern_row(0, 1, 1, "BRISC", "y", LOOP, "ZONE_START")
 
         with pytest.raises(ValueError) as refusal:
             _intervals(tmp_path, rows)
 
+        assert str(refusal.value) == (
+            "'LOOP' starts 2 times in profile_log_device.csv, but none could be read: "
+            "2 have a slot, core, run or cycle count that is not a number, and 0 lie "
+            "on core-RISC timelines past the 200000 followed at once"
+        )
+
+    def test_a_zone_past_the_timeline_ceiling_says_so(self, tmp_path):
+        rows = _run(0, 1, 1, "BRISC", 0, [100, 1100])
+
+        with (
+            patch.object(csv_queries, "MAX_ZONE_TIMELINES", 0),
+            patch.object(tools, "MAX_ZONE_TIMELINES", 0),
+            pytest.raises(ValueError) as refusal,
+        ):
+            _intervals(tmp_path, rows)
+
+        assert str(refusal.value).endswith(
+            ": 0 have a slot, core, run or cycle count that is not a number, and 2 lie "
+            "on core-RISC timelines past the 0 followed at once"
+        )
+
+    def test_the_zone_asked_for_is_counted_past_the_names_cap(self, tmp_path):
+        """Uncounted, its unreadable starts would read as a zone the log lacks."""
+        rows = [
+            *_run(0, 2, 1, "BRISC", 0, [100], zone="OTHER"),
+            modern_row(0, 1, 1, "BRISC", "x", LOOP, "ZONE_START"),
+        ]
+
+        with (
+            patch.object(csv_queries, "MAX_COUNTED_ZONE_NAMES", 1),
+            pytest.raises(ValueError) as refusal,
+        ):
+            _intervals(tmp_path, rows)
+
         assert str(refusal.value).startswith(
-            "'LOOP' starts 2 times in profile_log_device.csv, but none could be read"
+            "'LOOP' starts 1 times in profile_log_device.csv, but none could be read"
+        )
+
+    def test_a_refusal_says_when_the_zone_names_were_capped(self, tmp_path):
+        rows = _run(0, 1, 1, "BRISC", 0, [100, 1100])
+
+        with (
+            patch.object(csv_queries, "MAX_COUNTED_ZONE_NAMES", 1),
+            patch.object(tools, "MAX_COUNTED_ZONE_NAMES", 1),
+            pytest.raises(ValueError) as refusal,
+        ):
+            _intervals(tmp_path, rows, zone="LOPO")
+
+        assert str(refusal.value).endswith(
+            "; the log names more zones than the 1 counted"
+        )
+
+    def test_an_oversized_zone_name_is_not_listed(self, tmp_path):
+        """It is the capture's text, read by an agent that acts on a refusal."""
+        long_name = "Z" * (tools.MAX_ZONE_NAME_LENGTH + 1)
+        rows = [
+            *_run(0, 1, 1, "BRISC", 0, [100, 1100]),
+            *_run(0, 2, 1, "BRISC", 0, [100], zone=long_name),
+        ]
+
+        with pytest.raises(ValueError) as refusal:
+            _intervals(tmp_path, rows, zone="LOPO")
+
+        assert long_name not in str(refusal.value)
+        assert str(refusal.value).endswith(
+            "; 1 more have names longer than 256 characters, which are not listed"
+        )
+
+    def test_an_oversized_zone_argument_is_refused(self, tmp_path):
+        with pytest.raises(ValueError, match="zone is 257 characters; a zone name is"):
+            _intervals(tmp_path, _run(0, 1, 1, "BRISC", 0, [100]), zone="Q" * 257)
+
+    def test_a_log_with_no_zone_starts_says_so(self, tmp_path):
+        rows = [modern_row(0, 1, 1, "BRISC", 100, LOOP, "ZONE_END")]
+
+        with pytest.raises(ValueError) as refusal:
+            _intervals(tmp_path, rows)
+
+        assert str(refusal.value) == (
+            "profile_log_device.csv records no zone starts, so there is no 'LOOP' to time"
         )
 
     def test_an_unknown_zone_names_the_zones_the_log_starts(self, tmp_path):
@@ -660,6 +763,26 @@ class TestServer:
         assert '"median_us":1.0' in result["content"][0]["text"]
         assert outcome is McpToolOutcome.OK
 
+    @pytest.mark.parametrize(
+        "header, rows, zone, refusal",
+        [
+            (MODERN_HEADER, None, "LOPO", "no zone named 'LOPO'"),
+            (UNTYPED_HEADER, UNTYPED_ROWS, "MATMUL", "marks no zone starts or ends"),
+        ],
+    )
+    def test_a_refusal_through_the_server_is_recorded_as_one(
+        self, tmp_path, header, rows, zone, refusal
+    ):
+        registry = ReportRegistry()
+        write_device_log(tmp_path, header, rows or _run(0, 1, 1, "BRISC", 0, [1]))
+        load_report(registry, performance_path=str(tmp_path))
+
+        result, outcome = self._call(registry, {"handle": "report-1", "zone": zone})
+
+        assert result["isError"] is True
+        assert refusal in result["content"][0]["text"]
+        assert outcome is McpToolOutcome.REFUSED
+
     def test_a_profiler_only_handle_is_refused_as_the_agents_to_fix(self, tmp_path):
         registry = ReportRegistry()
         load_report(registry, profiler_path=str(_write_devices(tmp_path, [(0, 0)])))
@@ -682,6 +805,7 @@ class TestServer:
         ]
 
         assert schema["required"] == ["handle", "zone"]
+        assert schema["properties"]["zone"]["maxLength"] == tools.MAX_ZONE_NAME_LENGTH
 
 
 def test_the_smoke_capture_reads_end_to_end():

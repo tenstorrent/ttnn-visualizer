@@ -25,6 +25,7 @@ from ttnn_visualizer.csv_queries import (
     ACCUMULATE_FLUSH_ZONES,
     L1_ZONE_MARKER_CAPACITY,
     MAX_LISTED_SIGNPOSTS,
+    MAX_ZONE_TIMELINES,
     PROFILER_ZONE_PREFIX,
 )
 from ttnn_visualizer.tests.docs_parity import reject_duplicates
@@ -193,6 +194,8 @@ def test_the_page_carries_the_zone_intervals_caveats():
     assert f"at most {L1_ZONE_MARKER_CAPACITY // 2} zones" in page
     assert f"zones, named `{PROFILER_ZONE_PREFIX}…`" in page
     assert all(f"`{name}`" in page for name in ACCUMULATE_FLUSH_ZONES)
+    assert f"longer than {tools.MAX_ZONE_NAME_LENGTH} characters" in page
+    assert f"past the {MAX_ZONE_TIMELINES:,} core-RISC timelines" in page
     assert "never pooled, since each runs its own clock" in page
 
 

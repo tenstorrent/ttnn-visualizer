@@ -32,6 +32,7 @@ from ttnn_visualizer.tests.test_device_log_columns import (
     MODERN_HEADER,
     PRE_RENAME_HEADER,
     PREAMBLE,
+    modern_row,
     write_device_log,
 )
 
@@ -43,8 +44,8 @@ def _zone(slot, x, y, risc, start, end, run=RUN, zone=None):
     """A paired zone in `MODERN_HEADER`'s layout, a kernel unless named otherwise."""
     zone = zone or f"{risc.split('_')[0]}-KERNEL"
     return [
-        f"{slot},{x},{y},{risc},1,{start},0,{run},,,{zone},ZONE_START,1,k.cc,",
-        f"{slot},{x},{y},{risc},2,{end},0,{run},,,{zone},ZONE_END,1,k.cc,",
+        modern_row(slot, x, y, risc, start, zone, "ZONE_START", run=run),
+        modern_row(slot, x, y, risc, end, zone, "ZONE_END", run=run),
     ]
 
 
