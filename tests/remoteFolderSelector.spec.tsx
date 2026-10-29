@@ -250,7 +250,7 @@ it('clears localStorage and resets state when removing the only connection', asy
     getButtonWithText(CONNECTION_NAME).click();
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
 
-    fireEvent.click(screen.getByLabelText(getDeleteConnectionLabel(remoteConnection[0])));
+    fireEvent.click(await screen.findByLabelText(getDeleteConnectionLabel(remoteConnection[0]), {}, WAIT_FOR_OPTIONS));
     fireEvent.click(screen.getByRole('button', { name: CONFIRM_DELETE_LABEL }));
 
     // Verify UI resets to no connection state
@@ -277,7 +277,7 @@ it('empties the folder lists rather than reading the no-connection cache key whe
     getButtonWithText(CONNECTION_NAME).click();
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
 
-    fireEvent.click(screen.getByLabelText(getDeleteConnectionLabel(remoteConnection[0])));
+    fireEvent.click(await screen.findByLabelText(getDeleteConnectionLabel(remoteConnection[0]), {}, WAIT_FOR_OPTIONS));
     fireEvent.click(screen.getByRole('button', { name: CONFIRM_DELETE_LABEL }));
 
     await waitFor(() => expect(getButtonWithText(NO_CONNECTION)).not.toBeNull(), WAIT_FOR_OPTIONS);
@@ -355,7 +355,7 @@ it('keeps the selected connection when a different one is removed from its dropd
     getConnectionTrigger(lastConnection).click();
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
 
-    fireEvent.click(screen.getByLabelText(getDeleteConnectionLabel(middleConnection)));
+    fireEvent.click(await screen.findByLabelText(getDeleteConnectionLabel(middleConnection), {}, WAIT_FOR_OPTIONS));
     fireEvent.click(screen.getByRole('button', { name: CONFIRM_DELETE_LABEL }));
 
     await waitFor(() => {
@@ -374,7 +374,7 @@ it('keeps the selected connection when a different one is removed from its dropd
     getConnectionTrigger(lastConnection).click();
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
 
-    const remainingRows = screen.getAllByTestId(TEST_IDS.REMOTE_CONNECTION_ROW);
+    const remainingRows = await screen.findAllByTestId(TEST_IDS.REMOTE_CONNECTION_ROW, {}, WAIT_FOR_OPTIONS);
 
     expect(remainingRows).toHaveLength(2);
     remainingRows.forEach((row) => expect(row.textContent).not.toContain(middleConnection.name));
@@ -415,7 +415,7 @@ it('applies an edit to a connection that is not selected without changing the se
     getButtonWithText(CONNECTION_NAME).click();
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
 
-    fireEvent.click(screen.getByLabelText(getEditConnectionLabel(otherConnection)));
+    fireEvent.click(await screen.findByLabelText(getEditConnectionLabel(otherConnection), {}, WAIT_FOR_OPTIONS));
     fireEvent.change(screen.getByLabelText(CONNECTION_NAME_LABEL), { target: { value: EDITED_CONNECTION_NAME } });
     fireEvent.click(getButtonWithText('Run tests'));
 
@@ -537,7 +537,7 @@ it('moves cached folder lists when an edit changes the host', async () => {
     getButtonWithText(CONNECTION_NAME).click();
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
 
-    fireEvent.click(screen.getByLabelText(getEditConnectionLabel(original)));
+    fireEvent.click(await screen.findByLabelText(getEditConnectionLabel(original), {}, WAIT_FOR_OPTIONS));
     fireEvent.change(screen.getByLabelText(SSH_HOST_LABEL), { target: { value: editedHost } });
     fireEvent.click(getButtonWithText('Run tests'));
 
@@ -1614,7 +1614,7 @@ const selectRemoteFolder = async (type: RemoteFolderType, remotePath: string) =>
 
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
 
-    screen.getByText(remotePath).click();
+    (await screen.findByText(remotePath, {}, WAIT_FOR_OPTIONS)).click();
 };
 
 const selectProfilerFolder = (remotePath: string) => selectRemoteFolder(ReportKind.PROFILER, remotePath);
@@ -1961,7 +1961,7 @@ const editConnection = async (connection: RemoteConnection) => {
     // Edit is a per-row action inside the connection dropdown, so the row has to be on screen.
     fireEvent.click(getConnectionTrigger(connection));
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
-    fireEvent.click(screen.getByLabelText(getEditConnectionLabel(connection)));
+    fireEvent.click(await screen.findByLabelText(getEditConnectionLabel(connection), {}, WAIT_FOR_OPTIONS));
     await waitFor(() => expect(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_NAME })).toBeTruthy());
 };
 

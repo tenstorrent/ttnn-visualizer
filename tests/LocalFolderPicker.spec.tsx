@@ -103,7 +103,7 @@ describe('LocalFolderPicker link badges', () => {
         fireEvent.click(screen.getByText('Select a report...'));
         await waitFor(testForPortal, WAIT_FOR_OPTIONS);
 
-        fireEvent.click(screen.getByLabelText(deleteLabel(folders[0])));
+        fireEvent.click(await screen.findByLabelText(deleteLabel(folders[0]), {}, WAIT_FOR_OPTIONS));
         expect(screen.getAllByText(/Are you sure you want to delete/).length).toBeGreaterThan(0);
 
         rerender(
@@ -144,7 +144,7 @@ describe('LocalFolderPicker link badges', () => {
         fireEvent.click(screen.getByText('Select a report...'));
         await waitFor(testForPortal, WAIT_FOR_OPTIONS);
 
-        fireEvent.click(screen.getByLabelText(deleteLabel(folders[0])));
+        fireEvent.click(await screen.findByLabelText(deleteLabel(folders[0]), {}, WAIT_FOR_OPTIONS));
 
         expect(document.querySelectorAll('[role="alertdialog"]')).toHaveLength(1);
     });
@@ -165,7 +165,7 @@ describe('LocalFolderPicker link badges', () => {
         fireEvent.click(screen.getByText('Select a report...'));
         await waitFor(testForPortal, WAIT_FOR_OPTIONS);
 
-        const secondRow = screen.getAllByTestId(TEST_IDS.FOLDER_PICKER_ROW)[1];
+        const secondRow = (await screen.findAllByTestId(TEST_IDS.FOLDER_PICKER_ROW, {}, WAIT_FOR_OPTIONS))[1];
         const secondRowFolder = folders[1];
 
         fireEvent.click(within(secondRow).getByLabelText(deleteLabel(secondRowFolder)));

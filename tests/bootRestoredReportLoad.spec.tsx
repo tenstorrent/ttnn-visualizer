@@ -259,7 +259,7 @@ describe('boot-restored reports on Home', () => {
 
         getAllButtonsWithText(RESTORED_PROFILER.reportName)[0].click();
         await waitFor(testForPortal);
-        screen.getByText(nextProfiler.reportName).click();
+        (await screen.findByText(nextProfiler.reportName)).click();
 
         await waitFor(() => expect(recordReportLoaded).toHaveBeenCalledTimes(1));
         expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.PROFILER, ReportSource.LOCAL_TT_METAL);
