@@ -53,6 +53,7 @@ from ttnn_visualizer.csv_queries import (
     MAX_ZONE_TIMELINES,
     REPORT_ROW_ID_OFFSET,
     SIGNPOST_OP_TYPE,
+    UNREADABLE_NUMBER,
     CoreSpan,
     CoreSpans,
     DegradedPerformanceReport,
@@ -1372,7 +1373,7 @@ def core_spread(
     if malformed:
         caveats.append(
             f"{malformed} kernel rows of these operations' call counts have a slot, "
-            "core or cycle count that is not a number, and were left out, so the "
+            f"core or cycle count {UNREADABLE_NUMBER}, and were left out, so the "
             "figures cover only the rows that were readable."
         )
     pairing_caveat = _pairing_caveat(
@@ -1452,9 +1453,9 @@ def _unreadable_zone(zone: str, read: ZoneIntervals) -> str:
     return (
         f"{zone!r} starts {read.zone_starts[zone]} times in "
         f"{DeviceLogProfilerQueries.DEVICE_LOG_FILE}, but none could be read: "
-        f"{read.malformed_starts} have a slot, core, run or cycle count that is not a "
-        f"finite number, and {read.untracked_starts} lie on core-RISC timelines past the "
-        f"{MAX_ZONE_TIMELINES} followed at once"
+        f"{read.malformed_starts} have a slot, core, run or cycle count "
+        f"{UNREADABLE_NUMBER}, and {read.untracked_starts} lie on core-RISC timelines "
+        f"past the {MAX_ZONE_TIMELINES} followed at once"
     )
 
 
@@ -1667,8 +1668,8 @@ def _zone_interval_caveats(zone: str, read: ZoneIntervals, recurring: int) -> Li
         )
     if read.malformed:
         caveats.append(
-            f"{read.malformed} rows have a slot, core, run or cycle count that is not a "
-            "finite number, and were left out."
+            f"{read.malformed} rows have a slot, core, run or cycle count "
+            f"{UNREADABLE_NUMBER}, and were left out."
         )
     if read.untracked:
         caveats.append(

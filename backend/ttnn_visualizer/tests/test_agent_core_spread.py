@@ -499,7 +499,7 @@ class TestFirmwareWindows:
 
 
 class TestUnreadableCells:
-    """A cell that is not a number costs its row, not every operation's answer."""
+    """A cell that cannot be read costs its row, not every operation's answer."""
 
     @pytest.mark.parametrize(
         "bad",
@@ -509,18 +509,37 @@ class TestUnreadableCells:
             _zone(0, 4, 1, "BRISC", "inf", "inf"),
             _zone(0, 4, 1, "BRISC", "nan", 9000),
             _zone("x", 4, 1, "BRISC", 0, 9000),
+            _zone(0, 4, 1, "BRISC", 0, "1e300"),
+            _zone(0, 4, 1, "BRISC", -5, 9000),
+            _zone("1e30", 4, 1, "BRISC", 0, 9000),
+            _zone(0, 4, 1, "BRISC", 0, str(2**63)),
+            _zone(0, "-1e30", 1, "BRISC", 0, 9000),
         ],
-        ids=["core", "blank-cycles", "inf", "nan", "slot"],
+        ids=[
+            "core",
+            "blank-cycles",
+            "inf",
+            "nan",
+            "slot",
+            "cycles-past-int64",
+            "negative-cycles",
+            "slot-past-int64",
+            "cycles-at-2-63",
+            "core-below-int64",
+        ],
     )
-    def test_a_row_with_a_cell_that_is_not_a_number_is_left_out(self, tmp_path, bad):
+    def test_a_row_with_a_cell_that_cannot_be_read_is_left_out(self, tmp_path, bad):
         result = _spread(tmp_path, THREE_CORES + bad, [_op()], perf_id="1")
 
         op = result["ops"][0]
         assert op["in_log"] is True
         assert op["cores_in_log"] == 3
         assert op["core_span"]["max_us"] == 3.0
-        assert "kernel rows" in result["caveat"]
-        assert "not a number" in result["caveat"]
+        assert (
+            " kernel rows of these operations' call counts have a slot, core or cycle "
+            "count that is not a number or does not fit a 64-bit integer, or a "
+            "negative cycle count, and were left out"
+        ) in result["caveat"]
 
     def test_a_blank_run_elsewhere_keeps_the_join_and_whole_coordinates(self, tmp_path):
         """A blank cell makes pandas read the column as floats."""
