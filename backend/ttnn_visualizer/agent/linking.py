@@ -661,7 +661,10 @@ def operation_device_time(rows: Sequence[Dict]) -> Optional[float]:
     The graph view takes the slowest row instead (`aggregatePerfByOp`), so on an
     operation launching several the agent and the view differ.
     """
-    timed = _timed_rows(rows)
+    return _summed(_timed_rows(rows))
+
+
+def _summed(timed: Sequence[Tuple[Dict, float]]) -> Optional[float]:
     return sum(device_time for _, device_time in timed) if timed else None
 
 
@@ -670,7 +673,8 @@ def _device_time_summary(
 ) -> Dict[str, object]:
     """The operation's device time over all its rows, and the slowest of them."""
     timed = _timed_rows(rows)
-    total = operation_device_time(rows)
+    # `operation_device_time`'s sum, from rows already filtered once.
+    total = _summed(timed)
     if total is None:
         return {}
     slowest, _ = max(timed, key=lambda pair: pair[1])
@@ -704,8 +708,6 @@ def operation_detail(
     )
     link = operation_link(registry, handle)
     if link.status is LinkStatus.LINKED and result.get("rank") != link.rank:
-        # The link pairs the CSV with one rank's operations, and ids restart per rank,
-        # so another rank's operation N is not the one these rows belong to.
         result["operation_link"] = OperationLink(
             LinkStatus.UNAVAILABLE,
             rank=link.rank,
@@ -786,27 +788,26 @@ def critical_path(
         scope = operations.rank_scope(queries, rank)
         if scope.rank != link.rank:
             raise ValueError(_rank_mismatch_reason(link.rank, scope.rank, "the graph"))
-        graph = operations.read_scoped_graph(queries, scope)
+        graph = operations.read_scoped_graph(registry, handle, queries, scope)
 
     kept = op_graph.kept_operation_ids(graph)
-    weights: Dict[int, float] = {}
+    device_time_by_operation_id: Dict[int, float] = {}
     for operation_id in kept:
         device_time = operation_device_time(
             link.perf_rows_by_operation.get(operation_id, [])
         )
         if device_time is not None:
-            weights[operation_id] = device_time
+            device_time_by_operation_id[operation_id] = device_time
+    # `find_critical_path` drops an edge to an operation not kept, as the app's does.
     path = op_graph.find_critical_path(
-        sorted(kept),
-        [edge for edge in graph.edges if edge.source in kept and edge.target in kept],
-        weights,
+        sorted(kept), graph.edges, device_time_by_operation_id
     )
 
     cap = bounded(limit, MAX_LIMIT)
     uncosted = [
         operation_id
         for operation_id in path.operation_ids
-        if operation_id not in weights
+        if operation_id not in device_time_by_operation_id
     ]
     caveats = []
     if uncosted:
@@ -837,7 +838,9 @@ def critical_path(
                 "operation_id": operation_id,
                 "name": graph.names.get(operation_id),
                 "device_time": (
-                    round(weights[operation_id], 3) if operation_id in weights else None
+                    round(device_time_by_operation_id[operation_id], 3)
+                    if operation_id in device_time_by_operation_id
+                    else None
                 ),
             }
             for operation_id in path.operation_ids[:cap]
@@ -846,7 +849,8 @@ def critical_path(
         "uncosted_operation_count": len(uncosted),
         "uncosted_operation_ids": uncosted[:MAX_LIMIT],
         "has_cycle": path.has_cycle,
-        "projection": CRITICAL_PATH_PROJECTION,
+        "projection": tools.projection(None),
+        "graph_projection": CRITICAL_PATH_PROJECTION,
         **scope.as_response(),
         **operations.caveat_field(scope, *caveats),
         "operation_link": link.as_response(),

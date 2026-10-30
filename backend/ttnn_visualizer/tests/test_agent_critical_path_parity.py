@@ -20,7 +20,12 @@ graph never folds.
 import random
 from typing import Dict, List, Sequence, Tuple
 
-from ttnn_visualizer.agent.op_graph import GraphEdge, find_critical_path
+from ttnn_visualizer.agent.op_graph import (
+    GraphEdge,
+    build_graph,
+    find_critical_path,
+    kept_operation_ids,
+)
 from ttnn_visualizer.tests.parity_golden import Golden
 
 GOLDEN = Golden("opGraphCriticalPathParity")
@@ -125,6 +130,53 @@ def _random_cases(rng: random.Random) -> List[Dict]:
     return cases
 
 
+def _kept_case(
+    name: str,
+    operations: Sequence[Tuple[int, str]],
+    edges: Sequence[Tuple[int, int, int]],
+) -> Dict:
+    graph = build_graph(
+        dict(operations),
+        [GraphEdge(source, target, tensor_id) for source, target, tensor_id in edges],
+    )
+    return {
+        "name": name,
+        "operations": [list(operation) for operation in operations],
+        "edges": [list(edge) for edge in edges],
+        "expected_kept": sorted(kept_operation_ids(graph)),
+    }
+
+
+def _kept_cases() -> List[Dict]:
+    # Which operations the search runs over: `getKeptOperations` with deallocate hidden.
+    return [
+        _kept_case(
+            "diamond with a deallocate and an isolated op",
+            [
+                (1, "ttnn.from_torch"),
+                (2, "ttnn.matmul"),
+                (3, "ttnn.add"),
+                (4, "ttnn.concat"),
+                (5, "ttnn.relu"),
+                (6, "ttnn::deallocate"),
+                (7, "ttnn.isolated"),
+            ],
+            [(1, 2, 10), (1, 3, 10), (2, 4, 11), (3, 4, 12), (4, 5, 13), (4, 6, 13)],
+        ),
+        _kept_case(
+            "a neighbour reached only through a deallocate stays",
+            [(1, "ttnn.add"), (2, "ttnn.deallocate")],
+            [(1, 2, 10)],
+        ),
+        _kept_case(
+            "deallocate names are matched without case",
+            [(1, "ttnn.add"), (2, "TTNN.Deallocate"), (3, "TTNN::DEALLOCATE")],
+            [(1, 2, 10), (1, 3, 10)],
+        ),
+        _kept_case("no edges keeps nothing", [(1, "ttnn.add"), (2, "ttnn.relu")], []),
+    ]
+
+
 def _generate_golden() -> Dict:
     return {
         "_comment": (
@@ -132,6 +184,7 @@ def _generate_golden() -> Dict:
             "from the agent's port. Do not edit by hand; run pnpm run agent:parity-golden."
         ),
         "cases": _curated_cases() + _random_cases(random.Random(_SEED)),
+        "kept_cases": _kept_cases(),
     }
 
 

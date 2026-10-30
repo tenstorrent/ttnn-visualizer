@@ -33,16 +33,31 @@ from typing import (
     Set,
     Tuple,
     TypedDict,
+    TypeVar,
 )
 
 from ttnn_visualizer.agent import op_graph
-from ttnn_visualizer.agent.bounds import MAX_LIMIT, bounded, require_choice
+from ttnn_visualizer.agent.bounds import (
+    MAX_DETAILED_LIMIT,
+    MAX_LIMIT,
+    bounded,
+    require_choice,
+)
 from ttnn_visualizer.agent.handles import (
+    GRAPH_TABLES,
     PROFILER_DB_FILE,
+    CacheVariant,
     ReportRegistry,
     read_only_connection,
 )
-from ttnn_visualizer.models import Buffer, BufferType, Device, Instance, Operation
+from ttnn_visualizer.models import (
+    Buffer,
+    BufferType,
+    Device,
+    Instance,
+    Operation,
+    Tensor,
+)
 from ttnn_visualizer.queries import DatabaseQueries
 
 # Every allocation figure derived from `buffers` is in these units, and the
@@ -1225,9 +1240,7 @@ def tensor_flow(
     instance = registry.get(handle)
     with profiler_db(instance) as queries:
         scope = rank_scope(queries, rank)
-        refuse_unattributable(
-            queries, scope, "tensors", "input_tensors", "output_tensors"
-        )
+        refuse_unattributable(queries, scope, *GRAPH_TABLES)
         wanted = int(tensor_id)
         edges = [
             entry
@@ -1303,15 +1316,71 @@ def tensor_flow(
     return result
 
 
-GRAPH_TABLES = ("tensors", "input_tensors", "output_tensors")
+_PerRank = TypeVar("_PerRank")
 
 
-def read_scoped_graph(queries: DatabaseQueries, scope: RankScope) -> op_graph.OpGraph:
-    """The whole operation graph at `scope`'s rank, refused where it cannot be attributed."""
-    refuse_unattributable(queries, scope, *GRAPH_TABLES)
+def cached_per_rank(
+    registry: ReportRegistry,
+    handle: str,
+    variant: CacheVariant,
+    queries: DatabaseQueries,
+    scope: RankScope,
+    build: Callable[[DatabaseQueries, RankScope], _PerRank],
+) -> _PerRank:
+    """`build` once per handle and rank. A build that raises is not kept."""
+    # One pinned entry holding every rank, so a rank read cannot evict a scoped report.
+    by_rank: Dict[Optional[int], _PerRank] = registry.cached_report(
+        handle, lambda _: {}, variant=variant
+    )
+    if scope.rank not in by_rank:
+        by_rank[scope.rank] = build(queries, scope)
+    return by_rank[scope.rank]
+
+
+def _read_graph(queries: DatabaseQueries, scope: RankScope) -> op_graph.OpGraph:
     return op_graph.read_graph(
         queries, scoped(queries, "operations", scope), scope.rank
     )
+
+
+def read_scoped_graph(
+    registry: ReportRegistry,
+    handle: str,
+    queries: DatabaseQueries,
+    scope: RankScope,
+) -> op_graph.OpGraph:
+    """The whole operation graph at `scope`'s rank, read once per handle and rank.
+
+    The refusal is checked on every call rather than kept with the graph.
+    """
+    refuse_unattributable(queries, scope, *GRAPH_TABLES)
+    return cached_per_rank(
+        registry, handle, CacheVariant.OP_GRAPH, queries, scope, _read_graph
+    )
+
+
+def _subgraph_tensor(tensor: Optional[Tensor], tensor_id: int) -> Dict[str, object]:
+    """What a subgraph edge carries: enough to read a block's layout, not its sizes,
+    which `operation_detail` gives with the unit they need."""
+    if tensor is None:
+        return {"tensor_id": tensor_id}
+    memory_config = tensor.memory_config
+    return {
+        "tensor_id": tensor_id,
+        "shape": tensor.shape,
+        "dtype": tensor.dtype,
+        "layout": tensor.layout,
+        "buffer_type": (
+            _buffer_type_name(tensor.buffer_type)
+            if tensor.buffer_type is not None
+            else None
+        ),
+        "memory_layout": (
+            memory_config.get("memory_layout")
+            if isinstance(memory_config, dict)
+            else None
+        ),
+    }
 
 
 def subgraph_between(
@@ -1325,39 +1394,52 @@ def subgraph_between(
     """The operations and tensors on every path from one operation to another."""
     instance = registry.get(handle)
     source, target = int(from_operation_id), int(to_operation_id)
+    cap = bounded(limit, MAX_LIMIT)
     with profiler_db(instance) as queries:
         scope = rank_scope(queries, rank)
-        graph = read_scoped_graph(queries, scope)
+        graph = read_scoped_graph(registry, handle, queries, scope)
 
-    for operation_id in (source, target):
-        if operation_id not in graph.names:
-            raise no_such_operation(operation_id, scope)
-    members = op_graph.operations_between(graph, source, target)
-    if not members:
-        reverse = (
-            " (there is one from "
-            f"{target} to {source}: swap from_operation_id and to_operation_id)"
-            if op_graph.operations_between(graph, target, source)
-            else ""
+        for operation_id in (source, target):
+            if operation_id not in graph.names:
+                raise no_such_operation(operation_id, scope)
+        members = op_graph.operations_between(graph, source, target)
+        if not members:
+            reverse = (
+                " (there is one from "
+                f"{target} to {source}: swap from_operation_id and to_operation_id)"
+                if op_graph.operations_between(graph, target, source)
+                else ""
+            )
+            raise ValueError(f"no path from operation {source} to {target}{reverse}")
+
+        edges = sorted(
+            op_graph.edges_within(graph.edges, members),
+            key=lambda edge: (edge.source, edge.target, edge.tensor_id),
         )
-        raise ValueError(f"no path from operation {source} to {target}{reverse}")
+        tensor_ids = sorted({edge.tensor_id for edge in edges})
+        # Each tensor parses its memory config, so only the listed ones are read --
+        # and never with an empty id list, which drops the filter.
+        listed_ids = tensor_ids[: min(cap, MAX_DETAILED_LIMIT)]
+        tensors = (
+            {
+                tensor.tensor_id: tensor
+                for tensor in queries.query_tensors(
+                    filters=scoped(queries, "tensors", scope, tensor_id=listed_ids),
+                    size_from_buffers=False,
+                )
+            }
+            if listed_ids
+            else {}
+        )
 
-    cap = bounded(limit, MAX_LIMIT)
     ordered = sorted(members)
-    edges = sorted(
-        (
-            edge
-            for edge in graph.edges
-            if edge.source in members and edge.target in members
-        ),
-        key=lambda edge: (edge.source, edge.target, edge.tensor_id),
-    )
     return {
         "handle": handle,
         "from_operation_id": source,
         "to_operation_id": target,
         "operation_count": len(ordered),
         "edge_count": len(edges),
+        "tensor_count": len(tensor_ids),
         "operations": [
             {"operation_id": operation_id, "name": graph.names.get(operation_id)}
             for operation_id in ordered[:cap]
@@ -1372,6 +1454,11 @@ def subgraph_between(
             for edge in edges[:cap]
         ],
         "edges_truncated": len(edges) > cap,
+        "tensors": [
+            _subgraph_tensor(tensors.get(tensor_id), tensor_id)
+            for tensor_id in listed_ids
+        ],
+        "tensors_truncated": len(tensor_ids) > len(listed_ids),
         **scope.as_response(),
         **_caveats(scope),
     }
@@ -1419,11 +1506,11 @@ __all__ = [
     "BUFFER_SIZE_UNIT",
     "BUFFER_TYPE_NAMES",
     "DetailFields",
-    "GRAPH_TABLES",
     "MAX_ARGUMENT_VALUE_CHARS",
     "RankScope",
     "TENSOR_SIZE_UNIT",
     "ProfilerDatabaseMissingError",
+    "cached_per_rank",
     "caveat_field",
     "find_operations",
     "joined_caveat",

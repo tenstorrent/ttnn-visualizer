@@ -79,6 +79,9 @@ class CacheVariant(str, Enum):
     L1_PEAK = "l1_peak"
     # Every device op's per-core spread, from one read of the device log.
     CORE_SPREAD = "core_spread"
+    # The operation graph by rank, which `critical_path` and `subgraph_between` read
+    # whole and an agent reading a model block by block asks for again and again.
+    OP_GRAPH = "op_graph"
 
 
 # Snapshots narrowed by a scope -- a signpost range -- kept at once, across every
@@ -274,6 +277,10 @@ def _resolved_directory(label: str, path: Optional[str]) -> Optional[str]:
 # rather than from one probe. Kept here, beside the inventory that consumes it,
 # because `agent.operations` imports this module; it has to stay in step with
 # the queries those tools actually run.
+# What `op_graph.read_graph` reads beside `operations`: one place, so the tools
+# reading the graph are listed by the same tables they refuse on.
+GRAPH_TABLES = ("tensors", "input_tensors", "output_tensors")
+
 TOOL_TABLES: Dict[str, frozenset] = {
     # Not `stack_traces`, even though `called_from` reads it: the raw `no such
     # table` that justified requiring it cannot happen any more, because
@@ -287,12 +294,8 @@ TOOL_TABLES: Dict[str, frozenset] = {
     "operation_detail": frozenset(
         {"operations", "buffers", "tensors", "input_tensors", "output_tensors"}
     ),
-    "tensor_flow": frozenset(
-        {"operations", "tensors", "input_tensors", "output_tensors"}
-    ),
-    "subgraph_between": frozenset(
-        {"operations", "tensors", "input_tensors", "output_tensors"}
-    ),
+    "tensor_flow": frozenset({"operations", *GRAPH_TABLES}),
+    "subgraph_between": frozenset({"operations", *GRAPH_TABLES}),
     # `stack_traces` is not required, because the tool answers the argument half
     # without it and says in the response that the capture recorded no call site --
     # 8 of 86 local captures hold the table with no rows. That reasoning covers a
@@ -327,9 +330,8 @@ TOOL_TABLES: Dict[str, frozenset] = {
 }
 
 
-CRITICAL_PATH_TABLES = frozenset(
-    {"operations", "captured_graph", "tensors", "input_tensors", "output_tensors"}
-)
+# The graph, and the captured graphs the link aligns to weigh it.
+_CRITICAL_PATH_TABLES = TOOL_TABLES["subgraph_between"] | {"captured_graph"}
 
 
 def read_only_connection(db_file: Path) -> sqlite3.Connection:
@@ -702,7 +704,7 @@ def _inventory(instance: Instance, perf_csv: Optional[Path]) -> Dict[str, object
         record(tool_name, required <= tables)
     # Weighs the graph by the linked rows' device time, so it needs the graph's
     # tables, the captured graphs the link aligns, and a CSV to align them with.
-    record("critical_path", perf_ready and CRITICAL_PATH_TABLES <= tables)
+    record("critical_path", perf_ready and _CRITICAL_PATH_TABLES <= tables)
 
     return {
         # Tool names only. `operations` used to appear here whenever a `db.sqlite`

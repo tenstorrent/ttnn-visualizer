@@ -10,14 +10,16 @@ operations. The search itself is held by `test_agent_critical_path_parity.py`.
 """
 
 import sqlite3
+from unittest.mock import patch
 
 import pytest
 from ttnn_visualizer.agent import op_graph
 from ttnn_visualizer.agent import operations as agent_operations
 from ttnn_visualizer.agent import server
-from ttnn_visualizer.agent.bounds import MAX_LIMIT
+from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_LIMIT
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
 from ttnn_visualizer.agent.op_graph import GraphEdge
+from ttnn_visualizer.queries import DatabaseQueries
 
 # A diamond, 1 -> {2, 3} -> 4, then 4 -> 5 and a deallocate of 4's output. Op 7
 # consumes a tensor no operation produced, and op 8 touches no tensor at all.
@@ -42,7 +44,9 @@ INSERT INTO operations VALUES
 
 INSERT INTO tensors VALUES
     (10, 'Shape([1])', 'DataType.BFLOAT16', 'Layout.TILE', '', 0, NULL, NULL),
-    (11, 'Shape([1])', 'DataType.BFLOAT16', 'Layout.TILE', '', 0, NULL, NULL),
+    (11, 'Shape([1, 32])', 'DataType.BFLOAT8_B', 'Layout.TILE',
+     'MemoryConfig(memory_layout=TensorMemoryLayout::HEIGHT_SHARDED,buffer_type=BufferType::L1,shard_spec=std::nullopt)',
+     0, NULL, NULL),
     (12, 'Shape([1])', 'DataType.BFLOAT16', 'Layout.TILE', '', 0, NULL, NULL),
     (13, 'Shape([1])', 'DataType.BFLOAT16', 'Layout.TILE', '', 0, NULL, NULL),
     (14, 'Shape([1])', 'DataType.BFLOAT16', 'Layout.TILE', '', 0, NULL, NULL);
@@ -106,7 +110,7 @@ def _read(report) -> op_graph.OpGraph:
     registry, handle = report
     with agent_operations.profiler_db(registry.get(handle)) as queries:
         scope = agent_operations.rank_scope(queries, None)
-        return agent_operations.read_scoped_graph(queries, scope)
+        return agent_operations.read_scoped_graph(registry, handle, queries, scope)
 
 
 class TestReadGraph:
@@ -197,6 +201,52 @@ class TestSubgraphBetween:
         assert result["operation_count"] == 4
         assert result["edge_count"] == 4
         assert result["operations_truncated"] is False
+
+    def test_it_lists_each_tensor_once_with_its_layout(self, graph_report):
+        registry, handle = graph_report
+
+        result = agent_operations.subgraph_between(registry, handle, 1, 4)
+
+        # Tensor 10 reaches two consumers, and is listed once.
+        assert result["tensor_count"] == 3
+        assert [entry["tensor_id"] for entry in result["tensors"]] == [10, 11, 12]
+        assert result["tensors"][1] == {
+            "tensor_id": 11,
+            "shape": "Shape([1, 32])",
+            "dtype": "DataType.BFLOAT8_B",
+            "layout": "Layout.TILE",
+            "buffer_type": "L1",
+            "memory_layout": "TensorMemoryLayout::HEIGHT_SHARDED",
+        }
+        assert "size" not in result["tensors"][0]
+        assert result["tensors_truncated"] is False
+
+    def test_the_tensor_list_takes_the_limit_and_its_own_lower_cap(self, graph_report):
+        registry, handle = graph_report
+
+        limited = agent_operations.subgraph_between(registry, handle, 1, 4, limit=2)
+        uncapped = agent_operations.subgraph_between(
+            registry, handle, 1, 4, limit=MAX_LIMIT
+        )
+
+        assert [entry["tensor_id"] for entry in limited["tensors"]] == [10, 11]
+        assert limited["tensors_truncated"] is True
+        assert limited["tensor_count"] == 3
+        assert len(uncapped["tensors"]) <= MAX_DETAILED_LIMIT
+
+    def test_the_graph_is_read_once_per_handle_and_rank(self, graph_report):
+        registry, handle = graph_report
+
+        with patch.object(
+            DatabaseQueries,
+            "query_producers_consumers",
+            autospec=True,
+            side_effect=DatabaseQueries.query_producers_consumers,
+        ) as read:
+            agent_operations.subgraph_between(registry, handle, 1, 4)
+            agent_operations.subgraph_between(registry, handle, 2, 5)
+
+        assert read.call_count == 1
 
     def test_it_refuses_the_wrong_direction_and_says_so(self, graph_report):
         registry, handle = graph_report

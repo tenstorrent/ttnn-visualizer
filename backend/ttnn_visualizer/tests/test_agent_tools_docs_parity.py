@@ -184,6 +184,8 @@ def test_the_detailed_row_cap_the_page_states_is_the_enforced_one():
     page = " ".join(_read(_AGENT_DOCS).split())
 
     assert f"capped at {MAX_DETAILED_LIMIT} rather than {MAX_LIMIT}" in page
+    # `subgraph_between`'s tensor list, which the docs quote as a number.
+    assert f"or {MAX_DETAILED_LIMIT}, whichever is smaller" in page
 
 
 def test_the_signpost_name_limit_the_page_states_is_the_enforced_one():

@@ -11,19 +11,29 @@ and answers over all of them.
 `find_critical_path` is a port of `findCriticalPath`
 (`src/components/operation-graph/opGraphCriticalPath.ts`), and `kept_operation_ids` of
 `getKeptOperations` (`opGraphBuilder.ts`) with deallocate ops hidden, as the graph view
-hides them by default. The `opGraphCriticalPathParity` golden holds the first to the app;
+hides them by default. The `opGraphCriticalPathParity` golden holds both to the app;
 mirror a change on either side, then `pnpm run agent:parity-golden`.
 """
 
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
-from typing import Dict, FrozenSet, Iterable, List, Mapping, Optional, Sequence, Set
+from typing import (
+    AbstractSet,
+    Dict,
+    FrozenSet,
+    Iterable,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Set,
+)
 
 from ttnn_visualizer.agent.l1_peak import DEALLOCATE_OPERATION_NAMES
 from ttnn_visualizer.queries import DatabaseQueries
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class GraphEdge:
     source: int
     target: int
@@ -38,10 +48,17 @@ class OpGraph:
     incoming: Dict[int, List[GraphEdge]] = field(default_factory=dict)
 
 
+def edges_within(
+    edges: Iterable[GraphEdge], members: AbstractSet[int]
+) -> List[GraphEdge]:
+    """The edges whose two ends are both in `members`."""
+    return [edge for edge in edges if edge.source in members and edge.target in members]
+
+
 def build_graph(names: Mapping[int, str], edges: Iterable[GraphEdge]) -> OpGraph:
     """An edge whose endpoint is not one of `names` is dropped, as `buildOpGraph` drops
     an edge to an operation it did not keep."""
-    kept = [edge for edge in edges if edge.source in names and edge.target in names]
+    kept = edges_within(edges, names.keys())
     outgoing: Dict[int, List[GraphEdge]] = defaultdict(list)
     incoming: Dict[int, List[GraphEdge]] = defaultdict(list)
     for edge in kept:
@@ -223,6 +240,7 @@ __all__ = [
     "GraphEdge",
     "OpGraph",
     "build_graph",
+    "edges_within",
     "find_critical_path",
     "kept_operation_ids",
     "operations_between",

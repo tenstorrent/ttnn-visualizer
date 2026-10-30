@@ -747,14 +747,15 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
         McpToolName.SUBGRAPH_BETWEEN: {
             "title": "Subgraph between two operations",
             "description": (
-                "The operations and the tensor edges on every path from one "
+                "The operations, tensor edges and tensors on every path from one "
                 "operation to another, so one block can be read without walking it "
-                "through tensor_flow. Deallocate operations are kept, unlike in "
-                "critical_path. Refused when no path runs that way, saying so "
-                "when one runs the other way. Tensors are given by id only; "
-                "operation_detail or tensor_flow gives their shape, dtype, layout "
-                f"and memory config. Each list is capped at {MAX_LIMIT}; "
-                "operation_count and edge_count are the whole subgraph's."
+                "through tensor_flow. Each tensor is listed once with its shape, "
+                "dtype, layout, buffer type and memory layout; its size and shard "
+                "spec are operation_detail's. Deallocate operations are kept, unlike "
+                "in critical_path. Refused when no path runs that way, saying so "
+                f"when one runs the other way. Operations and edges are capped at "
+                f"{MAX_LIMIT} and tensors at {MAX_DETAILED_LIMIT}; operation_count, "
+                "edge_count and tensor_count are the whole subgraph's."
             ),
             "schema": {
                 "type": "object",

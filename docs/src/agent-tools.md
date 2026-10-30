@@ -107,7 +107,7 @@ another rank's operation under the same id.
 | `dram_fallbacks` | Operations that likely fell back from L1 to DRAM, inferred from their memory config arguments and from retries after an L1 allocation failure. |
 | `l1_peak` | The run's L1 peak per bank, split into circular buffers, intra-operation tensors, persistent tensors and stale ones, with the operation holding it and the operations closest to it. |
 | `critical_path` | The longest chain of cumulative device time through the operation graph, source to sink, with each operation's device time, the chain's total and share of the report's, and how many of its operations have no device time. Needs a linked performance report. |
-| `subgraph_between` | The operations and tensor edges on every path from one operation to another, so a block can be read without walking it one tensor at a time. |
+| `subgraph_between` | The operations, tensor edges and tensors on every path from one operation to another, each tensor once with its shape, dtype, layout, buffer type and memory layout, so a block can be read without walking it one tensor at a time. |
 
 `top_ops`, `op_breakdown`, `program_cache`, `zone_timings`, `core_spread` and `diff_reports`
 read the performance CSVs; the operation tools — `find_operations`, `operation_detail`,
@@ -762,15 +762,23 @@ whenever any is. A report whose tensor edges form a cycle gets `has_cycle: true`
 over the acyclic portion only. The tool needs the two reports linked, and reads the linked
 rank only, since an unlinked graph has no weights and its longest chain is not a critical
 path. `device_time_share_percent` is the path's share of `report_device_time_total`, as in
-`operation_detail`.
+`operation_detail`. `projection` is the performance report's, as every tool that reads it
+gives it, and `graph_projection` says which graph the path was searched over.
 
 `subgraph_between` needs only the database, and takes `rank`. It lists the operations
 reachable from `from_operation_id` that also reach `to_operation_id`, and the edges between
 them, sorted by id; `operation_count` and `edge_count` are the whole subgraph's when a list
 is capped. Unlike `critical_path`, it keeps deallocate operations, so one can be either
-end of the subgraph or on a path through it. It names tensors by id only — `operation_detail` and `tensor_flow` give their
-configuration. When no path runs from the first operation to the second, the call is
-refused, and says so when one runs the other way.
+end of the subgraph or on a path through it. `tensors` lists each tensor on those edges
+once, by id, with its shape, dtype, layout, buffer type and memory layout — what reading a
+block's layout needs. It is capped lower than the other lists, at the limit
+or 25, whichever is smaller, and `tensor_count` counts them all. It leaves out a tensor's
+size, whose unit depends on the capture: `operation_detail` and `tensor_flow` give it, with
+its `tensor_size_unit`, and the shard spec. When no path runs from the first operation to
+the second, the call is refused, and says so when one runs the other way.
+
+Both tools read the graph once per handle and rank, so walking a model block by block
+pays for the read on the first call only.
 
 **An operation id is not the end of the answer.** `memory_profile` names the operations
 holding its largest footprint, and `operation_provenance` turns such an id into the two things you need

@@ -1852,11 +1852,11 @@ def _add_edges(profiler_path: str, edges=_PATH_EDGES) -> None:
 
 @pytest.fixture
 def path_report(linked, tmp_path):
-    def _path_report(rows=_PATH_ROWS):
+    def _path_report(rows=_PATH_ROWS, edges=_PATH_EDGES):
         profiler_path = _write_profiler(
             tmp_path / "path-profiler", _PATH_GRAPHS, operations=_PATH_OPERATIONS
         )
-        _add_edges(profiler_path)
+        _add_edges(profiler_path, edges)
         registry, handle, _ = linked(profiler_path=profiler_path, rows=rows)
         return registry, handle
 
@@ -1879,7 +1879,41 @@ class TestCriticalPath:
         assert result["device_time"] == 16.0
         assert result["path_length"] == 3
         assert result["has_cycle"] is False
-        assert result["device_time_share_percent"] == tools.share_percent(16.0, 131.0)
+        report_total = sum(float(row["device_time"]) for row in _PATH_ROWS[1:])
+        assert result["device_time_share_percent"] == tools.share_percent(
+            16.0, report_total
+        )
+
+    def test_it_states_the_projection_its_weights_were_read_through(self, path_report):
+        registry, handle = path_report()
+
+        result = linking.critical_path(registry, handle)
+
+        assert result["projection"] == tools.projection(None)
+        assert result["graph_projection"] == linking.CRITICAL_PATH_PROJECTION
+
+    def test_a_cycle_is_flagged_and_caveated(self, path_report):
+        # Op 3's output feeds op 2, which fed op 3, so neither is ever ordered.
+        registry, handle = path_report(
+            edges=[(1, 10, [2, 4]), (2, 11, [3]), (3, 12, [2])]
+        )
+
+        result = linking.critical_path(registry, handle)
+
+        assert result["has_cycle"] is True
+        assert "holds a cycle" in result["caveat"]
+        assert [entry["operation_id"] for entry in result["operations"]] == [1, 4]
+        assert result["device_time"] == 15.0
+
+    def test_a_partitioned_run_carries_its_caveat_beside_the_gap(self, path_report):
+        with patch.object(
+            tools, "partitioned_caveat", return_value="Partitioned run caveat."
+        ):
+            registry, handle = path_report()
+            result = linking.critical_path(registry, handle)
+
+        assert "1 of the path's 3 operations" in result["caveat"]
+        assert result["caveat"].endswith("Partitioned run caveat.")
 
     def test_an_operation_with_no_row_is_crossed_and_counted(self, path_report):
         registry, handle = path_report()
@@ -1893,13 +1927,22 @@ class TestCriticalPath:
     def test_a_path_with_every_operation_costed_carries_no_gap_caveat(
         self, path_report
     ):
-        registry, handle = path_report()
-        with patch.object(
-            linking, "operation_device_time", side_effect=lambda rows: 1.0
-        ):
+        # Op 1 launches a device operation of its own, so every op on the path is timed.
+        graphs = {
+            **_PATH_GRAPHS,
+            1: _sequential_graph("ttnn.from_torch", "TilizeDeviceOperation"),
+        }
+        rows = [
+            _PATH_ROWS[0],
+            {**_perf_row("TilizeDeviceOperation", 8), "device_time": "2.0"},
+            *_PATH_ROWS[1:],
+        ]
+        with patch.dict(_PATH_GRAPHS, graphs):
+            registry, handle = path_report(rows=rows)
             result = linking.critical_path(registry, handle)
 
         assert result["uncosted_operation_count"] == 0
+        assert result["device_time"] == 18.0
         assert "caveat" not in result
 
     def test_it_leaves_out_deallocate_and_isolated_operations(self, path_report):
