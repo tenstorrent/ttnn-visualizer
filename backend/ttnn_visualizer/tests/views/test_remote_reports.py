@@ -2185,14 +2185,14 @@ class TestSyncRefreshesLastModified:
     otherwise be its own value from an older listing.
     """
 
-    def _sync(self, client, kind: str, *, refresh):
+    def _sync(self, client, kind: str, *, refresh, sync=None):
         sync_target = (
             "ttnn_visualizer.views.sync_remote_profiler_folders"
             if kind == "profiler"
             else "ttnn_visualizer.views.sync_remote_performance_folders"
         )
         with (
-            patch(sync_target, return_value=SyncMethod.SFTP),
+            patch(sync_target, **(sync or {"return_value": SyncMethod.SFTP})),
             patch(
                 "ttnn_visualizer.views.read_remote_report_last_modified", **refresh
             ) as read_time,
@@ -2208,8 +2208,7 @@ class TestSyncRefreshesLastModified:
                     },
                 },
             )
-        assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
-        return response.get_json(), read_time
+        return response, read_time
 
     @pytest.fixture(autouse=True)
     def _local_install(self, app, tmp_path):
@@ -2220,12 +2219,45 @@ class TestSyncRefreshesLastModified:
     def test_the_response_carries_the_remote_time_read_after_the_sync(
         self, client, kind
     ):
-        body, read_time = self._sync(client, kind, refresh={"return_value": 99})
+        response, read_time = self._sync(client, kind, refresh={"return_value": 99})
 
-        assert body["lastModified"] == 99
-        # Stamped after the refresh, so the copy is never reported as outdated.
-        assert body["lastSynced"] >= body["lastModified"]
-        assert read_time.call_args.kwargs == {"is_profiler": kind == "profiler"}
+        assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+        assert response.get_json()["lastModified"] == 99
+        (_, folder), kwargs = read_time.call_args
+        assert folder.remotePath == f"/remote/{kind}/reports/bert"
+        assert kwargs == {"is_profiler": kind == "profiler"}
+
+    @pytest.mark.parametrize("kind", ["profiler", "performance"])
+    def test_the_time_is_re_read_before_the_sync_is_stamped(self, client, kind):
+        """Stamped first, a remote time read a moment later could pass `lastSynced`
+        and mark the copy the user just synced as outdated."""
+        stamped_at_refresh = []
+
+        def _read(_connection, folder, **_kwargs):
+            stamped_at_refresh.append(folder.lastSynced)
+            return 99
+
+        response, _ = self._sync(client, kind, refresh={"side_effect": _read})
+
+        assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+        assert stamped_at_refresh == [None]
+        assert response.get_json()["lastSynced"] is not None
+
+    @pytest.mark.parametrize("kind", ["profiler", "performance"])
+    def test_a_failed_sync_reads_no_time(self, client, kind):
+        response, read_time = self._sync(
+            client,
+            kind,
+            refresh={"return_value": 99},
+            sync={
+                "side_effect": RemoteConnectionException(
+                    message="lost", status=ConnectionTestStates.FAILED
+                )
+            },
+        )
+
+        assert response.status_code != HTTPStatus.OK
+        read_time.assert_not_called()
 
     @pytest.mark.parametrize("kind", ["profiler", "performance"])
     @pytest.mark.parametrize(
@@ -2241,7 +2273,9 @@ class TestSyncRefreshesLastModified:
     def test_a_failed_refresh_keeps_the_sync_and_the_sent_time(
         self, client, kind, error
     ):
-        body, _ = self._sync(client, kind, refresh={"side_effect": error})
+        response, _ = self._sync(client, kind, refresh={"side_effect": error})
 
+        assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+        body = response.get_json()
         assert body["lastModified"] == 1
         assert body["lastSynced"] is not None

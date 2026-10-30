@@ -2461,14 +2461,21 @@ def remote_stack_trace_read(instance: Instance):
     return _remote_stack_source_read(instance, file_path, source_file_id)
 
 
-def _refresh_last_modified(
-    folder: RemoteReportFolder, connection: RemoteConnection, *, is_profiler: bool
+def _finalise_synced_folder(
+    folder: RemoteReportFolder,
+    connection: RemoteConnection,
+    directory_config_key: str,
+    *,
+    is_profiler: bool,
+    qualify_rank: bool = False,
 ) -> None:
-    """Re-read the time the client's row is ordered by, which it sent from an older listing.
+    """Describe a folder a sync just wrote, for the client to put back in its list.
 
-    Runs before ``lastSynced`` is stamped so the refreshed time cannot be later and
-    mark the copy outdated. A sync that succeeded must not fail because this
-    follow-up read did, so a failure keeps the time the client sent.
+    ``lastModified`` is re-read because the client sent it from an older listing and
+    orders its rows by it. That happens before ``lastSynced`` is stamped, so the
+    refreshed time cannot be later and mark the copy outdated. A sync that
+    succeeded must not fail because this follow-up read did, so a failure keeps
+    the time the client sent.
     """
     try:
         folder.lastModified = read_remote_report_last_modified(
@@ -2480,6 +2487,11 @@ def _refresh_last_modified(
             folder.remotePath,
             exc_info=True,
         )
+
+    folder.lastSynced = int(time.time())
+    _annotate_synced_copy(
+        folder, connection, directory_config_key, qualify_rank=qualify_rank
+    )
 
 
 @api.route("/remote/sync", methods=["POST"])
@@ -2508,12 +2520,11 @@ def sync_remote_folder():
                 sid=instance_id,
             )
 
-            _refresh_last_modified(performance_folder, connection, is_profiler=False)
-            performance_folder.lastSynced = int(time.time())
-            _annotate_synced_copy(
+            _finalise_synced_folder(
                 performance_folder,
                 connection,
                 "PERFORMANCE_DIRECTORY_NAME",
+                is_profiler=False,
                 qualify_rank=bool(connection.multihostPerformance),
             )
 
@@ -2540,10 +2551,11 @@ def sync_remote_folder():
             sid=instance_id,
         )
 
-        _refresh_last_modified(remote_profiler_folder, connection, is_profiler=True)
-        remote_profiler_folder.lastSynced = int(time.time())
-        _annotate_synced_copy(
-            remote_profiler_folder, connection, "PROFILER_DIRECTORY_NAME"
+        _finalise_synced_folder(
+            remote_profiler_folder,
+            connection,
+            "PROFILER_DIRECTORY_NAME",
+            is_profiler=True,
         )
 
         response_body = remote_profiler_folder.model_dump()

@@ -829,114 +829,105 @@ def download_single_file_sftp(
         raise RuntimeError(f"Failed to download {remote_file}: {type(e).__name__}: {e}")
 
 
-def get_remote_profiler_folder_from_config_path(
-    remote_connection: RemoteConnection,
-    config_path: str,
-    *,
-    fallback_last_modified: Optional[int] = None,
-) -> RemoteReportFolder:
-    """Read a remote config file and return RemoteFolder object.
+def _profiler_config_paths(
+    remote_connection: RemoteConnection, config_path: str
+) -> List[str]:
+    """The config file(s) that describe a profiler report, the one to read first.
 
-    ``fallback_last_modified`` stands in for a time that cannot be read; without
-    it the current time does, as a listing has nothing better to offer.
+    A single-host report has ``config_path`` itself; a multihost one has ranked
+    ``config_*_of_*.json`` beside it instead. Empty when the report has neither.
+    Raises ``CalledProcessError`` when the ranked listing fails.
     """
+    if _remote_file_exists(remote_connection, config_path):
+        return [config_path]
+
+    folder_str = str(Path(config_path).parent).rstrip("/")
+    # One argv after user@host: OpenSSH may wrap multi-arg remote commands in
+    # `sh -c` on the server and break `for ...; do ...; done`. Pass a single
+    # `bash -lc '<script>'` string instead. Use find so the script has no
+    # shell loop syntax.
+    inner = (
+        f"find {remote_arg(folder_str)} -maxdepth 1 "
+        "-name 'config_*_of_*.json' -print"
+    )
+    list_cmd = _ssh_argv(
+        remote_connection,
+        RemoteCommand.of("bash", "-lc", inner),
+    )
+    result = subprocess.run(
+        list_cmd,
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=_ssh_subprocess_timeout_seconds(),
+    )
+    lines = [ln.strip() for ln in result.stdout.splitlines() if ln.strip()]
+    by_base = {Path(l).name: l for l in lines}
+    ordered = ranked_profiler_config_basenames(by_base.keys())
+    return [by_base[n] for n in ordered]
+
+
+def _remote_file_exists(remote_connection: RemoteConnection, path: str) -> bool:
+    test_cmd = _ssh_argv(remote_connection, RemoteCommand.of("test", "-f", path))
+    result = subprocess.run(
+        test_cmd,
+        capture_output=True,
+        text=True,
+        timeout=_ssh_remote_check_timeout_seconds(),
+    )
+    return result.returncode == 0
+
+
+def _latest_remote_mtime(
+    remote_connection: RemoteConnection, paths: List[str]
+) -> Optional[int]:
+    """The newest readable time among ``paths``, or None when none can be read."""
+    return max(
+        (
+            mtime
+            for mtime in _remote_directory_mtimes(remote_connection, paths)
+            if mtime is not None
+        ),
+        default=None,
+    )
+
+
+def get_remote_profiler_folder_from_config_path(
+    remote_connection: RemoteConnection, config_path: str
+) -> RemoteReportFolder:
+    """Read a remote config file and return RemoteFolder object."""
     folder_path = Path(config_path).parent
     parent_folder_name = folder_path.name
     folder_str = str(folder_path).rstrip("/")
-    ssh_timeout = _ssh_subprocess_timeout_seconds()
-    check_timeout = _ssh_remote_check_timeout_seconds()
-
-    def ssh_run_checked(cmd: List[str]) -> subprocess.CompletedProcess:
-        return subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=ssh_timeout,
-        )
-
-    def ssh_cat(path: str) -> str:
-        cat_cmd = _ssh_argv(remote_connection, RemoteCommand.of("cat", path))
-        cat_result = ssh_run_checked(cat_cmd)
-        return cat_result.stdout
-
-    def ssh_test_file(path: str) -> bool:
-        test_cmd = _ssh_argv(remote_connection, RemoteCommand.of("test", "-f", path))
-        result = subprocess.run(
-            test_cmd,
-            capture_output=True,
-            text=True,
-            timeout=check_timeout,
-        )
-        return result.returncode == 0
-
-    def ssh_list_ranked_config_paths() -> List[str]:
-        # One argv after user@host: OpenSSH may wrap multi-arg remote commands in
-        # `sh -c` on the server and break `for ...; do ...; done`. Pass a single
-        # `bash -lc '<script>'` string instead. Use find so the script has no
-        # shell loop syntax.
-        inner = (
-            f"find {remote_arg(folder_str)} -maxdepth 1 "
-            "-name 'config_*_of_*.json' -print"
-        )
-        list_cmd = _ssh_argv(
-            remote_connection,
-            RemoteCommand.of("bash", "-lc", inner),
-        )
-        result = subprocess.run(
-            list_cmd,
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=ssh_timeout,
-        )
-        lines = [ln.strip() for ln in result.stdout.splitlines() if ln.strip()]
-        by_base = {Path(l).name: l for l in lines}
-        ordered = ranked_profiler_config_basenames(by_base.keys())
-        return [by_base[n] for n in ordered]
-
-    def unknown_last_modified() -> int:
-        if fallback_last_modified is not None:
-            return fallback_last_modified
-        return int(time.time())
 
     try:
-        single_config = str(Path(config_path))  # .../config.json from caller
-        read_path: Optional[str] = None
-        mtime_paths: List[str] = []
+        config_paths = _profiler_config_paths(remote_connection, str(Path(config_path)))
 
-        if ssh_test_file(single_config):
-            read_path = single_config
-            mtime_paths = [single_config]
-        else:
-            ranked_paths = ssh_list_ranked_config_paths()
-            if ranked_paths:
-                read_path = ranked_paths[0]
-                mtime_paths = ranked_paths
-
-        if read_path is None:
+        if not config_paths:
             return RemoteReportFolder(
                 remotePath=folder_str,
                 reportName=parent_folder_name,
-                lastModified=unknown_last_modified(),
+                lastModified=int(time.time()),
             )
 
         # The batch reader never raises for an unreadable time, so a remote whose
         # `stat` cannot answer still gets its report name read below.
-        known_mtimes = [
-            mtime
-            for mtime in _remote_directory_mtimes(remote_connection, mtime_paths)
-            if mtime is not None
-        ]
-        last_modified = max(known_mtimes, default=unknown_last_modified())
-        raw_json = ssh_cat(read_path)
+        last_modified = _latest_remote_mtime(remote_connection, config_paths)
+        cat_cmd = _ssh_argv(remote_connection, RemoteCommand.of("cat", config_paths[0]))
+        raw_json = subprocess.run(
+            cat_cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=_ssh_subprocess_timeout_seconds(),
+        ).stdout
         data = json.loads(raw_json)
         report_name = data.get("report_name") if isinstance(data, dict) else None
 
         return RemoteReportFolder(
             remotePath=folder_str,
             reportName=report_name,
-            lastModified=last_modified,
+            lastModified=int(time.time()) if last_modified is None else last_modified,
         )
 
     except subprocess.CalledProcessError as e:
@@ -949,7 +940,7 @@ def get_remote_profiler_folder_from_config_path(
         return RemoteReportFolder(
             remotePath=folder_str,
             reportName=parent_folder_name,
-            lastModified=unknown_last_modified(),
+            lastModified=int(time.time()),
         )
     except (json.JSONDecodeError, ValueError) as e:
         logger.error(f"Error parsing config file {config_path}: {e}")
@@ -957,7 +948,7 @@ def get_remote_profiler_folder_from_config_path(
         return RemoteReportFolder(
             remotePath=folder_str,
             reportName=parent_folder_name,
-            lastModified=unknown_last_modified(),
+            lastModified=int(time.time()),
         )
 
 
@@ -1019,13 +1010,22 @@ def read_remote_report_last_modified(
     An unreadable time keeps ``folder.lastModified``.
     """
     if is_profiler:
-        return get_remote_profiler_folder_from_config_path(
-            remote_connection,
-            str(Path(folder.remotePath) / TEST_CONFIG_FILE),
-            fallback_last_modified=folder.lastModified,
-        ).lastModified
+        # Only the times are wanted, so unlike the listing this never reads the
+        # config itself: one round trip fewer, and no JSON to fail on.
+        try:
+            timed_paths = _profiler_config_paths(
+                remote_connection, str(Path(folder.remotePath) / TEST_CONFIG_FILE)
+            )
+        except subprocess.CalledProcessError as e:
+            if e.returncode == 255:
+                handle_ssh_subprocess_error(e, remote_connection)
+            return folder.lastModified
+    else:
+        timed_paths = [folder.remotePath]
 
-    [mtime] = _remote_directory_mtimes(remote_connection, [folder.remotePath])
+    if not timed_paths:
+        return folder.lastModified
+    mtime = _latest_remote_mtime(remote_connection, timed_paths)
     return folder.lastModified if mtime is None else mtime
 
 
