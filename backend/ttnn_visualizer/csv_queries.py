@@ -207,6 +207,9 @@ _DEVICE_ID_COLUMN = "DEVICE ID"
 PROGRAM_HASH_COLUMN = "PROGRAM HASH"
 PROGRAM_CACHE_HIT_COLUMN = "PROGRAM CACHE HIT"
 
+# The device log's timestamp, which no row may hold negative.
+_CYCLES_COLUMN = "time[cycles since reset]"
+
 # Signpost names a refusal lists. A capture can emit one per layer or iteration;
 # the list is there to show a typo its neighbours, not to inventory the report.
 MAX_LISTED_SIGNPOSTS = 20
@@ -381,29 +384,40 @@ def interval_statistics(
     return float(np.median(pooled)), int(pooled.min()), int(pooled.max())
 
 
-# int64 holds [-2**63, 2**63), and a float holds both ends exactly, so cells compare as
-# floats: one that reads as past either end would wrap when cast.
+# int64 holds [-2**63, 2**63), and a float holds both ends exactly.
 _INT64_END = 2.0**63
-_CYCLES_COLUMN = "time[cycles since reset]"
+_INT64_MAX = np.uint64(2**63 - 1)
 # What `_whole_number_rows` leaves out, as the caveats that count it say.
-UNREADABLE_NUMBER = (
+UNREADABLE_NUMBER_REASON = (
     "that is not a number or does not fit a 64-bit integer, or a negative cycle count"
 )
 
 
-def _whole_number_rows(
-    chunk: pd.DataFrame, columns: Sequence[str]
-) -> Tuple[pd.DataFrame, np.ndarray]:
-    """The rows whose ``columns`` all read, as floats, inside int64's range, with no
-    negative cycle count, those columns as int64, and the mask that chose them, so
-    each caller counts the rest its own way. Two cycle counts kept differ by less
-    than 2**63."""
-    numbers = chunk[list(columns)].apply(pd.to_numeric, errors="coerce")
+def _fits_int64(numbers: pd.Series) -> np.ndarray:
+    """Whether each cell holds an int64, checked in the column's own dtype: read as
+    floats, an int64 column's top 512 values would round up to 2**63."""
+    if pd.api.types.is_signed_integer_dtype(numbers):
+        return np.ones(len(numbers), dtype=bool)
+    if pd.api.types.is_unsigned_integer_dtype(numbers):
+        return (numbers <= _INT64_MAX).to_numpy()
+    # A cell that made the column floats rounded it too, so the top end is a float's.
     values = numbers.to_numpy(dtype=float)
     # NaN fails both comparisons, so a cell that is not a number is left out too.
-    readable = ((values >= -_INT64_END) & (values < _INT64_END)).all(axis=1)
-    if _CYCLES_COLUMN in columns:
-        readable &= values[:, list(columns).index(_CYCLES_COLUMN)] >= 0
+    return (values >= -_INT64_END) & (values < _INT64_END)
+
+
+def _whole_number_rows(
+    chunk: pd.DataFrame, columns: Sequence[str], *, non_negative: Sequence[str]
+) -> Tuple[pd.DataFrame, np.ndarray]:
+    """The rows whose ``columns`` all hold int64s, none of ``non_negative`` below
+    zero, those columns as int64, and the mask that chose them, so each caller counts
+    the rest its own way. Two non-negative values kept differ by less than 2**63."""
+    numbers = chunk[list(columns)].apply(pd.to_numeric, errors="coerce")
+    readable: np.ndarray = np.ones(len(chunk), dtype=bool)
+    for column in columns:
+        readable &= _fits_int64(numbers[column])
+    for column in non_negative:
+        readable &= (numbers[column] >= 0).to_numpy()
     # A blank cell elsewhere makes pandas read a column as floats; keys stay ints.
     whole = chunk[readable].assign(
         **{column: numbers[column][readable].astype("int64") for column in columns}
@@ -828,8 +842,14 @@ class DeviceLogProfilerQueries:
     # REQUIRED_DEVICE_LOG_COLUMNS because only the zone queries need them; see the
     # comment in `_zone_phase` before folding the two together.
     ZONE_SUMMARY_COLUMNS = frozenset(_ZONE_COLUMNS)
-    # The columns `query_core_spans` reads as numbers, besides the run it filters on.
-    _SPAN_NUMBER_COLUMNS = ("PCIe slot", "core_x", "core_y", _CYCLES_COLUMN)
+    # The columns the span and interval readers hold as whole numbers.
+    _WHOLE_NUMBER_COLUMNS = (
+        "PCIe slot",
+        "core_x",
+        "core_y",
+        "run host ID",
+        _CYCLES_COLUMN,
+    )
     # The column that marks a zone's start and end, with its two tokens, in the
     # order one is preferred when a capture has both. Two spellings of the same
     # fact, neither required: a current capture writes `type` as ZONE_START /
@@ -1278,12 +1298,12 @@ class DeviceLogProfilerQueries:
                 .str.strip()
                 .str.endswith(KERNEL_ZONE_SUFFIX)
             ]
-            whole, readable = _whole_number_rows(chunk, self._SPAN_NUMBER_COLUMNS)
+            whole, readable = _whole_number_rows(
+                chunk, self._WHOLE_NUMBER_COLUMNS, non_negative=(_CYCLES_COLUMN,)
+            )
             if not readable.all():
                 malformed.update(chunk["run host ID"][~readable].astype(int).tolist())
-            chunk = whole.assign(
-                **{"run host ID": whole["run host ID"].astype("int64")}
-            )
+            chunk = whole
             for zone, risc, slot, x, y, run_id, cycles, phase in zip(
                 *(chunk[column].tolist() for column in columns)
             ):
@@ -1327,7 +1347,6 @@ class DeviceLogProfilerQueries:
         columns = list(self._ZONE_COLUMNS) + [phase_column]
         # Each kept row's flags ride beside its cells, named apart from any log column.
         row_columns = [*columns, "_kernel_start", "_marker", "_flush"]
-        number_columns = [*self._SPAN_NUMBER_COLUMNS, "run host ID"]
 
         timelines: Dict[RiscTimeline, ZoneRepeats] = {}
         open_runs: Dict[RiscTimeline, _OpenRun] = {}
@@ -1393,7 +1412,9 @@ class DeviceLogProfilerQueries:
                 }
             )
 
-            whole, readable = _whole_number_rows(chunk, number_columns)
+            whole, readable = _whole_number_rows(
+                chunk, self._WHOLE_NUMBER_COLUMNS, non_negative=(_CYCLES_COLUMN,)
+            )
             malformed += int((~readable).sum())
             malformed_starts += int(
                 (~readable & (wanted & starts)[kept].to_numpy()).sum()

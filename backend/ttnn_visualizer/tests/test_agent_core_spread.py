@@ -501,45 +501,61 @@ class TestFirmwareWindows:
 class TestUnreadableCells:
     """A cell that cannot be read costs its row, not every operation's answer."""
 
+    # No run case: a run cell that cannot be read matches no requested run, so it is
+    # filtered out before its row's cells are checked.
     @pytest.mark.parametrize(
-        "bad",
+        "bad, rows",
         [
-            _zone(0, "abc", 1, "BRISC", 0, 9000),
-            _zone(0, 4, 1, "BRISC", "", 9000),
-            _zone(0, 4, 1, "BRISC", "inf", "inf"),
-            _zone(0, 4, 1, "BRISC", "nan", 9000),
-            _zone("x", 4, 1, "BRISC", 0, 9000),
-            _zone(0, 4, 1, "BRISC", 0, "1e300"),
-            _zone(0, 4, 1, "BRISC", -5, 9000),
-            _zone("1e30", 4, 1, "BRISC", 0, 9000),
-            _zone(0, 4, 1, "BRISC", 0, str(2**63)),
-            _zone(0, "-1e30", 1, "BRISC", 0, 9000),
-        ],
-        ids=[
-            "core",
-            "blank-cycles",
-            "inf",
-            "nan",
-            "slot",
-            "cycles-past-int64",
-            "negative-cycles",
-            "slot-past-int64",
-            "cycles-at-2-63",
-            "core-below-int64",
+            pytest.param(_zone(0, "abc", 1, "BRISC", 0, 9000), 2, id="core"),
+            pytest.param(_zone(0, 4, 1, "BRISC", "", 9000), 1, id="blank-cycles"),
+            pytest.param(_zone(0, 4, 1, "BRISC", "inf", "inf"), 2, id="inf"),
+            pytest.param(_zone(0, 4, 1, "BRISC", "nan", 9000), 1, id="nan"),
+            pytest.param(_zone("x", 4, 1, "BRISC", 0, 9000), 2, id="slot"),
+            pytest.param(
+                _zone(0, 4, 1, "BRISC", 0, "1e300"), 1, id="cycles-past-int64"
+            ),
+            pytest.param(_zone(0, 4, 1, "BRISC", -5, 9000), 1, id="negative-cycles"),
+            pytest.param(
+                _zone("1e30", 4, 1, "BRISC", 0, 9000), 2, id="slot-past-int64"
+            ),
+            pytest.param(
+                _zone(0, 4, 1, "BRISC", 0, str(2**63)), 1, id="cycles-at-2-63"
+            ),
+            pytest.param(
+                _zone(0, "-1e30", 1, "BRISC", 0, 9000), 2, id="core-below-int64"
+            ),
         ],
     )
-    def test_a_row_with_a_cell_that_cannot_be_read_is_left_out(self, tmp_path, bad):
+    def test_a_row_with_a_cell_that_cannot_be_read_is_left_out(
+        self, tmp_path, bad, rows
+    ):
         result = _spread(tmp_path, THREE_CORES + bad, [_op()], perf_id="1")
 
         op = result["ops"][0]
         assert op["in_log"] is True
         assert op["cores_in_log"] == 3
         assert op["core_span"]["max_us"] == 3.0
-        assert (
-            " kernel rows of these operations' call counts have a slot, core or cycle "
-            "count that is not a number or does not fit a 64-bit integer, or a "
+        assert result["caveat"].startswith(
+            f"{rows} kernel rows of these operations' call counts have a slot, core or "
+            "cycle count that is not a number or does not fit a 64-bit integer, or a "
             "negative cycle count, and were left out"
-        ) in result["caveat"]
+        )
+
+    def test_large_whole_numbers_are_kept(self, tmp_path):
+        """An int64 column keeps its top value, which as a float rounds up to 2**63."""
+        top = 2**63 - 1
+        rows = [*THREE_CORES[:-2], *_zone(0, top, 1, "BRISC", 0, top)]
+
+        result = _spread(tmp_path, rows, [_op()], perf_id="1")
+
+        op = result["ops"][0]
+        assert op["cores_in_log"] == 3
+        assert op["slowest_cores"][0] == {
+            "x": top,
+            "y": 1,
+            "span_us": round(top / 1000, 3),
+        }
+        assert "left out" not in result.get("caveat", "")
 
     def test_a_blank_run_elsewhere_keeps_the_join_and_whole_coordinates(self, tmp_path):
         """A blank cell makes pandas read the column as floats."""
