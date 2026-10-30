@@ -718,17 +718,91 @@ class TestGaps:
             3.0,
         )
 
-    def test_rows_that_are_not_numbers_are_left_out_and_counted(self, tmp_path):
+    @pytest.mark.parametrize(
+        "bad",
+        [
+            pytest.param(
+                modern_row(0, 1, 1, "BRISC", "x", LOOP, "ZONE_START"),
+                id="not-a-number",
+            ),
+            pytest.param(
+                modern_row(0, 1, 1, "BRISC", "1e300", LOOP, "ZONE_START"),
+                id="cycles-past-int64",
+            ),
+            pytest.param(
+                modern_row(0, 1, 1, "BRISC", str(2**63), LOOP, "ZONE_START"),
+                id="cycles-at-2-63",
+            ),
+            pytest.param(
+                modern_row(0, 1, 1, "BRISC", -5, LOOP, "ZONE_START"),
+                id="negative-cycles",
+            ),
+            pytest.param(
+                modern_row("1e30", 1, 1, "BRISC", 1500, LOOP, "ZONE_START"),
+                id="slot-past-int64",
+            ),
+            pytest.param(
+                modern_row("-1e30", 1, 1, "BRISC", 1500, LOOP, "ZONE_START"),
+                id="slot-below-int64",
+            ),
+            pytest.param(
+                modern_row(0, "1e30", 1, "BRISC", 1500, LOOP, "ZONE_START"),
+                id="core-past-int64",
+            ),
+            pytest.param(
+                modern_row(0, 1, 1, "BRISC", 1500, LOOP, "ZONE_START", run="1e30"),
+                id="run-past-int64",
+            ),
+        ],
+    )
+    def test_unreadable_rows_are_left_out_and_counted(self, tmp_path, bad):
+        """Cast to int64, a cell past it would wrap into some other device, core,
+        run or time."""
         rows = _run(0, 1, 1, "BRISC", 0, [100, 1100, 2100])
-        rows.insert(3, modern_row(0, 1, 1, "BRISC", "x", LOOP, "ZONE_START"))
+        rows.insert(3, bad)
 
         answer = _intervals(tmp_path, rows)
 
         assert answer["by_core_risc"][0]["intervals"] == 2
+        assert answer["by_core_risc"][0]["max_us"] == 1.0
         assert (
-            "1 rows have a slot, core, run or cycle count that is not a finite number"
-            in (answer["caveat"])
-        )
+            "1 rows have a slot, core, run or cycle count that is not a number or does "
+            "not fit a 64-bit integer, or a negative cycle count, and were left out."
+        ) in answer["caveat"]
+
+    def test_large_whole_numbers_are_kept_and_subtracted(self, tmp_path):
+        """An int64 column keeps its top value, which as a float rounds up to 2**63."""
+        top = 2**63 - 1
+        rows = [
+            modern_row(top, top, 1, "BRISC", 0, "BRISC-KERNEL", "ZONE_START"),
+            *(
+                modern_row(top, top, 1, "BRISC", cycles, LOOP, "ZONE_START")
+                for cycles in (0, 2**62, top)
+            ),
+        ]
+
+        answer = _intervals(tmp_path, rows)
+
+        (entry,) = answer["by_core_risc"]
+        assert (entry["device"], entry["x"]) == (top, top)
+        assert (entry["occurrences"], entry["intervals"]) == (3, 2)
+        assert entry["max_us"] == round(2**62 / 1000, 3)
+        assert "left out" not in answer.get("caveat", "")
+
+    def test_starts_whose_difference_would_overflow_answer_rather_than_fail(
+        self, tmp_path
+    ):
+        """No two cycle counts kept are 2**63 or more apart, since none is negative."""
+        rows = [
+            modern_row(0, 1, 1, "BRISC", 0, "BRISC-KERNEL", "ZONE_START"),
+            modern_row(0, 1, 1, "BRISC", "-9e18", LOOP, "ZONE_START"),
+            modern_row(0, 1, 1, "BRISC", "9e18", LOOP, "ZONE_START"),
+        ]
+
+        answer = _intervals(tmp_path, rows)
+
+        assert answer["by_device"][0]["occurrences"] == 1
+        assert "1 rows have a slot, core, run or cycle count" in answer["caveat"]
 
     def test_starts_past_the_open_start_ceiling_say_the_log_is_malformed(
         self, tmp_path
@@ -764,17 +838,35 @@ class TestGaps:
 
 class TestRefusals:
     def test_a_zone_whose_starts_were_all_unreadable_says_so(self, tmp_path):
+        """Only its own starts are counted, not another zone's unreadable rows."""
         rows = _run(0, 1, 1, "BRISC", 0, [100, 1100])
         rows[1] = modern_row(0, 1, 1, "BRISC", "x", LOOP, "ZONE_START")
-        rows[3] = modern_row(0, 1, 1, "BRISC", "y", LOOP, "ZONE_START")
+        rows[3] = modern_row(0, 1, 1, "BRISC", -5, LOOP, "ZONE_START")
+        rows.append(modern_row(0, 2, 1, "BRISC", "z", "OTHER", "ZONE_START"))
 
         with pytest.raises(ValueError) as refusal:
             _intervals(tmp_path, rows)
 
         assert str(refusal.value) == (
             "'LOOP' starts 2 times in profile_log_device.csv, but none could be read: "
-            "2 have a slot, core, run or cycle count that is not a finite number, and 0 lie "
-            "on core-RISC timelines past the 200000 followed at once"
+            "2 have a slot, core, run or cycle count that is not a number or does not "
+            "fit a 64-bit integer, or a negative cycle count, and 0 lie on core-RISC "
+            "timelines past the 200000 followed at once"
+        )
+
+    def test_a_zone_the_log_lacks_is_refused_as_absent_beside_unreadable_rows(
+        self, tmp_path
+    ):
+        """Other zones' unreadable rows do not make its refusal theirs."""
+        rows = _run(0, 1, 1, "BRISC", 0, [100, 1100])
+        rows.insert(1, modern_row(0, 1, 1, "BRISC", "x", LOOP, "ZONE_START"))
+
+        with pytest.raises(ValueError) as refusal:
+            _intervals(tmp_path, rows, zone="LOPO")
+
+        assert str(refusal.value).startswith(
+            "no zone named 'LOPO' starts in profile_log_device.csv. Its zones by "
+            "starts, most first: 'LOOP' (3)"
         )
 
     def test_a_zone_past_the_timeline_ceiling_says_so(self, tmp_path):
@@ -788,8 +880,9 @@ class TestRefusals:
             _intervals(tmp_path, rows)
 
         assert str(refusal.value).endswith(
-            ": 0 have a slot, core, run or cycle count that is not a finite number, and 2 lie "
-            "on core-RISC timelines past the 0 followed at once"
+            ": 0 have a slot, core, run or cycle count that is not a number or does not "
+            "fit a 64-bit integer, or a negative cycle count, and 2 lie on core-RISC "
+            "timelines past the 0 followed at once"
         )
 
     def test_the_zone_asked_for_is_counted_past_the_names_cap(self, tmp_path):
