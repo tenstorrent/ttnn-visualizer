@@ -645,18 +645,34 @@ def top_ops(
     return result
 
 
-def _device_time_summary(
-    rows: Sequence[Dict], report_total: float
-) -> Dict[str, object]:
-    """The operation's device time over all its rows, and the slowest of them."""
-    timed = [
+def _timed_rows(rows: Sequence[Dict]) -> List[Tuple[Dict, float]]:
+    return [
         (row, device_time)
         for row in rows
         if (device_time := tools.countable_device_time(row)) is not None
     ]
-    if not timed:
+
+
+def operation_device_time(rows: Sequence[Dict]) -> Optional[float]:
+    """An operation's device time over every row it launched, or None if none is timed.
+
+    Summed, since an operation's device operations run one after another; both
+    `operation_detail` and `critical_path` read it here, so the two cannot disagree.
+    The graph view takes the slowest row instead (`aggregatePerfByOp`), so on an
+    operation launching several the agent and the view differ.
+    """
+    timed = _timed_rows(rows)
+    return sum(device_time for _, device_time in timed) if timed else None
+
+
+def _device_time_summary(
+    rows: Sequence[Dict], report_total: float
+) -> Dict[str, object]:
+    """The operation's device time over all its rows, and the slowest of them."""
+    timed = _timed_rows(rows)
+    total = operation_device_time(rows)
+    if total is None:
         return {}
-    total = sum(device_time for _, device_time in timed)
     slowest, _ = max(timed, key=lambda pair: pair[1])
     return {
         "device_time": round(total, 3),
@@ -751,21 +767,6 @@ def _rank_mismatch_reason(
     )
 
 
-def operation_device_time(rows: Sequence[Dict]) -> Optional[float]:
-    """An operation's device time over every row it launched, or None if none is timed.
-
-    Summed, as `operation_detail` sums it, since an operation's device operations run
-    one after another. The graph view takes the slowest row instead
-    (`aggregatePerfByOp`), so on an operation launching several the two differ.
-    """
-    timed = [
-        device_time
-        for row in rows
-        if (device_time := tools.countable_device_time(row)) is not None
-    ]
-    return sum(timed) if timed else None
-
-
 def critical_path(
     registry: ReportRegistry,
     handle: str,
@@ -807,6 +808,21 @@ def critical_path(
         for operation_id in path.operation_ids
         if operation_id not in weights
     ]
+    caveats = []
+    if uncosted:
+        caveats.append(
+            f"{len(uncosted)} of the path's {len(path.operation_ids)} operations "
+            "launched no performance row with a device time, and each counts as 0: a "
+            "gap in the performance report shortens the path rather than breaking it, "
+            "so a chain through those operations may be longer than this one."
+        )
+    if path.has_cycle:
+        caveats.append(
+            "The graph holds a cycle, so the path covers its acyclic portion only and "
+            "the total understates."
+        )
+    if link.partitioned_caveat:
+        caveats.append(link.partitioned_caveat)
     result: Dict[str, object] = {
         "handle": handle,
         "path_length": len(path.operation_ids),
@@ -832,26 +848,9 @@ def critical_path(
         "has_cycle": path.has_cycle,
         "projection": CRITICAL_PATH_PROJECTION,
         **scope.as_response(),
-        **operations.caveat_field(scope),
+        **operations.caveat_field(scope, *caveats),
         "operation_link": link.as_response(),
     }
-    caveats = []
-    if uncosted:
-        caveats.append(
-            f"{len(uncosted)} of the path's {len(path.operation_ids)} operations "
-            "launched no performance row with a device time, and each counts as 0: a "
-            "gap in the performance report shortens the path rather than breaking it, "
-            "so a chain through those operations may be longer than this one."
-        )
-    if path.has_cycle:
-        caveats.append(
-            "The graph holds a cycle, so the path covers its acyclic portion only and "
-            "the total understates."
-        )
-    if link.partitioned_caveat:
-        caveats.append(link.partitioned_caveat)
-    for caveat in caveats:
-        result["caveat"] = operations.joined_caveat(result.get("caveat"), caveat)
     return result
 
 

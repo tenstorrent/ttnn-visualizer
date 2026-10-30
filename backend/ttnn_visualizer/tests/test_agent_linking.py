@@ -42,7 +42,11 @@ from ttnn_visualizer.agent.linking import (
     UnlinkedReason,
 )
 from ttnn_visualizer.csv_queries import ResolvedSignposts
-from ttnn_visualizer.tests.smoke_capture import SMOKE_CAPTURE_DIR
+from ttnn_visualizer.tests.smoke_capture import (
+    SMOKE_CAPTURE_DIR,
+    smoke_rows,
+    write_ops_perf,
+)
 from ttnn_visualizer.tests.test_device_log_columns import (
     MODERN_HEADER,
     write_device_log,
@@ -1917,28 +1921,65 @@ class TestCriticalPath:
         assert result["device_time"] == 16.0
 
     def test_it_refuses_a_report_that_did_not_link(self, path_report):
-        # One row too few for op 6, so the device operation sequences disagree.
+        # Ops 4 and 6 lose their rows, so the device operation sequences disagree.
         registry, handle = path_report(rows=_PATH_ROWS[:-2])
 
         with pytest.raises(ValueError, match="linked to the profiler report"):
             linking.critical_path(registry, handle)
 
-    def test_it_refuses_a_rank_the_link_does_not_cover(self, path_report):
+    def test_it_refuses_a_rank_a_single_host_report_lacks(self, path_report):
         registry, handle = path_report()
 
-        with pytest.raises(ValueError, match="rank"):
+        with pytest.raises(ValueError, match="holds rank 0 only"):
             linking.critical_path(registry, handle, rank=1)
 
-    def test_load_report_lists_it_only_with_both_reports(self, linked, tmp_path):
+    def test_it_refuses_a_rank_other_than_the_linked_one(self, linked, tmp_path):
+        """Rank 1's operation N is not the one rank 0's linked rows belong to."""
+        path = _write_ranked_profiler(tmp_path / "ranked", _GRAPHS)
+        registry, handle, _ = linked(profiler_path=path)
+
+        assert linking.operation_link(registry, handle).status is LinkStatus.LINKED
+        with pytest.raises(
+            ValueError, match="linked to rank 0 only; the graph was read at rank 1"
+        ):
+            linking.critical_path(registry, handle, rank=1)
+
+    def test_load_report_lists_it_only_with_both_reports(self, tmp_path):
         profiler_path = _write_profiler(
             tmp_path / "listed", _PATH_GRAPHS, operations=_PATH_OPERATIONS
         )
-        registry = ReportRegistry()
+        performance = tmp_path / "performance"
+        performance.mkdir()
+        write_ops_perf(performance, smoke_rows())
 
-        alone = load_report(registry, profiler_path=profiler_path)
+        alone = load_report(ReportRegistry(), profiler_path=profiler_path)
+        both = load_report(
+            ReportRegistry(),
+            profiler_path=profiler_path,
+            performance_path=str(performance),
+        )
 
         assert "critical_path" in alone["unanswerable"]
         assert "subgraph_between" in alone["answerable"]
+        assert "critical_path" in both["answerable"]
+
+    def test_load_report_withholds_it_without_captured_graphs(self, tmp_path):
+        # The link aligns captured graphs, so without them nothing can be weighed.
+        profiler_path = _write_profiler(
+            tmp_path / "ungraphed", None, operations=_PATH_OPERATIONS
+        )
+        performance = tmp_path / "performance"
+        performance.mkdir()
+        write_ops_perf(performance, smoke_rows())
+
+        loaded = load_report(
+            ReportRegistry(),
+            profiler_path=profiler_path,
+            performance_path=str(performance),
+        )
+
+        assert "critical_path" in loaded["unanswerable"]
+        assert "subgraph_between" in loaded["answerable"]
 
     def test_the_server_routes_it_with_a_link_template(self, path_report):
         registry, handle = path_report()

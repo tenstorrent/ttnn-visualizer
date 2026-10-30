@@ -14,6 +14,7 @@ import sqlite3
 import pytest
 from ttnn_visualizer.agent import op_graph
 from ttnn_visualizer.agent import operations as agent_operations
+from ttnn_visualizer.agent import server
 from ttnn_visualizer.agent.bounds import MAX_LIMIT
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
 from ttnn_visualizer.agent.op_graph import GraphEdge
@@ -52,19 +53,53 @@ INSERT INTO input_tensors VALUES
 """
 
 
-@pytest.fixture
-def graph_report(tmp_path):
-    directory = tmp_path / "profiler"
+# Two ranks sharing operation and tensor ids, with different edges: rank 0 runs
+# 1 -> 2 -> 3 and rank 1 runs 1 -> 3 directly, so a read that leaked one rank into
+# the other would add an edge.
+_RANKED_GRAPH_SQL = """
+CREATE TABLE operations (
+    operation_id int, name text, duration float, rank int NOT NULL DEFAULT 0
+);
+CREATE TABLE tensors (
+    tensor_id int, shape text, dtype text, layout text, memory_config text,
+    device_id int, address int, buffer_type text, rank int NOT NULL DEFAULT 0
+);
+CREATE TABLE input_tensors (
+    operation_id int, input_index int, tensor_id int, rank int NOT NULL DEFAULT 0
+);
+CREATE TABLE output_tensors (
+    operation_id int, output_index int, tensor_id int, rank int NOT NULL DEFAULT 0
+);
+
+INSERT INTO operations VALUES
+    (1, 'ttnn.from_torch', 0.1, 0), (2, 'ttnn.matmul', 0.1, 0), (3, 'ttnn.add', 0.1, 0),
+    (1, 'ttnn.from_torch', 0.1, 1), (2, 'ttnn.matmul', 0.1, 1), (3, 'ttnn.add', 0.1, 1);
+INSERT INTO tensors VALUES
+    (10, 'Shape([1])', 'DataType.BFLOAT16', 'Layout.TILE', '', 0, NULL, NULL, 0),
+    (11, 'Shape([1])', 'DataType.BFLOAT16', 'Layout.TILE', '', 0, NULL, NULL, 0),
+    (10, 'Shape([1])', 'DataType.BFLOAT16', 'Layout.TILE', '', 0, NULL, NULL, 1);
+INSERT INTO output_tensors VALUES (1, 0, 10, 0), (2, 0, 11, 0), (1, 0, 10, 1);
+INSERT INTO input_tensors VALUES (2, 0, 10, 0), (3, 0, 11, 0), (3, 0, 10, 1);
+"""
+
+
+def _load(tmp_path, sql: str, name: str = "profiler"):
+    directory = tmp_path / name
     directory.mkdir()
     connection = sqlite3.connect(directory / "db.sqlite")
     try:
-        connection.executescript(_GRAPH_SQL)
+        connection.executescript(sql)
         connection.commit()
     finally:
         connection.close()
     registry = ReportRegistry()
     handle = load_report(registry, profiler_path=str(directory))["handle"]
     return registry, handle
+
+
+@pytest.fixture
+def graph_report(tmp_path):
+    return _load(tmp_path, _GRAPH_SQL)
 
 
 def _read(report) -> op_graph.OpGraph:
@@ -199,4 +234,64 @@ class TestSubgraphBetween:
             registry, handle, 1, 4, limit=MAX_LIMIT + 50
         )
 
+        assert len(result["operations"]) == 4
+        assert result["operations_truncated"] is False
+
+    def test_a_deallocate_operation_can_end_the_subgraph(self, graph_report):
+        """Unlike `critical_path`, which leaves deallocate operations out."""
+        registry, handle = graph_report
+
+        result = agent_operations.subgraph_between(registry, handle, 4, 6)
+
+        assert result["operations"] == [
+            {"operation_id": 4, "name": "ttnn.concat"},
+            {"operation_id": 6, "name": "ttnn::deallocate"},
+        ]
+
+    def test_the_server_routes_it_with_a_link_template(self, graph_report):
+        registry, handle = graph_report
+
+        result = server._tool_table(registry)["subgraph_between"]["handler"](
+            {"handle": handle, "from_operation_id": "1", "to_operation_id": 4}
+        )
+
         assert result["operation_count"] == 4
+        assert "{operation_id}" in result["app_link_template"]
+
+
+class TestSubgraphBetweenRanks:
+    @pytest.mark.parametrize(
+        ("rank", "edges"),
+        [
+            (
+                0,
+                [
+                    {"source": 1, "target": 2, "tensor_id": 10},
+                    {"source": 2, "target": 3, "tensor_id": 11},
+                ],
+            ),
+            (1, [{"source": 1, "target": 3, "tensor_id": 10}]),
+        ],
+    )
+    def test_it_reads_the_requested_rank_only(self, tmp_path, rank, edges):
+        registry, handle = _load(tmp_path, _RANKED_GRAPH_SQL)
+
+        result = agent_operations.subgraph_between(registry, handle, 1, 3, rank=rank)
+
+        assert result["edges"] == edges
+        assert result["rank"] == rank
+
+    def test_a_missing_operation_names_the_rank(self, tmp_path):
+        registry, handle = _load(tmp_path, _RANKED_GRAPH_SQL)
+
+        with pytest.raises(ValueError, match="no operation 9 in this report at rank 1"):
+            agent_operations.subgraph_between(registry, handle, 1, 9, rank=1)
+
+    @pytest.mark.parametrize("table", ["tensors", "input_tensors", "output_tensors"])
+    def test_a_graph_table_without_rank_is_refused(self, tmp_path, table):
+        registry, handle = _load(
+            tmp_path, _RANKED_GRAPH_SQL + f"ALTER TABLE {table} DROP COLUMN rank;"
+        )
+
+        with pytest.raises(agent_operations.UnattributableRankError, match=table):
+            agent_operations.subgraph_between(registry, handle, 1, 3)

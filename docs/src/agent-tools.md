@@ -744,7 +744,7 @@ after a newer `ops_perf_results` file appeared — a range not asked before, or 
 from the cache — is refused rather than lined up against operations linked from the old
 capture; call `load_report` again for a fresh handle.
 
-**`critical_path` and `subgraph_between` read the graph the way the graph view draws it.**
+**`critical_path` and `subgraph_between` read the graph's edges as the graph view does.**
 An edge runs from the operation that produced a tensor to each operation that consumed it,
 one per tensor. `critical_path` then leaves out deallocate operations and operations with
 no edge at all, as the graph view does by default, and finds the chain whose operations'
@@ -767,7 +767,8 @@ path. `device_time_share_percent` is the path's share of `report_device_time_tot
 `subgraph_between` needs only the database, and takes `rank`. It lists the operations
 reachable from `from_operation_id` that also reach `to_operation_id`, and the edges between
 them, sorted by id; `operation_count` and `edge_count` are the whole subgraph's when a list
-is capped. It names tensors by id only — `operation_detail` and `tensor_flow` give their
+is capped. Unlike `critical_path`, it keeps deallocate operations, so one can be either
+end of the subgraph or on a path through it. It names tensors by id only — `operation_detail` and `tensor_flow` give their
 configuration. When no path runs from the first operation to the second, the call is
 refused, and says so when one runs the other way.
 

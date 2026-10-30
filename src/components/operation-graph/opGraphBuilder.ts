@@ -73,6 +73,8 @@ export function collectCandidateEdges(operations: OpGraphSourceOperation[]): Can
     return candidates;
 }
 
+// Mirrored, with `hideDeallocate` on, as `kept_operation_ids` in
+// `backend/ttnn_visualizer/agent/op_graph.py`, which no golden holds.
 export function getKeptOperations(
     operations: OpGraphSourceOperation[],
     hideDeallocate: boolean,

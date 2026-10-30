@@ -290,15 +290,15 @@ TOOL_TABLES: Dict[str, frozenset] = {
     "tensor_flow": frozenset(
         {"operations", "tensors", "input_tensors", "output_tensors"}
     ),
+    "subgraph_between": frozenset(
+        {"operations", "tensors", "input_tensors", "output_tensors"}
+    ),
     # `stack_traces` is not required, because the tool answers the argument half
     # without it and says in the response that the capture recorded no call site --
     # 8 of 86 local captures hold the table with no rows. That reasoning covers a
     # table that is empty; a table that is *absent* is handled in `queries.py`,
     # where `query_stack_traces` now guards like its neighbours rather than letting
     # SQLite's `no such table` reach the agent. #2021
-    "subgraph_between": frozenset(
-        {"operations", "tensors", "input_tensors", "output_tensors"}
-    ),
     "operation_provenance": frozenset({"operations", "operation_arguments"}),
     # The errors table is optional: a report that predates it is answered with a caveat.
     "errors": frozenset({"operations"}),

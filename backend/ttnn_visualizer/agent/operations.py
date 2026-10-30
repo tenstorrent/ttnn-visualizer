@@ -178,6 +178,14 @@ def rank_scope(queries: DatabaseQueries, rank: Optional[int]) -> RankScope:
     return scope
 
 
+def no_such_operation(operation_id: int, scope: RankScope) -> ValueError:
+    """The refusal for an operation id the report does not hold at `scope`'s rank."""
+    return ValueError(
+        f"no operation {operation_id} in this report"
+        + (f" at rank {scope.rank}" if scope.rank is not None else "")
+    )
+
+
 class UnattributableRankError(ValueError):
     """Rows that cannot be attributed to the rank a response would name."""
 
@@ -711,10 +719,7 @@ def operation_provenance(
 
         operations = list(queries.query_operations(filters=filters))
         if not operations:
-            raise ValueError(
-                f"no operation {wanted} in this report"
-                + (f" at rank {scope.rank}" if scope.rank is not None else "")
-            )
+            raise no_such_operation(wanted, scope)
         operation = operations[0]
 
         arguments = list(
@@ -907,10 +912,7 @@ def operation_detail(
             )
         )
         if not operations:
-            raise ValueError(
-                f"no operation {operation_id} in this report"
-                + (f" at rank {scope.rank}" if scope.rank is not None else "")
-            )
+            raise no_such_operation(operation_id, scope)
         operation = operations[0]
 
         tensor_size_unit = (
@@ -1329,7 +1331,7 @@ def subgraph_between(
 
     for operation_id in (source, target):
         if operation_id not in graph.names:
-            raise ValueError(f"no operation {operation_id} in this report")
+            raise no_such_operation(operation_id, scope)
     members = op_graph.operations_between(graph, source, target)
     if not members:
         reverse = (
@@ -1417,15 +1419,16 @@ __all__ = [
     "BUFFER_SIZE_UNIT",
     "BUFFER_TYPE_NAMES",
     "DetailFields",
+    "GRAPH_TABLES",
     "MAX_ARGUMENT_VALUE_CHARS",
     "RankScope",
     "TENSOR_SIZE_UNIT",
     "ProfilerDatabaseMissingError",
     "caveat_field",
-    "GRAPH_TABLES",
     "find_operations",
     "joined_caveat",
     "memory_profile",
+    "no_such_operation",
     "operation_detail",
     "operation_provenance",
     "profiler_db",
