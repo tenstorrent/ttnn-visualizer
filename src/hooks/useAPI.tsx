@@ -1383,13 +1383,13 @@ export const useOpToPerfIdForPerfTable = () => {
             return opIdsMap;
         }
 
-        const deviceRowOpIds = getDeviceRowOpIds(linkedRows, getOpIdByPerfId(opIdsMap));
+        const opIdByDeviceRowId = getDeviceRowOpIds(linkedRows, getOpIdByPerfId(opIdsMap));
 
-        if (deviceRowOpIds.size === 0) {
+        if (opIdByDeviceRowId.size === 0) {
             return opIdsMap;
         }
 
-        return [...opIdsMap, ...[...deviceRowOpIds].map(([perfId, opId]) => ({ opId, perfId }))];
+        return [...opIdsMap, ...[...opIdByDeviceRowId].map(([perfId, opId]) => ({ opId, perfId }))];
     }, [opIdsMap, linkedRows]);
 };
 

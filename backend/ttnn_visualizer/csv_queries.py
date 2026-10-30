@@ -502,8 +502,9 @@ class _PerformanceReportOptions:
     group_by: Optional[str]
     no_stacked_report: bool
     detail_columns: bool
-    # Each merged row's per-device row ids, as `device_row_ids`. Opt-in: the agent's
-    # registry keeps its reports' dicts per handle and no tool reads them.
+    # Each merged row's per-device row ids, as `device_row_ids`, on rows that stand for
+    # more than their own. Opt-in: the agent's registry keeps its reports' dicts per
+    # handle and no tool reads them.
     device_row_ids: bool
 
 
@@ -1863,8 +1864,11 @@ class OpsPerformanceReportQueries:
                                             processed_row, idx, ops_perf_results
                                         )
 
+                                        # A row that stands only for itself has no
+                                        # other device's row to link, so it's left
+                                        # off: most captures are single-device.
                                         device_row_ids = device_rows_by_id.get(op_id)
-                                        if device_row_ids is not None:
+                                        if device_row_ids and len(device_row_ids) > 1:
                                             processed_row["device_row_ids"] = list(
                                                 device_row_ids
                                             )

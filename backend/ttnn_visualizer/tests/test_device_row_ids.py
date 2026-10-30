@@ -90,7 +90,9 @@ def test_merged_rows_partition_the_unmerged_device_rows():
     unmerged = _generate(instance, merge_devices=False)
     unmerged_by_id = {int(row["id"]): row for row in unmerged}
 
-    members = [member for row in merged for member in row.get("device_row_ids", [])]
+    # A row that stands only for itself carries no list: it is its own group.
+    groups = [row.get("device_row_ids", [int(row["id"])]) for row in merged]
+    members = [member for group in groups for member in group]
     device_row_ids = {
         row_id
         for row_id, row in unmerged_by_id.items()
@@ -99,11 +101,11 @@ def test_merged_rows_partition_the_unmerged_device_rows():
     assert len(members) == len(set(members))
     assert set(members) == device_row_ids
 
-    for row in merged:
-        assert int(row["id"]) in row["device_row_ids"]
-        assert {
-            unmerged_by_id[member]["raw_op_code"] for member in row["device_row_ids"]
-        } == {row["raw_op_code"]}
+    for row, group in zip(merged, groups):
+        assert int(row["id"]) in group
+        assert {unmerged_by_id[member]["raw_op_code"] for member in group} == {
+            row["raw_op_code"]
+        }
 
 
 def test_a_device_missing_an_op_pairs_by_op_not_by_position(tmp_path):
@@ -115,6 +117,29 @@ def test_a_device_missing_an_op_pairs_by_op_not_by_position(tmp_path):
     assert sorted(map(set, members.values()), key=min) == CRAFTED_GROUPS
     for row_id, row_members in members.items():
         assert int(row_id) in row_members
+
+
+def test_a_single_device_capture_carries_no_members(tmp_path, caplog):
+    """Every merged row of one device stands only for itself, so none has another
+    device's row to link, and an empty field is not mistaken for a rename."""
+    template = smoke_rows()[0]
+    write_ops_perf(
+        tmp_path,
+        [
+            {**template, "DEVICE ID": "0", "HOST START TS": str(1000 + position)}
+            for position in range(3)
+        ],
+    )
+    instance = Instance(
+        instance_id="pytest-device-row-ids-single", performance_path=str(tmp_path)
+    )
+
+    with caplog.at_level(logging.WARNING, logger=csv_queries.logger.name):
+        merged = _generate(instance, merge_devices=True, device_row_ids=True)
+
+    assert len(merged) == 3
+    assert not any("device_row_ids" in row for row in merged)
+    assert "named none of their members" not in caplog.text
 
 
 @pytest.mark.parametrize(
@@ -266,8 +291,13 @@ def test_the_route_asks_for_it_only_when_merged(
     assert response.status_code == 200
     report = response.get_json()["report"]
     assert report
-    assert all(
-        ("device_row_ids" in row) == (merge_devices == "true")
-        for row in report
-        if row["op_type"] == csv_queries._DEVICE_OP_TYPE
-    )
+    with_members = [row for row in report if "device_row_ids" in row]
+    if merge_devices == "false":
+        assert not with_members
+        return
+    # The frontend keys its links on `String(member)`, so members must come through
+    # the JSON as plain ints, the row's own id among them.
+    assert with_members
+    for row in with_members:
+        assert all(type(member) is int for member in row["device_row_ids"])
+        assert int(row["id"]) in row["device_row_ids"]
