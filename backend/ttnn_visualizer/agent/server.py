@@ -68,9 +68,10 @@ INSTRUCTIONS = (
     "- Two id spaces overlap. A performance row's id (a top_ops or perf_rows row's "
     "id, or any *_perf_id) numbers rows of the performance CSV. operation_id is the "
     "profiler database's: find_operations, memory_profile, tensor_flow, errors, "
-    "dram_fallbacks and l1_peak return it, operation_detail and "
-    "operation_provenance take it. One passed as the other "
-    "answers about a different operation; pass a top_ops row's operation_id on.\n"
+    "dram_fallbacks, l1_peak, critical_path and subgraph_between return it, "
+    "operation_detail, operation_provenance and subgraph_between take it. "
+    "One passed as the other answers about a different operation; pass a top_ops "
+    "row's operation_id on.\n"
     "- Device time and op-to-op gap are microseconds; an operation's duration is "
     "host seconds. Allocations and circular buffers are bytes per bank, never added "
     "across buffer types; "
@@ -708,6 +709,68 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
             "handler": lambda arguments: app_links.with_operation_link_template(
                 registry,
                 failures.l1_peak(registry, **arguments),
+            ),
+        },
+        McpToolName.CRITICAL_PATH: {
+            "title": "Critical path",
+            "description": (
+                "The longest chain of cumulative device time through the operation "
+                "graph, from source to sink, with each operation's device time, the "
+                "chain's total and its share of the report's. Edges run from the "
+                "operation that produced a tensor to each one that consumed it; "
+                "deallocate operations and operations with no edge are left out, as "
+                "the graph view leaves them out. An operation weighs the summed "
+                "device time of the performance rows it launched, as "
+                "operation_detail sums it, where the graph view takes its slowest "
+                "row, so the two can name different paths through an operation "
+                "that launches several. An operation with no timed row counts as 0 "
+                "and is still traversed: uncosted_operation_count says how much of "
+                "the path is a gap rather than a measurement. Needs a performance "
+                "report linked to the profiler report, and reads the linked rank "
+                f"only. Lists up to {MAX_LIMIT} operations; path_length is the "
+                "whole chain's."
+            ),
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "handle": {"type": "string"},
+                    "limit": _LIMIT_SCHEMA,
+                    "rank": _RANK_SCHEMA,
+                },
+                "required": ["handle"],
+            },
+            "handler": lambda arguments: app_links.with_operation_link_template(
+                registry,
+                linking.critical_path(registry, **arguments),
+            ),
+        },
+        McpToolName.SUBGRAPH_BETWEEN: {
+            "title": "Subgraph between two operations",
+            "description": (
+                "The operations, tensor edges and tensors on every path from one "
+                "operation to another, so one block can be read without walking it "
+                "through tensor_flow. Each tensor is listed once with its shape, "
+                "dtype, layout, buffer type and memory layout; its size and shard "
+                "spec are operation_detail's. Deallocate operations are kept, unlike "
+                "in critical_path. Refused when no path runs that way, saying so "
+                f"when one runs the other way. Operations and edges are capped at "
+                f"{MAX_LIMIT} and tensors at {MAX_DETAILED_LIMIT}; operation_count, "
+                "edge_count and tensor_count are the whole subgraph's."
+            ),
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "handle": {"type": "string"},
+                    "from_operation_id": _OPERATION_ID_SCHEMA,
+                    "to_operation_id": _OPERATION_ID_SCHEMA,
+                    "limit": _LIMIT_SCHEMA,
+                    "rank": _RANK_SCHEMA,
+                },
+                "required": ["handle", "from_operation_id", "to_operation_id"],
+            },
+            "handler": lambda arguments: app_links.with_operation_link_template(
+                registry,
+                operations.subgraph_between(registry, **arguments),
             ),
         },
     }

@@ -34,10 +34,18 @@ from functools import partial
 from typing import Dict, List, NamedTuple, Optional, Sequence, Set, Tuple
 
 from tt_perf_report.perf_report import HOST_OP_MARKER
-from ttnn_visualizer.agent import failures, operations, perf_detail, perf_flags, tools
+from ttnn_visualizer.agent import (
+    failures,
+    op_graph,
+    operations,
+    perf_detail,
+    perf_flags,
+    tools,
+)
 from ttnn_visualizer.agent.bounds import (
     MAX_LIMIT,
     GraphTooLargeError,
+    bounded,
     ensure_graph_readable,
 )
 from ttnn_visualizer.agent.captured_graph import UnreadableGraphError, parse_graph
@@ -637,18 +645,38 @@ def top_ops(
     return result
 
 
-def _device_time_summary(
-    rows: Sequence[Dict], report_total: float
-) -> Dict[str, object]:
-    """The operation's device time over all its rows, and the slowest of them."""
-    timed = [
+def _timed_rows(rows: Sequence[Dict]) -> List[Tuple[Dict, float]]:
+    return [
         (row, device_time)
         for row in rows
         if (device_time := tools.countable_device_time(row)) is not None
     ]
-    if not timed:
+
+
+def operation_device_time(rows: Sequence[Dict]) -> Optional[float]:
+    """An operation's device time over every row it launched, or None if none is timed.
+
+    Summed, since an operation's device operations run one after another; both
+    `operation_detail` and `critical_path` read it here, so the two cannot disagree.
+    The graph view takes the slowest row instead (`aggregatePerfByOp`), so on an
+    operation launching several the agent and the view differ.
+    """
+    return _summed(_timed_rows(rows))
+
+
+def _summed(timed: Sequence[Tuple[Dict, float]]) -> Optional[float]:
+    return sum(device_time for _, device_time in timed) if timed else None
+
+
+def _device_time_summary(
+    rows: Sequence[Dict], report_total: float
+) -> Dict[str, object]:
+    """The operation's device time over all its rows, and the slowest of them."""
+    timed = _timed_rows(rows)
+    # `operation_device_time`'s sum, from rows already filtered once.
+    total = _summed(timed)
+    if total is None:
         return {}
-    total = sum(device_time for _, device_time in timed)
     slowest, _ = max(timed, key=lambda pair: pair[1])
     return {
         "device_time": round(total, 3),
@@ -680,15 +708,10 @@ def operation_detail(
     )
     link = operation_link(registry, handle)
     if link.status is LinkStatus.LINKED and result.get("rank") != link.rank:
-        # The link pairs the CSV with one rank's operations, and ids restart per rank,
-        # so another rank's operation N is not the one these rows belong to.
         result["operation_link"] = OperationLink(
             LinkStatus.UNAVAILABLE,
             rank=link.rank,
-            reason=(
-                f"performance rows are linked to rank {link.rank} only; "
-                f"this operation was read at rank {result.get('rank')}"
-            ),
+            reason=_rank_mismatch_reason(link.rank, result.get("rank")),
         ).as_response()
         return result
     if link.status is LinkStatus.LINKED:
@@ -727,6 +750,114 @@ def operation_detail(
     return result
 
 
+CRITICAL_PATH_PROJECTION = (
+    "one edge per tensor, from the operation that produced it to each one that "
+    "consumed it; operations with no edge and deallocate operations left out, as the "
+    "graph view leaves them out; each operation weighed by the summed device time of "
+    "the performance rows it launched"
+)
+
+
+def _rank_mismatch_reason(
+    link_rank: Optional[int], rank: object, subject: str = "this operation"
+) -> str:
+    # Ids restart per rank, so another rank's operation N is not the one the
+    # linked rows belong to.
+    return (
+        f"performance rows are linked to rank {link_rank} only; "
+        f"{subject} was read at rank {rank}"
+    )
+
+
+def critical_path(
+    registry: ReportRegistry,
+    handle: str,
+    limit: Optional[int] = None,
+    rank: Optional[int] = None,
+) -> Dict[str, object]:
+    """The longest chain of cumulative device time through the operation graph."""
+    link = operation_link(registry, handle)
+    if link.status is not LinkStatus.LINKED:
+        raise ValueError(
+            "the critical path needs device time per operation, which needs the "
+            "performance report linked to the profiler report: "
+            f"{link.reason or link.status.value}"
+        )
+    instance = registry.get(handle)
+    with operations.profiler_db(instance) as queries:
+        scope = operations.rank_scope(queries, rank)
+        if scope.rank != link.rank:
+            raise ValueError(_rank_mismatch_reason(link.rank, scope.rank, "the graph"))
+        graph = operations.read_scoped_graph(registry, handle, queries, scope)
+
+    kept = op_graph.kept_operation_ids(graph)
+    device_time_by_operation_id: Dict[int, float] = {}
+    for operation_id in kept:
+        device_time = operation_device_time(
+            link.perf_rows_by_operation.get(operation_id, [])
+        )
+        if device_time is not None:
+            device_time_by_operation_id[operation_id] = device_time
+    # `find_critical_path` drops an edge to an operation not kept, as the app's does.
+    path = op_graph.find_critical_path(
+        sorted(kept), graph.edges, device_time_by_operation_id
+    )
+
+    cap = bounded(limit, MAX_LIMIT)
+    uncosted = [
+        operation_id
+        for operation_id in path.operation_ids
+        if operation_id not in device_time_by_operation_id
+    ]
+    caveats = []
+    if uncosted:
+        caveats.append(
+            f"{len(uncosted)} of the path's {len(path.operation_ids)} operations "
+            "launched no performance row with a device time, and each counts as 0: a "
+            "gap in the performance report shortens the path rather than breaking it, "
+            "so a chain through those operations may be longer than this one."
+        )
+    if path.has_cycle:
+        caveats.append(
+            "The graph holds a cycle, so the path covers its acyclic portion only and "
+            "the total understates."
+        )
+    if link.partitioned_caveat:
+        caveats.append(link.partitioned_caveat)
+    result: Dict[str, object] = {
+        "handle": handle,
+        "path_length": len(path.operation_ids),
+        "device_time": round(path.total, 3),
+        "device_time_unit": DEVICE_TIME_UNIT,
+        "device_time_share_percent": tools.share_percent(
+            path.total, link.report_device_time_total
+        ),
+        "report_device_time_total": round(link.report_device_time_total, 3),
+        "operations": [
+            {
+                "operation_id": operation_id,
+                "name": graph.names.get(operation_id),
+                "device_time": (
+                    round(device_time_by_operation_id[operation_id], 3)
+                    if operation_id in device_time_by_operation_id
+                    else None
+                ),
+            }
+            for operation_id in path.operation_ids[:cap]
+        ],
+        "truncated": len(path.operation_ids) > cap,
+        "uncosted_operation_count": len(uncosted),
+        "uncosted_operation_ids": uncosted[:MAX_LIMIT],
+        "has_cycle": path.has_cycle,
+        "projection": tools.projection(None),
+        "graph_projection": CRITICAL_PATH_PROJECTION,
+        **scope.as_response(),
+        **operations.caveat_field(scope, *caveats),
+        "operation_link": link.as_response(),
+    }
+    return result
+
+
 PROGRAM_CACHE_LINK_NOTE = (
     "first_repeat_miss_operation_id is the profiler database id of the operation that "
     "launched the op code's first repeat miss, to pass to operation_provenance for its "
@@ -755,6 +886,7 @@ def program_cache(
 
 
 __all__ = [
+    "CRITICAL_PATH_PROJECTION",
     "DEVICE_TIME_UNIT",
     "PROGRAM_CACHE_LINK_NOTE",
     "TOP_OPS_LINK_NOTE",
@@ -766,10 +898,12 @@ __all__ = [
     "UnlinkedReason",
     "UnlinkedRows",
     "collapse_multidevice_operations",
+    "critical_path",
     "device_operation_orders",
     "is_host_op_row",
     "match_device_operations",
     "operation_detail",
+    "operation_device_time",
     "operation_link",
     "program_cache",
     "top_ops",

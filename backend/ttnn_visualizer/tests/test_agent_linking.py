@@ -42,7 +42,11 @@ from ttnn_visualizer.agent.linking import (
     UnlinkedReason,
 )
 from ttnn_visualizer.csv_queries import ResolvedSignposts
-from ttnn_visualizer.tests.smoke_capture import SMOKE_CAPTURE_DIR
+from ttnn_visualizer.tests.smoke_capture import (
+    SMOKE_CAPTURE_DIR,
+    smoke_rows,
+    write_ops_perf,
+)
 from ttnn_visualizer.tests.test_device_log_columns import (
     MODERN_HEADER,
     write_device_log,
@@ -1772,3 +1776,259 @@ class TestPerfDetailLink:
 
         empty_fields.assert_called_once()
         assert detail["empty_in_report"] == ranked["empty_in_report"]
+
+
+def _sequential_graph(name: str, *device_operations: str) -> str:
+    """A captured graph whose operation launches `device_operations` one after another."""
+    nodes: List[Dict[str, object]] = [
+        {"node_type": "capture_start", "params": None},
+        {"node_type": "function_start", "params": {"name": name}},
+    ]
+    for device_operation in device_operations:
+        nodes.append(
+            {"node_type": "function_start", "params": {"name": device_operation}}
+        )
+        nodes.append(
+            {"node_type": "function_end", "params": {"name": device_operation}}
+        )
+    nodes.append({"node_type": "function_end", "params": {"name": name}})
+    return json.dumps(nodes)
+
+
+# Op 1 launches nothing, so it has no device time; op 2 launches two device operations.
+# Summed, 1 -> 2 -> 3 costs 3 + 4 + 9 = 16 and beats 1 -> 4 at 15; weighed by op 2's
+# slowest row, as the graph view weighs it, the path would be 1 -> 4 instead.
+_PATH_OPERATIONS = [
+    (1, "ttnn.from_torch"),
+    (2, "ttnn.matmul"),
+    (3, "ttnn.add"),
+    (4, "ttnn.relu"),
+    (5, "ttnn.deallocate"),
+    (6, "ttnn.isolated"),
+]
+_PATH_GRAPHS = {
+    1: _sequential_graph("ttnn.from_torch", "Tensor::to_device"),
+    2: _sequential_graph(
+        "ttnn.matmul", "MatmulDeviceOperation", "BinaryNgDeviceOperation"
+    ),
+    3: _sequential_graph("ttnn.add", "BinaryNgDeviceOperation"),
+    4: _sequential_graph("ttnn.relu", "UnaryDeviceOperation"),
+    5: _sequential_graph("ttnn.deallocate"),
+    6: _sequential_graph("ttnn.isolated", "IsolatedDeviceOperation"),
+}
+_PATH_ROWS = [
+    _perf_row("signpost-start", 2, "signpost"),
+    {**_perf_row("MatmulDeviceOperation", 3), "device_time": "3.0"},
+    {**_perf_row("BinaryNgDeviceOperation", 4), "device_time": "4.0"},
+    {**_perf_row("BinaryNgDeviceOperation", 5), "device_time": "9.0"},
+    {**_perf_row("UnaryDeviceOperation", 6), "device_time": "15.0"},
+    # The heaviest operation, alone: the graph view drops it, so the path must too.
+    {**_perf_row("IsolatedDeviceOperation", 7), "device_time": "100.0"},
+]
+# (producer, tensor, consumers): op 5 deallocates op 3's output.
+_PATH_EDGES = [(1, 10, [2, 4]), (2, 11, [3]), (3, 12, [5])]
+
+
+def _add_edges(profiler_path: str, edges=_PATH_EDGES) -> None:
+    connection = sqlite3.connect(Path(profiler_path, "db.sqlite"))
+    try:
+        for producer, tensor_id, consumers in edges:
+            connection.execute(
+                "INSERT INTO tensors VALUES (?, 'Shape([1])', 'DataType.BFLOAT16', "
+                "'Layout.TILE', '', 0, NULL, NULL)",
+                (tensor_id,),
+            )
+            connection.execute(
+                "INSERT INTO output_tensors VALUES (?, 0, ?)", (producer, tensor_id)
+            )
+            connection.executemany(
+                "INSERT INTO input_tensors VALUES (?, 0, ?)",
+                [(consumer, tensor_id) for consumer in consumers],
+            )
+        connection.commit()
+    finally:
+        connection.close()
+
+
+@pytest.fixture
+def path_report(linked, tmp_path):
+    def _path_report(rows=_PATH_ROWS, edges=_PATH_EDGES):
+        profiler_path = _write_profiler(
+            tmp_path / "path-profiler", _PATH_GRAPHS, operations=_PATH_OPERATIONS
+        )
+        _add_edges(profiler_path, edges)
+        registry, handle, _ = linked(profiler_path=profiler_path, rows=rows)
+        return registry, handle
+
+    return _path_report
+
+
+class TestCriticalPath:
+    def test_it_weighs_an_operation_by_every_row_it_launched(self, path_report):
+        registry, handle = path_report()
+
+        result = linking.critical_path(registry, handle)
+
+        assert result["operation_link"]["status"] == "linked"
+        assert [entry["operation_id"] for entry in result["operations"]] == [1, 2, 3]
+        assert [entry["device_time"] for entry in result["operations"]] == [
+            None,
+            7.0,
+            9.0,
+        ]
+        assert result["device_time"] == 16.0
+        assert result["path_length"] == 3
+        assert result["has_cycle"] is False
+        report_total = sum(float(row["device_time"]) for row in _PATH_ROWS[1:])
+        assert result["device_time_share_percent"] == tools.share_percent(
+            16.0, report_total
+        )
+
+    def test_it_states_the_projection_its_weights_were_read_through(self, path_report):
+        registry, handle = path_report()
+
+        result = linking.critical_path(registry, handle)
+
+        assert result["projection"] == tools.projection(None)
+        assert result["graph_projection"] == linking.CRITICAL_PATH_PROJECTION
+
+    def test_a_cycle_is_flagged_and_caveated(self, path_report):
+        # Op 3's output feeds op 2, which fed op 3, so neither is ever ordered.
+        registry, handle = path_report(
+            edges=[(1, 10, [2, 4]), (2, 11, [3]), (3, 12, [2])]
+        )
+
+        result = linking.critical_path(registry, handle)
+
+        assert result["has_cycle"] is True
+        assert "holds a cycle" in result["caveat"]
+        assert [entry["operation_id"] for entry in result["operations"]] == [1, 4]
+        assert result["device_time"] == 15.0
+
+    def test_a_partitioned_run_carries_its_caveat_beside_the_gap(self, path_report):
+        with patch.object(
+            tools, "partitioned_caveat", return_value="Partitioned run caveat."
+        ):
+            registry, handle = path_report()
+            result = linking.critical_path(registry, handle)
+
+        assert "1 of the path's 3 operations" in result["caveat"]
+        assert result["caveat"].endswith("Partitioned run caveat.")
+
+    def test_an_operation_with_no_row_is_crossed_and_counted(self, path_report):
+        registry, handle = path_report()
+
+        result = linking.critical_path(registry, handle)
+
+        assert result["uncosted_operation_count"] == 1
+        assert result["uncosted_operation_ids"] == [1]
+        assert "1 of the path's 3 operations" in result["caveat"]
+
+    def test_a_path_with_every_operation_costed_carries_no_gap_caveat(
+        self, path_report
+    ):
+        # Op 1 launches a device operation of its own, so every op on the path is timed.
+        graphs = {
+            **_PATH_GRAPHS,
+            1: _sequential_graph("ttnn.from_torch", "TilizeDeviceOperation"),
+        }
+        rows = [
+            _PATH_ROWS[0],
+            {**_perf_row("TilizeDeviceOperation", 8), "device_time": "2.0"},
+            *_PATH_ROWS[1:],
+        ]
+        with patch.dict(_PATH_GRAPHS, graphs):
+            registry, handle = path_report(rows=rows)
+            result = linking.critical_path(registry, handle)
+
+        assert result["uncosted_operation_count"] == 0
+        assert result["device_time"] == 18.0
+        assert "caveat" not in result
+
+    def test_it_leaves_out_deallocate_and_isolated_operations(self, path_report):
+        registry, handle = path_report()
+
+        result = linking.critical_path(registry, handle)
+
+        listed = {entry["operation_id"] for entry in result["operations"]}
+        assert 5 not in listed and 6 not in listed
+
+    def test_the_limit_caps_the_list_and_not_the_length(self, path_report):
+        registry, handle = path_report()
+
+        result = linking.critical_path(registry, handle, limit=1)
+
+        assert [entry["operation_id"] for entry in result["operations"]] == [1]
+        assert result["truncated"] is True
+        assert result["path_length"] == 3
+        assert result["device_time"] == 16.0
+
+    def test_it_refuses_a_report_that_did_not_link(self, path_report):
+        # Ops 4 and 6 lose their rows, so the device operation sequences disagree.
+        registry, handle = path_report(rows=_PATH_ROWS[:-2])
+
+        with pytest.raises(ValueError, match="linked to the profiler report"):
+            linking.critical_path(registry, handle)
+
+    def test_it_refuses_a_rank_a_single_host_report_lacks(self, path_report):
+        registry, handle = path_report()
+
+        with pytest.raises(ValueError, match="holds rank 0 only"):
+            linking.critical_path(registry, handle, rank=1)
+
+    def test_it_refuses_a_rank_other_than_the_linked_one(self, linked, tmp_path):
+        """Rank 1's operation N is not the one rank 0's linked rows belong to."""
+        path = _write_ranked_profiler(tmp_path / "ranked", _GRAPHS)
+        registry, handle, _ = linked(profiler_path=path)
+
+        assert linking.operation_link(registry, handle).status is LinkStatus.LINKED
+        with pytest.raises(
+            ValueError, match="linked to rank 0 only; the graph was read at rank 1"
+        ):
+            linking.critical_path(registry, handle, rank=1)
+
+    def test_load_report_lists_it_only_with_both_reports(self, tmp_path):
+        profiler_path = _write_profiler(
+            tmp_path / "listed", _PATH_GRAPHS, operations=_PATH_OPERATIONS
+        )
+        performance = tmp_path / "performance"
+        performance.mkdir()
+        write_ops_perf(performance, smoke_rows())
+
+        alone = load_report(ReportRegistry(), profiler_path=profiler_path)
+        both = load_report(
+            ReportRegistry(),
+            profiler_path=profiler_path,
+            performance_path=str(performance),
+        )
+
+        assert "critical_path" in alone["unanswerable"]
+        assert "subgraph_between" in alone["answerable"]
+        assert "critical_path" in both["answerable"]
+
+    def test_load_report_withholds_it_without_captured_graphs(self, tmp_path):
+        # The link aligns captured graphs, so without them nothing can be weighed.
+        profiler_path = _write_profiler(
+            tmp_path / "ungraphed", None, operations=_PATH_OPERATIONS
+        )
+        performance = tmp_path / "performance"
+        performance.mkdir()
+        write_ops_perf(performance, smoke_rows())
+
+        loaded = load_report(
+            ReportRegistry(),
+            profiler_path=profiler_path,
+            performance_path=str(performance),
+        )
+
+        assert "critical_path" in loaded["unanswerable"]
+        assert "subgraph_between" in loaded["answerable"]
+
+    def test_the_server_routes_it_with_a_link_template(self, path_report):
+        registry, handle = path_report()
+
+        result = server._tool_table(registry)["critical_path"]["handler"](
+            {"handle": handle}
+        )
+
+        assert "{operation_id}" in result["app_link_template"]

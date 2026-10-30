@@ -58,7 +58,8 @@ Answers link to the same thing in the web application, for the reader to open:
 - `load_report` returns an `app_link` to the report.
 - `operation_detail` and `operation_provenance` return an `app_link` to the operation.
 - `find_operations`, `top_ops`, `program_cache`, `memory_profile`, `tensor_flow`,
-  `errors`, `dram_fallbacks` and `l1_peak` return one `app_link_template`, in which
+  `errors`, `dram_fallbacks`, `l1_peak`, `critical_path` and `subgraph_between` return
+  one `app_link_template`, in which
   `{operation_id}` takes any operation id the answer lists.
 
 A link names the report by its directories, and the visualizer opens them when the link is
@@ -105,11 +106,15 @@ another rank's operation under the same id.
 | `errors` | The errors the run recorded, including an operation that started and never completed: which operation, the device operations whose launch failed, and for an allocation failure its figures and why it did not fit. |
 | `dram_fallbacks` | Operations that likely fell back from L1 to DRAM, inferred from their memory config arguments and from retries after an L1 allocation failure. |
 | `l1_peak` | The run's L1 peak per bank, split into circular buffers, intra-operation tensors, persistent tensors and stale ones, with the operation holding it and the operations closest to it. |
+| `critical_path` | The longest chain of cumulative device time through the operation graph, source to sink, with each operation's device time, the chain's total and share of the report's, and how many of its operations have no device time. Needs a linked performance report. |
+| `subgraph_between` | The operations, tensor edges and tensors on every path from one operation to another, each tensor once with its shape, dtype, layout, buffer type and memory layout, so a block can be read without walking it one tensor at a time. |
 
 `top_ops`, `op_breakdown`, `program_cache`, `zone_timings`, `core_spread` and `diff_reports`
 read the performance CSVs; the operation tools — `find_operations`, `operation_detail`,
-`memory_profile`, `tensor_flow`, `operation_provenance`, `errors`, `dram_fallbacks` and
-`l1_peak` — read the profiler report's SQLite database;
+`memory_profile`, `tensor_flow`, `operation_provenance`, `errors`, `dram_fallbacks`,
+`l1_peak` and `subgraph_between` — read the profiler report's SQLite database;
+`critical_path` reads both, and is listed only when the performance CSV can be reported on
+and the database holds the graph's tables and its captured graphs;
 `load_report` opens both, since its whole job is saying which of the others apply. A capture can carry either, both, or — as far as these tools are concerned —
 neither, which is what makes `load_report`'s answer worth reading first.
 
@@ -728,8 +733,8 @@ its CSV position in either read, so its `operation_id` is the one it has unrange
 `operation_detail`'s `report_device_time_total` and shares, describe the whole report while
 `top_ops`'s own `op_count` and totals describe the window.
 
-The link is resolved once per handle, on the first `top_ops`, `program_cache` or
-`operation_detail` that needs it, and reads every captured graph at the linked rank. On a handle with both reports,
+The link is resolved once per handle, on the first `top_ops`, `program_cache`,
+`operation_detail` or `critical_path` that needs it, and reads every captured graph at the linked rank. On a handle with both reports,
 the first `operation_detail` therefore also generates the performance report, which can
 take seconds on a large capture; every later call reuses both. A link that failed on a read
 that might pass next time — a locked database, a temp-file error in tt-perf-report — is not
@@ -738,6 +743,42 @@ read, so it never mixes two. A read that needs the CSV again after it was rewrit
 after a newer `ops_perf_results` file appeared — a range not asked before, or one dropped
 from the cache — is refused rather than lined up against operations linked from the old
 capture; call `load_report` again for a fresh handle.
+
+**`critical_path` and `subgraph_between` read the graph's edges as the graph view does.**
+An edge runs from the operation that produced a tensor to each operation that consumed it,
+one per tensor. `critical_path` then leaves out deallocate operations and operations with
+no edge at all, as the graph view does by default, and finds the chain whose operations'
+device time adds up to the most — the same search the graph view's critical path runs,
+held to it by a shared golden. Ties go to the longer chain, then to the lower operation id.
+
+An operation weighs the summed device time of every performance row it launched, as
+`operation_detail` totals it. The graph view weighs an operation by its slowest row
+instead, so on an operation that launches several device operations the two can name
+different paths. An operation with no timed row — unlinked, or a row tt-perf-report left
+blank — counts as 0 and is still traversed, so a gap in the performance report shortens
+the path rather than breaking it: `uncosted_operation_count` and `uncosted_operation_ids`
+say how much of the path is a gap rather than a measurement, and the caveat says so
+whenever any is. A report whose tensor edges form a cycle gets `has_cycle: true` and a path
+over the acyclic portion only. The tool needs the two reports linked, and reads the linked
+rank only, since an unlinked graph has no weights and its longest chain is not a critical
+path. `device_time_share_percent` is the path's share of `report_device_time_total`, as in
+`operation_detail`. `projection` is the performance report's, as every tool that reads it
+gives it, and `graph_projection` says which graph the path was searched over.
+
+`subgraph_between` needs only the database, and takes `rank`. It lists the operations
+reachable from `from_operation_id` that also reach `to_operation_id`, and the edges between
+them, sorted by id; `operation_count` and `edge_count` are the whole subgraph's when a list
+is capped. Unlike `critical_path`, it keeps deallocate operations, so one can be either
+end of the subgraph or on a path through it. `tensors` lists each tensor on those edges
+once, by id, with its shape, dtype, layout, buffer type and memory layout — what reading a
+block's layout needs. It is capped lower than the other lists, at the limit
+or 25, whichever is smaller, and `tensor_count` counts them all. It leaves out a tensor's
+size, whose unit depends on the capture: `operation_detail` and `tensor_flow` give it, with
+its `tensor_size_unit`, and the shard spec. When no path runs from the first operation to
+the second, the call is refused, and says so when one runs the other way.
+
+Both tools read the graph once per handle and rank, so walking a model block by block
+pays for the read on the first call only.
 
 **An operation id is not the end of the answer.** `memory_profile` names the operations
 holding its largest footprint, and `operation_provenance` turns such an id into the two things you need

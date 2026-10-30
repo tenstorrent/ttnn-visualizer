@@ -66,6 +66,9 @@ const updateMaxOptional = (existing: number | null, candidate: number | null | u
  *
  * Rows with a null `id`, null/non-finite `device_time`, or non-positive
  * `device_time` are skipped — they can't contribute to a log-scale ramp.
+ *
+ * The agent's `operation_device_time` (`backend/ttnn_visualizer/agent/linking.py`)
+ * sums an op's rows instead, so its critical path can differ from this view's.
  */
 export const aggregatePerfByOp = (rows: PerfOverlaySource[]): Map<number, OpPerfAggregate> => {
     const aggregatesByOpId = new Map<number, OpPerfAggregate>();
