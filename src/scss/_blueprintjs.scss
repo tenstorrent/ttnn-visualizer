@@ -5,7 +5,6 @@
 @use 'sass:color';
 @use 'sass:map';
 @use './definitions/colours' as *;
-@use './definitions/variables' as variables;
 @use '@blueprintjs/colors/lib/scss/colors' as *;
 
 $dark-primary-background-base: $tt-purple-shade;
@@ -14,18 +13,27 @@ $dark-warning-background-base: $tt-yellow;
 $dark-danger-background-base: $tt-red-accent;
 $dark-success-intent-color: $green4; // from BlueprintJS
 
-// Blueprint's own shade-6 colours ($blue6 etc. in core's _variables-extended.scss), which 6.6 used for minimal
-// active text. Written out because a `with (…)` block can't read the module it configures.
-$bp-blue6: #99c4ff;
-$bp-green6: #7cd7a2;
-$bp-orange6: #f5c186;
-$bp-red6: #ffa1a4;
-
-// Blueprint 6.6 elevation shadows; 6.7 redesigned them
-$bp-legacy-drop-shadow: rgba($black, 0.2);
+// Blueprint 6.6 dark elevation shadows; 6.7 redesigned them
 $bp-legacy-dark-drop-shadow: rgba($black, 0.4);
-$bp-legacy-border-shadow: 0 0 0 1px rgba($black, 0.1);
 $bp-legacy-dark-border-shadow: inset 0 0 0 1px rgba($white, 0.2);
+
+// Shared by the Sass configuration and the --bp-surface-shadow-* tokens, so both kinds of surface match
+$bp-legacy-dark-shadow-1: ($bp-legacy-dark-border-shadow, 0 1px 1px $bp-legacy-dark-drop-shadow);
+$bp-legacy-dark-shadow-2: (
+    $bp-legacy-dark-border-shadow,
+    0 1px 1px $bp-legacy-dark-drop-shadow,
+    0 2px 6px $bp-legacy-dark-drop-shadow
+);
+$bp-legacy-dark-shadow-3: (
+    $bp-legacy-dark-border-shadow,
+    0 2px 4px $bp-legacy-dark-drop-shadow,
+    0 8px 24px $bp-legacy-dark-drop-shadow
+);
+$bp-legacy-dark-shadow-4: (
+    $bp-legacy-dark-border-shadow,
+    0 4px 8px $bp-legacy-dark-drop-shadow,
+    0 18px 46px 6px $bp-legacy-dark-drop-shadow
+);
 $pt-intent-text-colors: (
     'primary': $dark-primary-intent-color,
     'success': $dark-success-intent-color,
@@ -33,200 +41,162 @@ $pt-intent-text-colors: (
     'danger': $dark-danger-background-base,
 );
 
+// Blueprint derives most intent colours from its --bp-intent-* tokens (set below). These maps are the exceptions:
+// they replace Blueprint's whole map, so every intent and 'default' is restated, and the 'default' entries repeat
+// Blueprint's own token mixes.
 @use '@blueprintjs/core/src/blueprint.scss' with (
     $pt-intent-text-colors: $pt-intent-text-colors,
-    $dark-button-background-color: variables.$dark-button-background-base,
-    $dark-button-background-color-hover: color.adjust(variables.$dark-button-background-base, $lightness: -5%),
-    $dark-minimal-button-background-color: variables.$dark-button-background-base,
-    $dark-minimal-button-background-color-hover: variables.$tt-dark-minimal-button-background-color-hover,
     $pt-dark-link-color: $tt-teal-accent,
     $control-checked-background-color: $tt-teal-accent,
     $control-checked-background-color-hover: color.adjust($tt-teal-accent, $lightness: -3%),
     $control-checked-background-color-active: color.adjust($tt-teal-accent, $lightness: -6%),
     $dark-progress-track-color: $tt-teal-shade,
     $dark-progress-head-color: $tt-teal-accent,
-    // $dark-control-checked-background-color: #abc123,
     $pt-dark-icon-color: $tt-white,
-    // "intent": (default, hover, active, text colors)
-    // 'default' must be restated because a configured map replaces Blueprint's whole map
-    $button-intent-states: (
-            'primary': (
-                $dark-primary-background-base,
-                color.adjust($dark-primary-background-base, $lightness: -5%),
-                color.adjust($dark-primary-background-base, $lightness: -10%),
-                $white,
-            ),
-            'success': (
-                $green4,
-                $green3,
-                $green2,
-                $white,
-            ),
-            // Blueprint has always drawn solid warning buttons in its own oranges with dark text.
-            // _blueprintjs-parity.scss also reads these for the hover, pressed and disabled fills.
-            'warning': (
-                    $orange5,
-                    $orange4,
-                    $orange3,
-                    $tt-grey-2,
-                ),
-            'danger': (
-                $dark-danger-background-base,
-                color.adjust($dark-danger-background-base, $lightness: -5%),
-                $tt-red-shade,
-                $white,
-            ),
-            'default': (
-                var(--bp-intent-default-rest),
-                var(--bp-intent-default-hover),
-                var(--bp-intent-default-active),
-                var(--bp-intent-default-foreground),
-            ),
-        ),
-    // Minimal and outlined buttons: tint background and dark-theme text colours
+    // Minimal and outlined button hover and pressed tints. Tinting from the token would use the purple shade, which
+    // barely shows against the dark background.
     $button-intent-colors: map.merge(
             $pt-intent-text-colors,
             (
                 'default': var(--bp-intent-default-rest),
             )
         ),
+    // Minimal and outlined button text. Blueprint mixes the intent token about 50% with white, which turns the
+    // purple shade that solid buttons need into a muddy grey, so text uses the palette's text colours instead.
     $button-dark-intent-text-colors: map.merge(
             $pt-intent-text-colors,
             (
                 'default': color-mix(in srgb, var(--bp-intent-default-rest) 46%, var(--bp-palette-white)),
             )
         ),
-    // Standalone minimal primary buttons are lightened further by the override at the end of this file
-    $button-dark-minimal-hover-text-colors: (
-            'primary': $blue5,
-            'success': $green5,
-            'warning': $orange5,
-            'danger': $red5,
-            'default': color-mix(in srgb, var(--bp-intent-default-hover) 46%, var(--bp-palette-white)),
+    $button-dark-minimal-hover-text-colors: map.merge(
+            $pt-intent-text-colors,
+            (
+                'primary': $tt-purple-tint-2,
+                'success': $green5,
+                'warning': $tt-yellow-tint-1,
+                'danger': $tt-red,
+                'default': color-mix(in srgb, var(--bp-intent-default-hover) 46%, var(--bp-palette-white)),
+            )
         ),
-    $button-dark-minimal-active-text-colors: (
-        'primary': $bp-blue6,
-        'success': $bp-green6,
-        'warning': $bp-orange6,
-        'danger': $bp-red6,
-        'default': color-mix(in srgb, var(--bp-intent-default-active) 46%, var(--bp-palette-white)),
-    ),
+    $button-dark-minimal-active-text-colors: map.merge(
+            $pt-intent-text-colors,
+            (
+                'primary': $tt-purple-tint-2,
+                'success': $green5,
+                'warning': $tt-yellow-tint-1,
+                'danger': $tt-red,
+                'default': color-mix(in srgb, var(--bp-intent-default-active) 46%, var(--bp-palette-white)),
+            )
+        ),
+    // Solid tags: (background, hover, pressed, text). Blueprint lightens the warning token for warning tags, which
+    // turns the yellow almost white; the other intents repeat Blueprint's own token entries.
+    $tag-intent-colors: (
+            'primary': (
+                var(--bp-intent-primary-rest),
+                var(--bp-intent-primary-hover),
+                var(--bp-intent-primary-active),
+                var(--bp-intent-primary-foreground),
+            ),
+            'success': (
+                var(--bp-intent-success-rest),
+                var(--bp-intent-success-hover),
+                var(--bp-intent-success-active),
+                var(--bp-intent-success-foreground),
+            ),
+            'warning': (
+                var(--bp-intent-warning-rest),
+                var(--bp-intent-warning-hover),
+                var(--bp-intent-warning-active),
+                var(--bp-intent-warning-foreground),
+            ),
+            'danger': (
+                var(--bp-intent-danger-rest),
+                var(--bp-intent-danger-hover),
+                var(--bp-intent-danger-active),
+                var(--bp-intent-danger-foreground),
+            ),
+        ),
+    // Minimal tags: (background, text, hover and pressed text). Blueprint draws dark minimal tag text in the bare
+    // intent token, which for the purple shade is unreadable on the dark background.
+    $minimal-dark-tag-intent-colors: (
+            'primary': (
+                $dark-primary-intent-color,
+                $dark-primary-intent-color,
+                $tt-purple-tint-2,
+            ),
+            'success': (
+                $dark-success-intent-color,
+                $green5,
+                $green5,
+            ),
+            'warning': (
+                $dark-warning-background-base,
+                $dark-warning-background-base,
+                $tt-yellow-tint-1,
+            ),
+            'danger': (
+                $dark-danger-background-base,
+                $tt-red,
+                $tt-red-tint-1,
+            ),
+        ),
     $pt-intent-colors: $pt-intent-text-colors,
     $pt-dark-intent-text-colors: $pt-intent-text-colors,
     $pt-text-color: $tt-grey-2,
     $dark-navbar-background-color: transparent,
-    // Background/Hover/Active/Text colours
-    $tag-intent-colors: (
-            'primary': (
-                $dark-primary-background-base,
-                color.adjust($dark-primary-background-base, $lightness: -10%),
-                color.adjust($dark-primary-background-base, $lightness: -5%),
-                $white,
-            ),
-            'success': (
-                $green3,
-                $green2,
-                $green1,
-                $white,
-            ),
-            'warning': (
-                $dark-warning-background-base,
-                color.adjust($dark-warning-background-base, $lightness: -10%),
-                color.adjust($dark-warning-background-base, $lightness: -5%),
-                $tt-grey-2,
-            ),
-            'danger': (
-                $dark-danger-background-base,
-                $red2,
-                $red1,
-                $white,
-            ),
-        ),
-    // Minimal tags keep Blueprint's own intent colours: (background, hover text, active text)
-    $minimal-tag-intent-colors: (
-            'primary': (
-                $blue3,
-                $blue2,
-                $blue1,
-            ),
-            'success': (
-                $green3,
-                $green2,
-                $green1,
-            ),
-            'warning': (
-                $orange3,
-                $orange2,
-                $orange1,
-            ),
-            'danger': (
-                $red3,
-                $red2,
-                $red1,
-            ),
-        ),
-    $minimal-dark-tag-intent-colors: (
-        'primary': (
-            $blue3,
-            $blue5,
-            $bp-blue6,
-        ),
-        'success': (
-            $green3,
-            $green5,
-            $bp-green6,
-        ),
-        'warning': (
-            $orange3,
-            $orange5,
-            $bp-orange6,
-        ),
-        'danger': (
-            $red3,
-            $red5,
-            $bp-red6,
-        ),
-    ),
-    $pt-elevation-shadow-0: 0 0 0 1px rgba($black, 0.15),
-    $pt-elevation-shadow-1: (
-        $bp-legacy-border-shadow,
-        0 1px 1px $bp-legacy-drop-shadow,
-    ),
-    $pt-elevation-shadow-2: (
-        $bp-legacy-border-shadow,
-        0 1px 1px $bp-legacy-drop-shadow,
-        0 2px 6px $bp-legacy-drop-shadow,
-    ),
-    $pt-elevation-shadow-3: (
-        $bp-legacy-border-shadow,
-        0 2px 4px $bp-legacy-drop-shadow,
-        0 8px 24px $bp-legacy-drop-shadow,
-    ),
-    $pt-elevation-shadow-4: (
-        $bp-legacy-border-shadow,
-        0 4px 8px $bp-legacy-drop-shadow,
-        0 18px 46px 6px $bp-legacy-drop-shadow,
-    ),
     $pt-dark-elevation-shadow-0: $bp-legacy-dark-border-shadow,
-    // Remove elevation shadows in dark mode (navbar)
+    // No navbar shadow in dark mode. The level 1 token below stays a real shadow: Blueprint lists it alongside
+    // other shadows on dark cards, where `none` would make the whole declaration invalid.
     $pt-dark-elevation-shadow-1: none,
-    $pt-dark-elevation-shadow-2: (
-        $bp-legacy-dark-border-shadow,
-        0 1px 1px $bp-legacy-dark-drop-shadow,
-        0 2px 6px $bp-legacy-dark-drop-shadow,
-    ),
-    $pt-dark-elevation-shadow-3: (
-        $bp-legacy-dark-border-shadow,
-        0 2px 4px $bp-legacy-dark-drop-shadow,
-        0 8px 24px $bp-legacy-dark-drop-shadow,
-    ),
-    $pt-dark-elevation-shadow-4: (
-        $bp-legacy-dark-border-shadow,
-        0 4px 8px $bp-legacy-dark-drop-shadow,
-        0 18px 46px 6px $bp-legacy-dark-drop-shadow,
-    )
+    $pt-dark-elevation-shadow-2: $bp-legacy-dark-shadow-2,
+    $pt-dark-elevation-shadow-3: $bp-legacy-dark-shadow-3,
+    $pt-dark-elevation-shadow-4: $bp-legacy-dark-shadow-4
 );
-@use './blueprintjs-parity';
+
+// Blueprint declares the intent tokens on :root only, and derives other :root tokens from them, so they are set
+// on :root too. Emitted after Blueprint's own declarations, including its @supports blocks, so these win.
+:root {
+    --bp-intent-primary-rest: #{$dark-primary-background-base};
+    --bp-intent-primary-hover: #{color.adjust($dark-primary-background-base, $lightness: -5%)};
+    --bp-intent-primary-active: #{color.adjust($dark-primary-background-base, $lightness: -10%)};
+    --bp-intent-primary-foreground: #{$white};
+    --bp-intent-success-rest: #{$dark-success-intent-color};
+    --bp-intent-success-hover: #{$green3};
+    --bp-intent-success-active: #{$green2};
+    --bp-intent-success-foreground: #{$white};
+
+    // Blueprint mixes only a quarter of the hover token into the warning button fill, so a near shade barely shows
+    --bp-intent-warning-rest: #{$dark-warning-background-base};
+    --bp-intent-warning-hover: #{$tt-yellow-shade};
+    --bp-intent-warning-active: #{$tt-yellow-shade};
+    --bp-intent-warning-foreground: #{$tt-grey-2};
+    --bp-intent-danger-rest: #{$dark-danger-background-base};
+    --bp-intent-danger-hover: #{color.adjust($dark-danger-background-base, $lightness: -5%)};
+    --bp-intent-danger-active: #{$tt-red-shade};
+    --bp-intent-danger-foreground: #{$white};
+
+    // Blueprint-private: the solid warning button fill, which Blueprint lightens from the warning token and which
+    // for our yellow comes out almost white. Its hover and pressed fills mix from this.
+    --bp6-button-warning-rest: #{$dark-warning-background-base};
+}
+
+// Blueprint declares its dark surface and typography tokens on .bp6-dark, so overriding them on :root would lose
+.bp6-dark {
+    // Icons in default buttons and the text typed into a tag input. Blueprint's muted grey left button icons
+    // dimmer than the white label beside them.
+    --bp-typography-color-default-rest: #{$tt-white};
+
+    // Disabled text keeps the translucent grey the app has always used, rather than Blueprint's opaque one
+    --bp-typography-color-default-disabled: #{rgba($gray4, 0.6)};
+    --bp-surface-shadow-0: #{$bp-legacy-dark-border-shadow};
+    --bp-surface-shadow-1: #{$bp-legacy-dark-shadow-1};
+    --bp-surface-shadow-2: #{$bp-legacy-dark-shadow-2};
+    --bp-surface-shadow-3: #{$bp-legacy-dark-shadow-3};
+    --bp-surface-shadow-4: #{$bp-legacy-dark-shadow-4};
+}
+
+// Deliberate differences from Blueprint, each with its reason
 
 // Blueprint raises an intent-coloured button or input inside a group to z-index 10-16 so
 // its border paints over the neighbour it shares an edge with. Those values only ever need
@@ -245,40 +215,28 @@ $pt-intent-text-colors: (
     isolation: isolate;
 }
 
-// Overrides for BlueprintJS which cannot be done via SASS variables
-.bp6-dark {
-    // Blueprint's hover and pressed text colour maps are shared by minimal and outlined buttons, but standalone
-    // minimal and outlined primary buttons need different colours here. Buttons inside a minimal or outlined
-    // group carry neither class, so they keep the map colours.
-    .bp6-button {
-        &.bp6-minimal {
-            &.bp6-intent-primary {
-                &:hover,
-                &:active {
-                    &:not(:disabled) {
-                        color: $tt-purple-tint-2;
-                    }
-                }
+.bp6-button {
+    // Icon-only buttons pull their icon out to centre it. 6.7 narrowed this to an icon that is a direct child,
+    // so an icon wrapped in a span, such as a Tooltip target, lost the margin.
+    .bp6-icon:first-child:last-child,
+    .bp6-spinner + .bp6-icon:last-child {
+        margin: 0 calc(-1 * calc(calc(var(--bp-surface-spacing) * 7.5) - calc(var(--bp-surface-spacing) * 4)) * 0.5);
+    }
+}
 
-                &.bp6-active {
-                    color: $tt-purple-tint-2;
-                }
+.bp6-dark {
+    // Outlined primary buttons share the minimal hover and pressed text map, whose tint is too pale next to their
+    // purple outline. Buttons inside an outlined group carry no outlined class, so they keep the map colour.
+    .bp6-button.bp6-outlined.bp6-intent-primary {
+        &:hover,
+        &:active {
+            &:not(:disabled) {
+                color: $dark-primary-intent-color;
             }
         }
 
-        &.bp6-outlined {
-            &.bp6-intent-primary {
-                &:hover,
-                &:active {
-                    &:not(:disabled) {
-                        color: $dark-primary-intent-color;
-                    }
-                }
-
-                &.bp6-active {
-                    color: $dark-primary-intent-color;
-                }
-            }
+        &.bp6-active {
+            color: $dark-primary-intent-color;
         }
     }
 }
