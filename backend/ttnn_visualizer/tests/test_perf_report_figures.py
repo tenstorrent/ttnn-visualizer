@@ -12,6 +12,7 @@ import gc
 import os
 import subprocess
 import sys
+from dataclasses import fields
 
 import matplotlib.pyplot as plt
 import pytest
@@ -28,20 +29,13 @@ _GENERATIONS = 5
 
 
 def _options(**overrides) -> _PerformanceReportOptions:
-    queries = OpsPerformanceReportQueries
-    defaults = dict(
-        start_signpost=queries.DEFAULT_START_SIGNPOST,
-        end_signpost=queries.DEFAULT_END_SIGNPOST,
-        print_signposts=queries.DEFAULT_PRINT_SIGNPOSTS,
-        hide_host_ops=queries.DEFAULT_NO_HOST_OPS,
-        merge_devices=queries.DEFAULT_MERGE_DEVICES,
-        tracing_mode=queries.DEFAULT_TRACING_MODE,
-        group_by=queries.DEFAULT_GROUP_BY,
-        no_stacked_report=queries.DEFAULT_NO_STACKED_REPORT,
-        detail_columns=queries.DEFAULT_DETAIL_COLUMNS,
-        device_row_ids=queries.DEFAULT_DEVICE_ROW_IDS,
-    )
-    return _PerformanceReportOptions(**{**defaults, **overrides})
+    # `_report_options` ignores keys it does not know, so a misspelt override
+    # would silently test the default instead.
+    unknown = set(overrides) - {
+        field.name for field in fields(_PerformanceReportOptions)
+    }
+    assert not unknown, f"not a report option: {sorted(unknown)}"
+    return OpsPerformanceReportQueries._report_options(**overrides)
 
 
 def _smoke_csv() -> str:

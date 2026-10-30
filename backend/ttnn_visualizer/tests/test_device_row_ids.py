@@ -24,12 +24,12 @@ from ttnn_visualizer.extensions import db
 from ttnn_visualizer.models import Instance, InstanceTable
 from ttnn_visualizer.tests.smoke_capture import (
     SMOKE_CAPTURE_DIR,
+    signposted_rows,
     smoke_rows,
     write_ops_perf,
 )
 
 REPORT_ENDPOINT = "/api/performance/perf-results/report"
-DEVICE_OP_TYPE = "tt_dnn_device"
 
 # One operation per entry, in host order: (op code, {device: kernel duration}).
 # Device 2 never runs the first Untilize, so its rows pair one op later than a
@@ -94,7 +94,7 @@ def test_merged_rows_partition_the_unmerged_device_rows():
     device_row_ids = {
         row_id
         for row_id, row in unmerged_by_id.items()
-        if row["op_type"] == DEVICE_OP_TYPE
+        if row["op_type"] == csv_queries._DEVICE_OP_TYPE
     }
     assert len(members) == len(set(members))
     assert set(members) == device_row_ids
@@ -143,6 +143,35 @@ def test_the_agent_does_not_ask_for_it(tmp_path):
     assert not any("device_row_ids" in row for row in report)
 
 
+def test_rows_the_merge_passes_through_carry_no_members(tmp_path, caplog):
+    """Signposts and host ops leave the merge's column blank (NaN), which must be
+    skipped rather than read: one bad cell would drop every row's members."""
+    rows = signposted_rows()
+    rows.append({**rows[0], "OP TYPE": "python_fallback", "OP CODE": "HostOp"})
+    write_ops_perf(tmp_path, rows)
+    instance = Instance(
+        instance_id="pytest-device-row-ids-passthrough", performance_path=str(tmp_path)
+    )
+
+    with caplog.at_level(logging.WARNING, logger=csv_queries.logger.name):
+        report = OpsPerformanceReportQueries.generate_report(
+            instance, hide_host_ops=False, merge_devices=True, device_row_ids=True
+        )["report"]
+
+    device_rows = [
+        row for row in report if row["op_type"] == csv_queries._DEVICE_OP_TYPE
+    ]
+    passed_through = [
+        row for row in report if row["op_type"] != csv_queries._DEVICE_OP_TYPE
+    ]
+    assert {row["op_type"] for row in passed_through} == {"signpost", "python_fallback"}
+    assert not any("device_row_ids" in row for row in passed_through)
+    assert device_rows
+    for row in device_rows:
+        assert int(row["id"]) in row["device_row_ids"]
+    assert "Could not read" not in caplog.text
+
+
 def test_a_failed_read_leaves_the_report_whole(monkeypatch, caplog):
     def _unreadable(merged):
         raise KeyError("ORIGINAL_ROW")
@@ -155,7 +184,12 @@ def test_a_failed_read_leaves_the_report_whole(monkeypatch, caplog):
 
     assert len(report) == len(_generate(instance, merge_devices=True))
     assert not any("device_row_ids" in row for row in report)
-    assert "merged device rows" in caplog.text
+    # Matched on its own wording: the empty map also trips the rename warning,
+    # which says "merged device rows" too.
+    (failure,) = [
+        record for record in caplog.records if "Could not read" in record.getMessage()
+    ]
+    assert failure.exc_info is not None
 
 
 def test_an_upstream_rename_is_logged_rather_than_silent(monkeypatch, caplog):
@@ -235,5 +269,5 @@ def test_the_route_asks_for_it_only_when_merged(
     assert all(
         ("device_row_ids" in row) == (merge_devices == "true")
         for row in report
-        if row["op_type"] == DEVICE_OP_TYPE
+        if row["op_type"] == csv_queries._DEVICE_OP_TYPE
     )

@@ -661,7 +661,14 @@ describe('report matching under a filtered performance tab', () => {
 
         await waitFor(() => expect(result.current[1]).toHaveLength(unmergedRows.length));
 
-        expect(getReportRequests().filter((params) => !params.merge_devices)).toHaveLength(1);
+        // The tab's unmerged view and the linked report, and nothing else.
+        expect(getReportRequests()).toHaveLength(2);
+        expect(getReportRequests()).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ merge_devices: false }),
+                expect.objectContaining({ merge_devices: true, hide_host_ops: true, tracing_mode: false }),
+            ]),
+        );
     });
 
     it('keeps its result across re-renders, and drops the unmerged rows once devices are merged again', async () => {

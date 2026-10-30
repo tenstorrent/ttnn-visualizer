@@ -255,11 +255,13 @@ REPORT_ROW_ID_OFFSET = 2
 # Raw CSV columns a signpost is read from. tt-perf-report orders rows by the host
 # start time before it resolves a signpost, unless tracing mode is on.
 _OP_TYPE_COLUMN = "OP TYPE"
-_DEVICE_OP_TYPE = "tt_dnn_device"
 _OP_CODE_COLUMN = "OP CODE"
 _HOST_START_COLUMN = "HOST START TS"
 # Read in the same pass for the agent's `load_report`, which reports the device count.
 _DEVICE_ID_COLUMN = "DEVICE ID"
+
+# The `OP TYPE` of a device op: the only rows `merge_device_rows` groups across devices.
+_DEVICE_OP_TYPE = "tt_dnn_device"
 
 # A row's program and whether the program cache held it. Older captures lack both.
 PROGRAM_HASH_COLUMN = "PROGRAM HASH"
