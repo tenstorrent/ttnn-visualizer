@@ -276,15 +276,19 @@ In component stylesheets, prefer styling classes we own (for example wrapper or 
 
 This keeps styles resilient to Blueprint markup changes and avoids cross-component side effects.
 
-### Blueprint theming layers
+### Blueprint theming
 
-Blueprint 6.7+ draws most dark-theme colours from `--bp-*` design tokens and ignores many of the Sass variables we configure, so keeping the app's look on 6.21 takes three layers, emitted in this order:
+Blueprint 6.7+ draws most colours from its `--bp-*` design tokens and derives the other shades from them with `oklch(from …)` and `color-mix(…)`. `src/scss/_blueprintjs.scss` themes it in this order:
 
-1. **Configuration** — the `@use '@blueprintjs/core/src/blueprint.scss' with (…)` block in `src/scss/_blueprintjs.scss`. Change a colour here first when Blueprint still reads the variable.
-2. **Parity** — `src/scss/_blueprintjs-parity.scss` restores Blueprint 6.6's dark-theme rules where 6.21 stopped reading the configuration. It copies 6.6's selectors and rule order so specificity is unchanged, and `tests/blueprintParityStyles.spec.ts` pins a sample of its 6.6 values. Keep it a faithful copy: don't put app-specific changes here.
-3. **App deviations** — the rules at the end of `src/scss/_blueprintjs.scss`, after the parity layer, for anything the app deliberately does differently from Blueprint.
+1. **Configuration** — the `@use '@blueprintjs/core/src/blueprint.scss' with (…)` block. It sets what Blueprint still reads from Sass (switch and checkbox colours, progress bars, links, intent text and icons, the navbar, dark elevation shadows) and a few of Blueprint's token-era colour maps where the derived colour is wrong for our palette: minimal and outlined button text and tints, and tags. A configured map replaces Blueprint's whole map, so restate every intent.
+2. **Tokens** — `--bp-intent-*` from our palette, declared on `:root`, and dark `--bp-surface-*` / `--bp-typography-*` overrides on `.bp6-dark`. Each goes on the selector Blueprint declares it on: an intent token set only on `.bp6-dark` would leave the `:root` tokens Blueprint derives from it unchanged, and a dark token set on `:root` loses to Blueprint's `.bp6-dark` declaration. Both blocks follow the `@use`, so they also beat Blueprint's `@supports` redeclarations.
+3. **App deviations** — selector overrides at the end of the file, each with the reason it is needed.
 
-The Blueprint packages are pinned to `~` ranges and upgraded together. On a minor bump, re-check the parity layer against the new release (the spec's version check fails until you do), and update the version noted in its header. #2252 tracks replacing the parity layer with theming through the design tokens.
+Prefer a token to a map, and a map to a selector. The primary token is `$tt-purple-shade`, which solid buttons and tags need; text and outlines that need the light `$tt-purple` get it from the configured maps.
+
+Inputs, tags and the file input use relative colour syntax with no fallback, so the app needs Firefox 128+, Chrome 119+ or Safari 16.4+.
+
+The Blueprint packages are pinned to `~` ranges and upgraded together. On a minor bump, compare `/styleguide` before and after, re-check the overrides, and update the version in `tests/blueprintThemeStyles.spec.ts`, which pins the token values and overrides and fails until you do.
 
 ### Stylesheet imports go through the `styles/` alias
 

@@ -6,8 +6,10 @@ import {
     Button,
     ButtonGroup,
     ButtonVariant,
+    Checkbox,
     Classes,
     FormGroup,
+    HTMLSelect,
     InputGroup,
     Intent,
     PopoverPosition,
@@ -52,6 +54,34 @@ import type { IncomingEdgeView, OutgoingEdge, SourceNode } from '../components/m
 
 // Ends at 1 so the widest bar is shown against the node it has to stay inside.
 const PERF_BAR_SAMPLE_SCORES = [0.05, 0.35, 0.7, 1] as const;
+
+const BUTTON_INTENTS = [
+    { intent: Intent.NONE, icon: undefined },
+    { intent: Intent.PRIMARY, icon: IconNames.ADD },
+    { intent: Intent.SUCCESS, icon: IconNames.TICK },
+    { intent: Intent.WARNING, icon: IconNames.WARNING_SIGN },
+    { intent: Intent.DANGER, icon: IconNames.ISSUE },
+] as const;
+
+// Disabled rows sit under their enabled variant so a theme change to either is easy to compare
+const BUTTON_ROWS = [
+    { label: 'Default', variant: ButtonVariant.SOLID, disabled: false },
+    { label: 'Default disabled', variant: ButtonVariant.SOLID, disabled: true },
+    { label: 'Outlined', variant: ButtonVariant.OUTLINED, disabled: false },
+    { label: 'Outlined disabled', variant: ButtonVariant.OUTLINED, disabled: true },
+    { label: 'Minimal', variant: ButtonVariant.MINIMAL, disabled: false },
+    { label: 'Minimal disabled', variant: ButtonVariant.MINIMAL, disabled: true },
+] as const;
+
+const TAG_INTENTS = [
+    { intent: Intent.NONE, label: 'None' },
+    { intent: Intent.PRIMARY, label: 'Primary' },
+    { intent: Intent.WARNING, label: 'Warning' },
+    { intent: Intent.SUCCESS, label: 'Success' },
+    { intent: Intent.DANGER, label: 'Danger' },
+] as const;
+
+const SELECT_OPTIONS = ['First option', 'Second option'];
 
 const FORM_GROUP = {
     label: 'Form label',
@@ -422,128 +452,23 @@ export default function Styleguide() {
                 </thead>
 
                 <tbody>
-                    <tr>
-                        <th>Default</th>
-                        <td>
-                            <Button>Your text here</Button>
-                        </td>
-                        <td>
-                            <Button
-                                icon={IconNames.ADD}
-                                intent={Intent.PRIMARY}
-                            >
-                                Your text here
-                            </Button>
-                        </td>
-                        <td>
-                            <Button
-                                icon={IconNames.TICK}
-                                intent={Intent.SUCCESS}
-                            >
-                                Your text here
-                            </Button>
-                        </td>
-                        <td>
-                            <Button
-                                icon={IconNames.WARNING_SIGN}
-                                intent={Intent.WARNING}
-                            >
-                                Your text here
-                            </Button>
-                        </td>
-                        <td>
-                            <Button
-                                icon={IconNames.ISSUE}
-                                intent={Intent.DANGER}
-                            >
-                                Your text here
-                            </Button>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th>Outlined</th>
-                        <td>
-                            <Button variant={ButtonVariant.OUTLINED}>Your text here</Button>
-                        </td>
-                        <td>
-                            <Button
-                                icon={IconNames.ADD}
-                                intent={Intent.PRIMARY}
-                                variant={ButtonVariant.OUTLINED}
-                            >
-                                Your text here
-                            </Button>
-                        </td>
-                        <td>
-                            <Button
-                                icon={IconNames.TICK}
-                                intent={Intent.SUCCESS}
-                                variant={ButtonVariant.OUTLINED}
-                            >
-                                Your text here
-                            </Button>
-                        </td>
-                        <td>
-                            <Button
-                                icon={IconNames.WARNING_SIGN}
-                                intent={Intent.WARNING}
-                                variant={ButtonVariant.OUTLINED}
-                            >
-                                Your text here
-                            </Button>
-                        </td>
-                        <td>
-                            <Button
-                                icon={IconNames.ISSUE}
-                                intent={Intent.DANGER}
-                                variant={ButtonVariant.OUTLINED}
-                            >
-                                Your text here
-                            </Button>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th>Minimal</th>
-                        <td>
-                            <Button variant={ButtonVariant.MINIMAL}>Your text here</Button>
-                        </td>
-                        <td>
-                            <Button
-                                icon={IconNames.ADD}
-                                intent={Intent.PRIMARY}
-                                variant={ButtonVariant.MINIMAL}
-                            >
-                                Your text here
-                            </Button>
-                        </td>
-                        <td>
-                            <Button
-                                icon={IconNames.TICK}
-                                intent={Intent.SUCCESS}
-                                variant={ButtonVariant.MINIMAL}
-                            >
-                                Your text here
-                            </Button>
-                        </td>
-                        <td>
-                            <Button
-                                icon={IconNames.WARNING_SIGN}
-                                intent={Intent.WARNING}
-                                variant={ButtonVariant.MINIMAL}
-                            >
-                                Your text here
-                            </Button>
-                        </td>
-                        <td>
-                            <Button
-                                icon={IconNames.ISSUE}
-                                intent={Intent.DANGER}
-                                variant={ButtonVariant.MINIMAL}
-                            >
-                                Your text here
-                            </Button>
-                        </td>
-                    </tr>
+                    {BUTTON_ROWS.map(({ label, variant, disabled }) => (
+                        <tr key={label}>
+                            <th>{label}</th>
+                            {BUTTON_INTENTS.map(({ intent, icon }) => (
+                                <td key={intent}>
+                                    <Button
+                                        icon={icon}
+                                        intent={intent}
+                                        variant={variant}
+                                        disabled={disabled}
+                                    >
+                                        Your text here
+                                    </Button>
+                                </td>
+                            ))}
+                        </tr>
+                    ))}
                 </tbody>
             </table>
 
@@ -670,6 +595,25 @@ export default function Styleguide() {
                     intent={Intent.DANGER}
                     leftIcon={IconNames.FOLDER_NEW}
                 />
+
+                <InputGroup
+                    onChange={() => {}}
+                    leftIcon={IconNames.FOLDER_NEW}
+                    placeholder='Disabled'
+                    disabled
+                />
+            </div>
+
+            <div className='container flex'>
+                <HTMLSelect options={SELECT_OPTIONS} />
+                <HTMLSelect
+                    options={SELECT_OPTIONS}
+                    minimal
+                />
+                <HTMLSelect
+                    options={SELECT_OPTIONS}
+                    disabled
+                />
             </div>
 
             <div className='short-width'>
@@ -697,6 +641,20 @@ export default function Styleguide() {
             </FormGroup>
 
             <FormGroup>
+                <Checkbox label='Checkbox' />
+                <Checkbox
+                    label='Checkbox'
+                    onChange={() => {}}
+                    checked
+                />
+                <Checkbox
+                    label='Checkbox'
+                    onChange={() => {}}
+                    indeterminate
+                />
+            </FormGroup>
+
+            <FormGroup>
                 <Switch label='Toggle switch' />
                 <Switch
                     label='Toggle switch'
@@ -721,42 +679,34 @@ export default function Styleguide() {
             <h3>Tags</h3>
 
             <div className='container flex'>
-                <Tag
-                    intent={Intent.NONE}
-                    size={Size.LARGE}
-                >
-                    None
-                </Tag>
-                <Tag
-                    intent={Intent.PRIMARY}
-                    size={Size.LARGE}
-                >
-                    Primary
-                </Tag>
-                <Tag
-                    intent={Intent.WARNING}
-                    size={Size.LARGE}
-                >
-                    Warning
-                </Tag>
-                <Tag
-                    intent={Intent.SUCCESS}
-                    size={Size.LARGE}
-                >
-                    Success
-                </Tag>
-                <Tag
-                    intent={Intent.DANGER}
-                    size={Size.LARGE}
-                >
-                    Danger
-                </Tag>
+                {TAG_INTENTS.map(({ intent, label }) => (
+                    <Tag
+                        key={intent}
+                        intent={intent}
+                        size={Size.LARGE}
+                    >
+                        {label}
+                    </Tag>
+                ))}
 
                 <MemoryTag memory={BufferTypeLabel[BufferType.DRAM]} />
                 <MemoryTag memory={BufferTypeLabel[BufferType.L1]} />
                 <MemoryTag memory={BufferTypeLabel[BufferType.L1_SMALL]} />
                 <MemoryTag memory={BufferTypeLabel[BufferType.SYSTEM_MEMORY]} />
                 <MemoryTag memory={BufferTypeLabel[BufferType.TRACE]} />
+            </div>
+
+            <div className='container flex'>
+                {TAG_INTENTS.map(({ intent, label }) => (
+                    <Tag
+                        key={intent}
+                        intent={intent}
+                        size={Size.LARGE}
+                        minimal
+                    >
+                        {label} minimal
+                    </Tag>
+                ))}
             </div>
 
             <h3>Progress bar</h3>
