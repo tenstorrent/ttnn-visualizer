@@ -717,11 +717,12 @@ and how many lay past the 200,000 core-RISC timelines followed at once.
 No zone tool shows a zone name longer than 256 characters or a RISC name longer than 32
 characters: such a name is the capture's text, not the tool's, and tt-metal's longest RISC
 name, `QUASAR_NEO3_TRISC3`, is 18. `zone_timings` leaves an entry with one out, counted in
-`zones_unlisted_too_long`, and `limit` counts only the entries listed. `core_spread` leaves
-such a RISC out of `by_risc`, counted in `by_risc_unlisted_too_long`, though its kernels
-still count in their cores' spans. `zone_intervals` leaves such a timeline out of
-`by_core_risc`, counted in `by_core_risc_unlisted_too_long`, though its intervals still
-count in `by_device` and `timeline_count`.
+`zones_unlisted_too_long`, and `limit` counts only the entries listed. Both count
+zone-and-RISC entries, not names, so a long zone name on five RISCs counts five.
+`core_spread` leaves such a RISC out of `by_risc`, counted in `by_risc_unlisted_too_long`,
+though its kernels still count in their cores' spans. `zone_intervals` leaves such a
+timeline out of `by_core_risc`, counted in `by_core_risc_unlisted_too_long`, though its
+intervals still count in `by_device` and `timeline_count`.
 
 **A performance row and a profiler operation are linked by order, not by a shared id.**
 Neither report records the other's id, so when a handle is loaded with both, the tools

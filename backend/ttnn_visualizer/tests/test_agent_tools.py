@@ -2224,8 +2224,8 @@ class TestZoneSummary:
         assert PREAMBLE.startswith("ARCH")
 
 
-def _zone_timings(tmp_path, zones, **arguments):
-    """`zone_timings` over one paired zone for each ``(zone, risc, cycles)``."""
+def _zone_log(tmp_path, zones):
+    """A loaded log with one paired zone for each ``(zone, risc, cycles)``."""
     rows = [
         row
         for zone, risc, cycles in zones
@@ -2237,16 +2237,19 @@ def _zone_timings(tmp_path, zones, **arguments):
     registry = ReportRegistry()
     write_device_log(tmp_path, MODERN_HEADER, rows)
     load_report(registry, performance_path=str(tmp_path))
-    return tools.zone_timings(registry, "report-1", **arguments)
+    return registry
+
+
+def _zone_timings(tmp_path, zones, **arguments):
+    return tools.zone_timings(_zone_log(tmp_path, zones), "report-1", **arguments)
 
 
 class TestZoneTimingsTool:
     def test_a_name_too_long_to_show_is_counted_rather_than_listed(self, tmp_path):
-        """A crafted log's names are its own text, and one could fill the answer."""
         result = _zone_timings(
             tmp_path,
             [
-                ("Z" * 100_000, "BRISC", 9000),
+                ("Z" * (tools.MAX_ZONE_NAME_LENGTH + 1), "BRISC", 9000),
                 ("MATMUL", "R" * (tools.MAX_RISC_NAME_LENGTH + 1), 8000),
                 ("MATMUL", "BRISC", 500),
                 ("READ", "NCRISC", 100),
@@ -2259,7 +2262,32 @@ class TestZoneTimingsTool:
         assert [(zone["zone"], zone["risc"]) for zone in result["zones"]] == [
             ("MATMUL", "BRISC")
         ]
+        assert result["returned"] == 1
         assert result["zones_unlisted_too_long"] == 2
+
+    def test_an_entry_with_both_names_too_long_is_counted_once(self, tmp_path):
+        result = _zone_timings(
+            tmp_path,
+            [
+                (
+                    "Z" * (tools.MAX_ZONE_NAME_LENGTH + 1),
+                    "R" * (tools.MAX_RISC_NAME_LENGTH + 1),
+                    9000,
+                ),
+                ("MATMUL", "BRISC", 500),
+            ],
+        )
+
+        assert result["zones_unlisted_too_long"] == 1
+        assert result["returned"] == 1
+
+    def test_a_huge_name_does_not_reach_the_answer(self, tmp_path):
+        """A crafted log's names are its own text, and one could fill the answer."""
+        result = _zone_timings(
+            tmp_path, [("Z" * 100_000, "BRISC", 9000), ("MATMUL", "BRISC", 500)]
+        )
+
+        assert result["zones_unlisted_too_long"] == 1
         assert len(json.dumps(result)) < 2_000
 
     def test_names_at_the_bounds_are_listed(self, tmp_path):
@@ -2274,12 +2302,16 @@ class TestZoneTimingsTool:
         assert "zones_unlisted_too_long" not in result
 
     def test_a_bad_limit_is_refused_before_the_log_is_read(self, tmp_path):
+        registry = _zone_log(tmp_path, [("MATMUL", "BRISC", 500)])
+
         with (
+            patch.object(DeviceLogProfilerQueries, "read_capture_metadata") as metadata,
             patch.object(DeviceLogProfilerQueries, "query_zone_summary") as summary,
             pytest.raises(ValueError, match="limit must be a whole number"),
         ):
-            _zone_timings(tmp_path, [("MATMUL", "BRISC", 500)], limit="abc")
+            tools.zone_timings(registry, "report-1", limit="abc")
 
+        metadata.assert_not_called()
         summary.assert_not_called()
 
     def test_cycles_are_converted_with_the_capture_clock(self, tmp_path):

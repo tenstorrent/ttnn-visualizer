@@ -263,6 +263,8 @@ class TestIntervals:
 
         assert (answer["by_core_risc"], answer["returned"]) == ([], 0)
         assert answer["by_core_risc_unlisted_too_long"] == 1
+        assert answer["timeline_count"] == 1
+        assert answer["by_device"][0]["cores"] == 1
         assert answer["by_device"][0]["median_us"] == 1.0
 
     def test_the_zone_name_is_matched_whole(self, tmp_path):
