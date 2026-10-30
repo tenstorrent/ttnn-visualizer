@@ -145,6 +145,91 @@ def _stacked_report_plot_skipped():
         perf_report.HAS_MATPLOTLIB = has_matplotlib
 
 
+def _has_groupable_device_rows(df: pd.DataFrame) -> bool:
+    """Whether `merge_device_rows` must group some of `df`: a device op whose device
+    id is usable. Without one, every row passes through and the column never appears."""
+    if _OP_TYPE_COLUMN not in df.columns or _DEVICE_ID_COLUMN not in df.columns:
+        return False
+    device_ids = pd.to_numeric(df[_DEVICE_ID_COLUMN], errors="coerce")
+    return bool(((df[_OP_TYPE_COLUMN] == _DEVICE_OP_TYPE) & device_ids.notna()).any())
+
+
+def _read_merged_device_rows(merged: pd.DataFrame) -> Dict[int, Tuple[int, ...]]:
+    """Each merged row's id, mapped to the ids of the per-device rows it stands for."""
+    column = perf_report.MERGED_ROWS_COLUMN
+    if column not in merged.columns:
+        return {}
+    # Host ops, signposts and device ops without a usable device id are passed
+    # through unmerged and leave the column blank (NaN), so only tuples are groups.
+    return {
+        int(row_id): tuple(int(member) for member in members)
+        for row_id, members in zip(merged["ORIGINAL_ROW"], merged[column])
+        if isinstance(members, tuple)
+    }
+
+
+@contextmanager
+def _merged_device_rows_captured(
+    enabled: bool,
+) -> Iterator[Dict[int, Tuple[int, ...]]]:
+    """Record which per-device rows each merged row stands for (#2177).
+
+    `merge_device_rows` works this out for every merged row, in its
+    `MERGED_ROWS_COLUMN` (1.5.0), but tt-perf-report writes no such column to its
+    output, so this wraps the module's function for the duration of one build and
+    reads the column from what it returns. Reading the merge's own answer is what
+    lets the frontend link every device's row of an operation without reproducing
+    the merge (#2178 asks for the column upstream).
+
+    Enter it inside `_perf_report_output_bounded`, so the module global is only
+    swapped while the build lock is held; entering it without the lock raises. A
+    failure to read the column must not fail the report: tt-perf-report's caller
+    turns any exception into a 422, so it is logged and the map left empty, and rows
+    then simply carry no members. The tests pin both names, and a merge that had
+    rows to group but wrote no column is logged, in case an upstream rename
+    silently drops the field.
+    """
+    members_by_row: Dict[int, Tuple[int, ...]] = {}
+    if not enabled:
+        yield members_by_row
+        return
+    if not _PERF_REPORT_OUTPUT_LOCK.locked():
+        # Another build could otherwise call this one's wrapper and write its rows
+        # into this map.
+        raise RuntimeError(
+            "merge_device_rows is only swapped under _PERF_REPORT_OUTPUT_LOCK"
+        )
+
+    # Looked up on entry rather than at import, so whatever is installed now -- a
+    # test's patch included -- is what gets wrapped and put back.
+    merge_device_rows = perf_report.merge_device_rows
+
+    def merge_device_rows_capturing(df):
+        merged = merge_device_rows(df)
+        try:
+            if (
+                perf_report.MERGED_ROWS_COLUMN not in merged.columns
+                and _has_groupable_device_rows(df)
+            ):
+                # The frontend falls back to linking only the row the merge kept.
+                logger.warning(
+                    "tt-perf-report merged device rows but named none of their members"
+                )
+            members_by_row.update(_read_merged_device_rows(merged))
+        except Exception:
+            members_by_row.clear()
+            logger.warning(
+                "Could not read tt-perf-report's merged device rows", exc_info=True
+            )
+        return merged
+
+    perf_report.merge_device_rows = merge_device_rows_capturing
+    try:
+        yield members_by_row
+    finally:
+        perf_report.merge_device_rows = merge_device_rows
+
+
 _PERF_REPORT_DIR = os.path.dirname(os.path.abspath(perf_report.__file__))
 
 # Stdlib frames that sit between a library's call and the `SystemExit`: the `exit()`
@@ -199,6 +284,9 @@ _OP_CODE_COLUMN = "OP CODE"
 _HOST_START_COLUMN = "HOST START TS"
 # Read in the same pass for the agent's `load_report`, which reports the device count.
 _DEVICE_ID_COLUMN = "DEVICE ID"
+
+# The `OP TYPE` of a device op: the only rows `merge_device_rows` groups across devices.
+_DEVICE_OP_TYPE = "tt_dnn_device"
 
 # A row's program and whether the program cache held it. Older captures lack both.
 PROGRAM_HASH_COLUMN = "PROGRAM HASH"
@@ -439,6 +527,10 @@ class _PerformanceReportOptions:
     group_by: Optional[str]
     no_stacked_report: bool
     detail_columns: bool
+    # Each merged row's per-device row ids, as `device_row_ids`, on rows that stand for
+    # more than their own. Opt-in: the agent's registry keeps its reports' dicts per
+    # handle and no tool reads them.
+    device_row_ids: bool
 
 
 class LocalCSVQueryRunner:
@@ -1432,6 +1524,7 @@ class OpsPerformanceReportQueries:
     DEFAULT_NO_HOST_OPS = False
     DEFAULT_NO_STACKED_REPORT = False
     DEFAULT_DETAIL_COLUMNS = False
+    DEFAULT_DEVICE_ROW_IDS = False
     DEFAULT_NO_STACK_BY_IN0 = True
     DEFAULT_MERGE_DEVICES = True
     DEFAULT_STACKED_CSV_FILE = None  # Stacked report CSV output file
@@ -1597,6 +1690,7 @@ class OpsPerformanceReportQueries:
                 "no_stacked_report", cls.DEFAULT_NO_STACKED_REPORT
             ),
             detail_columns=kwargs.get("detail_columns", cls.DEFAULT_DETAIL_COLUMNS),
+            device_row_ids=kwargs.get("device_row_ids", cls.DEFAULT_DEVICE_ROW_IDS),
         )
 
     @classmethod
@@ -1657,9 +1751,17 @@ class OpsPerformanceReportQueries:
             else:
                 ignore_signposts = cls.DEFAULT_IGNORE_SIGNPOSTS
 
+            # Only a merged build calls `merge_device_rows` with more than one device.
+            capture_device_rows = options.device_row_ids and merge_devices
             open_figures = set(plt.get_fignums())
             try:
-                with _stacked_report_plot_skipped(), _perf_report_output_bounded():
+                with (
+                    _stacked_report_plot_skipped(),
+                    _perf_report_output_bounded(),
+                    _merged_device_rows_captured(
+                        capture_device_rows
+                    ) as device_rows_by_id,
+                ):
                     perf_report.generate_perf_report(
                         [csv_file],
                         start_signpost,
@@ -1786,6 +1888,15 @@ class OpsPerformanceReportQueries:
                                         cls.set_hash_from_results(
                                             processed_row, idx, ops_perf_results
                                         )
+
+                                        # A row that stands only for itself has no
+                                        # other device's row to link, so it's left
+                                        # off: most captures are single-device.
+                                        device_row_ids = device_rows_by_id.get(op_id)
+                                        if device_row_ids and len(device_row_ids) > 1:
+                                            processed_row["device_row_ids"] = list(
+                                                device_row_ids
+                                            )
 
                                         report.append(processed_row)
                                     except (ValueError, IndexError) as e:
