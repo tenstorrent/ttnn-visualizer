@@ -6,6 +6,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import MultiSelectField from '../src/components/MultiSelectField';
+import openMultiSelect from './helpers/openMultiSelect';
 import testForPortal from './helpers/testForPortal';
 
 const PLACEHOLDER = 'Select Value...';
@@ -40,9 +41,9 @@ function renderField({ values = [], disabledValues }: RenderOptions = {}) {
     return updateHandler;
 }
 
-/** The options only exist while the MultiSelect popover is open. */
+/** The options only exist while the MultiSelect popover is open, and render inside its portal. */
 const openSelect = async () => {
-    fireEvent.click(screen.getByPlaceholderText(PLACEHOLDER));
+    await openMultiSelect(PLACEHOLDER);
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
 };
 

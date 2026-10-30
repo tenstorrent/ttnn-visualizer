@@ -4,7 +4,7 @@
 
 import { configDefaults, defineConfig, mergeConfig } from 'vitest/config';
 import path from 'path';
-import viteConfig from './vite.config';
+import viteConfig from './vite.config.ts';
 
 export default defineConfig((configEnv) =>
     mergeConfig(
@@ -35,8 +35,8 @@ export default defineConfig((configEnv) =>
                     },
                 },
                 alias: {
-                    'styles/': `${path.resolve(__dirname, 'src/scss')}/`,
-                    '@blueprintjs': path.resolve(__dirname, './node_modules/@blueprintjs'),
+                    'styles/': `${path.resolve(import.meta.dirname, 'src/scss')}/`,
+                    '@blueprintjs': path.resolve(import.meta.dirname, './node_modules/@blueprintjs'),
                 },
             },
         }),

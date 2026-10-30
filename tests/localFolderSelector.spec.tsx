@@ -49,6 +49,11 @@ const SELECT_REPORT_TEXT = 'Select a report...';
 // item would also match the empty state ("No results.").
 const waitForPickerOptions = () => screen.findAllByTestId(TEST_IDS.FOLDER_PICKER_ROW, {}, WAIT_FOR_OPTIONS);
 
+// The picker closes on selection, but its menu stays mounted until the close transition ends, and
+// until then each row is a second button carrying the selected report's name.
+const waitForPickerClosed = () =>
+    waitFor(() => expect(screen.queryAllByTestId(TEST_IDS.FOLDER_PICKER_ROW)).toHaveLength(0), WAIT_FOR_OPTIONS);
+
 // Data is mutated in the mock of useLocal - eventually this should be set per test as needed
 const mockPerfFolderList: ReportFolder[] = [...mockPerformanceReportFolders];
 
@@ -307,6 +312,7 @@ it('updates the instance when a profiler report is selected and creates toast me
         () => expect(screen.getByTestId(TEST_IDS.TOAST_FILENAME).textContent).to.contain(reportName),
         WAIT_FOR_OPTIONS,
     );
+    await waitForPickerClosed();
 
     expect(getAllButtonsWithText(reportName)).toHaveLength(1);
     expect(getAllButtonsWithText(SELECT_REPORT_TEXT)).toHaveLength(1);
@@ -333,6 +339,7 @@ it('updates the instance when a performance report is selected and creates toast
         () => expect(screen.getByTestId(TEST_IDS.TOAST_FILENAME).textContent).to.contain(path),
         WAIT_FOR_OPTIONS,
     );
+    await waitForPickerClosed();
 
     expect(getAllButtonsWithText(path)).toHaveLength(1);
     expect(getAllButtonsWithText(SELECT_REPORT_TEXT)).toHaveLength(1);

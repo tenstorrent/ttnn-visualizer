@@ -54,6 +54,7 @@ import {
     getOperationLateDeallocationCount,
 } from '../../functions/lateDeallocation';
 import useMemoryZoomRange from '../../hooks/useMemoryZoomRange';
+import RemountOnResize from '../RemountOnResize';
 
 interface OperationDetailsProps {
     operationId: number;
@@ -412,7 +413,7 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
                                         memoryZoomEnd={memorySizeL1}
                                         configuration={L1RenderZoomoutConfiguration}
                                     />
-                                    <div className='zoom-range-wrap'>
+                                    <RemountOnResize className='zoom-range-wrap'>
                                         <RangeSlider
                                             min={plotZoomRangeMin}
                                             max={plotZoomRangeMax}
@@ -428,7 +429,7 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
                                             }}
                                             className='memory-zoom-range'
                                         />
-                                    </div>
+                                    </RemountOnResize>
 
                                     <L1Plots
                                         operationDetails={details}

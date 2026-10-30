@@ -122,6 +122,7 @@ Open pull requests with **`dev`** as the base branch by default.
 - Don't hardcode colour values in TS/TSX. Promote to a CSS custom property in `src/scss/_base.scss` (e.g. `--graph-focused-node: #f6bc42;`), then expose it through `GRAPH_COLORS` in `src/definitions/GraphColors.ts` via the `cssVar()` helper. Components read colours through `GRAPH_COLORS`, or through a getter such as `getPerfChartChrome()` where the module can be evaluated outside the app tree that `main.tsx` starts after importing `index.scss`, such as directly by a test (say where in its docstring), never from a literal — [read on use](./CONVENTIONS.md#read-on-use-when-the-value-is-needed-before-the-stylesheet-is-guaranteed-to-have-applied).
 - The same rule applies to magic layout numbers used in more than one place — promote to a SCSS variable or CSS custom property.
 - In component-local SCSS, prefer app-owned classnames over direct `.bp6-*` selector overrides; reserve Blueprint-wide overrides for `src/scss/_blueprintjs.scss`.
+- Blueprint theming has three layers, in order: the `@use … with (…)` configuration in `src/scss/_blueprintjs.scss`; `src/scss/_blueprintjs-parity.scss`, which restores Blueprint 6.6's dark-theme rendering and must stay a faithful copy of it; then our own deviations at the end of `_blueprintjs.scss`. A TT-specific tweak goes in that last layer, never in the parity file — [read more](./CONVENTIONS.md#blueprint-theming-layers).
 - Use **`@use`**, never `@import` (deprecated by Sass, already migrated). `as *` for tokens meant to be ergonomic at call sites (colour variables); a short namespace for everything else (`variables.$base-font`).
 - **Partials carry a leading underscore, component stylesheets don't.** Shared partials, definitions, and mixins live in `src/scss/` as `_base.scss` / `definitions/_colours.scss` / `mixins/_scrollShade.scss`; component sheets live in `src/scss/components/` and are **PascalCase** matching their component (`OperationDetailsComponent.scss`).
 - Import stylesheets through the **`styles/`** alias (`import 'styles/components/SearchField.scss'`), which maps 1:1 to `src/scss/`, rather than relative `../scss/...`. The alias is wired in `tsconfig.json`, `vite.config.ts`, and `vitest.config.ts` — all three must stay in sync.
@@ -170,6 +171,7 @@ Applies on touch to views that draw data-proportional visuals (NPE chip cluster 
 
 - **pnpm** is the only supported frontend package manager (`engines.pnpm >= 11`). Don't `npm install` or `yarn add`.
 - The Node version is pinned via **`.nvmrc`**. Use `nvm use` from the repo root; `corepack` handles pnpm shimming automatically on Node 16+.
+- **`@blueprintjs/core`, `select` and `table` are pinned to `~` ranges and move together.** `select` and `table` depend on core themselves, so bumping one alone can install a second copy of core. A Blueprint minor bump means re-checking the parity layer; `tests/blueprintParityStyles.spec.ts` fails until it is updated.
 
 ### Database schema changes
 
