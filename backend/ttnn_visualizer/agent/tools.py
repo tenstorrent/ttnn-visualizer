@@ -21,6 +21,7 @@ from typing import (
     Callable,
     Dict,
     Hashable,
+    Iterable,
     List,
     Optional,
     Sequence,
@@ -80,6 +81,7 @@ from ttnn_visualizer.models import Instance
 logger = logging.getLogger(__name__)
 
 _Read = TypeVar("_Read")
+_Item = TypeVar("_Item")
 
 # The projection every tool reads through, stated rather than defaulted.
 #
@@ -357,11 +359,35 @@ def _resolve_signposts(instance: Instance) -> ResolvedSignposts:
         return read_signposts(csv_file, low_memory=True)
 
 
+def _name_shown(name: str, max_length: int) -> bool:
+    """Whether a name the capture supplied is short enough to show an agent."""
+    return len(name) <= max_length
+
+
+def _shown_and_dropped(
+    items: Iterable[_Item],
+    shown: Callable[[_Item], bool],
+    limit: Optional[int] = None,
+) -> Tuple[List[_Item], int]:
+    """Up to `limit` of the items `shown` keeps, in order, and how many it left out."""
+    kept: List[_Item] = []
+    dropped = 0
+    for item in items:
+        if not shown(item):
+            dropped += 1
+        elif limit is None or len(kept) < limit:
+            kept.append(item)
+    return kept, dropped
+
+
 def _short_names(
-    named: Sequence[Tuple[str, int]], max_length: int
-) -> List[Tuple[str, int]]:
-    """The names, with their counts and in order, short enough to show an agent."""
-    return [entry for entry in named if len(entry[0]) <= max_length]
+    named: Sequence[Tuple[str, int]], max_length: int, limit: int
+) -> Tuple[List[Tuple[str, int]], int]:
+    """Up to `limit` names, with their counts and in order, short enough to show an
+    agent, and how many were too long."""
+    return _shown_and_dropped(
+        named, lambda entry: _name_shown(entry[0], max_length), limit
+    )
 
 
 def with_signposts(
@@ -382,17 +408,18 @@ def with_signposts(
         return {**loaded, "signposts_problem": str(error)}
     named = resolved.occurrences()
     # A longer name cannot be passed back as a bound, and is the capture's text, not ours.
-    usable = _short_names(named, MAX_SIGNPOST_NAME_LENGTH)
+    usable, too_long = _short_names(
+        named, MAX_SIGNPOST_NAME_LENGTH, MAX_LISTED_SIGNPOSTS
+    )
     result: Dict[str, object] = {
         **loaded,
         "signpost_count": len(named),
         "signposts": [
-            {"name": name, "occurrences": occurrences}
-            for name, occurrences in usable[:MAX_LISTED_SIGNPOSTS]
+            {"name": name, "occurrences": occurrences} for name, occurrences in usable
         ],
     }
-    if len(usable) < len(named):
-        result["signposts_unlisted_too_long"] = len(named) - len(usable)
+    if too_long:
+        result["signposts_unlisted_too_long"] = too_long
     if resolved.device_count is not None:
         device_count = cast(Dict[str, int], loaded.get("device_count") or {})
         result["device_count"] = {
@@ -752,15 +779,23 @@ def zone_timings(
     registry: ReportRegistry, handle: str, limit: Optional[int] = None
 ) -> Dict[str, object]:
     """Per-zone, per-RISC totals from the device profiler log."""
+    count = bounded(limit)
     instance = registry.get(handle)
     metadata = DeviceLogProfilerQueries.read_capture_metadata(instance)
     clock_mhz = finite_number(metadata.get("CHIP_FREQ[MHz]"))
 
     with DeviceLogProfilerQueries(instance, stream=True) as queries:
-        summary, pairing = queries.query_zone_summary(limit=bounded(limit))
+        summary, pairing = queries.query_zone_summary()
+    # Filtered whole, so the limit counts only entries whose names can be shown.
+    listed, too_long = _shown_and_dropped(
+        summary,
+        lambda entry: _name_shown(cast(str, entry["zone"]), MAX_ZONE_NAME_LENGTH)
+        and _risc_shown(cast(str, entry["risc"])),
+        count,
+    )
 
     zones = []
-    for entry in summary:
+    for entry in listed:
         total_cycles = entry["total_cycles"]
         zones.append(
             {
@@ -792,6 +827,8 @@ def zone_timings(
             "occurrences only."
         ),
     }
+    if too_long:
+        result["zones_unlisted_too_long"] = too_long
     caveat = _pairing_caveat(pairing, "these totals")
     if caveat:
         result["caveat"] = caveat
@@ -1091,15 +1128,19 @@ def _core_figures(cores: Dict[tuple, CoreSpan], clock_mhz: float) -> Dict[str, o
         for risc, cycles in span.risc_cycles.items():
             risc_us[risc].append(cycles / clock_mhz)
     slowest = sorted(core_us.items(), key=lambda item: item[1], reverse=True)
-    return {
+    listed, too_long = _shown_and_dropped(sorted(risc_us), _risc_shown)
+    figures: Dict[str, object] = {
         "cores_in_log": len(cores),
         "core_span": _spread(list(core_us.values())),
-        "by_risc": {risc: _spread(risc_us[risc]) for risc in sorted(risc_us)},
+        "by_risc": {risc: _spread(risc_us[risc]) for risc in listed},
         "slowest_cores": [
             {"x": int(x), "y": int(y), "span_us": _rounded(duration)}
             for (x, y), duration in slowest[:SLOWEST_CORES]
         ],
     }
+    if too_long:
+        figures["by_risc_unlisted_too_long"] = too_long
+    return figures
 
 
 def _spannable(row: Dict) -> bool:
@@ -1365,9 +1406,17 @@ def core_spread(
 
 # Zone names a refusal lists, most started first.
 MAX_LISTED_ZONES = MAX_LISTED_SIGNPOSTS
-# A zone name longer than this is the capture's text, not ours: it is not listed, and a
-# zone asked for by such a name is refused, as a signpost's is.
+# A zone name longer than this is the capture's text, not ours: no zone tool shows it, and
+# a zone asked for by such a name is refused, as a signpost's is.
 MAX_ZONE_NAME_LENGTH = MAX_SIGNPOST_NAME_LENGTH
+# A RISC name longer than this is the capture's text too; tt-metal's longest,
+# QUASAR_NEO3_TRISC3, is 18 characters.
+MAX_RISC_NAME_LENGTH = 32
+
+
+def _risc_shown(risc: str) -> bool:
+    return _name_shown(risc, MAX_RISC_NAME_LENGTH)
+
 
 ZONE_INTERVALS_NOTE = (
     "An interval runs from one start of the zone to its next start on the same core's "
@@ -1443,18 +1492,18 @@ def _unknown_zone(zone: str, read: ZoneIntervals) -> str:
     log = DeviceLogProfilerQueries.DEVICE_LOG_FILE
     if not read.zone_starts:
         return f"{log} records no zone starts, so there is no {zone!r} to time"
-    listable = _short_names(read.zone_starts.most_common(), MAX_ZONE_NAME_LENGTH)
-    named = ", ".join(
-        f"{name!r} ({count})" for name, count in listable[:MAX_LISTED_ZONES]
+    listed, too_long = _short_names(
+        read.zone_starts.most_common(), MAX_ZONE_NAME_LENGTH, MAX_LISTED_ZONES
     )
+    named = ", ".join(f"{name!r} ({count})" for name, count in listed)
     refusal = f"no zone named {zone!r} starts in {log}. " + (
         f"Its zones by starts, most first: {named}"
         if named
         else "None of its zone names is short enough to list"
     )
-    if len(listable) > MAX_LISTED_ZONES:
-        refusal += f", and {len(listable) - MAX_LISTED_ZONES} more"
-    too_long = len(read.zone_starts) - len(listable)
+    unlisted = len(read.zone_starts) - too_long - len(listed)
+    if unlisted:
+        refusal += f", and {unlisted} more"
     if too_long:
         refusal += (
             f"; {too_long} more have names longer than {MAX_ZONE_NAME_LENGTH} "
@@ -1527,8 +1576,11 @@ def zone_intervals(
             timeline,
         ),
     )
+    listed, too_long = _shown_and_dropped(
+        ranked, lambda timeline: _risc_shown(timeline[3]), count
+    )
     shown = []
-    for timeline in ranked[:count]:
+    for timeline in listed:
         slot, x, y, risc = timeline
         shown.append(
             {
@@ -1556,6 +1608,8 @@ def zone_intervals(
         "by_core_risc": shown,
         "note": ZONE_INTERVALS_NOTE,
     }
+    if too_long:
+        result["by_core_risc_unlisted_too_long"] = too_long
 
     caveats = _zone_interval_caveats(name, read, len(ranked))
     if caveats:
@@ -2057,6 +2111,7 @@ __all__ = [
     "CANONICAL_PROJECTION",
     "CORE_SPREAD_NOTE",
     "DEFAULT_METRIC",
+    "MAX_RISC_NAME_LENGTH",
     "MAX_SIGNPOST_NAME_LENGTH",
     "MAX_ZONE_NAME_LENGTH",
     "OP_BREAKDOWN_NOTE",

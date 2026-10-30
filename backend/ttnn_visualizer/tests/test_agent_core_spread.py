@@ -98,6 +98,7 @@ class TestStatistics:
             {"x": 2, "y": 1, "span_us": 2.0},
             {"x": 1, "y": 1, "span_us": 1.2},
         ]
+        assert "by_risc_unlisted_too_long" not in op
 
     def test_each_risc_is_spread_on_its_own(self, tmp_path):
         op = _spread(tmp_path, THREE_CORES, [_op()], perf_id="1")["ops"][0]
@@ -109,6 +110,31 @@ class TestStatistics:
             "imbalance": 1.5,
         }
         assert op["by_risc"]["TRISC_0"]["max_us"] == 1.1
+
+    def test_a_risc_name_too_long_to_show_is_counted_rather_than_listed(self, tmp_path):
+        """Its kernel still sets its core's span, which names no RISC."""
+        at_bound = "R" * tools.MAX_RISC_NAME_LENGTH
+        rows = [
+            *THREE_CORES,
+            *_zone(0, 1, 1, at_bound, 0, 4000),
+            *_zone(0, 2, 1, f"{at_bound}R", 0, 5000),
+        ]
+
+        op = _spread(tmp_path, rows, [_op()], perf_id="1")["ops"][0]
+
+        assert sorted(op["by_risc"]) == ["BRISC", at_bound, "TRISC_0"]
+        assert op["by_risc_unlisted_too_long"] == 1
+        assert op["slowest_cores"][0] == {"x": 2, "y": 1, "span_us": 5.0}
+
+    def test_an_op_only_on_risc_names_too_long_to_show_keeps_its_spread(self, tmp_path):
+        long_risc = "R" * (tools.MAX_RISC_NAME_LENGTH + 1)
+
+        op = _spread(
+            tmp_path, _zone(0, 1, 1, long_risc, 0, 2000), [_op(cores="1")], perf_id="1"
+        )["ops"][0]
+
+        assert (op["by_risc"], op["by_risc_unlisted_too_long"]) == ({}, 1)
+        assert op["core_span"]["max_us"] == 2.0
 
     def test_the_slowest_cores_are_capped(self, tmp_path):
         rows = [

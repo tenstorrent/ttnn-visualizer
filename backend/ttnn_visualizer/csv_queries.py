@@ -1106,9 +1106,7 @@ class DeviceLogProfilerQueries:
         meta = cls.read_device_meta(instance)
         return meta.frequency if meta is not None and meta.frequency else None
 
-    def query_zone_summary(
-        self, limit: Optional[int] = None
-    ) -> Tuple[List[Dict[str, object]], Dict[str, int]]:
+    def query_zone_summary(self) -> Tuple[List[Dict[str, object]], Dict[str, int]]:
         """Aggregate the whole log into one row per (zone, RISC).
 
         The two existing zone queries both need you to already know the zone you
@@ -1205,7 +1203,7 @@ class DeviceLogProfilerQueries:
         )
 
         pairing = pairer.pairing(self.DEVICE_LOG_FILE)
-        return (summary[:limit] if limit is not None else summary), pairing
+        return summary, pairing
 
     def query_core_spans(self, requests: Set[SpanRequest]) -> CoreSpans:
         """Each core's kernel zones for the given perf rows' runs and windows.
