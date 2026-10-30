@@ -31,6 +31,7 @@ from ttnn_visualizer.models import (
     RemoteReportFolder,
     folder_segment_from_remote_path,
     rank_from_remote_path,
+    remote_folder_newest_first_key,
 )
 from ttnn_visualizer.remote_command import (
     RemoteCommand,
@@ -126,6 +127,16 @@ MULTIHOST_REPORT_LAYOUT_HINT = "rank<N>/reports"
 # Paths per batched `stat` call, so a rank-heavy tree cannot build a remote
 # command line long enough to hit ARG_MAX.
 _MTIME_BATCH_SIZE = 200
+# Defines a remote shell function `mtime <path>` printing seconds since the epoch.
+# GNU `stat -c %Y` and BSD/macOS `stat -f %m` reject each other's flags, so the
+# flavour is probed once on `/` rather than chained per path: a GNU `stat -f`
+# reached for an unreadable path prints filesystem details over several lines,
+# which would misalign every time after it.
+_PORTABLE_MTIME_FUNCTION = (
+    "if stat -c %Y / >/dev/null 2>&1; "
+    'then mtime() { stat -c %Y "$1"; }; '
+    'else mtime() { stat -f %m "$1"; }; fi'
+)
 
 
 def _ssh_cmd_prefix(remote_connection: RemoteConnection) -> List[str]:
@@ -819,9 +830,16 @@ def download_single_file_sftp(
 
 
 def get_remote_profiler_folder_from_config_path(
-    remote_connection: RemoteConnection, config_path: str
+    remote_connection: RemoteConnection,
+    config_path: str,
+    *,
+    fallback_last_modified: Optional[int] = None,
 ) -> RemoteReportFolder:
-    """Read a remote config file and return RemoteFolder object."""
+    """Read a remote config file and return RemoteFolder object.
+
+    ``fallback_last_modified`` stands in for a time that cannot be read; without
+    it the current time does, as a listing has nothing better to offer.
+    """
     folder_path = Path(config_path).parent
     parent_folder_name = folder_path.name
     folder_str = str(folder_path).rstrip("/")
@@ -836,13 +854,6 @@ def get_remote_profiler_folder_from_config_path(
             check=True,
             timeout=ssh_timeout,
         )
-
-    def ssh_stat_mtime(path: str) -> int:
-        stat_cmd = _ssh_argv(
-            remote_connection, RemoteCommand.of("stat", "-c", "%Y", path)
-        )
-        stat_result = ssh_run_checked(stat_cmd)
-        return int(float(stat_result.stdout.strip()))
 
     def ssh_cat(path: str) -> str:
         cat_cmd = _ssh_argv(remote_connection, RemoteCommand.of("cat", path))
@@ -884,6 +895,11 @@ def get_remote_profiler_folder_from_config_path(
         ordered = ranked_profiler_config_basenames(by_base.keys())
         return [by_base[n] for n in ordered]
 
+    def unknown_last_modified() -> int:
+        if fallback_last_modified is not None:
+            return fallback_last_modified
+        return int(time.time())
+
     try:
         single_config = str(Path(config_path))  # .../config.json from caller
         read_path: Optional[str] = None
@@ -902,10 +918,17 @@ def get_remote_profiler_folder_from_config_path(
             return RemoteReportFolder(
                 remotePath=folder_str,
                 reportName=parent_folder_name,
-                lastModified=int(time.time()),
+                lastModified=unknown_last_modified(),
             )
 
-        last_modified = max(ssh_stat_mtime(p) for p in mtime_paths)
+        # The batch reader never raises for an unreadable time, so a remote whose
+        # `stat` cannot answer still gets its report name read below.
+        known_mtimes = [
+            mtime
+            for mtime in _remote_directory_mtimes(remote_connection, mtime_paths)
+            if mtime is not None
+        ]
+        last_modified = max(known_mtimes, default=unknown_last_modified())
         raw_json = ssh_cat(read_path)
         data = json.loads(raw_json)
         report_name = data.get("report_name") if isinstance(data, dict) else None
@@ -926,7 +949,7 @@ def get_remote_profiler_folder_from_config_path(
         return RemoteReportFolder(
             remotePath=folder_str,
             reportName=parent_folder_name,
-            lastModified=int(time.time()),
+            lastModified=unknown_last_modified(),
         )
     except (json.JSONDecodeError, ValueError) as e:
         logger.error(f"Error parsing config file {config_path}: {e}")
@@ -934,7 +957,7 @@ def get_remote_profiler_folder_from_config_path(
         return RemoteReportFolder(
             remotePath=folder_str,
             reportName=parent_folder_name,
-            lastModified=int(time.time()),
+            lastModified=unknown_last_modified(),
         )
 
 
@@ -981,6 +1004,29 @@ def get_remote_performance_folders_from_paths(
         )
 
     return folders
+
+
+def read_remote_report_last_modified(
+    remote_connection: RemoteConnection,
+    folder: RemoteReportFolder,
+    *,
+    is_profiler: bool,
+) -> int:
+    """Re-read one report's ``lastModified`` the way its listing does.
+
+    A profiler report is timed by its config file(s), a performance report by its
+    folder, so a refreshed row sorts exactly where a fresh listing would put it.
+    An unreadable time keeps ``folder.lastModified``.
+    """
+    if is_profiler:
+        return get_remote_profiler_folder_from_config_path(
+            remote_connection,
+            str(Path(folder.remotePath) / TEST_CONFIG_FILE),
+            fallback_last_modified=folder.lastModified,
+        ).lastModified
+
+    [mtime] = _remote_directory_mtimes(remote_connection, [folder.remotePath])
+    return folder.lastModified if mtime is None else mtime
 
 
 @remote_exception_handler
@@ -1254,10 +1300,11 @@ def _permission_denied_path(stderr: str) -> Optional[str]:
 def _remote_directory_mtimes(
     remote_connection: RemoteConnection, directories: List[str]
 ) -> List[Optional[int]]:
-    """Modification times for ``directories``, batched into one round trip each.
+    """Modification times for ``directories`` (or files), batched into one round trip each.
 
     ``stat`` is invoked per path inside a single remote shell so that a path it
     cannot read yields a blank line, keeping the results aligned with the input.
+    The ``stat`` flavour is picked once per shell (see ``_PORTABLE_MTIME_FUNCTION``).
     """
     mtimes: List[Optional[int]] = []
 
@@ -1267,7 +1314,10 @@ def _remote_directory_mtimes(
         ssh_cmd = _ssh_argv(
             remote_connection,
             RemoteCommand.from_shell_fragment(
-                f'for p in {quoted}; do stat -c %Y "$p" 2>/dev/null || echo; done'
+                f"{_PORTABLE_MTIME_FUNCTION} ; "
+                # The space before `;` keeps it a separate shell token from
+                # the last quoted path.
+                f'for p in {quoted} ; do mtime "$p" 2>/dev/null || echo; done'
             ),
         )
 
@@ -1445,7 +1495,7 @@ def get_remote_performance_folders(
         remote_connection, performance_paths
     )
 
-    return sorted(remote_folder_data, key=lambda x: x.lastModified, reverse=True)
+    return sorted(remote_folder_data, key=remote_folder_newest_first_key)
 
 
 @remote_exception_handler
@@ -1480,7 +1530,7 @@ def get_remote_profiler_folders(
         )
         remote_folder_data.append(remote_folder)
 
-    return sorted(remote_folder_data, key=lambda x: x.lastModified, reverse=True)
+    return sorted(remote_folder_data, key=remote_folder_newest_first_key)
 
 
 def _safe_sync_destination_segment(

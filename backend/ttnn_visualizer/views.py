@@ -8,6 +8,7 @@ import logging
 import platform
 import re
 import shutil
+import subprocess
 import time
 import urllib
 import urllib.request
@@ -140,6 +141,7 @@ from ttnn_visualizer.sftp_operations import (
     get_active_sync_method,
     get_remote_performance_folders,
     get_remote_profiler_folders,
+    read_remote_report_last_modified,
     sync_remote_performance_folders,
     sync_remote_profiler_folders,
 )
@@ -1123,14 +1125,15 @@ def get_profiler_data_list(instance: Instance):
             directory.name for directory in path.iterdir() if directory.is_dir()
         ]
 
-    # Sort directory names by modified time (most recent first)
+    # Most recent first; equal times fall back to the name so ties have one order,
+    # which under SERVER_MODE would otherwise come from hashing a set.
     def get_modified_time(dir_name):
         dir_path = Path(path) / dir_name
         if dir_path.exists():
             return dir_path.stat().st_mtime
         return 0
 
-    directory_names.sort(key=get_modified_time, reverse=True)
+    directory_names.sort(key=lambda name: (-get_modified_time(name), name))
 
     for dir_name in directory_names:
         dir_path = Path(path) / dir_name
@@ -1240,14 +1243,15 @@ def get_performance_data_list(instance: Instance):
 
     valid_dirs = []
 
-    # Sort directory names by modified time (most recent first)
+    # Most recent first; equal times fall back to the name so ties have one order,
+    # which under SERVER_MODE would otherwise come from hashing a set.
     def get_modified_time(dir_name):
         dir_path = Path(path) / dir_name
         if dir_path.exists():
             return dir_path.stat().st_mtime
         return 0
 
-    directory_names.sort(key=get_modified_time, reverse=True)
+    directory_names.sort(key=lambda name: (-get_modified_time(name), name))
 
     for dir_name in directory_names:
         dir_path = Path(path) / dir_name
@@ -2457,6 +2461,27 @@ def remote_stack_trace_read(instance: Instance):
     return _remote_stack_source_read(instance, file_path, source_file_id)
 
 
+def _refresh_last_modified(
+    folder: RemoteReportFolder, connection: RemoteConnection, *, is_profiler: bool
+) -> None:
+    """Re-read the time the client's row is ordered by, which it sent from an older listing.
+
+    Runs before ``lastSynced`` is stamped so the refreshed time cannot be later and
+    mark the copy outdated. A sync that succeeded must not fail because this
+    follow-up read did, so a failure keeps the time the client sent.
+    """
+    try:
+        folder.lastModified = read_remote_report_last_modified(
+            connection, folder, is_profiler=is_profiler
+        )
+    except (RemoteConnectionException, subprocess.TimeoutExpired):
+        logger.warning(
+            "Could not re-read the modification time of %s after syncing it",
+            folder.remotePath,
+            exc_info=True,
+        )
+
+
 @api.route("/remote/sync", methods=["POST"])
 @local_only
 def sync_remote_folder():
@@ -2483,6 +2508,7 @@ def sync_remote_folder():
                 sid=instance_id,
             )
 
+            _refresh_last_modified(performance_folder, connection, is_profiler=False)
             performance_folder.lastSynced = int(time.time())
             _annotate_synced_copy(
                 performance_folder,
@@ -2514,6 +2540,7 @@ def sync_remote_folder():
             sid=instance_id,
         )
 
+        _refresh_last_modified(remote_profiler_folder, connection, is_profiler=True)
         remote_profiler_folder.lastSynced = int(time.time())
         _annotate_synced_copy(
             remote_profiler_folder, connection, "PROFILER_DIRECTORY_NAME"

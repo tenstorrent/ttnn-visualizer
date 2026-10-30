@@ -43,6 +43,7 @@ from ttnn_visualizer.sftp_operations import (
     check_remote_path_for_reports,
     find_folders_by_files,
     get_remote_performance_folders,
+    get_remote_profiler_folders,
 )
 from ttnn_visualizer.tests.test_ssh_host_key_errors import CHANGED_HOST_STDERR
 from ttnn_visualizer.views import (
@@ -50,6 +51,20 @@ from ttnn_visualizer.views import (
     _report_search_status,
     _safe_report_folder_name,
 )
+
+
+@pytest.fixture(autouse=True)
+def _no_remote_mtime_refresh():
+    """`/remote/sync` re-reads the synced report's remote time over SSH afterwards.
+
+    Without this every sync test would spawn a real `ssh` to its fake host. Tests of
+    the refresh itself patch it again, which takes precedence inside their block.
+    """
+    with patch(
+        "ttnn_visualizer.views.read_remote_report_last_modified",
+        side_effect=lambda _connection, folder, **_kwargs: folder.lastModified,
+    ):
+        yield
 
 
 def _found(folders: list) -> RemoteFolderSearch:
@@ -1209,10 +1224,11 @@ class TestSyncedNameOnTheWire:
     MULTIHOST_ROOT = "/remote/generated/profiler/ttrun"
     TIMESTAMP = "2026_07_28_18_04_24"
 
-    def _listing(self, app, *, multihost: bool) -> list:
+    def _listing(self, app, *, multihost: bool, mtimes: Optional[list] = None) -> list:
+        # Listed out of order so the tests can see the listing sort them.
         paths = [
-            f"{self.MULTIHOST_ROOT}/rank0/reports/{self.TIMESTAMP}",
             f"{self.MULTIHOST_ROOT}/rank1/reports/{self.TIMESTAMP}",
+            f"{self.MULTIHOST_ROOT}/rank0/reports/{self.TIMESTAMP}",
         ]
         connection = RemoteConnection(
             name="test-remote",
@@ -1232,10 +1248,21 @@ class TestSyncedNameOnTheWire:
             ),
             patch(
                 "ttnn_visualizer.sftp_operations._remote_directory_mtimes",
-                return_value=[10, 20],
+                return_value=mtimes if mtimes is not None else [10, 20],
             ),
         ):
             return get_remote_performance_folders(connection)
+
+    def test_ranks_sharing_a_time_are_listed_in_path_order(self, app):
+        """Remote times are whole seconds, so the ranks of one run routinely tie."""
+        folders = self._listing(app, multihost=True, mtimes=[10, 10])
+
+        assert [folder.rank for folder in folders] == [0, 1]
+
+    def test_newer_folders_still_come_first(self, app):
+        folders = self._listing(app, multihost=True, mtimes=[20, 10])
+
+        assert [folder.rank for folder in folders] == [1, 0]
 
     def test_each_rank_carries_its_own_synced_name_and_rank(self, app):
         folders = {
@@ -2122,3 +2149,99 @@ class TestReportSearchAgainstRealFind:
         found = self._run_find(self._expression(str(reports), None))
 
         assert found == [str(reports / "single_host_report")]
+
+
+def test_remote_profiler_listing_breaks_equal_times_by_path(app):
+    connection = RemoteConnection.model_validate(_remote_connection_payload())
+    paths = [f"/remote/profiler/reports/{name}" for name in ("b", "c", "a")]
+
+    def _describe(_connection, config_path, **_kwargs):
+        return RemoteReportFolder(
+            remotePath=str(Path(config_path).parent),
+            reportName=Path(config_path).parent.name,
+            lastModified=10,
+        )
+
+    with (
+        app.app_context(),
+        patch(
+            "ttnn_visualizer.sftp_operations.find_folders_by_files",
+            return_value=_found(paths),
+        ),
+        patch(
+            "ttnn_visualizer.sftp_operations.get_remote_profiler_folder_from_config_path",
+            side_effect=_describe,
+        ),
+    ):
+        folders = get_remote_profiler_folders(connection)
+
+    assert [folder.reportName for folder in folders] == ["a", "b", "c"]
+
+
+class TestSyncRefreshesLastModified:
+    """A synced row must move to where a fresh listing would put it.
+
+    The client re-sorts on the `lastModified` this route returns, which would
+    otherwise be its own value from an older listing.
+    """
+
+    def _sync(self, client, kind: str, *, refresh):
+        sync_target = (
+            "ttnn_visualizer.views.sync_remote_profiler_folders"
+            if kind == "profiler"
+            else "ttnn_visualizer.views.sync_remote_performance_folders"
+        )
+        with (
+            patch(sync_target, return_value=SyncMethod.SFTP),
+            patch(
+                "ttnn_visualizer.views.read_remote_report_last_modified", **refresh
+            ) as read_time,
+        ):
+            response = client.post(
+                "/api/remote/sync",
+                json={
+                    "connection": _remote_connection_payload(),
+                    kind: {
+                        "reportName": "bert",
+                        "remotePath": f"/remote/{kind}/reports/bert",
+                        "lastModified": 1,
+                    },
+                },
+            )
+        assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+        return response.get_json(), read_time
+
+    @pytest.fixture(autouse=True)
+    def _local_install(self, app, tmp_path):
+        app.config["SERVER_MODE"] = False
+        app.config["REMOTE_DATA_DIRECTORY"] = str(tmp_path)
+
+    @pytest.mark.parametrize("kind", ["profiler", "performance"])
+    def test_the_response_carries_the_remote_time_read_after_the_sync(
+        self, client, kind
+    ):
+        body, read_time = self._sync(client, kind, refresh={"return_value": 99})
+
+        assert body["lastModified"] == 99
+        # Stamped after the refresh, so the copy is never reported as outdated.
+        assert body["lastSynced"] >= body["lastModified"]
+        assert read_time.call_args.kwargs == {"is_profiler": kind == "profiler"}
+
+    @pytest.mark.parametrize("kind", ["profiler", "performance"])
+    @pytest.mark.parametrize(
+        "error",
+        [
+            RemoteConnectionException(
+                message="lost", status=ConnectionTestStates.FAILED
+            ),
+            subprocess.TimeoutExpired(cmd="ssh", timeout=1),
+        ],
+        ids=["connection", "timeout"],
+    )
+    def test_a_failed_refresh_keeps_the_sync_and_the_sent_time(
+        self, client, kind, error
+    ):
+        body, _ = self._sync(client, kind, refresh={"side_effect": error})
+
+        assert body["lastModified"] == 1
+        assert body["lastSynced"] is not None

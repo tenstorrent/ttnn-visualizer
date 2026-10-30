@@ -11,9 +11,11 @@ size-aware listings, plus its fallback path when the remote ``find`` lacks
 need network access or a real SSH server.
 """
 
+import os
 import shlex
 import subprocess
 from http import HTTPStatus
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -1058,3 +1060,73 @@ class TestGetRemoteFileListWithoutSizes:
                 connection, "/remote", exclude_patterns=[]
             )
         assert result == [("/remote/a.txt", 0), ("/remote/b.txt", 0)]
+
+
+class TestPortableRemoteMtimes:
+    """Remote times are read with whichever `stat` the remote has.
+
+    GNU `stat -c %Y` and BSD/macOS `stat -f %m` reject each other's flags. Before
+    the fallback, a non-GNU remote gave every report the same time.
+    """
+
+    _real_run = staticmethod(subprocess.run)
+
+    def _run_locally(self, cmd, *args, **kwargs):
+        """Run the remote command through this machine's shell and `stat`, which is
+        GNU on CI and BSD on a Mac, so between them both branches are exercised."""
+        return self._real_run(["sh", "-c", cmd[-1]], capture_output=True, text=True)
+
+    def test_times_come_back_aligned_with_the_paths(self, connection, tmp_path):
+        older = tmp_path / "older"
+        newer = tmp_path / "o'brien; touch pwned"
+        for path, mtime in ((older, 1_000), (newer, 2_000)):
+            path.mkdir()
+            os.utime(path, (mtime, mtime))
+
+        with patch("subprocess.run", side_effect=self._run_locally):
+            mtimes = _remote_directory_mtimes(
+                connection, [str(older), str(tmp_path / "missing"), str(newer)]
+            )
+
+        # A path `stat` cannot read is a blank line, not a shifted result.
+        assert mtimes == [1_000, None, 2_000]
+        assert not (tmp_path / "pwned").exists()
+
+    def test_the_command_carries_both_stat_flavours(self, connection):
+        with patch("subprocess.run", return_value=_completed("")) as run:
+            _remote_directory_mtimes(connection, ["/remote/reports/a"])
+
+        remote_cmd = _remote_shell_command_from_run(run)
+        assert "stat -c %Y" in remote_cmd
+        assert "stat -f %m" in remote_cmd
+
+
+class TestProfilerFolderWithoutReadableTime:
+    """A profiler config whose time cannot be read still has its name read."""
+
+    _CONFIG_PATH = "/remote/profiler/bert/config.json"
+
+    def _describe(self, connection, **kwargs):
+        def run_remote(cmd, *args, **_kwargs):
+            remote_cmd = cmd[-1]
+            if remote_cmd.startswith("cat"):
+                return _completed('{"report_name": "BERT large"}')
+            # `test -f` succeeds; the mtime batch prints the blank line of a
+            # `stat` that could not answer.
+            return _completed("\n")
+
+        with patch("subprocess.run", side_effect=run_remote):
+            return get_remote_profiler_folder_from_config_path(
+                connection, self._CONFIG_PATH, **kwargs
+            )
+
+    def test_the_report_name_still_comes_from_the_config(self, connection):
+        folder = self._describe(connection)
+
+        assert folder.reportName == "BERT large"
+        assert folder.remotePath == str(Path(self._CONFIG_PATH).parent)
+
+    def test_an_unreadable_time_takes_the_fallback_given(self, connection):
+        folder = self._describe(connection, fallback_last_modified=42)
+
+        assert folder.lastModified == 42
