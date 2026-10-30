@@ -95,6 +95,7 @@ const ROOT_TOKENS: [string, string][] = [
 // [token, value], set on .bp6-dark because Blueprint declares the dark values there
 const DARK_TOKENS: [string, string][] = [
     ['--bp-typography-color-default-rest', '#fff'],
+    ['--bp-typography-color-default-disabled', 'rgba(171, 179, 191, 0.6)'],
     ['--bp-surface-shadow-0', DARK_BORDER_SHADOW],
     ['--bp-surface-shadow-1', `${DARK_BORDER_SHADOW}, 0 1px 1px ${DARK_DROP_SHADOW}`],
     ['--bp-surface-shadow-2', `${DARK_BORDER_SHADOW}, 0 1px 1px ${DARK_DROP_SHADOW}, 0 2px 6px ${DARK_DROP_SHADOW}`],
@@ -117,6 +118,9 @@ const OVERRIDDEN_VALUES: [string, string, string][] = [
     ['.bp6-dark .bp6-button.bp6-outlined.bp6-intent-primary:hover:not(:disabled)', 'color', '#bcb3f7'],
     ['.bp6-dark .bp6-button.bp6-outlined.bp6-intent-primary:active:not(:disabled)', 'color', '#bcb3f7'],
     ['.bp6-dark .bp6-button.bp6-outlined.bp6-intent-primary.bp6-active', 'color', '#bcb3f7'],
+    ['.bp6-dark .bp6-button.bp6-minimal.bp6-intent-success.bp6-active', 'color', '#72ca9b'],
+    ['.bp6-dark .bp6-button.bp6-minimal.bp6-intent-warning.bp6-active', 'color', '#f9d68e'],
+    ['.bp6-dark .bp6-button.bp6-minimal.bp6-intent-danger.bp6-active', 'color', '#ff9e8a'],
     ['.bp6-dark .bp6-tag.bp6-minimal.bp6-intent-primary', 'color', '#bcb3f7'],
     ['.bp6-dark .bp6-tag.bp6-minimal.bp6-intent-success', 'color', '#72ca9b'],
     ['.bp6-dark .bp6-tag.bp6-minimal.bp6-intent-warning', 'color', '#f6bc42'],

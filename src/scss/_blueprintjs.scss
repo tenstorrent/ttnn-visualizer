@@ -73,6 +73,9 @@ $pt-intent-text-colors: (
             $pt-intent-text-colors,
             (
                 'primary': $tt-purple-tint-2,
+                'success': $green5,
+                'warning': $tt-yellow-tint-1,
+                'danger': $tt-red,
                 'default': color-mix(in srgb, var(--bp-intent-default-hover) 46%, var(--bp-palette-white)),
             )
         ),
@@ -80,6 +83,9 @@ $pt-intent-text-colors: (
             $pt-intent-text-colors,
             (
                 'primary': $tt-purple-tint-2,
+                'success': $green5,
+                'warning': $tt-yellow-tint-1,
+                'danger': $tt-red,
                 'default': color-mix(in srgb, var(--bp-intent-default-active) 46%, var(--bp-palette-white)),
             )
         ),
@@ -180,6 +186,9 @@ $pt-intent-text-colors: (
     // Icons in default buttons and the text typed into a tag input. Blueprint's muted grey left button icons
     // dimmer than the white label beside them.
     --bp-typography-color-default-rest: #{$tt-white};
+
+    // Disabled text keeps the translucent grey the app has always used, rather than Blueprint's opaque one
+    --bp-typography-color-default-disabled: #{rgba($gray4, 0.6)};
     --bp-surface-shadow-0: #{$bp-legacy-dark-border-shadow};
     --bp-surface-shadow-1: #{$bp-legacy-dark-shadow-1};
     --bp-surface-shadow-2: #{$bp-legacy-dark-shadow-2};
