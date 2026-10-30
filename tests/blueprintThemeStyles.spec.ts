@@ -18,11 +18,6 @@ import { createSassOptions } from '../src/libs/blueprintjs/sassOptions';
 const ROOT = resolve(__dirname, '..');
 const STYLESHEET = 'src/scss/_blueprintjs.scss';
 
-interface Declaration {
-    order: number;
-    value: string;
-}
-
 // Blueprint and our partials quote attribute values differently, which does not change what they match
 const normaliseSelector = (selector: string) =>
     selector
@@ -33,11 +28,13 @@ const normaliseSelector = (selector: string) =>
 // The same options Vite builds with, so these checks see the CSS that ships
 const compileBlueprintStyles = () => compile(join(ROOT, STYLESHEET), createSassOptions(ROOT)).css;
 
-/** Every top-level declaration, keyed by `selector|property`, keeping only the last one in source order. */
+// Sass wraps long values over several lines, which does not change them
+const normaliseValue = (value: string) => value.replace(/\s+/g, ' ').trim();
+
+/** Every top-level declaration value, keyed by `selector|property`, keeping only the last one in source order. */
 const indexDeclarations = (css: string) => {
-    const declarations = new Map<string, Declaration>();
+    const valueBySelectorProperty = new Map<string, string>();
     const openSelectors: string[] = [];
-    let order = 0;
 
     for (const [, text, brace] of css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]*)([{}])/g)) {
         if (brace === '{') {
@@ -47,32 +44,29 @@ const indexDeclarations = (css: string) => {
             const isTopLevelRule = selectorList !== '' && !selectorList.startsWith('@') && openSelectors.length === 0;
 
             if (isTopLevelRule) {
-                order += 1;
-                const ruleOrder = order;
-
                 text.split(';')
                     .filter((declaration) => declaration.includes(':'))
                     .forEach((declaration) => {
                         const colon = declaration.indexOf(':');
                         const property = declaration.slice(0, colon).trim();
-                        const value = declaration.slice(colon + 1).trim();
+                        const value = normaliseValue(declaration.slice(colon + 1));
 
                         selectorList.split(',').forEach((selector) => {
-                            declarations.set(`${normaliseSelector(selector)}|${property}`, { order: ruleOrder, value });
+                            valueBySelectorProperty.set(`${normaliseSelector(selector)}|${property}`, value);
                         });
                     });
             }
         }
     }
 
-    return declarations;
+    return valueBySelectorProperty;
 };
 
 const css = compileBlueprintStyles();
-const declarations = indexDeclarations(css);
+const valueBySelectorProperty = indexDeclarations(css);
 
-const winningDeclaration = (selector: string, property: string) =>
-    declarations.get(`${normaliseSelector(selector)}|${property}`);
+const winningValue = (selector: string, property: string) =>
+    valueBySelectorProperty.get(`${normaliseSelector(selector)}|${property}`);
 
 const DARK_BORDER_SHADOW = 'inset 0 0 0 1px rgba(255, 255, 255, 0.2)';
 const DARK_DROP_SHADOW = 'rgba(17, 20, 24, 0.4)';
@@ -102,16 +96,38 @@ const ROOT_TOKENS: [string, string][] = [
 const DARK_TOKENS: [string, string][] = [
     ['--bp-typography-color-default-rest', '#fff'],
     ['--bp-surface-shadow-0', DARK_BORDER_SHADOW],
+    ['--bp-surface-shadow-1', `${DARK_BORDER_SHADOW}, 0 1px 1px ${DARK_DROP_SHADOW}`],
+    ['--bp-surface-shadow-2', `${DARK_BORDER_SHADOW}, 0 1px 1px ${DARK_DROP_SHADOW}, 0 2px 6px ${DARK_DROP_SHADOW}`],
     ['--bp-surface-shadow-3', `${DARK_BORDER_SHADOW}, 0 2px 4px ${DARK_DROP_SHADOW}, 0 8px 24px ${DARK_DROP_SHADOW}`],
+    [
+        '--bp-surface-shadow-4',
+        `${DARK_BORDER_SHADOW}, 0 4px 8px ${DARK_DROP_SHADOW}, 0 18px 46px 6px ${DARK_DROP_SHADOW}`,
+    ],
 ];
 
-// [selector, property, value] for the colours that come from configured Blueprint maps or app overrides
+// [selector, property, value] for the colours that come from configured Blueprint Sass or app overrides
 const OVERRIDDEN_VALUES: [string, string, string][] = [
     ['.bp6-dark .bp6-button.bp6-minimal.bp6-intent-primary:hover', 'color', '#e2defc'],
+    [
+        '.bp6-dark .bp6-button.bp6-minimal.bp6-intent-primary:hover',
+        'background-color',
+        'color-mix(in oklch, #bcb3f7 20%, transparent)',
+    ],
+    ['.bp6-dark .bp6-button.bp6-minimal.bp6-intent-primary.bp6-active', 'color', '#e2defc'],
     ['.bp6-dark .bp6-button.bp6-outlined.bp6-intent-primary:hover:not(:disabled)', 'color', '#bcb3f7'],
+    ['.bp6-dark .bp6-button.bp6-outlined.bp6-intent-primary:active:not(:disabled)', 'color', '#bcb3f7'],
+    ['.bp6-dark .bp6-button.bp6-outlined.bp6-intent-primary.bp6-active', 'color', '#bcb3f7'],
     ['.bp6-dark .bp6-tag.bp6-minimal.bp6-intent-primary', 'color', '#bcb3f7'],
+    ['.bp6-dark .bp6-tag.bp6-minimal.bp6-intent-success', 'color', '#72ca9b'],
+    ['.bp6-dark .bp6-tag.bp6-minimal.bp6-intent-warning', 'color', '#f6bc42'],
     ['.bp6-dark .bp6-tag.bp6-minimal.bp6-intent-danger', 'color', '#ff9e8a'],
     ['.bp6-tag.bp6-intent-warning', 'background', 'var(--bp-intent-warning-rest)'],
+    // Still read from Sass in Blueprint 6.21, so a release that moves them onto tokens would silently drop them
+    ['.bp6-dark a', 'color', '#3eb7de'],
+    ['.bp6-control input:checked ~ .bp6-control-indicator', 'background-color', '#3eb7de'],
+    ['.bp6-dark .bp6-control.bp6-switch input:checked ~ .bp6-control-indicator', 'background', '#3eb7de'],
+    ['.bp6-dark .bp6-progress-bar', 'background', '#0d4d62'],
+    ['.bp6-dark .bp6-progress-bar .bp6-progress-meter', 'background-color', '#3eb7de'],
     // Blueprint 6.7+ only matches an icon that is a direct child, so an icon wrapped in a Tooltip target lost this
     [
         '.bp6-button .bp6-icon:first-child:last-child',
@@ -126,7 +142,7 @@ const CHECKED_BLUEPRINT_CORE = '6.21';
 /** The value of the last declaration of a custom property anywhere in the CSS, including inside @supports. */
 const lastTokenValue = (token: string) => {
     const values = [...css.matchAll(new RegExp(`${token}\\s*:\\s*([^;}]+)`, 'g'))].map(([, value]) =>
-        value.replace(/\s+/g, ' ').trim(),
+        normaliseValue(value),
     );
 
     return values.at(-1);
@@ -145,11 +161,11 @@ describe('Blueprint theme', () => {
     });
 
     it.each(ROOT_TOKENS)(':root sets %s to %s', (token, expected) => {
-        expect(winningDeclaration(':root', token)?.value).toBe(expected);
+        expect(winningValue(':root', token)).toBe(expected);
     });
 
     it.each(DARK_TOKENS)('.bp6-dark sets %s to %s', (token, expected) => {
-        expect(winningDeclaration('.bp6-dark', token)?.value.replace(/\s+/g, ' ')).toBe(expected);
+        expect(winningValue('.bp6-dark', token)).toBe(expected);
     });
 
     // Blueprint redeclares some tokens inside @supports blocks, which the selector index does not see
@@ -160,8 +176,14 @@ describe('Blueprint theme', () => {
         },
     );
 
+    // A token Blueprint stops reading, such as the private --bp6-button-warning-rest, would otherwise pass every
+    // check above while changing nothing
+    it.each([...ROOT_TOKENS, ...DARK_TOKENS])('%s is still read by Blueprint', (token) => {
+        expect(css).toMatch(new RegExp(`var\\(${token}[,)]`));
+    });
+
     it.each(OVERRIDDEN_VALUES)('%s keeps its %s', (selector, property, expected) => {
-        expect(winningDeclaration(selector, property)?.value).toBe(expected);
+        expect(winningValue(selector, property)).toBe(expected);
     });
 
     it('only references --bp-* design tokens that Blueprint still defines', () => {

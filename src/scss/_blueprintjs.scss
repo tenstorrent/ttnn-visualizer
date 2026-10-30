@@ -16,6 +16,24 @@ $dark-success-intent-color: $green4; // from BlueprintJS
 // Blueprint 6.6 dark elevation shadows; 6.7 redesigned them
 $bp-legacy-dark-drop-shadow: rgba($black, 0.4);
 $bp-legacy-dark-border-shadow: inset 0 0 0 1px rgba($white, 0.2);
+
+// Shared by the Sass configuration and the --bp-surface-shadow-* tokens, so both kinds of surface match
+$bp-legacy-dark-shadow-1: ($bp-legacy-dark-border-shadow, 0 1px 1px $bp-legacy-dark-drop-shadow);
+$bp-legacy-dark-shadow-2: (
+    $bp-legacy-dark-border-shadow,
+    0 1px 1px $bp-legacy-dark-drop-shadow,
+    0 2px 6px $bp-legacy-dark-drop-shadow
+);
+$bp-legacy-dark-shadow-3: (
+    $bp-legacy-dark-border-shadow,
+    0 2px 4px $bp-legacy-dark-drop-shadow,
+    0 8px 24px $bp-legacy-dark-drop-shadow
+);
+$bp-legacy-dark-shadow-4: (
+    $bp-legacy-dark-border-shadow,
+    0 4px 8px $bp-legacy-dark-drop-shadow,
+    0 18px 46px 6px $bp-legacy-dark-drop-shadow
+);
 $pt-intent-text-colors: (
     'primary': $dark-primary-intent-color,
     'success': $dark-success-intent-color,
@@ -122,23 +140,12 @@ $pt-intent-text-colors: (
     $pt-text-color: $tt-grey-2,
     $dark-navbar-background-color: transparent,
     $pt-dark-elevation-shadow-0: $bp-legacy-dark-border-shadow,
-    // Remove elevation shadows in dark mode (navbar)
+    // No navbar shadow in dark mode. The level 1 token below stays a real shadow: Blueprint lists it alongside
+    // other shadows on dark cards, where `none` would make the whole declaration invalid.
     $pt-dark-elevation-shadow-1: none,
-    $pt-dark-elevation-shadow-2: (
-        $bp-legacy-dark-border-shadow,
-        0 1px 1px $bp-legacy-dark-drop-shadow,
-        0 2px 6px $bp-legacy-dark-drop-shadow,
-    ),
-    $pt-dark-elevation-shadow-3: (
-        $bp-legacy-dark-border-shadow,
-        0 2px 4px $bp-legacy-dark-drop-shadow,
-        0 8px 24px $bp-legacy-dark-drop-shadow,
-    ),
-    $pt-dark-elevation-shadow-4: (
-        $bp-legacy-dark-border-shadow,
-        0 4px 8px $bp-legacy-dark-drop-shadow,
-        0 18px 46px 6px $bp-legacy-dark-drop-shadow,
-    )
+    $pt-dark-elevation-shadow-2: $bp-legacy-dark-shadow-2,
+    $pt-dark-elevation-shadow-3: $bp-legacy-dark-shadow-3,
+    $pt-dark-elevation-shadow-4: $bp-legacy-dark-shadow-4
 );
 
 // Blueprint declares the intent tokens on :root only, and derives other :root tokens from them, so they are set
@@ -148,7 +155,7 @@ $pt-intent-text-colors: (
     --bp-intent-primary-hover: #{color.adjust($dark-primary-background-base, $lightness: -5%)};
     --bp-intent-primary-active: #{color.adjust($dark-primary-background-base, $lightness: -10%)};
     --bp-intent-primary-foreground: #{$white};
-    --bp-intent-success-rest: #{$green4};
+    --bp-intent-success-rest: #{$dark-success-intent-color};
     --bp-intent-success-hover: #{$green3};
     --bp-intent-success-active: #{$green2};
     --bp-intent-success-foreground: #{$white};
@@ -174,17 +181,13 @@ $pt-intent-text-colors: (
     // dimmer than the white label beside them.
     --bp-typography-color-default-rest: #{$tt-white};
     --bp-surface-shadow-0: #{$bp-legacy-dark-border-shadow};
-    --bp-surface-shadow-1: #{$bp-legacy-dark-border-shadow}, 0 1px 1px #{$bp-legacy-dark-drop-shadow};
-    --bp-surface-shadow-2:
-        #{$bp-legacy-dark-border-shadow}, 0 1px 1px #{$bp-legacy-dark-drop-shadow},
-        0 2px 6px #{$bp-legacy-dark-drop-shadow};
-    --bp-surface-shadow-3:
-        #{$bp-legacy-dark-border-shadow}, 0 2px 4px #{$bp-legacy-dark-drop-shadow},
-        0 8px 24px #{$bp-legacy-dark-drop-shadow};
-    --bp-surface-shadow-4:
-        #{$bp-legacy-dark-border-shadow}, 0 4px 8px #{$bp-legacy-dark-drop-shadow},
-        0 18px 46px 6px #{$bp-legacy-dark-drop-shadow};
+    --bp-surface-shadow-1: #{$bp-legacy-dark-shadow-1};
+    --bp-surface-shadow-2: #{$bp-legacy-dark-shadow-2};
+    --bp-surface-shadow-3: #{$bp-legacy-dark-shadow-3};
+    --bp-surface-shadow-4: #{$bp-legacy-dark-shadow-4};
 }
+
+// Deliberate differences from Blueprint, each with its reason
 
 // Blueprint raises an intent-coloured button or input inside a group to z-index 10-16 so
 // its border paints over the neighbour it shares an edge with. Those values only ever need
@@ -202,8 +205,6 @@ $pt-intent-text-colors: (
 .bp6-control-group {
     isolation: isolate;
 }
-
-// Deliberate differences from Blueprint, each with its reason
 
 .bp6-button {
     // Icon-only buttons pull their icon out to centre it. 6.7 narrowed this to an icon that is a direct child,

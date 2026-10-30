@@ -288,6 +288,8 @@ Prefer a token to a map, and a map to a selector. The primary token is `$tt-purp
 
 Inputs, tags and the file input use relative colour syntax with no fallback, so the app needs Firefox 128+, Chrome 119+ or Safari 16.4+.
 
+One override is not a public token: `--bp6-button-warning-rest`, Blueprint's private warning button fill, which it marks as temporary. It is the most likely to break on an upgrade; the spec fails if Blueprint stops reading it.
+
 The Blueprint packages are pinned to `~` ranges and upgraded together. On a minor bump, compare `/styleguide` before and after, re-check the overrides, and update the version in `tests/blueprintThemeStyles.spec.ts`, which pins the token values and overrides and fails until you do.
 
 ### Stylesheet imports go through the `styles/` alias

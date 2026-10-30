@@ -56,7 +56,7 @@ import type { IncomingEdgeView, OutgoingEdge, SourceNode } from '../components/m
 const PERF_BAR_SAMPLE_SCORES = [0.05, 0.35, 0.7, 1] as const;
 
 const BUTTON_INTENTS = [
-    { intent: Intent.NONE, icon: undefined },
+    { intent: Intent.NONE, icon: null },
     { intent: Intent.PRIMARY, icon: IconNames.ADD },
     { intent: Intent.SUCCESS, icon: IconNames.TICK },
     { intent: Intent.WARNING, icon: IconNames.WARNING_SIGN },
