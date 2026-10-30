@@ -19,7 +19,7 @@ The report pickers list reports newest first, and nothing in the pickers reorder
 - When only the locally synced copies of remote reports can be listed, they are ordered by when they were synced. A copy with no record of its sync is ordered by when its folder was last modified.
 - Reports with the same time are listed by folder name, and remote reports by their remote path. Remote times are recorded to the second, so the ranks of one multi-host run often share one and are listed in path order.
 
-Syncing a remote report reads its time again, so it moves to its place in the list straight away.
+In a list read from the remote machine, syncing a report reads its time again, so it moves to its place straight away. A list of locally synced copies is not reordered by when the sync happened until it is fetched again.
 
 Once the active report of the other kind has been linked, or has failed to link, with at least one report, each row carries a link badge: linked, failed to link, or not yet known. A memory report picker shows its badges against the active performance report, and a performance report picker shows them against the active memory report. An active report that has never been paired shows no badges.
 

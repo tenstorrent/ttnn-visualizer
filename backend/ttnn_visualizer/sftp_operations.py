@@ -997,6 +997,7 @@ def get_remote_performance_folders_from_paths(
     return folders
 
 
+@remote_exception_handler
 def read_remote_report_last_modified(
     remote_connection: RemoteConnection,
     folder: RemoteReportFolder,
@@ -1311,15 +1312,15 @@ def _remote_directory_mtimes(
     for index in range(0, len(directories), _MTIME_BATCH_SIZE):
         batch = directories[index : index + _MTIME_BATCH_SIZE]
         quoted = " ".join(remote_arg(directory) for directory in batch)
-        ssh_cmd = _ssh_argv(
-            remote_connection,
-            RemoteCommand.from_shell_fragment(
-                f"{_PORTABLE_MTIME_FUNCTION} ; "
-                # The space before `;` keeps it a separate shell token from
-                # the last quoted path.
-                f'for p in {quoted} ; do mtime "$p" 2>/dev/null || echo; done'
-            ),
+        script = (
+            f"{_PORTABLE_MTIME_FUNCTION} ; "
+            # The space before `;` keeps it a separate shell token from the last
+            # quoted path.
+            f'for p in {quoted} ; do mtime "$p" 2>/dev/null || echo; done'
         )
+        # Run through `sh` rather than the login shell, which may be csh, tcsh or
+        # fish and reject this POSIX syntax.
+        ssh_cmd = _ssh_argv(remote_connection, RemoteCommand.of("sh", "-c", script))
 
         try:
             result = subprocess.run(

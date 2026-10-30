@@ -44,6 +44,7 @@ from ttnn_visualizer.sftp_operations import (
     find_folders_by_files,
     get_remote_performance_folders,
     get_remote_profiler_folders,
+    read_remote_report_last_modified,
 )
 from ttnn_visualizer.tests.test_ssh_host_key_errors import CHANGED_HOST_STDERR
 from ttnn_visualizer.views import (
@@ -2275,6 +2276,36 @@ class TestSyncRefreshesLastModified:
     ):
         response, _ = self._sync(client, kind, refresh={"side_effect": error})
 
+        assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+        body = response.get_json()
+        assert body["lastModified"] == 1
+        assert body["lastSynced"] is not None
+
+    @pytest.mark.parametrize("kind", ["profiler", "performance"])
+    @pytest.mark.parametrize(
+        "stderr",
+        [
+            "ssh: connect to host h port 22: Connection refused",
+            "Permission denied (publickey).",
+        ],
+        ids=["unreachable", "auth"],
+    )
+    def test_ssh_failing_during_the_refresh_keeps_the_sync_and_the_sent_time(
+        self, client, kind, stderr
+    ):
+        """Drives the real refresh, whose SSH errors are not `RemoteConnectionException`
+        until its decorator converts them."""
+        lost = subprocess.CompletedProcess(args=["ssh"], returncode=255, stderr=stderr)
+        with patch(
+            "ttnn_visualizer.sftp_operations.subprocess.run", return_value=lost
+        ) as run:
+            response, _ = self._sync(
+                client,
+                kind,
+                refresh={"side_effect": read_remote_report_last_modified},
+            )
+
+        run.assert_called()
         assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
         body = response.get_json()
         assert body["lastModified"] == 1

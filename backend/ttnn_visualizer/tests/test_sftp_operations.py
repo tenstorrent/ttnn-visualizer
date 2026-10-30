@@ -155,9 +155,11 @@ class TestRemoteFindShellQuoting:
         with patch("subprocess.run", return_value=_completed("1700000000")) as run:
             _remote_directory_mtimes(connection, [self._APOSTROPHE_FOLDER])
 
-        remote_cmd = _remote_shell_command_from_run(run)
-        assert shlex.quote(self._APOSTROPHE_FOLDER) in remote_cmd
-        assert f"stat -c %Y '{self._APOSTROPHE_FOLDER}'" not in remote_cmd
+        # Wrapped in `sh -c` so a csh or fish login shell never parses the loop.
+        program, flag, script = shlex.split(_remote_shell_command_from_run(run))
+        assert (program, flag) == ("sh", "-c")
+        assert shlex.quote(self._APOSTROPHE_FOLDER) in script
+        assert f"stat -c %Y '{self._APOSTROPHE_FOLDER}'" not in script
 
     # These three ran the path as its own argv element after user@host, which looks
     # safe but is not: ssh joins everything after the target with spaces and hands the
@@ -183,6 +185,9 @@ class TestRemoteFindShellQuoting:
     def test_no_config_path_command_leaks_the_payload_unquoted(self, connection):
         for command in self._config_path_commands(connection):
             tokens = shlex.split(command)
+            if tokens[:2] == ["sh", "-c"]:
+                # The script `sh` runs is where the payload has to stay one word.
+                tokens = shlex.split(tokens[2])
             # A leak splits the payload across argv — the path ends at `o'brien;`
             # and `touch` becomes a word of its own. Asserted on the tokens rather
             # than on the command text because some commands carry the config
@@ -1085,11 +1090,11 @@ if [ "$1" != "-f" ]; then echo "stat: illegal option -- c" >&2; exit 1; fi
 case "$3" in */older) echo 1000 ;; */newer) echo 2000 ;; *) exit 1 ;; esac
 """
 
-    def _run_locally(self, cmd, *args, env=None, **kwargs):
+    def _run_locally(self, cmd, *args, env=None, cwd=None, **kwargs):
         """Run the remote command through this machine's shell and `stat`, which is
         GNU on CI and BSD on a Mac."""
         return self._real_run(
-            ["sh", "-c", cmd[-1]], capture_output=True, text=True, env=env
+            ["sh", "-c", cmd[-1]], capture_output=True, text=True, env=env, cwd=cwd
         )
 
     def _mtimes_with_stat(self, connection, tmp_path, script: str) -> list:
@@ -1111,18 +1116,25 @@ case "$3" in */older) echo 1000 ;; */newer) echo 2000 ;; *) exit 1 ;; esac
     def test_times_come_back_aligned_with_the_paths(self, connection, tmp_path):
         older = tmp_path / "older"
         newer = tmp_path / "o'brien; touch pwned"
-        for path, mtime in ((older, 1_000), (newer, 2_000)):
+        newest = tmp_path / "$(touch substituted)"
+        for path, mtime in ((older, 1_000), (newer, 2_000), (newest, 3_000)):
             path.mkdir()
             os.utime(path, (mtime, mtime))
 
-        with patch("subprocess.run", side_effect=self._run_locally):
+        # Run in `tmp_path`, where an injected relative `touch` would land.
+        with patch(
+            "subprocess.run",
+            side_effect=lambda cmd, *a, **k: self._run_locally(cmd, cwd=tmp_path),
+        ):
             mtimes = _remote_directory_mtimes(
-                connection, [str(older), str(tmp_path / "missing"), str(newer)]
+                connection,
+                [str(older), str(tmp_path / "missing"), str(newer), str(newest)],
             )
 
         # A path `stat` cannot read is a blank line, not a shifted result.
-        assert mtimes == [1_000, None, 2_000]
+        assert mtimes == [1_000, None, 2_000, 3_000]
         assert not (tmp_path / "pwned").exists()
+        assert not (tmp_path / "substituted").exists()
 
     @pytest.mark.parametrize(
         "script", [_GNU_STAT, _BSD_STAT], ids=["gnu-stat", "bsd-stat"]
