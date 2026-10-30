@@ -9,7 +9,7 @@ import { Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TestProviders } from './helpers/TestProviders';
 import getAllButtonsWithText from './helpers/getAllButtonsWithText';
-import testForPortal from './helpers/testForPortal';
+import { openPopover } from './helpers/testForPortal';
 import { minimalValidNpeData, npeWindow, summary } from './helpers/npeFixtures';
 import { noSshConfigResult } from './helpers/sshConfigFixtures';
 import mockProfilerFolderList from './data/mockProfilerFolderList.json';
@@ -257,8 +257,7 @@ describe('boot-restored reports on Home', () => {
         await settle();
         expectNothingRecorded();
 
-        getAllButtonsWithText(RESTORED_PROFILER.reportName)[0].click();
-        await waitFor(testForPortal);
+        await openPopover(getAllButtonsWithText(RESTORED_PROFILER.reportName)[0]);
         (await screen.findByText(nextProfiler.reportName)).click();
 
         await waitFor(() => expect(recordReportLoaded).toHaveBeenCalledTimes(1));

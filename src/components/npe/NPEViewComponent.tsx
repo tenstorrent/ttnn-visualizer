@@ -48,7 +48,7 @@ import { NODE_SIZE, getLines, resetRouteColors } from './drawingApi';
 import NPETimelineComponent from './NPETimelineComponent';
 import ActiveTransferDetails from './ActiveTransferDetails';
 import { useNodeType } from '../../hooks/useAPI';
-import useObservedWidth from '../../hooks/useObservedWidth';
+import RemountOnResize from '../RemountOnResize';
 import { DeviceArchitecture } from '../../definitions/DeviceArchitecture';
 import { CLUSTER_COORDS } from '../../model/ClusterModel';
 import NPEMetadata from './NPEMetadata';
@@ -155,9 +155,6 @@ const NPEView = ({
     const [selectedZoneAddress, setSelectedZoneAddress] = useState<NPE_COORDINATES | null>(null);
     const [expandedZoneMap, setExpandedZoneMap] = useState<Record<RootzoneStateKey, boolean>>({});
     const [canvasWidth, setCanvasWidth] = useState(window.innerWidth);
-    // Remount the sliders when their widths change, so they convert pointer positions at the new size
-    const [zoomSliderRef, zoomSliderWidth] = useObservedWidth();
-    const [scrubberRef, scrubberWidth] = useObservedWidth();
     const [isShowingAllTransfers, setIsShowingAllTransfers] = useState<boolean>(false);
     const [isAnnotatingCores, setIsAnnotatingCores] = useState<boolean>(true);
     const [nocFilter, setNocFilter] = useState<NoCType | null>(null);
@@ -713,10 +710,9 @@ const NPEView = ({
                             }}
                         />
 
-                        <div ref={zoomSliderRef}>
+                        <RemountOnResize>
                             Zoom
                             <Slider
-                                key={zoomSliderWidth}
                                 handleHtmlProps={{ 'aria-label': 'Zoom' }}
                                 min={0.1}
                                 max={2}
@@ -726,15 +722,13 @@ const NPEView = ({
                                 onChange={(value: number) => setZoom(value)}
                                 labelRenderer={(value) => `${value.toFixed(1)}`}
                             />
-                        </div>
+                        </RemountOnResize>
                     </div>
                 </ButtonGroup>
-                <div
-                    ref={scrubberRef}
-                    style={{ position: 'relative', width: `${switchWidth}px` }}
-                >
+                <div style={{ position: 'relative', width: `${switchWidth}px` }}>
+                    {/* Its width comes from state, so remount on that to keep the slider's track measurement current */}
                     <Slider
-                        key={scrubberWidth}
+                        key={Math.round(switchWidth)}
                         handleHtmlProps={{ 'aria-label': 'Timeline scrubber' }}
                         min={0}
                         max={npeData.timestep_data.length - 1}

@@ -16,7 +16,7 @@ import {
     NO_LINKED_RESULTS_TEXT,
 } from '../src/definitions/FolderLinkStatus';
 import { getDeleteActionLabel } from '../src/functions/managedEntityLabels';
-import testForPortal from './helpers/testForPortal';
+import { openPopover } from './helpers/testForPortal';
 import { TestProviders } from './helpers/TestProviders';
 import { runsWithoutFingerprints } from './helpers/reportLinkFixtures';
 
@@ -62,8 +62,7 @@ describe('LocalFolderPicker link badges', () => {
             </TestProviders>,
         );
 
-        fireEvent.click(screen.getByText('Select a report...'));
-        await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+        await openPopover(screen.getByText('Select a report...'), WAIT_FOR_OPTIONS);
 
         const labels = [...document.querySelectorAll('.folder-picker-menu-item .bp6-text-overflow-ellipsis')].map(
             (el) => el.textContent,
@@ -100,8 +99,7 @@ describe('LocalFolderPicker link badges', () => {
             </TestProviders>,
         );
 
-        fireEvent.click(screen.getByText('Select a report...'));
-        await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+        await openPopover(screen.getByText('Select a report...'), WAIT_FOR_OPTIONS);
 
         fireEvent.click(await screen.findByLabelText(deleteLabel(folders[0]), {}, WAIT_FOR_OPTIONS));
         expect(screen.getAllByText(/Are you sure you want to delete/).length).toBeGreaterThan(0);
@@ -141,8 +139,7 @@ describe('LocalFolderPicker link badges', () => {
             </TestProviders>,
         );
 
-        fireEvent.click(screen.getByText('Select a report...'));
-        await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+        await openPopover(screen.getByText('Select a report...'), WAIT_FOR_OPTIONS);
 
         fireEvent.click(await screen.findByLabelText(deleteLabel(folders[0]), {}, WAIT_FOR_OPTIONS));
 
@@ -162,8 +159,7 @@ describe('LocalFolderPicker link badges', () => {
             </TestProviders>,
         );
 
-        fireEvent.click(screen.getByText('Select a report...'));
-        await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+        await openPopover(screen.getByText('Select a report...'), WAIT_FOR_OPTIONS);
 
         const secondRow = (await screen.findAllByTestId(TEST_IDS.FOLDER_PICKER_ROW, {}, WAIT_FOR_OPTIONS))[1];
         const secondRowFolder = folders[1];
@@ -192,8 +188,7 @@ describe('LocalFolderPicker link badges', () => {
             </TestProviders>,
         );
 
-        fireEvent.click(screen.getByText(SELECT_REPORT_TEXT));
-        await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+        await openPopover(screen.getByText(SELECT_REPORT_TEXT), WAIT_FOR_OPTIONS);
 
         // The rows still render, so this is the gate being asserted rather than an empty dropdown.
         expect(screen.getAllByTestId(TEST_IDS.FOLDER_PICKER_ROW)).toHaveLength(folders.length);
@@ -215,8 +210,7 @@ describe('LocalFolderPicker link badges', () => {
             </TestProviders>,
         );
 
-        fireEvent.click(screen.getByText(SELECT_REPORT_TEXT));
-        await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+        await openPopover(screen.getByText(SELECT_REPORT_TEXT), WAIT_FOR_OPTIONS);
 
         // The rows still render, so this is the gate being asserted rather than an empty dropdown.
         expect(screen.getAllByTestId(TEST_IDS.FOLDER_PICKER_ROW)).toHaveLength(folders.length);
@@ -237,8 +231,7 @@ describe('LocalFolderPicker link badges', () => {
             </TestProviders>,
         );
 
-        fireEvent.click(screen.getByText('Select a report...'));
-        await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+        await openPopover(screen.getByText('Select a report...'), WAIT_FOR_OPTIONS);
 
         const unlinkIcon = document.querySelector('.folder-picker-menu-item .bp6-icon-unlink.bp6-intent-warning');
         expect(unlinkIcon).not.toBeNull();
@@ -261,8 +254,7 @@ describe('LocalFolderPicker link badges', () => {
             </TestProviders>,
         );
 
-        fireEvent.click(screen.getByText('Select a report...'));
-        await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+        await openPopover(screen.getByText('Select a report...'), WAIT_FOR_OPTIONS);
 
         expect(document.querySelectorAll('.folder-picker-menu-item .bp6-icon-link.bp6-intent-success')).toHaveLength(
             linkedCount,
@@ -298,8 +290,7 @@ describe('LocalFolderPicker linked-only filter', () => {
     };
 
     const openPicker = async () => {
-        fireEvent.click(screen.getByText(SELECT_REPORT_TEXT));
-        await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+        await openPopover(screen.getByText(SELECT_REPORT_TEXT), WAIT_FOR_OPTIONS);
     };
 
     const getRowLabels = () =>
