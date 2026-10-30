@@ -8,6 +8,7 @@ import logging
 import platform
 import re
 import shutil
+import subprocess
 import time
 import urllib
 import urllib.request
@@ -140,6 +141,7 @@ from ttnn_visualizer.sftp_operations import (
     get_active_sync_method,
     get_remote_performance_folders,
     get_remote_profiler_folders,
+    read_remote_report_last_modified,
     sync_remote_performance_folders,
     sync_remote_profiler_folders,
 )
@@ -1123,14 +1125,15 @@ def get_profiler_data_list(instance: Instance):
             directory.name for directory in path.iterdir() if directory.is_dir()
         ]
 
-    # Sort directory names by modified time (most recent first)
+    # Most recent first; equal times fall back to the name so ties have one order,
+    # which under SERVER_MODE would otherwise come from hashing a set.
     def get_modified_time(dir_name):
         dir_path = Path(path) / dir_name
         if dir_path.exists():
             return dir_path.stat().st_mtime
         return 0
 
-    directory_names.sort(key=get_modified_time, reverse=True)
+    directory_names.sort(key=lambda name: (-get_modified_time(name), name))
 
     for dir_name in directory_names:
         dir_path = Path(path) / dir_name
@@ -1240,14 +1243,15 @@ def get_performance_data_list(instance: Instance):
 
     valid_dirs = []
 
-    # Sort directory names by modified time (most recent first)
+    # Most recent first; equal times fall back to the name so ties have one order,
+    # which under SERVER_MODE would otherwise come from hashing a set.
     def get_modified_time(dir_name):
         dir_path = Path(path) / dir_name
         if dir_path.exists():
             return dir_path.stat().st_mtime
         return 0
 
-    directory_names.sort(key=get_modified_time, reverse=True)
+    directory_names.sort(key=lambda name: (-get_modified_time(name), name))
 
     for dir_name in directory_names:
         dir_path = Path(path) / dir_name
@@ -2457,6 +2461,39 @@ def remote_stack_trace_read(instance: Instance):
     return _remote_stack_source_read(instance, file_path, source_file_id)
 
 
+def _finalise_synced_folder(
+    folder: RemoteReportFolder,
+    connection: RemoteConnection,
+    directory_config_key: str,
+    *,
+    is_profiler: bool,
+    qualify_rank: bool = False,
+) -> None:
+    """Describe a folder a sync just wrote, for the client to put back in its list.
+
+    ``lastModified`` is re-read because the client sent it from an older listing and
+    orders its rows by it. That happens before ``lastSynced`` is stamped, so the
+    refreshed time cannot be later and mark the copy outdated. A sync that
+    succeeded must not fail because this follow-up read did, so a failure keeps
+    the time the client sent.
+    """
+    try:
+        folder.lastModified = read_remote_report_last_modified(
+            connection, folder, is_profiler=is_profiler
+        )
+    except (RemoteConnectionException, subprocess.TimeoutExpired):
+        logger.warning(
+            "Could not re-read the modification time of %s after syncing it",
+            folder.remotePath,
+            exc_info=True,
+        )
+
+    folder.lastSynced = int(time.time())
+    _annotate_synced_copy(
+        folder, connection, directory_config_key, qualify_rank=qualify_rank
+    )
+
+
 @api.route("/remote/sync", methods=["POST"])
 @local_only
 def sync_remote_folder():
@@ -2483,11 +2520,11 @@ def sync_remote_folder():
                 sid=instance_id,
             )
 
-            performance_folder.lastSynced = int(time.time())
-            _annotate_synced_copy(
+            _finalise_synced_folder(
                 performance_folder,
                 connection,
                 "PERFORMANCE_DIRECTORY_NAME",
+                is_profiler=False,
                 qualify_rank=bool(connection.multihostPerformance),
             )
 
@@ -2514,9 +2551,11 @@ def sync_remote_folder():
             sid=instance_id,
         )
 
-        remote_profiler_folder.lastSynced = int(time.time())
-        _annotate_synced_copy(
-            remote_profiler_folder, connection, "PROFILER_DIRECTORY_NAME"
+        _finalise_synced_folder(
+            remote_profiler_folder,
+            connection,
+            "PROFILER_DIRECTORY_NAME",
+            is_profiler=True,
         )
 
         response_body = remote_profiler_folder.model_dump()

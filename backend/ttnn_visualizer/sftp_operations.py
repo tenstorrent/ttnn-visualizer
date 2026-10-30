@@ -31,6 +31,7 @@ from ttnn_visualizer.models import (
     RemoteReportFolder,
     folder_segment_from_remote_path,
     rank_from_remote_path,
+    remote_folder_newest_first_key,
 )
 from ttnn_visualizer.remote_command import (
     RemoteCommand,
@@ -126,6 +127,16 @@ MULTIHOST_REPORT_LAYOUT_HINT = "rank<N>/reports"
 # Paths per batched `stat` call, so a rank-heavy tree cannot build a remote
 # command line long enough to hit ARG_MAX.
 _MTIME_BATCH_SIZE = 200
+# Defines a remote shell function `mtime <path>` printing seconds since the epoch.
+# GNU `stat -c %Y` and BSD/macOS `stat -f %m` reject each other's flags, so the
+# flavour is probed once on `/` rather than chained per path: a GNU `stat -f`
+# reached for an unreadable path prints filesystem details over several lines,
+# which would misalign every time after it.
+_PORTABLE_MTIME_FUNCTION = (
+    "if stat -c %Y / >/dev/null 2>&1; "
+    'then mtime() { stat -c %Y "$1"; }; '
+    'else mtime() { stat -f %m "$1"; }; fi'
+)
 
 
 def _ssh_cmd_prefix(remote_connection: RemoteConnection) -> List[str]:
@@ -818,6 +829,69 @@ def download_single_file_sftp(
         raise RuntimeError(f"Failed to download {remote_file}: {type(e).__name__}: {e}")
 
 
+def _profiler_config_paths(
+    remote_connection: RemoteConnection, config_path: str
+) -> List[str]:
+    """The config file(s) that describe a profiler report, the one to read first.
+
+    A single-host report has ``config_path`` itself; a multihost one has ranked
+    ``config_*_of_*.json`` beside it instead. Empty when the report has neither.
+    Raises ``CalledProcessError`` when the ranked listing fails.
+    """
+    if _remote_file_exists(remote_connection, config_path):
+        return [config_path]
+
+    folder_str = str(Path(config_path).parent).rstrip("/")
+    # One argv after user@host: OpenSSH may wrap multi-arg remote commands in
+    # `sh -c` on the server and break `for ...; do ...; done`. Pass a single
+    # `bash -lc '<script>'` string instead. Use find so the script has no
+    # shell loop syntax.
+    inner = (
+        f"find {remote_arg(folder_str)} -maxdepth 1 "
+        "-name 'config_*_of_*.json' -print"
+    )
+    list_cmd = _ssh_argv(
+        remote_connection,
+        RemoteCommand.of("bash", "-lc", inner),
+    )
+    result = subprocess.run(
+        list_cmd,
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=_ssh_subprocess_timeout_seconds(),
+    )
+    lines = [ln.strip() for ln in result.stdout.splitlines() if ln.strip()]
+    by_base = {Path(l).name: l for l in lines}
+    ordered = ranked_profiler_config_basenames(by_base.keys())
+    return [by_base[n] for n in ordered]
+
+
+def _remote_file_exists(remote_connection: RemoteConnection, path: str) -> bool:
+    test_cmd = _ssh_argv(remote_connection, RemoteCommand.of("test", "-f", path))
+    result = subprocess.run(
+        test_cmd,
+        capture_output=True,
+        text=True,
+        timeout=_ssh_remote_check_timeout_seconds(),
+    )
+    return result.returncode == 0
+
+
+def _latest_remote_mtime(
+    remote_connection: RemoteConnection, paths: List[str]
+) -> Optional[int]:
+    """The newest readable time among ``paths``, or None when none can be read."""
+    return max(
+        (
+            mtime
+            for mtime in _remote_directory_mtimes(remote_connection, paths)
+            if mtime is not None
+        ),
+        default=None,
+    )
+
+
 def get_remote_profiler_folder_from_config_path(
     remote_connection: RemoteConnection, config_path: str
 ) -> RemoteReportFolder:
@@ -825,95 +899,35 @@ def get_remote_profiler_folder_from_config_path(
     folder_path = Path(config_path).parent
     parent_folder_name = folder_path.name
     folder_str = str(folder_path).rstrip("/")
-    ssh_timeout = _ssh_subprocess_timeout_seconds()
-    check_timeout = _ssh_remote_check_timeout_seconds()
-
-    def ssh_run_checked(cmd: List[str]) -> subprocess.CompletedProcess:
-        return subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=ssh_timeout,
-        )
-
-    def ssh_stat_mtime(path: str) -> int:
-        stat_cmd = _ssh_argv(
-            remote_connection, RemoteCommand.of("stat", "-c", "%Y", path)
-        )
-        stat_result = ssh_run_checked(stat_cmd)
-        return int(float(stat_result.stdout.strip()))
-
-    def ssh_cat(path: str) -> str:
-        cat_cmd = _ssh_argv(remote_connection, RemoteCommand.of("cat", path))
-        cat_result = ssh_run_checked(cat_cmd)
-        return cat_result.stdout
-
-    def ssh_test_file(path: str) -> bool:
-        test_cmd = _ssh_argv(remote_connection, RemoteCommand.of("test", "-f", path))
-        result = subprocess.run(
-            test_cmd,
-            capture_output=True,
-            text=True,
-            timeout=check_timeout,
-        )
-        return result.returncode == 0
-
-    def ssh_list_ranked_config_paths() -> List[str]:
-        # One argv after user@host: OpenSSH may wrap multi-arg remote commands in
-        # `sh -c` on the server and break `for ...; do ...; done`. Pass a single
-        # `bash -lc '<script>'` string instead. Use find so the script has no
-        # shell loop syntax.
-        inner = (
-            f"find {remote_arg(folder_str)} -maxdepth 1 "
-            "-name 'config_*_of_*.json' -print"
-        )
-        list_cmd = _ssh_argv(
-            remote_connection,
-            RemoteCommand.of("bash", "-lc", inner),
-        )
-        result = subprocess.run(
-            list_cmd,
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=ssh_timeout,
-        )
-        lines = [ln.strip() for ln in result.stdout.splitlines() if ln.strip()]
-        by_base = {Path(l).name: l for l in lines}
-        ordered = ranked_profiler_config_basenames(by_base.keys())
-        return [by_base[n] for n in ordered]
 
     try:
-        single_config = str(Path(config_path))  # .../config.json from caller
-        read_path: Optional[str] = None
-        mtime_paths: List[str] = []
+        config_paths = _profiler_config_paths(remote_connection, str(Path(config_path)))
 
-        if ssh_test_file(single_config):
-            read_path = single_config
-            mtime_paths = [single_config]
-        else:
-            ranked_paths = ssh_list_ranked_config_paths()
-            if ranked_paths:
-                read_path = ranked_paths[0]
-                mtime_paths = ranked_paths
-
-        if read_path is None:
+        if not config_paths:
             return RemoteReportFolder(
                 remotePath=folder_str,
                 reportName=parent_folder_name,
                 lastModified=int(time.time()),
             )
 
-        last_modified = max(ssh_stat_mtime(p) for p in mtime_paths)
-        raw_json = ssh_cat(read_path)
+        # The batch reader never raises for an unreadable time, so a remote whose
+        # `stat` cannot answer still gets its report name read below.
+        last_modified = _latest_remote_mtime(remote_connection, config_paths)
+        cat_cmd = _ssh_argv(remote_connection, RemoteCommand.of("cat", config_paths[0]))
+        raw_json = subprocess.run(
+            cat_cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=_ssh_subprocess_timeout_seconds(),
+        ).stdout
         data = json.loads(raw_json)
         report_name = data.get("report_name") if isinstance(data, dict) else None
 
         return RemoteReportFolder(
             remotePath=folder_str,
             reportName=report_name,
-            lastModified=last_modified,
+            lastModified=int(time.time()) if last_modified is None else last_modified,
         )
 
     except subprocess.CalledProcessError as e:
@@ -981,6 +995,39 @@ def get_remote_performance_folders_from_paths(
         )
 
     return folders
+
+
+@remote_exception_handler
+def read_remote_report_last_modified(
+    remote_connection: RemoteConnection,
+    folder: RemoteReportFolder,
+    *,
+    is_profiler: bool,
+) -> int:
+    """Re-read one report's ``lastModified`` the way its listing does.
+
+    A profiler report is timed by its config file(s), a performance report by its
+    folder, so a refreshed row sorts exactly where a fresh listing would put it.
+    An unreadable time keeps ``folder.lastModified``.
+    """
+    if is_profiler:
+        # Only the times are wanted, so unlike the listing this never reads the
+        # config itself: one round trip fewer, and no JSON to fail on.
+        try:
+            timed_paths = _profiler_config_paths(
+                remote_connection, str(Path(folder.remotePath) / TEST_CONFIG_FILE)
+            )
+        except subprocess.CalledProcessError as e:
+            if e.returncode == 255:
+                handle_ssh_subprocess_error(e, remote_connection)
+            return folder.lastModified
+    else:
+        timed_paths = [folder.remotePath]
+
+    if not timed_paths:
+        return folder.lastModified
+    mtime = _latest_remote_mtime(remote_connection, timed_paths)
+    return folder.lastModified if mtime is None else mtime
 
 
 @remote_exception_handler
@@ -1254,22 +1301,26 @@ def _permission_denied_path(stderr: str) -> Optional[str]:
 def _remote_directory_mtimes(
     remote_connection: RemoteConnection, directories: List[str]
 ) -> List[Optional[int]]:
-    """Modification times for ``directories``, batched into one round trip each.
+    """Modification times for ``directories`` (or files), batched into one round trip each.
 
     ``stat`` is invoked per path inside a single remote shell so that a path it
     cannot read yields a blank line, keeping the results aligned with the input.
+    The ``stat`` flavour is picked once per shell (see ``_PORTABLE_MTIME_FUNCTION``).
     """
     mtimes: List[Optional[int]] = []
 
     for index in range(0, len(directories), _MTIME_BATCH_SIZE):
         batch = directories[index : index + _MTIME_BATCH_SIZE]
         quoted = " ".join(remote_arg(directory) for directory in batch)
-        ssh_cmd = _ssh_argv(
-            remote_connection,
-            RemoteCommand.from_shell_fragment(
-                f'for p in {quoted}; do stat -c %Y "$p" 2>/dev/null || echo; done'
-            ),
+        script = (
+            f"{_PORTABLE_MTIME_FUNCTION} ; "
+            # The space before `;` keeps it a separate shell token from the last
+            # quoted path.
+            f'for p in {quoted} ; do mtime "$p" 2>/dev/null || echo; done'
         )
+        # Run through `sh` rather than the login shell, which may be csh, tcsh or
+        # fish and reject this POSIX syntax.
+        ssh_cmd = _ssh_argv(remote_connection, RemoteCommand.of("sh", "-c", script))
 
         try:
             result = subprocess.run(
@@ -1445,7 +1496,7 @@ def get_remote_performance_folders(
         remote_connection, performance_paths
     )
 
-    return sorted(remote_folder_data, key=lambda x: x.lastModified, reverse=True)
+    return sorted(remote_folder_data, key=remote_folder_newest_first_key)
 
 
 @remote_exception_handler
@@ -1480,7 +1531,7 @@ def get_remote_profiler_folders(
         )
         remote_folder_data.append(remote_folder)
 
-    return sorted(remote_folder_data, key=lambda x: x.lastModified, reverse=True)
+    return sorted(remote_folder_data, key=remote_folder_newest_first_key)
 
 
 def _safe_sync_destination_segment(

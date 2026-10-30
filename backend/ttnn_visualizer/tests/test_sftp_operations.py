@@ -11,9 +11,11 @@ size-aware listings, plus its fallback path when the remote ``find`` lacks
 need network access or a real SSH server.
 """
 
+import os
 import shlex
 import subprocess
 from http import HTTPStatus
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -27,10 +29,11 @@ from ttnn_visualizer.exceptions import (
     RemoteConnectionException,
     SSHException,
 )
-from ttnn_visualizer.models import RemoteConnection
+from ttnn_visualizer.models import RemoteConnection, RemoteReportFolder
 from ttnn_visualizer.sftp_operations import (
     _MISSING_ROOT_EXIT_CODE,
     _NOT_A_DIRECTORY_EXIT_CODE,
+    TEST_CONFIG_FILE,
     RemoteFolderSearch,
     RemoteSearchRootState,
     _get_remote_file_list_without_sizes,
@@ -43,6 +46,7 @@ from ttnn_visualizer.sftp_operations import (
     get_remote_directory_list,
     get_remote_file_list,
     get_remote_profiler_folder_from_config_path,
+    read_remote_report_last_modified,
     resolve_file_path,
     sync_files_and_directories,
 )
@@ -151,9 +155,11 @@ class TestRemoteFindShellQuoting:
         with patch("subprocess.run", return_value=_completed("1700000000")) as run:
             _remote_directory_mtimes(connection, [self._APOSTROPHE_FOLDER])
 
-        remote_cmd = _remote_shell_command_from_run(run)
-        assert shlex.quote(self._APOSTROPHE_FOLDER) in remote_cmd
-        assert f"stat -c %Y '{self._APOSTROPHE_FOLDER}'" not in remote_cmd
+        # Wrapped in `sh -c` so a csh or fish login shell never parses the loop.
+        program, flag, script = shlex.split(_remote_shell_command_from_run(run))
+        assert (program, flag) == ("sh", "-c")
+        assert shlex.quote(self._APOSTROPHE_FOLDER) in script
+        assert f"stat -c %Y '{self._APOSTROPHE_FOLDER}'" not in script
 
     # These three ran the path as its own argv element after user@host, which looks
     # safe but is not: ssh joins everything after the target with spaces and hands the
@@ -179,6 +185,9 @@ class TestRemoteFindShellQuoting:
     def test_no_config_path_command_leaks_the_payload_unquoted(self, connection):
         for command in self._config_path_commands(connection):
             tokens = shlex.split(command)
+            if tokens[:2] == ["sh", "-c"]:
+                # The script `sh` runs is where the payload has to stay one word.
+                tokens = shlex.split(tokens[2])
             # A leak splits the payload across argv — the path ends at `o'brien;`
             # and `touch` becomes a word of its own. Asserted on the tokens rather
             # than on the command text because some commands carry the config
@@ -1058,3 +1067,187 @@ class TestGetRemoteFileListWithoutSizes:
                 connection, "/remote", exclude_patterns=[]
             )
         assert result == [("/remote/a.txt", 0), ("/remote/b.txt", 0)]
+
+
+class TestPortableRemoteMtimes:
+    """Remote times are read with whichever `stat` the remote has.
+
+    GNU `stat -c %Y` and BSD/macOS `stat -f %m` reject each other's flags. Without
+    the fallback, a non-GNU remote gives every report the same time.
+    """
+
+    _real_run = staticmethod(subprocess.run)
+
+    # Stand-ins for each flavour, so both branches run on any OS. The GNU one
+    # answers `-f` as GNU does, over several lines, so a command that reached it
+    # for an unreadable path would shift every time after that path.
+    _GNU_STAT = """#!/bin/sh
+if [ "$1" != "-c" ]; then printf '  File: "%s"\\n    ID: 0\\n' "$3"; exit 0; fi
+case "$3" in /) echo 1 ;; */older) echo 1000 ;; */newer) echo 2000 ;; *) exit 1 ;; esac
+"""
+    _BSD_STAT = """#!/bin/sh
+if [ "$1" != "-f" ]; then echo "stat: illegal option -- c" >&2; exit 1; fi
+case "$3" in */older) echo 1000 ;; */newer) echo 2000 ;; *) exit 1 ;; esac
+"""
+
+    def _run_locally(self, cmd, *args, env=None, cwd=None, **kwargs):
+        """Run the remote command through this machine's shell and `stat`, which is
+        GNU on CI and BSD on a Mac."""
+        return self._real_run(
+            ["sh", "-c", cmd[-1]], capture_output=True, text=True, env=env, cwd=cwd
+        )
+
+    def _mtimes_with_stat(self, connection, tmp_path, script: str) -> list:
+        shim_dir = tmp_path / "bin"
+        shim_dir.mkdir()
+        shim = shim_dir / "stat"
+        shim.write_text(script)
+        shim.chmod(0o755)
+        env = {**os.environ, "PATH": f"{shim_dir}{os.pathsep}{os.environ['PATH']}"}
+
+        with patch(
+            "subprocess.run",
+            side_effect=lambda cmd, *a, **k: self._run_locally(cmd, env=env),
+        ):
+            return _remote_directory_mtimes(
+                connection, ["/r/older", "/r/missing", "/r/newer"]
+            )
+
+    def test_times_come_back_aligned_with_the_paths(self, connection, tmp_path):
+        older = tmp_path / "older"
+        newer = tmp_path / "o'brien; touch pwned"
+        newest = tmp_path / "$(touch substituted)"
+        for path, mtime in ((older, 1_000), (newer, 2_000), (newest, 3_000)):
+            path.mkdir()
+            os.utime(path, (mtime, mtime))
+
+        # Run in `tmp_path`, where an injected relative `touch` would land.
+        with patch(
+            "subprocess.run",
+            side_effect=lambda cmd, *a, **k: self._run_locally(cmd, cwd=tmp_path),
+        ):
+            mtimes = _remote_directory_mtimes(
+                connection,
+                [str(older), str(tmp_path / "missing"), str(newer), str(newest)],
+            )
+
+        # A path `stat` cannot read is a blank line, not a shifted result.
+        assert mtimes == [1_000, None, 2_000, 3_000]
+        assert not (tmp_path / "pwned").exists()
+        assert not (tmp_path / "substituted").exists()
+
+    @pytest.mark.parametrize(
+        "script", [_GNU_STAT, _BSD_STAT], ids=["gnu-stat", "bsd-stat"]
+    )
+    def test_each_stat_flavour_answers_aligned_with_the_paths(
+        self, connection, tmp_path, script
+    ):
+        assert self._mtimes_with_stat(connection, tmp_path, script) == [
+            1_000,
+            None,
+            2_000,
+        ]
+
+
+class TestProfilerFolderWithoutReadableTime:
+    """A profiler config whose time cannot be read still has its name read."""
+
+    _CONFIG_PATH = "/remote/profiler/bert/config.json"
+
+    def _describe(self, connection):
+        def run_remote(cmd, *args, **_kwargs):
+            remote_cmd = cmd[-1]
+            if remote_cmd.startswith("cat"):
+                return _completed('{"report_name": "BERT large"}')
+            # `test -f` succeeds; the mtime batch prints the blank line of a
+            # `stat` that could not answer.
+            return _completed("\n")
+
+        with patch("subprocess.run", side_effect=run_remote):
+            return get_remote_profiler_folder_from_config_path(
+                connection, self._CONFIG_PATH
+            )
+
+    def test_the_report_name_still_comes_from_the_config(self, connection):
+        folder = self._describe(connection)
+
+        assert folder.reportName == "BERT large"
+        assert folder.remotePath == str(Path(self._CONFIG_PATH).parent)
+
+    def test_an_unreadable_time_falls_back_to_now(self, connection):
+        with patch("ttnn_visualizer.sftp_operations.time.time", return_value=123.4):
+            folder = self._describe(connection)
+
+        assert folder.lastModified == 123
+
+
+class TestReadRemoteReportLastModified:
+    """The time `/remote/sync` hands back must be the one a fresh listing would show."""
+
+    _FOLDER = RemoteReportFolder(
+        reportName="bert", remotePath="/remote/reports/bert", lastModified=50
+    )
+
+    def _read(self, connection, *, is_profiler, mtimes, config_paths=None):
+        with (
+            patch(
+                "ttnn_visualizer.sftp_operations._remote_directory_mtimes",
+                return_value=mtimes,
+            ) as read_mtimes,
+            patch(
+                "ttnn_visualizer.sftp_operations._profiler_config_paths",
+                **(
+                    {"side_effect": config_paths}
+                    if isinstance(config_paths, BaseException)
+                    else {"return_value": config_paths}
+                ),
+            ) as find_configs,
+            # Everything remote goes through the two helpers above; a config read
+            # (`cat`) or any other round trip would land here.
+            patch("subprocess.run", side_effect=AssertionError("unexpected SSH")),
+        ):
+            value = read_remote_report_last_modified(
+                connection, self._FOLDER, is_profiler=is_profiler
+            )
+        return value, read_mtimes, find_configs
+
+    def test_a_performance_report_is_timed_by_its_folder(self, connection):
+        value, read_mtimes, _ = self._read(connection, is_profiler=False, mtimes=[77])
+
+        assert value == 77
+        read_mtimes.assert_called_once_with(connection, [self._FOLDER.remotePath])
+
+    def test_an_unreadable_performance_time_keeps_the_sent_one(self, connection):
+        value, _, _ = self._read(connection, is_profiler=False, mtimes=[None])
+
+        assert value == self._FOLDER.lastModified
+
+    def test_a_profiler_report_is_timed_by_its_newest_config(self, connection):
+        ranked = [
+            "/remote/reports/bert/config_0_of_2.json",
+            "/remote/reports/bert/config_1_of_2.json",
+        ]
+        value, read_mtimes, find_configs = self._read(
+            connection, is_profiler=True, mtimes=[5, 9], config_paths=ranked
+        )
+
+        assert value == 9
+        find_configs.assert_called_once_with(
+            connection, f"{self._FOLDER.remotePath}/{TEST_CONFIG_FILE}"
+        )
+        read_mtimes.assert_called_once_with(connection, ranked)
+
+    @pytest.mark.parametrize(
+        "config_paths",
+        [[], subprocess.CalledProcessError(1, ["ssh"])],
+        ids=["no-config", "listing-failed"],
+    )
+    def test_a_profiler_report_without_a_readable_config_keeps_the_sent_time(
+        self, connection, config_paths
+    ):
+        value, read_mtimes, _ = self._read(
+            connection, is_profiler=True, mtimes=[], config_paths=config_paths
+        )
+
+        assert value == self._FOLDER.lastModified
+        read_mtimes.assert_not_called()

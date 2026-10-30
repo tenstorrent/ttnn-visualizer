@@ -18,6 +18,7 @@ import createToastNotification from '../../functions/createToastNotification';
 import { ToastType } from '../../definitions/ToastType';
 import getRemoteSyncFailureAction from '../../functions/getRemoteSyncFailureAction';
 import { RemoteSyncFailureAction } from '../../definitions/RemoteSync';
+import compareRemoteFoldersNewestFirst from '../../functions/compareRemoteFoldersNewestFirst';
 import getResponseError from '../../functions/getResponseError';
 import hasPerformanceDiscoveryChanged from '../../functions/hasPerformanceDiscoveryChanged';
 import getServerConfig from '../../functions/getServerConfig';
@@ -567,9 +568,10 @@ const RemoteSyncConfigurator = () => {
                 // report pickers spin for the whole SSH sync (progress is FileStatusOverlay).
                 const { data: updatedFolder } = await sync(connection, selected);
 
-                const updatedFolders = getSaved(connection).map((f) =>
-                    f.remotePath === updatedFolder?.remotePath ? updatedFolder : f,
-                );
+                // The sync re-reads the row's remote time, so it may have moved.
+                const updatedFolders = getSaved(connection)
+                    .map((f) => (f.remotePath === updatedFolder?.remotePath ? updatedFolder : f))
+                    .sort(compareRemoteFoldersNewestFirst);
 
                 updateSaved(connection, updatedFolders);
 

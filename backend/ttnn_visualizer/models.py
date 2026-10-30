@@ -741,6 +741,16 @@ class RemoteReportFolder(SerializeableModel):
         return sanitise_remote_report_path(value)
 
 
+def remote_folder_newest_first_key(folder: RemoteReportFolder) -> Tuple[int, str]:
+    """Newest first; equal times fall back to ``remotePath`` so ties have one order.
+
+    Remote times are whole seconds, so the ranks of one multihost run routinely tie.
+    ``src/functions/compareRemoteFoldersNewestFirst.ts`` mirrors this rule for the
+    re-sort after a single-folder sync.
+    """
+    return (-folder.lastModified, folder.remotePath)
+
+
 def stored_remote_connection(value: Any) -> Optional[RemoteConnection]:
     """Deserialise a persisted connection, treating an unusable one as absent.
 
