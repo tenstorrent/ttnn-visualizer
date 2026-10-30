@@ -145,6 +145,15 @@ def _stacked_report_plot_skipped():
         perf_report.HAS_MATPLOTLIB = has_matplotlib
 
 
+def _has_groupable_device_rows(df: pd.DataFrame) -> bool:
+    """Whether `merge_device_rows` must group some of `df`: a device op whose device
+    id is usable. Without one, every row passes through and the column never appears."""
+    if _OP_TYPE_COLUMN not in df.columns or _DEVICE_ID_COLUMN not in df.columns:
+        return False
+    device_ids = pd.to_numeric(df[_DEVICE_ID_COLUMN], errors="coerce")
+    return bool(((df[_OP_TYPE_COLUMN] == _DEVICE_OP_TYPE) & device_ids.notna()).any())
+
+
 def _read_merged_device_rows(merged: pd.DataFrame) -> Dict[int, Tuple[int, ...]]:
     """Each merged row's id, mapped to the ids of the per-device rows it stands for."""
     column = perf_report.MERGED_ROWS_COLUMN
@@ -173,15 +182,23 @@ def _merged_device_rows_captured(
     the merge (#2178 asks for the column upstream).
 
     Enter it inside `_perf_report_output_bounded`, so the module global is only
-    swapped while the build lock is held. A failure to read the column must not
-    fail the report: tt-perf-report's caller turns any exception into a 422, so it
-    is logged and the map left empty, and rows then simply carry no members. The
-    tests pin both names, in case an upstream rename silently drops the field.
+    swapped while the build lock is held; entering it without the lock raises. A
+    failure to read the column must not fail the report: tt-perf-report's caller
+    turns any exception into a 422, so it is logged and the map left empty, and rows
+    then simply carry no members. The tests pin both names, and a merge that had
+    rows to group but wrote no column is logged, in case an upstream rename
+    silently drops the field.
     """
     members_by_row: Dict[int, Tuple[int, ...]] = {}
     if not enabled:
         yield members_by_row
         return
+    if not _PERF_REPORT_OUTPUT_LOCK.locked():
+        # Another build could otherwise call this one's wrapper and write its rows
+        # into this map.
+        raise RuntimeError(
+            "merge_device_rows is only swapped under _PERF_REPORT_OUTPUT_LOCK"
+        )
 
     # Looked up on entry rather than at import, so whatever is installed now -- a
     # test's patch included -- is what gets wrapped and put back.
@@ -190,6 +207,14 @@ def _merged_device_rows_captured(
     def merge_device_rows_capturing(df):
         merged = merge_device_rows(df)
         try:
+            if (
+                perf_report.MERGED_ROWS_COLUMN not in merged.columns
+                and _has_groupable_device_rows(df)
+            ):
+                # The frontend falls back to linking only the row the merge kept.
+                logger.warning(
+                    "tt-perf-report merged device rows but named none of their members"
+                )
             members_by_row.update(_read_merged_device_rows(merged))
         except Exception:
             members_by_row.clear()
@@ -1888,17 +1913,6 @@ class OpsPerformanceReportQueries:
                 logger.error(f"Error processing CSV output file: {e}")
                 report = []
                 degraded = True
-
-            if (
-                capture_device_rows
-                and not device_rows_by_id
-                and any(row.get("op_type") == _DEVICE_OP_TYPE for row in report)
-            ):
-                # Not degraded: the rows are whole, and the frontend falls back to
-                # linking only the row the merge kept. Most likely an upstream rename.
-                logger.warning(
-                    "tt-perf-report merged device rows but named none of their members"
-                )
 
             stacked_report: List[Dict] = []
 

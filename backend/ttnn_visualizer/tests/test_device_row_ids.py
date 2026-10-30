@@ -84,8 +84,14 @@ def _members_by_row(report: List[Dict]) -> Dict[str, List[int]]:
     return {row["id"]: row["device_row_ids"] for row in report}
 
 
-def test_merged_rows_partition_the_unmerged_device_rows():
-    instance = _smoke_instance()
+@pytest.mark.parametrize(
+    "make_instance",
+    [lambda tmp_path: _smoke_instance(), _crafted_instance],
+    ids=["aligned", "device-missing-an-op"],
+)
+def test_merged_rows_partition_the_unmerged_device_rows(make_instance, tmp_path):
+    """What the frontend relies on, whatever pairing the merge settles on."""
+    instance = make_instance(tmp_path)
     merged = _generate(instance, merge_devices=True, device_row_ids=True)
     unmerged = _generate(instance, merge_devices=False)
     unmerged_by_id = {int(row["id"]): row for row in unmerged}
@@ -109,6 +115,9 @@ def test_merged_rows_partition_the_unmerged_device_rows():
 
 
 def test_a_device_missing_an_op_pairs_by_op_not_by_position(tmp_path):
+    """Pins tt-perf-report's own pairing of the crafted capture. A failure after a
+    version bump means upstream regrouped: re-read the merge before updating
+    `CRAFTED_GROUPS`, as the partition test above still holds either way."""
     merged = _generate(
         _crafted_instance(tmp_path), merge_devices=True, device_row_ids=True
     )
@@ -209,12 +218,11 @@ def test_a_failed_read_leaves_the_report_whole(monkeypatch, caplog):
 
     assert len(report) == len(_generate(instance, merge_devices=True))
     assert not any("device_row_ids" in row for row in report)
-    # Matched on its own wording: the empty map also trips the rename warning,
-    # which says "merged device rows" too.
     (failure,) = [
         record for record in caplog.records if "Could not read" in record.getMessage()
     ]
     assert failure.exc_info is not None
+    assert "named none of their members" not in caplog.text
 
 
 def test_an_upstream_rename_is_logged_rather_than_silent(monkeypatch, caplog):
@@ -233,6 +241,65 @@ def test_an_upstream_rename_is_logged_rather_than_silent(monkeypatch, caplog):
     assert report
     assert not any("device_row_ids" in row for row in report)
     assert "named none of their members" in caplog.text
+
+
+@pytest.mark.parametrize(
+    "host_op_device",
+    # No usable device id at all: tt-perf-report never calls the merge.
+    # Only a host op has one: the merge runs, but has no device op to group.
+    [None, "0"],
+    ids=["no-merge", "nothing-to-group"],
+)
+def test_nothing_to_group_is_not_mistaken_for_a_rename(
+    tmp_path, caplog, host_op_device
+):
+    """Device ops without a usable device id are passed through ungrouped, so a
+    report without members says nothing about the column's name."""
+    rows = [{**row, "DEVICE ID": ""} for row in smoke_rows()[:3]]
+    if host_op_device is not None:
+        rows.append(
+            {
+                **rows[0],
+                "OP TYPE": "python_fallback",
+                "OP CODE": "HostOp",
+                "DEVICE ID": host_op_device,
+            }
+        )
+    write_ops_perf(tmp_path, rows)
+    instance = Instance(
+        instance_id="pytest-device-row-ids-no-device", performance_path=str(tmp_path)
+    )
+
+    with caplog.at_level(logging.WARNING, logger=csv_queries.logger.name):
+        report = _generate(instance, merge_devices=True, device_row_ids=True)
+
+    assert any(row["op_type"] == csv_queries._DEVICE_OP_TYPE for row in report)
+    assert "named none of their members" not in caplog.text
+
+
+def test_the_merge_runs_only_under_the_build_lock(monkeypatch):
+    merge_device_rows = perf_report.merge_device_rows
+    lock_held = []
+
+    def _recording(df):
+        lock_held.append(csv_queries._PERF_REPORT_OUTPUT_LOCK.locked())
+        return merge_device_rows(df)
+
+    monkeypatch.setattr(perf_report, "merge_device_rows", _recording)
+
+    _generate(_smoke_instance(), merge_devices=True, device_row_ids=True)
+
+    assert lock_held == [True]
+
+
+def test_the_merge_is_not_swapped_without_the_build_lock():
+    merge_device_rows = perf_report.merge_device_rows
+
+    with pytest.raises(RuntimeError, match="_PERF_REPORT_OUTPUT_LOCK"):
+        with csv_queries._merged_device_rows_captured(True):
+            pass
+
+    assert perf_report.merge_device_rows is merge_device_rows
 
 
 def test_the_names_it_reads_are_still_upstream():
