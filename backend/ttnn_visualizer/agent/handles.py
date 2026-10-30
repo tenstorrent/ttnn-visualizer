@@ -296,6 +296,9 @@ TOOL_TABLES: Dict[str, frozenset] = {
     # table that is empty; a table that is *absent* is handled in `queries.py`,
     # where `query_stack_traces` now guards like its neighbours rather than letting
     # SQLite's `no such table` reach the agent. #2021
+    "subgraph_between": frozenset(
+        {"operations", "tensors", "input_tensors", "output_tensors"}
+    ),
     "operation_provenance": frozenset({"operations", "operation_arguments"}),
     # The errors table is optional: a report that predates it is answered with a caveat.
     "errors": frozenset({"operations"}),
@@ -322,6 +325,11 @@ TOOL_TABLES: Dict[str, frozenset] = {
         }
     ),
 }
+
+
+CRITICAL_PATH_TABLES = frozenset(
+    {"operations", "captured_graph", "tensors", "input_tensors", "output_tensors"}
+)
 
 
 def read_only_connection(db_file: Path) -> sqlite3.Connection:
@@ -692,6 +700,9 @@ def _inventory(instance: Instance, perf_csv: Optional[Path]) -> Dict[str, object
     tables = _readable_tables(profiler_path)
     for tool_name, required in TOOL_TABLES.items():
         record(tool_name, required <= tables)
+    # Weighs the graph by the linked rows' device time, so it needs the graph's
+    # tables, the captured graphs the link aligns, and a CSV to align them with.
+    record("critical_path", perf_ready and CRITICAL_PATH_TABLES <= tables)
 
     return {
         # Tool names only. `operations` used to appear here whenever a `db.sqlite`

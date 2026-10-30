@@ -35,6 +35,7 @@ from typing import (
     TypedDict,
 )
 
+from ttnn_visualizer.agent import op_graph
 from ttnn_visualizer.agent.bounds import MAX_LIMIT, bounded, require_choice
 from ttnn_visualizer.agent.handles import (
     PROFILER_DB_FILE,
@@ -1300,6 +1301,80 @@ def tensor_flow(
     return result
 
 
+GRAPH_TABLES = ("tensors", "input_tensors", "output_tensors")
+
+
+def read_scoped_graph(queries: DatabaseQueries, scope: RankScope) -> op_graph.OpGraph:
+    """The whole operation graph at `scope`'s rank, refused where it cannot be attributed."""
+    refuse_unattributable(queries, scope, *GRAPH_TABLES)
+    return op_graph.read_graph(
+        queries, scoped(queries, "operations", scope), scope.rank
+    )
+
+
+def subgraph_between(
+    registry: ReportRegistry,
+    handle: str,
+    from_operation_id: int,
+    to_operation_id: int,
+    limit: Optional[int] = None,
+    rank: Optional[int] = None,
+) -> Dict[str, object]:
+    """The operations and tensors on every path from one operation to another."""
+    instance = registry.get(handle)
+    source, target = int(from_operation_id), int(to_operation_id)
+    with profiler_db(instance) as queries:
+        scope = rank_scope(queries, rank)
+        graph = read_scoped_graph(queries, scope)
+
+    for operation_id in (source, target):
+        if operation_id not in graph.names:
+            raise ValueError(f"no operation {operation_id} in this report")
+    members = op_graph.operations_between(graph, source, target)
+    if not members:
+        reverse = (
+            " (there is one from "
+            f"{target} to {source}: swap from_operation_id and to_operation_id)"
+            if op_graph.operations_between(graph, target, source)
+            else ""
+        )
+        raise ValueError(f"no path from operation {source} to {target}{reverse}")
+
+    cap = bounded(limit, MAX_LIMIT)
+    ordered = sorted(members)
+    edges = sorted(
+        (
+            edge
+            for edge in graph.edges
+            if edge.source in members and edge.target in members
+        ),
+        key=lambda edge: (edge.source, edge.target, edge.tensor_id),
+    )
+    return {
+        "handle": handle,
+        "from_operation_id": source,
+        "to_operation_id": target,
+        "operation_count": len(ordered),
+        "edge_count": len(edges),
+        "operations": [
+            {"operation_id": operation_id, "name": graph.names.get(operation_id)}
+            for operation_id in ordered[:cap]
+        ],
+        "operations_truncated": len(ordered) > cap,
+        "edges": [
+            {
+                "source": edge.source,
+                "target": edge.target,
+                "tensor_id": edge.tensor_id,
+            }
+            for edge in edges[:cap]
+        ],
+        "edges_truncated": len(edges) > cap,
+        **scope.as_response(),
+        **_caveats(scope),
+    }
+
+
 def rank_caveat(scope: RankScope) -> Optional[str]:
     """The caveat every database tool's answer carries on a multi-host report."""
     if scope.multi_host and scope.rank is not None:
@@ -1347,6 +1422,7 @@ __all__ = [
     "TENSOR_SIZE_UNIT",
     "ProfilerDatabaseMissingError",
     "caveat_field",
+    "GRAPH_TABLES",
     "find_operations",
     "joined_caveat",
     "memory_profile",
@@ -1355,9 +1431,11 @@ __all__ = [
     "profiler_db",
     "rank_caveat",
     "rank_scope",
+    "read_scoped_graph",
     "refuse_unattributable",
     "scoped",
     "scoped_devices",
+    "subgraph_between",
     "tensor_flow",
     "unattributable_reason",
     "withheld_caveat",
