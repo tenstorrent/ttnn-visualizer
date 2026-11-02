@@ -3,13 +3,11 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { defineConfig } from 'vite';
-import path, { join } from 'path';
+import path from 'path';
 import react from '@vitejs/plugin-react';
-// @ts-expect-error don't have types declaration for node-build-scripts
-import { sassNodeModulesLoadPaths } from '@blueprintjs/node-build-scripts';
-// @ts-expect-error don't have types declaration for legacySassSvgInlinerFactory
-import { legacySassSvgInlinerFactory } from './src/libs/blueprintjs/legacySassSvgInlinerFactory';
-import { version } from './package.json';
+// @ts-expect-error don't have types declaration for sassOptions
+import { createSassOptions } from './src/libs/blueprintjs/sassOptions.js';
+import packageJson from './package.json' with { type: 'json' };
 
 // https://vitejs.dev/config/
 export default defineConfig(({ command }) => {
@@ -51,7 +49,7 @@ export default defineConfig(({ command }) => {
         },
         base: command === 'serve' ? '/' : '/static/',
         define: {
-            'import.meta.env.APP_VERSION': JSON.stringify(version),
+            'import.meta.env.APP_VERSION': JSON.stringify(packageJson.version),
         },
         plugins: [react()],
         server: {
@@ -65,26 +63,14 @@ export default defineConfig(({ command }) => {
         },
         resolve: {
             alias: {
-                'styles/': `${path.resolve(__dirname, 'src/scss')}/`,
-                '@blueprintjs': path.resolve(__dirname, './node_modules/@blueprintjs'),
+                'styles/': `${path.resolve(import.meta.dirname, 'src/scss')}/`,
+                '@blueprintjs': path.resolve(import.meta.dirname, './node_modules/@blueprintjs'),
             },
         },
         css: {
             devSourcemap: true,
             preprocessorOptions: {
-                scss: {
-                    quietDeps: true, // Ignoring warnings relating to BlueprintJS - revisit if we upgrade it
-                    functions: {
-                        'svg-icon($path, $selectors: null)': legacySassSvgInlinerFactory(
-                            join(__dirname, '/src/libs/blueprintjs/icons'),
-                            {
-                                optimize: true,
-                                encodingFormat: 'uri',
-                            },
-                        ),
-                    },
-                    loadPaths: sassNodeModulesLoadPaths,
-                },
+                scss: createSassOptions(import.meta.dirname),
             },
         },
     };
