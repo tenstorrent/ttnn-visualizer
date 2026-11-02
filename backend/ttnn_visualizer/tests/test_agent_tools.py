@@ -265,6 +265,9 @@ class TestReportInventory:
         newer = tmp_path / "ops_perf_results_new.csv"
         newer.write_bytes(b"")
         os.utime(older, (1000, 1000))
+        # `newest_ops_perf_file` ranks by ctime, which each `os.utime` also bumps.
+        # The pause keeps the two ctimes apart on filesystems with coarse timestamps.
+        time.sleep(0.01)
         os.utime(newer, (2000, 2000))
 
         loaded = load_report(ReportRegistry(), performance_path=str(tmp_path))
@@ -669,6 +672,9 @@ class TestReportFacts:
             tmp_path, [{**row, "DEVICE ID": "0"} for row in smoke_rows()]
         )
         os.utime(older, (1000, 1000))
+        # `newest_ops_perf_file` ranks by ctime, which each `os.utime` also bumps.
+        # The pause keeps the two ctimes apart on filesystems with coarse timestamps.
+        time.sleep(0.01)
         os.utime(newer, (2000, 2000))
         registry = ReportRegistry()
 
