@@ -79,6 +79,9 @@ class CacheVariant(str, Enum):
     L1_PEAK = "l1_peak"
     # Every device op's per-core spread, from one read of the device log.
     CORE_SPREAD = "core_spread"
+    # The operation graph by rank, which `critical_path` and `subgraph_between` read
+    # whole and an agent reading a model block by block asks for again and again.
+    OP_GRAPH = "op_graph"
 
 
 # Snapshots narrowed by a scope -- a signpost range -- kept at once, across every
@@ -270,6 +273,10 @@ def _resolved_directory(label: str, path: Optional[str]) -> Optional[str]:
     return str(resolved)
 
 
+# What `op_graph.read_graph` reads beside `operations`: one place, so the tools
+# reading the graph are listed by the same tables they refuse on.
+GRAPH_TABLES = ("tensors", "input_tensors", "output_tensors")
+
 # The tables each database tool reads, so answerability is decided per tool
 # rather than from one probe. Kept here, beside the inventory that consumes it,
 # because `agent.operations` imports this module; it has to stay in step with
@@ -287,9 +294,8 @@ TOOL_TABLES: Dict[str, frozenset] = {
     "operation_detail": frozenset(
         {"operations", "buffers", "tensors", "input_tensors", "output_tensors"}
     ),
-    "tensor_flow": frozenset(
-        {"operations", "tensors", "input_tensors", "output_tensors"}
-    ),
+    "tensor_flow": frozenset({"operations", *GRAPH_TABLES}),
+    "subgraph_between": frozenset({"operations", *GRAPH_TABLES}),
     # `stack_traces` is not required, because the tool answers the argument half
     # without it and says in the response that the capture recorded no call site --
     # 8 of 86 local captures hold the table with no rows. That reasoning covers a
@@ -322,6 +328,10 @@ TOOL_TABLES: Dict[str, frozenset] = {
         }
     ),
 }
+
+
+# The graph, and the captured graphs the link aligns to weigh it.
+_CRITICAL_PATH_TABLES = TOOL_TABLES["subgraph_between"] | {"captured_graph"}
 
 
 def read_only_connection(db_file: Path) -> sqlite3.Connection:
@@ -675,16 +685,15 @@ def _inventory(instance: Instance, perf_csv: Optional[Path]) -> Dict[str, object
     profiler_path = instance.profiler_path
     device_log_columns = _answerable_device_log_columns(instance)
     record("zone_timings", device_log_columns is not None)
-    # Joins a perf row to its zones, so it needs both files, durations to spread
-    # (a phase column `query_core_spans` would pair on) and a clock to read their
-    # cycles as time.
-    record(
-        "core_spread",
-        perf_ready
-        and device_log_columns is not None
+    # Both read zone starts apart from ends (a phase column) as time, against a clock.
+    zones_timed = (
+        device_log_columns is not None
         and bool(DeviceLogProfilerQueries.ZONE_PHASE_TOKENS.keys() & device_log_columns)
-        and DeviceLogProfilerQueries.clock_mhz(instance) is not None,
+        and DeviceLogProfilerQueries.clock_mhz(instance) is not None
     )
+    record("zone_intervals", zones_timed)
+    # Joins a perf row to its zones, so it needs the performance CSV as well.
+    record("core_spread", perf_ready and zones_timed)
 
     # Per tool, against the tables it reads. A partial capture can answer
     # `find_operations` and none of the rest, and saying so is the whole point
@@ -692,6 +701,9 @@ def _inventory(instance: Instance, perf_csv: Optional[Path]) -> Dict[str, object
     tables = _readable_tables(profiler_path)
     for tool_name, required in TOOL_TABLES.items():
         record(tool_name, required <= tables)
+    # Weighs the graph by the linked rows' device time, so it needs the graph's
+    # tables, the captured graphs the link aligns, and a CSV to align them with.
+    record("critical_path", perf_ready and _CRITICAL_PATH_TABLES <= tables)
 
     return {
         # Tool names only. `operations` used to appear here whenever a `db.sqlite`
