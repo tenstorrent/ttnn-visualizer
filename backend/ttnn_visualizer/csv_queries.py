@@ -147,11 +147,15 @@ def _stacked_report_plot_skipped():
 
 def _has_groupable_device_rows(df: pd.DataFrame) -> bool:
     """Whether `merge_device_rows` must group some of `df`: a device op whose device
-    id is usable. Without one, every row passes through and the column never appears."""
+    id is usable. Without one, every row passes through and the column never appears.
+
+    Usable is tt-perf-report's rule (`get_int`, 1.5.0): a whole, non-negative, finite
+    number. NaN and infinity give NaN from the modulo, so neither passes."""
     if _OP_TYPE_COLUMN not in df.columns or _DEVICE_ID_COLUMN not in df.columns:
         return False
     device_ids = pd.to_numeric(df[_DEVICE_ID_COLUMN], errors="coerce")
-    return bool(((df[_OP_TYPE_COLUMN] == _DEVICE_OP_TYPE) & device_ids.notna()).any())
+    usable = (device_ids % 1 == 0) & (device_ids >= 0)
+    return bool(((df[_OP_TYPE_COLUMN] == _DEVICE_OP_TYPE) & usable).any())
 
 
 def _read_merged_device_rows(merged: pd.DataFrame) -> Dict[int, Tuple[int, ...]]:
@@ -179,10 +183,15 @@ def _merged_device_rows_captured(
     output, so this wraps the module's function for the duration of one build and
     reads the column from what it returns. Reading the merge's own answer is what
     lets the frontend link every device's row of an operation without reproducing
-    the merge (#2178 asks for the column upstream).
+    the merge.
+
+    TODO(#2178): read tt-perf-report's own merge-group column instead, once it
+    writes one, and drop this wrapper.
 
     Enter it inside `_perf_report_output_bounded`, so the module global is only
-    swapped while the build lock is held; entering it without the lock raises. A
+    swapped while the build lock is held. Entering it while no build holds the lock
+    raises, which catches the build's context managers being reordered; the lock has
+    no owner, so it cannot tell this build's hold from another's. A
     failure to read the column must not fail the report: tt-perf-report's caller
     turns any exception into a 422, so it is logged and the map left empty, and rows
     then simply carry no members. The tests pin both names, and a merge that had
@@ -194,8 +203,8 @@ def _merged_device_rows_captured(
         yield members_by_row
         return
     if not _PERF_REPORT_OUTPUT_LOCK.locked():
-        # Another build could otherwise call this one's wrapper and write its rows
-        # into this map.
+        # Swapped outside the lock, another build could call this one's wrapper and
+        # write its rows into this map.
         raise RuntimeError(
             "merge_device_rows is only swapped under _PERF_REPORT_OUTPUT_LOCK"
         )

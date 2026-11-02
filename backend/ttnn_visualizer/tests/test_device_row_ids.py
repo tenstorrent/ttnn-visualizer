@@ -244,18 +244,32 @@ def test_an_upstream_rename_is_logged_rather_than_silent(monkeypatch, caplog):
 
 
 @pytest.mark.parametrize(
-    "host_op_device",
-    # No usable device id at all: tt-perf-report never calls the merge.
-    # Only a host op has one: the merge runs, but has no device op to group.
-    [None, "0"],
-    ids=["no-merge", "nothing-to-group"],
+    "device_op_device, host_op_device, merge_calls",
+    [
+        # No device id at all: tt-perf-report never calls the merge.
+        ("", None, 0),
+        # Only a host op has one: the merge runs, but has no device op to group.
+        ("", "0", 1),
+        # Ids the merge counts as devices but cannot group by (`get_int`).
+        ("-1", None, 1),
+        ("0.5", None, 1),
+    ],
+    ids=["no-merge", "nothing-to-group", "negative-id", "fractional-id"],
 )
 def test_nothing_to_group_is_not_mistaken_for_a_rename(
-    tmp_path, caplog, host_op_device
+    monkeypatch, tmp_path, caplog, device_op_device, host_op_device, merge_calls
 ):
     """Device ops without a usable device id are passed through ungrouped, so a
     report without members says nothing about the column's name."""
-    rows = [{**row, "DEVICE ID": ""} for row in smoke_rows()[:3]]
+    merge_device_rows = perf_report.merge_device_rows
+    calls = []
+
+    def _counting(df):
+        calls.append(df)
+        return merge_device_rows(df)
+
+    monkeypatch.setattr(perf_report, "merge_device_rows", _counting)
+    rows = [{**row, "DEVICE ID": device_op_device} for row in smoke_rows()[:3]]
     if host_op_device is not None:
         rows.append(
             {
@@ -273,6 +287,7 @@ def test_nothing_to_group_is_not_mistaken_for_a_rename(
     with caplog.at_level(logging.WARNING, logger=csv_queries.logger.name):
         report = _generate(instance, merge_devices=True, device_row_ids=True)
 
+    assert len(calls) == merge_calls
     assert any(row["op_type"] == csv_queries._DEVICE_OP_TYPE for row in report)
     assert "named none of their members" not in caplog.text
 

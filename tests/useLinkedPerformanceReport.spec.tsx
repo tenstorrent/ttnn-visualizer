@@ -627,7 +627,8 @@ describe('report matching under a filtered performance tab', () => {
     it.each([
         // The backend could not read the merge's members, so it sent none.
         ['carry no members', DEVICE_OP_NAMES.map((_name, index) => unmergedRows[index * NUM_DEVICES]!)],
-        // A single-device run: each merged row stands only for itself.
+        // Rows that stand only for themselves. The backend leaves the field off these, so
+        // this guards an older backend that sent the row's own id alone.
         ['stand only for themselves', mergedRows.map((row) => ({ ...row, device_row_ids: [Number(row.id)] }))],
     ])('hands back the merged lookup itself when the merged rows %s', async (_label, rows) => {
         serveMergedRows(rows as PerfTableRow[]);
