@@ -13,12 +13,14 @@ const memoryLayoutPattern = /memory_layout=([A-Za-z_:]+)/;
 const shardSpecPattern =
     /shard_spec=ShardSpec\((?:grid=\{(\[.*?\])\},?)?(?:shape=\{(\d+), (\d+)\},?)?(?:orientation=ShardOrientation::([A-Za-z_]+),?)?(?:halo=(\d+),?)?(?:mode=ShardMode::([A-Z_]+),?)?(?:physical_shard_shape=std::([A-Za-z_]+),?)?/;
 
+/** What sits inside a raw `MemoryConfig(...)` string, or null if it isn't one, like the backend's `_memory_config_body`. */
+const getMemoryConfigBody = (value: string | null | undefined): string | null =>
+    value?.match(memoryConfigPattern)?.[1] ?? null;
+
 const parseMemoryConfig = (string: string | null | undefined): MemoryConfig | null => {
-    const match = string?.match(memoryConfigPattern);
+    const capturedString = getMemoryConfigBody(string);
 
-    if (match) {
-        const capturedString = match[1];
-
+    if (capturedString != null) {
         const memoryLayoutMatch = capturedString.match(memoryLayoutPattern);
         const shardSpecMatch = capturedString.match(shardSpecPattern);
 
@@ -43,9 +45,21 @@ const parseMemoryConfig = (string: string | null | undefined): MemoryConfig | nu
     return null;
 };
 
+/**
+ * An operation argument with `parsedValue` set when its value is a whole `MemoryConfig(...)`,
+ * which the operation details view renders key by key. Any other argument is returned as is.
+ */
+export const withParsedMemoryConfig = <Argument extends { value: string }>(
+    argument: Argument,
+): Argument | (Argument & { parsedValue: MemoryConfig }) => {
+    const parsedValue = parseMemoryConfig(argument.value);
+
+    return parsedValue ? { ...argument, parsedValue } : argument;
+};
+
 /** Whether a raw argument value is a whole `MemoryConfig(...)`, whatever buffer type it declares. */
 export const isMemoryConfigValue = (value: string | null | undefined): value is string =>
-    value != null && memoryConfigPattern.test(value);
+    getMemoryConfigBody(value) != null;
 
 /**
  * The buffer type a raw `MemoryConfig(...)` string declares, mirroring the backend's
@@ -53,9 +67,7 @@ export const isMemoryConfigValue = (value: string | null | undefined): value is 
  * operation details view renders key by key.
  */
 export const getMemoryConfigBufferType = (value: string | null | undefined): BufferType | null => {
-    const body = value?.match(memoryConfigPattern)?.[1];
-
-    return toBufferType(body?.match(bufferTypePattern)?.[1]);
+    return toBufferType(getMemoryConfigBody(value)?.match(bufferTypePattern)?.[1]);
 };
 
 export const MEMORY_CONFIG_HEADERS = {

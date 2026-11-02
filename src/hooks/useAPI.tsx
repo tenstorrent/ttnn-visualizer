@@ -29,7 +29,7 @@ import {
 } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
 import { summariseOperationBuffers } from '../functions/summariseOperationBuffers';
-import parseMemoryConfig, { isMemoryConfigValue } from '../functions/parseMemoryConfig';
+import { withParsedMemoryConfig } from '../functions/parseMemoryConfig';
 import getServerConfig from '../functions/getServerConfig';
 import { PerfTableRow } from '../model/PerfTable';
 import { DeviceOperationMapping, DeviceOperationOrderCandidates } from '../model/DeviceOperationMapping';
@@ -239,11 +239,7 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
             return { ...tensor, io: 'input' };
         });
 
-        const argumentsWithParsedValues = operation.arguments.map((argument) =>
-            isMemoryConfigValue(argument.value)
-                ? { ...argument, parsedValue: parseMemoryConfig(argument.value) }
-                : argument,
-        );
+        const argumentsWithParsedValues = operation.arguments.map(withParsedMemoryConfig);
 
         return {
             ...operation,
