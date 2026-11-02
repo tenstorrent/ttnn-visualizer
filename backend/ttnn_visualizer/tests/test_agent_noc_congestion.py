@@ -880,7 +880,7 @@ class TestRefusals:
             ):
                 _call(registry, handle)
         finally:
-            path.chmod(0o644)
+            path.chmod(0o600)
 
     def test_a_trace_declaring_more_json_than_the_tool_parses_is_refused_unread(
         self, tmp_path, monkeypatch
