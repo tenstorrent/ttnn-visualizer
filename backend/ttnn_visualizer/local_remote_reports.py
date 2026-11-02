@@ -13,6 +13,7 @@ from typing import Callable, List, Optional
 from ttnn_visualizer.models import (
     RemoteConnection,
     RemoteReportFolder,
+    remote_folder_newest_first_key,
     split_rank_suffix,
 )
 from ttnn_visualizer.report_fingerprint import (
@@ -111,7 +112,7 @@ def list_local_synced_report_folders(
             )
         )
 
-    folders.sort(key=lambda folder: folder.lastModified, reverse=True)
+    folders.sort(key=remote_folder_newest_first_key)
     return folders
 
 

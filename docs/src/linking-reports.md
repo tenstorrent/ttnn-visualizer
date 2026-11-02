@@ -17,12 +17,9 @@ The report pickers list reports newest first, and nothing in the pickers reorder
 - Local reports are ordered by when their folder was last modified. Uploading a report counts as a modification.
 - Remote reports are ordered by when they were last modified on the remote machine.
 - When only the locally synced copies of remote reports can be listed, they are ordered by when they were synced. A copy with no record of its sync is ordered by when its folder was last modified.
+- Reports with the same time are listed by folder name, and remote reports by their remote path. Remote times are recorded to the second, so the ranks of one multi-host run often share one and are listed in path order.
 
-Some cases do not follow this order yet ([#2209](https://github.com/tenstorrent/ttnn-visualizer/issues/2209)):
-
-- Reports with the same time can appear in any order. On the hosted app that order can change when the app restarts. Remote times are recorded to the second, so the ranks of one multi-host run often share one.
-- After you sync a single remote report, it keeps its place in the list until the list is fetched again.
-- On remote machines whose `stat` command is not the GNU version, such as macOS, every remote report gets the same time, so the list is not in date order.
+In a list read from the remote machine, syncing a report reads its time again, so it moves to its place straight away. A list of locally synced copies is not reordered by when the sync happened until it is fetched again.
 
 Once the active report of the other kind has been linked, or has failed to link, with at least one report, each row carries a link badge: linked, failed to link, or not yet known. A memory report picker shows its badges against the active performance report, and a performance report picker shows them against the active memory report. An active report that has never been paired shows no badges.
 
