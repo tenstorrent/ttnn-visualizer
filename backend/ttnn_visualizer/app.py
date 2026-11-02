@@ -111,7 +111,9 @@ def _build_spa_client_config(app: Flask) -> dict:
     # operator-configured paths/ports under SERVER_MODE (same posture as USERNAME).
     if not server_mode:
         js_config["SSH_DEFAULT_PORT"] = app.config["SSH_DEFAULT_PORT"]
-        js_config["SSH_DEFAULT_PROFILER_PATH"] = app.config["SSH_DEFAULT_PROFILER_PATH"]
+        js_config["SSH_DEFAULT_MEMORY_REPORT_PATH"] = app.config[
+            "SSH_DEFAULT_MEMORY_REPORT_PATH"
+        ]
         js_config["SSH_DEFAULT_PERFORMANCE_PATH"] = app.config[
             "SSH_DEFAULT_PERFORMANCE_PATH"
         ]

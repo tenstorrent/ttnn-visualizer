@@ -347,6 +347,13 @@ _STRICT_BOOLEANS = frozenset({"SERVER_MODE"})
 # error handler — for anyone who only wanted verbose logs.
 _ENV_ALIASES: Mapping[str, str] = {"DEBUG": "FLASK_DEBUG"}
 
+# Config attributes whose variable was renamed, mapped to the name it used to read. The old
+# name is still honoured when the new one is unset, so an existing ``.env`` keeps working,
+# but it warns so the operator renames it. Unlike an alias, the new name is the attribute.
+_ENV_RENAMED: Mapping[str, str] = {
+    "SSH_DEFAULT_MEMORY_REPORT_PATH": "SSH_DEFAULT_PROFILER_PATH",
+}
+
 
 def _event_logging_remedy(env_value: str) -> str:
     """What to tell an operator who set ``USAGE_RECORDING_ACTIVE``.
@@ -457,6 +464,25 @@ def _env_name_for(key: str) -> str:
     aliased spelling written once and lets warnings still name what the operator set.
     """
     return _ENV_ALIASES.get(key, key)
+
+
+def _read_renamed_variable(key: str) -> Optional[str]:
+    """The value of a setting's former variable, warning when one is set.
+
+    Only consulted when the current variable is unset, so the new name always wins.
+    """
+    former = _ENV_RENAMED.get(key)
+    if former is None:
+        return None
+
+    env_value = os.getenv(former)
+    if env_value is not None:
+        logger.warning(
+            "%s is deprecated; rename it to %s. Using its value for now.",
+            former,
+            _env_name_for(key),
+        )
+    return env_value
 
 
 def _keep_declared(key: str, declared: Any, env_value: str, expected: str) -> Any:
@@ -597,7 +623,8 @@ class DefaultConfig(object):
 
     # Remote SSH connection dialog defaults (local install only — suppressed under SERVER_MODE).
     SSH_DEFAULT_PORT = _parse_ssh_port(os.getenv("SSH_DEFAULT_PORT"))
-    SSH_DEFAULT_PROFILER_PATH = os.getenv("SSH_DEFAULT_PROFILER_PATH", "")
+    # Falls back to its former name through ``_ENV_RENAMED`` in the override loop.
+    SSH_DEFAULT_MEMORY_REPORT_PATH = os.getenv("SSH_DEFAULT_MEMORY_REPORT_PATH", "")
     SSH_DEFAULT_PERFORMANCE_PATH = os.getenv("SSH_DEFAULT_PERFORMANCE_PATH", "")
     # Remote SSH subprocess timeouts (seconds).
     SSH_SUBPROCESS_TIMEOUT = int(os.getenv("SSH_SUBPROCESS_TIMEOUT", "120"))
@@ -659,7 +686,8 @@ class DefaultConfig(object):
         concrete class is a subclass. Subclass declarations win because later
         ``setattr`` calls overwrite earlier ones. Values are coerced to what the class
         body would have produced; see :func:`_coerce_env_value`. Attributes read a
-        differently named variable where :data:`_ENV_ALIASES` says so.
+        differently named variable where :data:`_ENV_ALIASES` says so, and fall back to
+        a former name where :data:`_ENV_RENAMED` lists one.
 
         Derived and constant attributes in :data:`_ENV_OVERRIDE_SKIP` are left alone;
         :meth:`recompute_derived_settings` rebuilds everything computed from them
@@ -679,6 +707,8 @@ class DefaultConfig(object):
                     continue
 
                 env_value = os.getenv(_env_name_for(key))
+                if env_value is None:
+                    env_value = _read_renamed_variable(key)
                 if env_value is None:
                     continue
 
