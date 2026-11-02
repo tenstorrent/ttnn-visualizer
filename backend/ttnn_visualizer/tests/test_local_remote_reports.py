@@ -448,3 +448,22 @@ def test_list_local_synced_folders_fingerprint_the_synced_copy(
         tmp_path / host / directory_name / "run"
     )
     assert folders[0].runFingerprint is not None
+
+
+def test_list_local_breaks_equal_times_by_name(tmp_path: Path):
+    host = "bh-lb-01"
+    reports = tmp_path / host / "profiler-reports"
+    for name in ("b_report", "c_report", "a_report"):
+        (reports / name).mkdir(parents=True)
+        (reports / name / "db.sqlite").write_text("x")
+        (reports / name / ".last-synced").write_text("1000")
+
+    folders = list_local_synced_profiler_folders(
+        _connection(host), tmp_path, "profiler-reports"
+    )
+
+    assert [folder.syncedName for folder in folders] == [
+        "a_report",
+        "b_report",
+        "c_report",
+    ]
