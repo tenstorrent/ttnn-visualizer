@@ -6,10 +6,12 @@
 
 Covers the SQLite index build/read helpers in ``npe_index``: columnar summary
 shape, freshness/version invalidation, windowed reads, the chunked IN-list for
-busy timesteps, and the single-flight build lock under concurrency.
+busy timesteps, and the single-flight build lock under concurrency. Also the
+readers `noc_congestion` uses, which must never write beside the trace (#2156).
 """
 
 import os
+import sqlite3
 import threading
 import time
 from pathlib import Path
@@ -19,11 +21,19 @@ import pytest
 import zstd
 from ttnn_visualizer import npe_index
 from ttnn_visualizer.npe_index import (
+    INDEX_READ_ERRORS,
     INDEX_VERSION,
     _as_int,
     ensure_index,
+    fresh_index,
+    get_index_path,
+    indexed_link_demand,
+    looks_like_trace,
     read_summary,
     read_window,
+    trace_link_demand,
+    trace_size,
+    transfer_count,
     truncate,
 )
 
@@ -349,3 +359,449 @@ def test_concurrent_ensure_index_builds_once(tmp_path, monkeypatch):
     # Every worker got a usable, non-corrupt index.
     summary = read_summary(results[0])
     assert summary["n_timesteps"] == 6
+
+
+def _listing(directory: Path) -> dict:
+    """Each file's size and modification time, to show a reader wrote nothing."""
+    return {
+        path.name: (path.stat().st_size, path.stat().st_mtime_ns)
+        for path in directory.iterdir()
+    }
+
+
+def _execute(db_path: Path, statement: str, *parameters) -> None:
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute(statement, parameters)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _row_count(db_path: Path, table: str) -> int:
+    conn = sqlite3.connect(db_path)
+    try:
+        return conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
+    finally:
+        conn.close()
+
+
+def _set_meta(db_path: Path, key: str, value) -> None:
+    _execute(db_path, "UPDATE meta SET value = ? WHERE key = ?", value, key)
+
+
+def _counted_builds(monkeypatch) -> list:
+    builds: list = []
+    real_build = npe_index._build_index
+
+    def counting_build(*args, **kwargs):
+        builds.append(1)
+        return real_build(*args, **kwargs)
+
+    monkeypatch.setattr(npe_index, "_build_index", counting_build)
+    return builds
+
+
+_NOT_CURRENT = {
+    "stale-version": lambda npe_path, db_path: _set_meta(
+        db_path, "index_version", str(INDEX_VERSION - 1)
+    ),
+    "other-source-mtime": lambda npe_path, db_path: _set_meta(
+        db_path, "source_mtime_ns", str(Path(npe_path).stat().st_mtime_ns + 1)
+    ),
+    "not-sqlite": lambda npe_path, db_path: db_path.write_bytes(b"not an index " * 64),
+    "empty-file": lambda npe_path, db_path: db_path.write_bytes(b""),
+    "text-version": lambda npe_path, db_path: _set_meta(
+        db_path, "index_version", "abc"
+    ),
+    "null-version": lambda npe_path, db_path: _set_meta(db_path, "index_version", None),
+    "text-source-mtime": lambda npe_path, db_path: _set_meta(
+        db_path, "source_mtime_ns", "abc"
+    ),
+    "null-source-mtime": lambda npe_path, db_path: _set_meta(
+        db_path, "source_mtime_ns", None
+    ),
+    "no-source-mtime-row": lambda npe_path, db_path: _execute(
+        db_path, "DELETE FROM meta WHERE key = 'source_mtime_ns'"
+    ),
+    "no-meta-table": lambda npe_path, db_path: _execute(db_path, "DROP TABLE meta"),
+    "trace-gone": lambda npe_path, db_path: Path(npe_path).unlink(),
+}
+
+
+def test_fresh_index_is_none_without_a_sidecar(tmp_path):
+    npe_path = _write_npe(tmp_path, _make_npe_object())
+    before = _listing(tmp_path)
+
+    assert fresh_index(npe_path) is None
+    assert _listing(tmp_path) == before
+
+
+def test_fresh_index_is_none_for_a_missing_trace(tmp_path):
+    assert fresh_index(str(tmp_path / "absent.json")) is None
+    assert _listing(tmp_path) == {}
+
+
+@pytest.mark.parametrize("damage", list(_NOT_CURRENT.values()), ids=list(_NOT_CURRENT))
+def test_fresh_index_is_none_for_an_index_that_is_not_current(tmp_path, damage):
+    npe_path = _write_npe(tmp_path, _make_npe_object())
+    damage(npe_path, ensure_index(npe_path))
+    before = _listing(tmp_path)
+
+    assert fresh_index(npe_path) is None
+    assert _listing(tmp_path) == before
+
+
+def test_fresh_index_names_a_current_index_without_touching_it(tmp_path):
+    npe_path = _write_npe(tmp_path, _make_npe_object())
+    db_path = ensure_index(npe_path)
+    before = _listing(tmp_path)
+
+    assert fresh_index(npe_path) == db_path == get_index_path(npe_path)
+    assert _listing(tmp_path) == before
+
+
+@pytest.mark.parametrize("value", ["abc", None], ids=["text", "null"])
+@pytest.mark.parametrize("key", ["index_version", "source_mtime_ns"])
+def test_ensure_index_rebuilds_over_damaged_meta(tmp_path, monkeypatch, key, value):
+    # int() of a damaged row used to raise out of every request on the report.
+    npe_path = _write_npe(tmp_path, _make_npe_object())
+    db_path = ensure_index(npe_path)
+    _set_meta(db_path, key, value)
+    builds = _counted_builds(monkeypatch)
+
+    assert ensure_index(npe_path) == db_path
+    assert len(builds) == 1
+    assert fresh_index(npe_path) == db_path
+
+
+@pytest.mark.parametrize(
+    "name, content",
+    [
+        ("trace.json", b'{"timestep_data": []}'),
+        ("trace.npeviz", b' \n\t\r{"timestep_data": []}'),
+        ("trace.npeviz.zst", zstd.compress(b'{"timestep_data": []}')),
+    ],
+    ids=["json", "json-after-whitespace", "zst"],
+)
+def test_a_trace_starts_as_a_json_object_or_a_zstd_frame(tmp_path, name, content):
+    path = tmp_path / name
+    path.write_bytes(content)
+
+    assert looks_like_trace(path) is True
+
+
+@pytest.mark.parametrize(
+    "name, content",
+    [
+        ("trace.json", b'[{"timestep_data": []}]'),
+        ("trace.json", b""),
+        ("trace.json", b" \n "),
+        ("trace.json", zstd.compress(b"{}")),
+        ("trace.zst", b'{"timestep_data": []}'),
+        ("trace.zst", b"\x28\xb5\x2f"),
+    ],
+    ids=[
+        "json-list",
+        "empty",
+        "whitespace",
+        "zstd-named-json",
+        "json-named-zst",
+        "cut-magic",
+    ],
+)
+def test_a_file_that_does_not_start_as_a_trace_is_not_one(tmp_path, name, content):
+    path = tmp_path / name
+    path.write_bytes(content)
+
+    assert looks_like_trace(path) is False
+
+
+@pytest.mark.parametrize("name", ["trace.json", "trace.zst"])
+def test_a_sqlite_file_is_not_a_trace(tmp_path, name):
+    path = tmp_path / name
+    _execute(path, "CREATE TABLE timestep_data (t INTEGER)")
+
+    assert looks_like_trace(path) is False
+
+
+def test_a_missing_file_or_a_directory_is_not_a_trace(tmp_path):
+    (tmp_path / "trace.json").mkdir()
+
+    assert looks_like_trace(tmp_path / "absent.json") is False
+    assert looks_like_trace(tmp_path / "trace.json") is False
+
+
+def _content(size: int) -> bytes:
+    return (b'{"pad": "' + b"0123456789abcdef" * (size // 16 + 1))[:size]
+
+
+def test_trace_size_of_json_is_the_file_size(tmp_path):
+    path = Path(_write_npe(tmp_path, _make_npe_object()))
+
+    assert trace_size(path) == path.stat().st_size
+
+
+@pytest.mark.parametrize("level", [1, 19])
+@pytest.mark.parametrize("size", [0, 200, 255, 256, 300, 65_791, 65_792, 70_000])
+def test_trace_size_of_a_zst_is_its_frames_declared_size(tmp_path, size, level):
+    path = tmp_path / "trace.npeviz.zst"
+    path.write_bytes(zstd.compress(_content(size), level))
+
+    assert trace_size(path) == size
+
+
+@pytest.mark.parametrize(
+    "level, single_segment", [(19, True), (1, False)], ids=["single", "windowed"]
+)
+def test_trace_size_reads_frames_with_and_without_a_window_descriptor(
+    tmp_path, level, single_segment
+):
+    size = 1 << 20
+    frame = zstd.compress(_content(size), level)
+    # The library picks the layout; checked so both stay covered.
+    assert bool(frame[4] & 0x20) is single_segment
+    path = tmp_path / "trace.npeviz.zst"
+    path.write_bytes(frame)
+
+    assert trace_size(path) == size
+
+
+# Frame_Header_Descriptor field sizes by flag value (RFC 8878, 3.1.1.1.1).
+_DICTIONARY_ID_BYTES = (0, 1, 2, 4)
+_CONTENT_SIZE_BYTES = (0, 2, 4, 8)
+_DECLARED_BY_WIDTH = {0: 0, 1: 200, 2: 65_791, 4: 3 << 30, 8: 1 << 40}
+
+
+def _frame_header(size_flag: int, single_segment: bool, dictionary_flag: int) -> bytes:
+    width = _CONTENT_SIZE_BYTES[size_flag] or (1 if single_segment else 0)
+    size = _DECLARED_BY_WIDTH[width]
+    descriptor = size_flag << 6 | (0x20 if single_segment else 0) | dictionary_flag
+    return (
+        b"\x28\xb5\x2f\xfd"
+        + bytes([descriptor])
+        + (b"" if single_segment else b"\x58")
+        + b"\xab" * _DICTIONARY_ID_BYTES[dictionary_flag]
+        + (size - 256 if width == 2 else size).to_bytes(width, "little")
+    )
+
+
+@pytest.mark.parametrize(
+    "size_flag, single_segment, dictionary_flag",
+    [
+        (size_flag, single_segment, dictionary_flag)
+        for size_flag in range(4)
+        for single_segment in (True, False)
+        for dictionary_flag in range(4)
+        if size_flag or single_segment
+    ],
+)
+def test_trace_size_reads_every_frame_header_layout(
+    tmp_path, size_flag, single_segment, dictionary_flag
+):
+    path = tmp_path / "trace.zst"
+    path.write_bytes(_frame_header(size_flag, single_segment, dictionary_flag))
+    width = _CONTENT_SIZE_BYTES[size_flag] or 1
+
+    assert trace_size(path) == _DECLARED_BY_WIDTH[width]
+
+
+@pytest.mark.parametrize(
+    "head",
+    [
+        *(_frame_header(0, False, dictionary_flag) for dictionary_flag in range(4)),
+        _frame_header(3, False, 3)[:-1],
+        b"\x28\xb5\x2f\xfd\x20",
+        b"\x50\x2a\x4d\x18" + b"\x08" * 14,
+        b'{"timestep_data": []}',
+    ],
+    ids=[
+        *(f"no-size-dictionary-{flag}" for flag in range(4)),
+        "cut-header",
+        "short",
+        "skippable-frame",
+        "json",
+    ],
+)
+def test_trace_size_is_none_where_a_zst_declares_no_size(tmp_path, head):
+    path = tmp_path / "trace.zst"
+    path.write_bytes(head)
+
+    assert trace_size(path) is None
+
+
+@pytest.mark.parametrize("name", ["absent.json", "absent.zst"])
+def test_trace_size_of_a_missing_file_raises(tmp_path, name):
+    # `noc_congestion` refuses on an OSError; a None would let it read the file.
+    with pytest.raises(OSError):
+        trace_size(tmp_path / name)
+
+
+def test_transfer_count_counts_each_id_once():
+    transfers = [
+        {"id": 1},
+        {"id": 1},
+        {"id": 2},
+        {"id": 2.0},
+        {"id": None},
+        {"src": [0, 0, 0]},
+        "7",
+        7,
+        None,
+        [1],
+    ]
+
+    assert transfer_count(transfers) == 2
+
+
+@pytest.mark.parametrize("transfers", [None, {}, {"id": 1}, "abc", 7])
+def test_transfer_count_of_anything_but_a_list_is_zero(transfers):
+    assert transfer_count(transfers) == 0
+
+
+def test_transfer_count_is_the_row_count_of_the_index_it_describes(tmp_path):
+    obj = _make_npe_object(n_transfers=4)
+    obj["noc_transfers"] += [
+        {"id": 1, "total_bytes": 64},
+        {"id": 3},
+        {"id": 2.0},
+        {"id": None},
+        {"src": [0, 0, 0]},
+    ]
+    db_path = ensure_index(_write_npe(tmp_path, obj))
+
+    assert transfer_count(obj["noc_transfers"]) == _row_count(db_path, "transfer") == 4
+
+
+def test_transfer_count_reads_a_numeric_string_id_as_the_index_stores_it(tmp_path):
+    obj = _make_npe_object(n_transfers=0)
+    obj["noc_transfers"] = [{"id": 3}, {"id": "3"}]
+    db_path = ensure_index(_write_npe(tmp_path, obj))
+
+    assert transfer_count(obj["noc_transfers"]) == _row_count(db_path, "transfer")
+
+
+@pytest.mark.parametrize(
+    "trace",
+    [{}, {"timestep_data": {}}, {"timestep_data": None}, [], [{"timestep_data": []}]],
+    ids=["no-key", "dict", "null", "empty-list", "list"],
+)
+def test_trace_link_demand_refuses_what_holds_no_timestep_data_list(trace):
+    with pytest.raises(ValueError, match="no timestep_data list"):
+        trace_link_demand(trace)
+
+
+def test_trace_link_demand_counts_timesteps_that_are_not_objects():
+    steps = [{"start_cycle": 0, "end_cycle": 9, "link_demand": []}, 7, None, "x", []]
+
+    rows = trace_link_demand({"timestep_data": steps})
+
+    assert rows.unreadable_timesteps == 4
+    assert list(rows.timesteps) == [(0, 9, []), *[(None, None, [])] * 4]
+
+
+def test_trace_link_demand_reads_a_step_without_link_demand_as_idle():
+    rows = trace_link_demand({"timestep_data": [{"start_cycle": 0, "end_cycle": 9}]})
+
+    assert list(rows.timesteps) == [(0, 9, [])]
+    assert rows.unreadable_timesteps == 0
+
+
+def test_trace_link_demand_leaves_demands_for_truncate():
+    trace = {
+        "common_info": {"arch": "blackhole"},
+        "noc_transfers": [{"id": 0}, {"id": 0}, {"id": 1}],
+        "timestep_data": [{"link_demand": [[0, 0, 0, "NOC0_EAST", 50.0009]]}],
+    }
+
+    rows = trace_link_demand(trace)
+
+    assert rows.common_info == {"arch": "blackhole"}
+    assert rows.transfer_count == 2
+    assert rows.truncated is False
+    assert list(rows.timesteps) == [(None, None, [[0, 0, 0, "NOC0_EAST", 50.0009]])]
+
+
+@pytest.mark.parametrize("common_info", [None, [], "wormhole_b0"])
+def test_trace_link_demand_reads_a_common_info_that_is_not_an_object_as_empty(
+    common_info,
+):
+    rows = trace_link_demand({"common_info": common_info, "timestep_data": []})
+
+    assert rows.common_info == {}
+
+
+def test_indexed_link_demand_is_none_without_a_current_index(tmp_path):
+    npe_path = _write_npe(tmp_path, _make_npe_object())
+    before = _listing(tmp_path)
+
+    with indexed_link_demand(Path(npe_path)) as indexed:
+        assert indexed is None
+    assert _listing(tmp_path) == before
+
+
+def test_indexed_link_demand_gives_the_traces_rows_truncated(tmp_path):
+    obj = _make_npe_object(n_transfers=3, n_timesteps=3)
+    obj["noc_transfers"].append({"id": 0})
+    npe_path = _write_npe(tmp_path, obj)
+    ensure_index(npe_path)
+
+    with indexed_link_demand(Path(npe_path)) as indexed:
+        assert indexed is not None
+        rows = list(indexed.timesteps)
+
+    assert indexed.common_info == obj["common_info"]
+    assert indexed.transfer_count == 3
+    assert indexed.truncated is True
+    assert indexed.unreadable_timesteps == 0
+    assert rows == [
+        (0, 9, []),
+        (10, 19, [[0, 0, 0, "NOC0_EAST", 224.8]]),
+        (20, 29, [[0, 0, 0, "NOC0_EAST", 224.8]]),
+    ]
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "UPDATE meta SET value = 'not json' WHERE key = 'common_info'",
+        "DELETE FROM meta WHERE key = 'common_info'",
+        "DROP TABLE transfer",
+        "DROP TABLE timestep",
+        "UPDATE timestep SET link_demand = 'not json' WHERE t = 2",
+    ],
+    ids=[
+        "common-info-not-json",
+        "no-common-info",
+        "no-transfer-table",
+        "no-timestep-table",
+        "link-demand-not-json",
+    ],
+)
+def test_a_damaged_index_raises_an_index_read_error_while_read(tmp_path, statement):
+    npe_path = _write_npe(tmp_path, _make_npe_object())
+    _execute(ensure_index(npe_path), statement)
+
+    with pytest.raises(INDEX_READ_ERRORS):
+        with indexed_link_demand(Path(npe_path)) as indexed:
+            list(indexed.timesteps)
+
+
+def test_indexed_link_demand_never_recreates_a_sidecar_removed_after_its_check(
+    tmp_path, monkeypatch
+):
+    npe_path = _write_npe(tmp_path, _make_npe_object())
+    db_path = ensure_index(npe_path)
+    checked = npe_index.fresh_index
+
+    def removed_after_check(path):
+        found = checked(path)
+        db_path.unlink()
+        return found
+
+    monkeypatch.setattr(npe_index, "fresh_index", removed_after_check)
+
+    with pytest.raises(INDEX_READ_ERRORS):
+        with indexed_link_demand(Path(npe_path)):
+            pass
+    assert not db_path.exists()
