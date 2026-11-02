@@ -10,8 +10,9 @@ test feeds the port curated and seeded graphs and writes its answers to a golden
 and `tests/opGraphCriticalPathParity.spec.ts` asserts the app's function gives the same
 answers from the same graphs.
 
-Weights are microseconds in multiples of a quarter, so the app's nanoseconds are exact
-and an equal-cost tie stays a tie on both sides. Folded blocks have no case: the agent's
+Weights are microseconds, which both sides sum as nanoseconds. Seeded weights are
+multiples of a quarter; the decimal cases hold the port to summing nanoseconds, where an
+equal-cost tie in microseconds would not be one. Folded blocks have no case: the agent's
 graph never folds.
 
     pnpm run agent:parity-golden    <- regenerates tests/data/opGraphCriticalPathParity.json
@@ -89,6 +90,12 @@ def _curated_cases() -> List[Dict]:
             [1, 2, 3, 4],
             [(1, 2), (2, 4), (3, 4)],
             {2: 10, 3: 10},
+        ),
+        _case(
+            "decimal weights tie as nanoseconds",
+            [1, 2, 3],
+            [(1, 2)],
+            {1: 3.3, 2: 6.6, 3: 9.9},
         ),
         _case("parallel edges", [1, 2], [(1, 2), (1, 2)], {1: 10, 2: 20}),
         _case("edge from a dropped op", [1, 2], [(1, 2), (3, 2)], {1: 10, 2: 20}),
@@ -205,6 +212,8 @@ def test_the_golden_reaches_the_rules():
         "has_cycle": True,
     }
     assert expected["every op in a cycle"]["operation_ids"] == []
+    # 3.3 + 6.6 is 9.899999999999999 in microseconds, which would lose to op 3.
+    assert expected["decimal weights tie as nanoseconds"]["operation_ids"] == [1, 2]
     seeded = [case["expected"] for case in cases if case["name"].startswith("seeded")]
     assert any(entry["has_cycle"] for entry in seeded)
     assert any(len(entry["operation_ids"]) >= 4 for entry in seeded)

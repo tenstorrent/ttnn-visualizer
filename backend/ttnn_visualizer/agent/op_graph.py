@@ -32,6 +32,9 @@ from typing import (
 from ttnn_visualizer.agent.l1_peak import DEALLOCATE_OPERATION_NAMES
 from ttnn_visualizer.queries import DatabaseQueries
 
+# `US_TO_NS` in `src/functions/perfOverlay.ts`: the app weighs the path in nanoseconds.
+_US_TO_NS = 1000
+
 
 @dataclass(frozen=True, slots=True)
 class GraphEdge:
@@ -151,8 +154,10 @@ def find_critical_path(
             outgoing[edge.source].append(edge)
             in_degree[edge.target] += 1
 
+    # Summed in nanoseconds, as the app sums them: in microseconds 3.3 + 6.6 falls
+    # short of 9.9 and a tie the app sees would be broken on cost instead.
     weight = {
-        operation_id: weight_by_id.get(operation_id, 0.0)
+        operation_id: weight_by_id.get(operation_id, 0.0) * _US_TO_NS
         for operation_id in operation_ids
     }
     cost = dict(weight)
@@ -203,7 +208,7 @@ def find_critical_path(
         path.append(step)
         step = predecessor.get(step)
     path.reverse()
-    return CriticalPath(path, cost[end], len(order) < len(operation_ids))
+    return CriticalPath(path, cost[end] / _US_TO_NS, len(order) < len(operation_ids))
 
 
 def _reachable(

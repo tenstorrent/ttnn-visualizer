@@ -1905,6 +1905,16 @@ class TestCriticalPath:
         assert [entry["operation_id"] for entry in result["operations"]] == [1, 4]
         assert result["device_time"] == 15.0
 
+    def test_an_operation_reading_its_own_output_is_not_a_cycle(self, path_report):
+        # Op 2 writes tensor 13 and reads it back; the graph view draws no such edge.
+        registry, handle = path_report(edges=[*_PATH_EDGES, (2, 13, [2])])
+
+        result = linking.critical_path(registry, handle)
+
+        assert result["has_cycle"] is False
+        assert [entry["operation_id"] for entry in result["operations"]] == [1, 2, 3]
+        assert result["device_time"] == 16.0
+
     def test_a_partitioned_run_carries_its_caveat_beside_the_gap(self, path_report):
         with patch.object(
             tools, "partitioned_caveat", return_value="Partitioned run caveat."
