@@ -94,7 +94,7 @@ Recorded by the server once during a successful local launch.
 
 Recorded after a report is loaded successfully.
 
-- `kind`: `profiler`, `performance`, `npe`, `mlir`, `cluster_descriptor`.
+- `kind`: `profiler` (the memory report), `performance`, `npe`, `mlir`, `cluster_descriptor`.
 - `source`: `upload`, `remote_sync`, `local_tt_metal`, `demo`.
   - `upload`: a report uploaded from the browser. Under `SERVER_MODE`, this also counts every reselection of one of the session's earlier uploads from the report list, so hosted `upload` counts are loads, not uploads.
   - `remote_sync`: a report synced from a remote host.
@@ -109,7 +109,7 @@ Before 0.107.0, hosted event logs tagged every report picked from the hosted rep
 
 Recorded after a report cannot be loaded.
 
-- `kind`: `profiler`, `performance`, `npe`, `mlir`, `cluster_descriptor`.
+- `kind`: `profiler` (the memory report), `performance`, `npe`, `mlir`, `cluster_descriptor`.
 - `reason_class`: `unsupported_version`, `missing_file`, `parse_error`, `too_large`, `permission`, `other`.
 
 The reason is deliberately classified rather than copied from an error message.
