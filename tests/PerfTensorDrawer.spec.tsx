@@ -115,6 +115,8 @@ describe('PerfTensorDrawer', () => {
             </TestProviders>,
         );
 
+        expect(NO_LINKED_OPERATION_TEXT).toMatch(/memory report operation/i);
+        expect(NO_LINKED_OPERATION_TEXT).not.toMatch(/\.$/);
         expect(screen.getByText(`${NO_LINKED_OPERATION_TEXT}.`)).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Memory Details' })).not.toBeInTheDocument();
         expect(screen.queryByRole('link', { name: /matmul_op/i })).not.toBeInTheDocument();

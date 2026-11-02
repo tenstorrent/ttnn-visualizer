@@ -812,7 +812,7 @@ def report_fingerprints(instance: Instance):
 @timer
 def get_config(instance: Instance):
     """
-    Return the profiler ``config.json`` object for this report.
+    Return the memory report's ``config.json`` object for this report.
 
     For multi-host ranked configs (``config_<n>_of_<world>.json``), the response
     is the same shape as a single config file: one JSON object. Default is

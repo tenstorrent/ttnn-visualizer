@@ -270,6 +270,12 @@ describe('useRemoteConnection - syncRemoteFolder timeout', () => {
         );
     });
 
+    it('names each report in its missing-path message', () => {
+        expect(NO_MEMORY_REPORT_PATH_MESSAGE).toMatch(/memory report/i);
+        expect(NO_PERFORMANCE_PATH_MESSAGE).toMatch(/performance/i);
+        expect(`${NO_MEMORY_REPORT_PATH_MESSAGE} ${NO_PERFORMANCE_PATH_MESSAGE}`).not.toMatch(/profiler/i);
+    });
+
     it('throws when syncing a profiler folder without profilerPath', async () => {
         const { result } = renderHook(() => useRemoteConnection());
 

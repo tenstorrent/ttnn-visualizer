@@ -31,6 +31,10 @@ import { LateDeallocationCount } from '../../definitions/LateDeallocation';
 import { TEST_IDS } from '../../definitions/TestIds';
 import 'styles/components/BufferSummaryControls.scss';
 
+const L1_PRESSURE_UNAVAILABLE_TOOLTIP = "L1 pressure data isn't available for this memory report.";
+
+const UNLINKED_TOP_N_TOOLTIP = "Loaded performance report doesn't match this memory report (no operations in common).";
+
 // Static copy for the disabled-toggle tooltip, keyed by (mode, availability
 // state). Mirrors the PERF_OVERLAY_TOOLTIP map in definitions/PerfOverlayStatus
 // so the two surfaces use the same vocabulary for the same problem.
@@ -38,10 +42,6 @@ import 'styles/components/BufferSummaryControls.scss';
 // All perf-derived modes share the same source (the perf report), so they
 // share UNLINKED copy and differ only on the per-metric READY / UNAVAILABLE
 // strings.
-const L1_PRESSURE_UNAVAILABLE_TOOLTIP = "L1 pressure data isn't available for this memory report.";
-
-const UNLINKED_TOP_N_TOOLTIP = "Loaded performance report doesn't match this memory report (no operations in common).";
-
 const TOP_N_STATUS_TOOLTIP: Record<TopNAnnotationMode, Record<TopNAnnotationStatus, string>> = {
     [TopNAnnotationMode.PERF_TIME]: {
         [TopNAnnotationStatus.UNAVAILABLE]: 'Load a performance report to enable kernel-duration highlights.',
