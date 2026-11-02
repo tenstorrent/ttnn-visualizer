@@ -3,13 +3,45 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
-import { getMemoryConfigBufferType, isMemoryConfigValue } from '../src/functions/parseMemoryConfig';
+import parseMemoryConfig, { getMemoryConfigBufferType, isMemoryConfigValue } from '../src/functions/parseMemoryConfig';
 import { BufferType, StringBufferType } from '../src/model/BufferType';
 import { makeMemoryConfigArgument } from './helpers/operationDescription';
 
 // The older form, without the nd_shard_spec fields.
 const SHARDED_L1 =
     'MemoryConfig(memory_layout=TensorMemoryLayout::HEIGHT_SHARDED,buffer_type=BufferType::L1,shard_spec=ShardSpec(grid={[(x=0,y=0) - (x=7,y=7)]},shape={32, 64},orientation=ShardOrientation::ROW_MAJOR,halo=0))';
+// How reports print a tensor argument: the memory config sits mid-string, and the repr still
+// ends in `)`, so a pattern unanchored at the start reads the whole tail as the config.
+const TENSOR_REPR = `ttnn.Tensor(shape=Shape([1, 1000]), dtype=DataType.BFLOAT16, layout=Layout.TILE, memory_config=${SHARDED_L1}, storage_type=StorageType.DEVICE, tensor_id=214, is_allocated=True, mesh_coords=['MeshCoordinate([0, 0])'], distribution_shape=MeshShape([1]), placements=['PlacementReplicate()'])`;
+
+describe('parseMemoryConfig', () => {
+    const shardedL1 = {
+        memory_layout: 'TensorMemoryLayout::HEIGHT_SHARDED',
+        shard_spec: { grid: '[(x=0,y=0) - (x=7,y=7)]', shape: [32, 64], orientation: 'ROW_MAJOR', halo: 0 },
+    };
+
+    it('parses a sharded config', () => {
+        expect(parseMemoryConfig(SHARDED_L1)).toEqual(shardedL1);
+    });
+
+    it('parses the namespaced form older reports print', () => {
+        expect(parseMemoryConfig(`tt::tt_metal::${SHARDED_L1}`)).toEqual(shardedL1);
+    });
+
+    it('parses an interleaved config without a shard spec', () => {
+        expect(parseMemoryConfig(makeMemoryConfigArgument(StringBufferType.DRAM).value)).toEqual({
+            memory_layout: 'TensorMemoryLayout::INTERLEAVED',
+            shard_spec: 'std::nullopt',
+        });
+    });
+
+    it.each([TENSOR_REPR, `ttnn.Tensor(..., memory_config=${SHARDED_L1}`, null, undefined, '', 'std::nullopt'])(
+        'is null for %s',
+        (value) => {
+            expect(parseMemoryConfig(value)).toBeNull();
+        },
+    );
+});
 
 describe('getMemoryConfigBufferType', () => {
     it.each([
@@ -44,6 +76,10 @@ describe('getMemoryConfigBufferType', () => {
         expect(getMemoryConfigBufferType(`ttnn.Tensor(..., memory_config=${SHARDED_L1}`)).toBeNull();
     });
 
+    it('is null for a tensor argument that contains a memory config', () => {
+        expect(getMemoryConfigBufferType(TENSOR_REPR)).toBeNull();
+    });
+
     it.each([null, undefined, '', 'std::nullopt'])('is null for %s', (value) => {
         expect(getMemoryConfigBufferType(value)).toBeNull();
     });
@@ -54,7 +90,7 @@ describe('isMemoryConfigValue', () => {
         expect(isMemoryConfigValue(value)).toBe(true);
     });
 
-    it.each([`ttnn.Tensor(..., memory_config=${SHARDED_L1}`, `other::${SHARDED_L1}`, null, undefined])(
+    it.each([TENSOR_REPR, `ttnn.Tensor(..., memory_config=${SHARDED_L1}`, `other::${SHARDED_L1}`, null, undefined])(
         'rejects %s',
         (value) => {
             expect(isMemoryConfigValue(value)).toBe(false);
