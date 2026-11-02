@@ -39,6 +39,18 @@ describe('compareRemoteFoldersNewestFirst', () => {
         );
     });
 
+    it('puts a character past U+FFFF after one below it, as Python does', () => {
+        expect(sortedPaths([folder('/r/😀', 100), folder('/r/Ａ', 100), folder('/r/a', 100)])).toEqual([
+            '/r/a',
+            '/r/Ａ',
+            '/r/😀',
+        ]);
+    });
+
+    it('puts a path before a longer one it begins', () => {
+        expect(sortedPaths([folder('/r/ab', 100), folder('/r/a', 100)])).toEqual(['/r/a', '/r/ab']);
+    });
+
     it('moves a synced row whose time grew to the top', () => {
         const listed = [folder('/r/a', 300), folder('/r/b', 200), folder('/r/c', 100)];
         const afterSync = listed.map((f) => (f.remotePath === '/r/c' ? { ...f, lastModified: 400 } : f));

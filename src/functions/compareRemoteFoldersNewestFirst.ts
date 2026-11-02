@@ -20,5 +20,21 @@ export default function compareRemoteFoldersNewestFirst(a: RemoteFolder, b: Remo
         return 0;
     }
 
-    return a.remotePath < b.remotePath ? -1 : 1;
+    return compareByCodePoint(a.remotePath, b.remotePath);
+}
+
+// `<` compares UTF-16 code units, which put a character past U+FFFF (an emoji, say)
+// before U+E000–U+FFFF, where Python puts it after.
+function compareByCodePoint(left: string, right: string): number {
+    let index = 0;
+    while (index < left.length && index < right.length) {
+        const leftPoint = left.codePointAt(index) ?? 0;
+        const rightPoint = right.codePointAt(index) ?? 0;
+        if (leftPoint !== rightPoint) {
+            return leftPoint < rightPoint ? -1 : 1;
+        }
+        index += leftPoint > 0xffff ? 2 : 1;
+    }
+
+    return Math.sign(left.length - right.length);
 }
