@@ -13,6 +13,7 @@ import { OpType, PATTERN_COUNT } from '../../definitions/Performance';
 import {
     ColumnDefinition,
     ColumnKeys,
+    NO_LINKED_OPERATION_TEXT,
     PerfTableFilters,
     RepeatCacheOutcome,
     comparisonKeys,
@@ -191,7 +192,7 @@ const PerformanceTable = ({
         }
 
         if (!isValidNumber(row.op)) {
-            return { canOpen: false, reason: 'No linked memory report operation for this row' };
+            return { canOpen: false, reason: NO_LINKED_OPERATION_TEXT };
         }
 
         return { canOpen: true, reason: 'View input/output tensor details' };

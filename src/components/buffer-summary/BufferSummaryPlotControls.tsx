@@ -38,32 +38,30 @@ import 'styles/components/BufferSummaryControls.scss';
 // All perf-derived modes share the same source (the perf report), so they
 // share UNLINKED copy and differ only on the per-metric READY / UNAVAILABLE
 // strings.
+const UNLINKED_TOP_N_TOOLTIP = "Loaded performance report doesn't match this memory report (no operations in common).";
+
 const TOP_N_STATUS_TOOLTIP: Record<TopNAnnotationMode, Record<TopNAnnotationStatus, string>> = {
     [TopNAnnotationMode.PERF_TIME]: {
         [TopNAnnotationStatus.UNAVAILABLE]: 'Load a performance report to enable kernel-duration highlights.',
-        [TopNAnnotationStatus.UNLINKED]:
-            "Loaded performance report doesn't match this memory report (no operations in common).",
+        [TopNAnnotationStatus.UNLINKED]: UNLINKED_TOP_N_TOOLTIP,
         [TopNAnnotationStatus.NO_DATA]: "Loaded performance report doesn't include kernel-duration data.",
         [TopNAnnotationStatus.READY]: 'Highlight the top-N ops on the timeline by kernel duration.',
     },
     [TopNAnnotationMode.PERF_OP_TO_OP_GAP]: {
         [TopNAnnotationStatus.UNAVAILABLE]: 'Load a performance report to enable op-to-op gap highlights.',
-        [TopNAnnotationStatus.UNLINKED]:
-            "Loaded performance report doesn't match this memory report (no operations in common).",
+        [TopNAnnotationStatus.UNLINKED]: UNLINKED_TOP_N_TOOLTIP,
         [TopNAnnotationStatus.NO_DATA]: "Loaded performance report doesn't include op-to-op gap data.",
         [TopNAnnotationStatus.READY]: 'Highlight the top-N ops by dispatch / host-side stall (op-to-op gap).',
     },
     [TopNAnnotationMode.PERF_DRAM_PERCENT]: {
         [TopNAnnotationStatus.UNAVAILABLE]: 'Load a performance report to enable DRAM-utilization highlights.',
-        [TopNAnnotationStatus.UNLINKED]:
-            "Loaded performance report doesn't match this memory report (no operations in common).",
+        [TopNAnnotationStatus.UNLINKED]: UNLINKED_TOP_N_TOOLTIP,
         [TopNAnnotationStatus.NO_DATA]: "Loaded performance report doesn't include DRAM-utilization data.",
         [TopNAnnotationStatus.READY]: 'Highlight the top-N ops by DRAM bandwidth utilization.',
     },
     [TopNAnnotationMode.PERF_FLOPS_PERCENT]: {
         [TopNAnnotationStatus.UNAVAILABLE]: 'Load a performance report to enable FLOPS-utilization highlights.',
-        [TopNAnnotationStatus.UNLINKED]:
-            "Loaded performance report doesn't match this memory report (no operations in common).",
+        [TopNAnnotationStatus.UNLINKED]: UNLINKED_TOP_N_TOOLTIP,
         [TopNAnnotationStatus.NO_DATA]: "Loaded performance report doesn't include FLOPS-utilization data.",
         [TopNAnnotationStatus.READY]: 'Highlight the top-N ops by FLOPS utilization.',
     },

@@ -11,6 +11,7 @@ import { TypedPerfTableRow } from '../../model/PerfTable';
 import ROUTES from '../../definitions/Routes';
 import { TEST_IDS } from '../../definitions/TestIds';
 import { StackTraceLanguage } from '../../definitions/StackTrace';
+import { NO_LINKED_OPERATION_TEXT } from '../../definitions/PerfTable';
 import isValidNumber from '../../functions/isValidNumber';
 import { useOperationsList } from '../../hooks/useAPI';
 import { selectedPerfRowIdAtom } from '../../store/app';
@@ -88,7 +89,7 @@ function PerfTensorDrawer({ rows }: PerfTensorDrawerProps) {
                     </>
                 ) : (
                     <p className='perf-tensor-drawer-empty'>
-                        <em>No linked memory report operation for this row.</em>
+                        <em>{NO_LINKED_OPERATION_TEXT}.</em>
                     </p>
                 )}
             </div>
