@@ -710,16 +710,45 @@ def _inventory(instance: Instance, perf_csv: Optional[Path]) -> Dict[str, object
     }
 
 
+def _memory_report_argument(
+    memory_report_path: Optional[str], profiler_path: Optional[str]
+) -> Tuple[str, Optional[str]]:
+    """The memory report path and the argument name it came in under.
+
+    Both names are accepted together only when they agree, so a caller passing both
+    cannot load a different report than the one it meant.
+    """
+    if profiler_path is None:
+        return "memory_report_path", memory_report_path
+    if memory_report_path is not None and memory_report_path != profiler_path:
+        raise ValueError(
+            "memory_report_path and profiler_path name different paths; "
+            "pass only memory_report_path"
+        )
+    if memory_report_path is not None:
+        return "memory_report_path", memory_report_path
+    return "profiler_path", profiler_path
+
+
 def load_report(
     registry: ReportRegistry,
     profiler_path: Optional[str] = None,
     performance_path: Optional[str] = None,
+    memory_report_path: Optional[str] = None,
 ) -> Dict[str, object]:
-    """Register a report by path and describe what it holds."""
-    if profiler_path is None and performance_path is None:
-        raise ValueError("one of profiler_path or performance_path is required")
+    """Register a report by path and describe what it holds.
 
-    profiler = _resolved_directory("profiler_path", profiler_path)
+    ``memory_report_path`` is the preferred name for the memory report directory;
+    ``profiler_path`` is its former name, still accepted. Last in the signature so
+    positional callers keep binding the former names.
+    """
+    memory_label, memory_path = _memory_report_argument(
+        memory_report_path, profiler_path
+    )
+    if memory_path is None and performance_path is None:
+        raise ValueError("one of memory_report_path or performance_path is required")
+
+    profiler = _resolved_directory(memory_label, memory_path)
     performance = _resolved_directory("performance_path", performance_path)
     handle = registry.add(profiler, performance)
     instance = registry.get(handle)
