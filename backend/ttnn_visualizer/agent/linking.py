@@ -799,12 +799,10 @@ def critical_path(
         if device_time is not None:
             device_time_by_operation_id[operation_id] = device_time
     # `find_critical_path` drops an edge to an operation not kept, as the app's does.
-    # An operation that reads a tensor it also writes is not a cycle: the graph view
-    # draws no edge from a node to itself, so its search never sees one.
+    # An operation that reads a tensor it also writes is not a cycle, since that edge
+    # is not drawn.
     path = op_graph.find_critical_path(
-        sorted(kept),
-        [edge for edge in graph.edges if edge.source != edge.target],
-        device_time_by_operation_id,
+        sorted(kept), graph.drawn_edges, device_time_by_operation_id
     )
 
     cap = bounded(limit, MAX_LIMIT)

@@ -748,13 +748,15 @@ capture; call `load_report` again for a fresh handle.
 An edge runs from the operation that produced a tensor to each operation that consumed it,
 one per tensor. `critical_path` then leaves out deallocate operations and operations with
 no edge at all, as the graph view does by default, and finds the chain whose operations'
-device time adds up to the most — the same search the graph view's critical path runs,
-held to it by a shared golden. Ties go to the longer chain, then to the lower operation id.
+device time adds up to the most — the graph view's critical path search, held to it by a
+shared golden. Ties go to the longer chain, then to the lower operation id.
 
-An operation weighs the summed device time of every performance row it launched, as
-`operation_detail` totals it. The graph view weighs an operation by its slowest row
-instead, so on an operation that launches several device operations the two can name
-different paths. An operation with no timed row — unlinked, or a row tt-perf-report left
+The two can still name different paths. The graph view folds weight-load fans into one
+block by default and weighs a block as the sum of its members, so a fan of heavy loads can
+outweigh a longer chain there; this graph never folds, so each load counts alone. And an
+operation here weighs the summed device time of every performance row it launched, as
+`operation_detail` totals it, where the graph view weighs it by its slowest row, which
+differs on an operation that launches several device operations. An operation with no timed row — unlinked, or a row tt-perf-report left
 blank — counts as 0 and is still traversed, so a gap in the performance report shortens
 the path rather than breaking it: `uncosted_operation_count` and `uncosted_operation_ids`
 say how much of the path is a gap rather than a measurement, and the caveat says so

@@ -46,7 +46,11 @@ class GraphEdge:
 @dataclass(frozen=True)
 class OpGraph:
     names: Dict[int, str]
+    # Every edge, which decides what `kept_operation_ids` keeps, as in `getKeptOperations`.
     edges: List[GraphEdge]
+    # The edges the graph view draws: no edge from an operation to itself, which one
+    # that reads a tensor it also writes would add. Both tools search these.
+    drawn_edges: List[GraphEdge]
     outgoing: Dict[int, List[GraphEdge]] = field(default_factory=dict)
     incoming: Dict[int, List[GraphEdge]] = field(default_factory=dict)
 
@@ -62,12 +66,13 @@ def build_graph(names: Mapping[int, str], edges: Iterable[GraphEdge]) -> OpGraph
     """An edge whose endpoint is not one of `names` is dropped, as `buildOpGraph` drops
     an edge to an operation it did not keep."""
     kept = edges_within(edges, names.keys())
+    drawn = [edge for edge in kept if edge.source != edge.target]
     outgoing: Dict[int, List[GraphEdge]] = defaultdict(list)
     incoming: Dict[int, List[GraphEdge]] = defaultdict(list)
-    for edge in kept:
+    for edge in drawn:
         outgoing[edge.source].append(edge)
         incoming[edge.target].append(edge)
-    return OpGraph(dict(names), kept, dict(outgoing), dict(incoming))
+    return OpGraph(dict(names), kept, drawn, dict(outgoing), dict(incoming))
 
 
 def read_graph(

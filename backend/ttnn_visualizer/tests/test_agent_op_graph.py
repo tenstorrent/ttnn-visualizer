@@ -59,7 +59,8 @@ INSERT INTO input_tensors VALUES
 
 # Two ranks sharing operation and tensor ids, with different edges: rank 0 runs
 # 1 -> 2 -> 3 and rank 1 runs 1 -> 3 directly, so a read that leaked one rank into
-# the other would add an edge.
+# the other would add an edge. Their names and tensor 10 differ too, and only rank 0
+# has operation 4, so a leaked name, tensor or operation shows as well.
 _RANKED_GRAPH_SQL = """
 CREATE TABLE operations (
     operation_id int, name text, duration float, rank int NOT NULL DEFAULT 0
@@ -77,14 +78,21 @@ CREATE TABLE output_tensors (
 
 INSERT INTO operations VALUES
     (1, 'ttnn.from_torch', 0.1, 0), (2, 'ttnn.matmul', 0.1, 0), (3, 'ttnn.add', 0.1, 0),
-    (1, 'ttnn.from_torch', 0.1, 1), (2, 'ttnn.matmul', 0.1, 1), (3, 'ttnn.add', 0.1, 1);
+    (4, 'ttnn.relu', 0.1, 0),
+    (1, 'ttnn.to_device', 0.1, 1), (2, 'ttnn.softmax', 0.1, 1),
+    (3, 'ttnn.multiply', 0.1, 1);
 INSERT INTO tensors VALUES
     (10, 'Shape([1])', 'DataType.BFLOAT16', 'Layout.TILE', '', 0, NULL, NULL, 0),
     (11, 'Shape([1])', 'DataType.BFLOAT16', 'Layout.TILE', '', 0, NULL, NULL, 0),
-    (10, 'Shape([1])', 'DataType.BFLOAT16', 'Layout.TILE', '', 0, NULL, NULL, 1);
+    (10, 'Shape([1, 64])', 'DataType.FLOAT32', 'Layout.ROW_MAJOR', '', 0, NULL, NULL, 1);
 INSERT INTO output_tensors VALUES (1, 0, 10, 0), (2, 0, 11, 0), (1, 0, 10, 1);
 INSERT INTO input_tensors VALUES (2, 0, 10, 0), (3, 0, 11, 0), (3, 0, 10, 1);
 """
+
+
+# Operation 2 also reads tensor 11, which it writes, as `ttnn.to_device` does on
+# segformer_encoder.
+_SELF_EDGE_SQL = _GRAPH_SQL + "INSERT INTO input_tensors VALUES (2, 1, 11);"
 
 
 def _load(tmp_path, sql: str, name: str = "profiler"):
@@ -138,6 +146,15 @@ class TestReadGraph:
         assert graph.edges == [GraphEdge(1, 2, 10)]
         assert 9 not in graph.incoming
 
+    def test_it_draws_no_edge_from_an_operation_to_itself(self):
+        graph = op_graph.build_graph(
+            {1: "a", 2: "b"}, [GraphEdge(1, 2, 10), GraphEdge(2, 2, 11)]
+        )
+
+        assert graph.edges == [GraphEdge(1, 2, 10), GraphEdge(2, 2, 11)]
+        assert graph.drawn_edges == [GraphEdge(1, 2, 10)]
+        assert 2 not in graph.outgoing
+
 
 class TestKeptOperations:
     def test_it_keeps_what_the_graph_view_draws(self, graph_report):
@@ -155,6 +172,12 @@ class TestKeptOperations:
         )
 
         assert op_graph.kept_operation_ids(graph) == {1}
+
+    def test_an_edge_to_itself_keeps_an_operation(self):
+        """`getKeptOperations` counts every edge, drawn or not."""
+        graph = op_graph.build_graph({1: "a", 2: "b"}, [GraphEdge(2, 2, 10)])
+
+        assert op_graph.kept_operation_ids(graph) == {2}
 
 
 class TestOperationsBetween:
@@ -201,6 +224,15 @@ class TestSubgraphBetween:
         assert result["operation_count"] == 4
         assert result["edge_count"] == 4
         assert result["operations_truncated"] is False
+
+    def test_it_leaves_out_an_edge_from_an_operation_to_itself(self, tmp_path):
+        registry, handle = _load(tmp_path, _SELF_EDGE_SQL)
+
+        result = agent_operations.subgraph_between(registry, handle, 2, 4)
+
+        assert result["edges"] == [{"source": 2, "target": 4, "tensor_id": 11}]
+        assert result["edge_count"] == 1
+        assert result["tensor_count"] == 1
 
     def test_it_lists_each_tensor_once_with_its_layout(self, graph_report):
         registry, handle = graph_report
@@ -368,6 +400,42 @@ class TestSubgraphBetweenRanks:
         ]
         assert again["edges"] == first["edges"]
         assert read.call_count == 2
+
+    @pytest.mark.parametrize(
+        ("rank", "names", "tensor"),
+        [
+            (
+                0,
+                ["ttnn.from_torch", "ttnn.matmul", "ttnn.add"],
+                ("Shape([1])", "DataType.BFLOAT16", "Layout.TILE"),
+            ),
+            (
+                1,
+                ["ttnn.to_device", "ttnn.multiply"],
+                ("Shape([1, 64])", "DataType.FLOAT32", "Layout.ROW_MAJOR"),
+            ),
+        ],
+    )
+    def test_names_and_tensors_come_from_the_requested_rank(
+        self, tmp_path, rank, names, tensor
+    ):
+        registry, handle = _load(tmp_path, _RANKED_GRAPH_SQL)
+
+        result = agent_operations.subgraph_between(registry, handle, 1, 3, rank=rank)
+
+        assert [entry["name"] for entry in result["operations"]] == names
+        tensor_10 = result["tensors"][0]
+        assert tensor_10["tensor_id"] == 10
+        assert (tensor_10["shape"], tensor_10["dtype"], tensor_10["layout"]) == tensor
+
+    def test_an_operation_only_another_rank_has_is_refused(self, tmp_path):
+        registry, handle = _load(tmp_path, _RANKED_GRAPH_SQL)
+
+        assert agent_operations.subgraph_between(registry, handle, 4, 4, rank=0)[
+            "operations"
+        ] == [{"operation_id": 4, "name": "ttnn.relu"}]
+        with pytest.raises(ValueError, match="no operation 4 in this report at rank 1"):
+            agent_operations.subgraph_between(registry, handle, 4, 4, rank=1)
 
     def test_a_missing_operation_names_the_rank(self, tmp_path):
         registry, handle = _load(tmp_path, _RANKED_GRAPH_SQL)

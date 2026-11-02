@@ -1406,7 +1406,7 @@ def subgraph_between(
             raise ValueError(f"no path from operation {source} to {target}{reverse}")
 
         edges = sorted(
-            op_graph.edges_within(graph.edges, members),
+            op_graph.edges_within(graph.drawn_edges, members),
             key=lambda edge: (edge.source, edge.target, edge.tensor_id),
         )
         tensor_ids = sorted({edge.tensor_id for edge in edges})
