@@ -316,6 +316,7 @@ class TestToolsCarryLinks:
             ("errors", failures, "app_link_template"),
             ("dram_fallbacks", failures, "app_link_template"),
             ("l1_peak", failures, "app_link_template"),
+            ("late_deallocations", failures, "app_link_template"),
         ],
     )
     def test_each_tool_answers_with_its_link(
@@ -347,6 +348,7 @@ class TestToolsCarryLinks:
             "errors",
             "dram_fallbacks",
             "l1_peak",
+            "late_deallocations",
         ],
     )
     def test_a_call_without_a_handle_is_still_refused(self, event_log_directory, tool):
@@ -391,6 +393,7 @@ class TestRankGatingOnRealAnswers:
             ("errors", {}, "app_link_template"),
             ("dram_fallbacks", {}, "app_link_template"),
             ("l1_peak", {}, "app_link_template"),
+            ("late_deallocations", {}, "app_link_template"),
         ],
     )
     def test_a_link_at_rank_0_and_none_at_rank_1(self, ranked, tool, arguments, key):
