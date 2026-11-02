@@ -39,7 +39,7 @@ const countLinkedRowsByOpId = (opIdsMap: OpIdsMap): Map<number, number> => {
  * unrelated run would be blamed on this one. The link is the pinned one, so the answer
  * does not move with the table's view filters. Rows are counted through the table's own
  * lookup, so with devices unmerged the count matches the rows the table flags. Takes that
- * lookup as an argument so the route groups the unmerged rows once.
+ * lookup as an argument so the route builds the per-device lookup once.
  */
 export const useAllocationFailures = (perfTableOpIdsMap: OpIdsMap): AllocationFailures => {
     const { data: operations } = useOperationsList();

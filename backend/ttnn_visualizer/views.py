@@ -1386,6 +1386,9 @@ def get_performance_results_report(instance: Instance):
             merge_devices=merge_devices,
             tracing_mode=tracing_mode,
             group_by=group_by,
+            # What the frontend links every device's row of an operation through
+            # while devices are unmerged (#2177); only a merged report can carry it.
+            device_row_ids=merge_devices,
         )
     except InvalidSignpostRange as error:
         return response_bad_request(str(error))
