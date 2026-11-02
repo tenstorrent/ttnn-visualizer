@@ -4,7 +4,7 @@ This file orients coding agents and contributors who work on this repository.
 
 ## Purpose
 
-TT-NN Visualizer lets users inspect **memory profiler** and **performance profiler** reports produced when using the Tenstorrent **TTNN** library (with TT-Metal). The UI is built around loading, browsing, and analyzing those reports—not general-purpose ML training or arbitrary workloads.
+TT-NN Visualizer lets users inspect **memory** and **performance** reports produced when using the Tenstorrent **TTNN** library (with TT-Metal). The UI is built around loading, browsing, and analyzing those reports—not general-purpose ML training or arbitrary workloads.
 
 ## Where reports come from
 
@@ -12,7 +12,7 @@ Reports can reach the app in several ways:
 
 - **Upload** through the application.
 - **Sync from a remote machine** over SSH.
-- **Local TT-Metal tree** when the app runs on the same machine as TTNN/TT-Metal: default/conventional locations include paths under the TT-Metal checkout such as `tt-metal/generated/ttnn/reports/` and `tt-metal/generated/profiler/reports/` (memory vs profiler outputs).
+- **Local TT-Metal tree** when the app runs on the same machine as TTNN/TT-Metal: default/conventional locations include paths under the TT-Metal checkout such as `tt-metal/generated/ttnn/reports/` and `tt-metal/generated/profiler/reports/` (memory vs performance report outputs).
 
 When changing ingestion, sync, or path logic, keep these flows and paths in mind.
 

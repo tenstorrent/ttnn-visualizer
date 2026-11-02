@@ -114,7 +114,7 @@ describe('PerfTensorDrawer', () => {
             </TestProviders>,
         );
 
-        expect(screen.getByText('No linked profiler operation for this row.')).toBeInTheDocument();
+        expect(screen.getByText('No linked memory report operation for this row.')).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Memory Details' })).not.toBeInTheDocument();
         expect(screen.queryByRole('link', { name: /matmul_op/i })).not.toBeInTheDocument();
     });

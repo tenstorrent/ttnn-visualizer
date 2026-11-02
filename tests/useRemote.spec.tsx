@@ -284,7 +284,7 @@ describe('useRemoteConnection - syncRemoteFolder timeout', () => {
                 },
                 profilerFolder,
             ),
-        ).rejects.toThrow('No profiler path provided');
+        ).rejects.toThrow('No memory report path provided');
     });
 
     it('throws when syncing a performance folder without performancePath', async () => {

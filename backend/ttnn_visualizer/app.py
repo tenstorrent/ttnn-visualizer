@@ -434,7 +434,7 @@ def parse_args():
         description="A tool for visualizing the Tenstorrent Neural Network model (TT-NN)"
     )
     parser.add_argument(
-        "--profiler-path", type=str, help="Specify a profiler path", default=None
+        "--profiler-path", type=str, help="Specify a memory report path", default=None
     )
     parser.add_argument(
         "--performance-path", help="Specify a performance path", default=None
@@ -524,7 +524,7 @@ def display_mode_info_without_db(config):
         profiler_base = Path(tt_metal_home) / "generated" / "ttnn" / "reports"
         performance_base = Path(tt_metal_home) / "generated" / "profiler" / "reports"
 
-        print(f"   Profiler reports: {profiler_base}")
+        print(f"   Memory reports: {profiler_base}")
         print(f"   Performance reports: {performance_base}")
 
         # Validate setup
@@ -536,7 +536,7 @@ def display_mode_info_without_db(config):
             print(f"   ⚠️  Warning: TT-Metal generated directory not found")
         elif not profiler_base.exists():
             print(
-                f"   ⚠️  Warning: Profiler reports directory not found: {profiler_base}"
+                f"   ⚠️  Warning: Memory reports directory not found: {profiler_base}"
             )
         elif not performance_base.exists():
             print(
@@ -779,7 +779,7 @@ def main():
                 )
                 instance_id = session.instance_id
             except InvalidReportPath:
-                sys.exit(f"❌ Invalid profiler path: {args.profiler_path}")
+                sys.exit(f"❌ Invalid memory report path: {args.profiler_path}")
             except InvalidProfilerPath:
                 sys.exit(f"❌ Invalid performance path: {args.performance_path}")
 

@@ -183,7 +183,7 @@ const PerformanceTable = ({
 
     const getTensorDrawerStatus = (row: TypedPerfTableRow): { canOpen: boolean; reason: string } => {
         if (!isReportsSynced) {
-            return { canOpen: false, reason: 'Load a synced profiler report to see tensor details' };
+            return { canOpen: false, reason: 'Load a synced memory report to see tensor details' };
         }
 
         if (row.raw_op_code.includes('MISSING')) {
@@ -191,7 +191,7 @@ const PerformanceTable = ({
         }
 
         if (!isValidNumber(row.op)) {
-            return { canOpen: false, reason: 'No linked profiler operation for this row' };
+            return { canOpen: false, reason: 'No linked memory report operation for this row' };
         }
 
         return { canOpen: true, reason: 'View input/output tensor details' };

@@ -88,7 +88,7 @@ function PerfTensorDrawer({ rows }: PerfTensorDrawerProps) {
                     </>
                 ) : (
                     <p className='perf-tensor-drawer-empty'>
-                        <em>No linked profiler operation for this row.</em>
+                        <em>No linked memory report operation for this row.</em>
                     </p>
                 )}
             </div>

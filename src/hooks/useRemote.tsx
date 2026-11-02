@@ -160,7 +160,7 @@ const useRemoteConnection = () => {
 
         // Performance-only connections use empty profilerPath; require a path for the folder being synced.
         if (profilerRemoteFolder && !connection.profilerPath) {
-            throw new Error('No profiler path provided');
+            throw new Error('No memory report path provided');
         }
 
         if (performanceRemoteFolder && !connection.performancePath) {

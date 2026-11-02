@@ -8,6 +8,8 @@ Follow instructions for setting up [TT-Metalium](https://docs.tenstorrent.com/tt
 
 ### Memory reports
 
+A memory report is the `db.sqlite` database TT-NN writes for a run, alongside its `config.json`. Despite the name it holds more than memory: it also records the op graph, tensor flow, Python stack traces and, with comparison mode on, comparison results.
+
 Recommended pytest config when generating your data:
 
 ``` bash

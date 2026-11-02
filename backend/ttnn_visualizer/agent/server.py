@@ -62,12 +62,12 @@ MAX_LINE_BYTES = 1_000_000
 # any call, so it is kept short and each description keeps only its own tool's caveats.
 INSTRUCTIONS = (
     "Read-only tools over TT-NN Visualizer performance reports (ops_perf_results CSV, "
-    "device log) and profiler reports (db.sqlite).\n"
+    "device log) and memory reports (db.sqlite).\n"
     "- Call load_report first. It returns the handle the other tools take, which of "
     "them the report can answer, its signposts, architecture and device count.\n"
     "- Two id spaces overlap. A performance row's id (a top_ops or perf_rows row's "
     "id, or any *_perf_id) numbers rows of the performance CSV. operation_id is the "
-    "profiler database's: find_operations, memory_profile, tensor_flow, errors, "
+    "memory report database's: find_operations, memory_profile, tensor_flow, errors, "
     "dram_fallbacks and l1_peak return it, operation_detail and "
     "operation_provenance take it. One passed as the other "
     "answers about a different operation; pass a top_ops row's operation_id on.\n"
@@ -146,7 +146,7 @@ _SIGNPOST_SCHEMAS = {
 _OPERATION_ID_SCHEMA = {
     "type": "integer",
     "description": (
-        "The profiler database's operation id, as find_operations or a top_ops row's "
+        "The memory report database's operation id, as find_operations or a top_ops row's "
         "operation_id gives it; never a top_ops row's id."
     ),
 }
@@ -251,7 +251,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "op_to_op_gap leaves out its first operation, and the gap total "
                 "excludes the gap leading into it. Each row's id numbers the "
                 "performance CSV. When the handle also holds a "
-                "profiler report, each row's operation_id is the profiler database "
+                "memory report, each row's operation_id is the memory report database "
                 "id for one rank, and operation_link says whether the reports linked, "
                 "at which rank, how many rows did not link and why, and, in its note, "
                 "when an operation_id is null. A range narrows the ranked rows only: "
@@ -327,7 +327,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "code, most repeat misses first: calls, distinct programs, repeat "
                 "calls, and how many of those hit or missed the program cache. The "
                 "response's note says how a call is counted. Reads the whole report, "
-                "with no signpost range. When the handle also holds a profiler "
+                "with no signpost range. When the handle also holds a memory "
                 "report, each op code's first repeat miss carries the operation_id "
                 "to pass to operation_provenance."
             ),
@@ -477,7 +477,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
             "title": "Find operations",
             "description": (
                 "Find operations by name substring, returning ids to ask about. "
-                "Durations here are host wall time from the profiler report; for "
+                "Durations here are host wall time from the memory report; for "
                 "device time use top_ops."
             ),
             "schema": {
