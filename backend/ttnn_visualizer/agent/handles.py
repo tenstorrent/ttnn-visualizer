@@ -33,6 +33,7 @@ from typing import (
     cast,
 )
 
+from ttnn_visualizer import npe_index
 from ttnn_visualizer.csv_queries import (
     PROGRAM_CACHE_HIT_COLUMN,
     PROGRAM_HASH_COLUMN,
@@ -79,6 +80,10 @@ class CacheVariant(str, Enum):
     L1_PEAK = "l1_peak"
     # Every device op's per-core spread, from one read of the device log.
     CORE_SPREAD = "core_spread"
+    # A tt-npe trace's link demand, summed per link and burst from one read.
+    NOC_CONGESTION = "noc_congestion"
+    # The tt-npe trace a handle first read, so its later calls answer from that read.
+    NOC_SOURCE = "noc_source"
 
 
 # Snapshots narrowed by a scope -- a signpost range -- kept at once, across every
@@ -143,13 +148,19 @@ class ReportRegistry:
         ) = OrderedDict()
         self._next_id = 1
 
-    def add(self, profiler_path: Optional[str], performance_path: Optional[str]) -> str:
+    def add(
+        self,
+        profiler_path: Optional[str],
+        performance_path: Optional[str],
+        npe_path: Optional[str] = None,
+    ) -> str:
         handle = f"report-{self._next_id}"
         self._next_id += 1
         self._instances[handle] = Instance(
             instance_id=handle,
             profiler_path=profiler_path,
             performance_path=performance_path,
+            npe_path=npe_path,
         )
         return handle
 
@@ -267,6 +278,15 @@ def _resolved_directory(label: str, path: Optional[str]) -> Optional[str]:
     resolved = Path(path).expanduser().resolve()
     if not resolved.is_dir():
         raise ValueError(f"{label} is not a directory: {resolved}")
+    return str(resolved)
+
+
+def _resolved_file(label: str, path: Optional[str]) -> Optional[str]:
+    if path is None:
+        return None
+    resolved = Path(path).expanduser().resolve()
+    if not resolved.is_file():
+        raise ValueError(f"{label} is not a file: {resolved}")
     return str(resolved)
 
 
@@ -650,7 +670,7 @@ def _answerable_device_log_columns(instance: Instance) -> Optional[frozenset]:
 def _inventory(instance: Instance, perf_csv: Optional[Path]) -> Dict[str, object]:
     """What this report can actually answer.
 
-    Reported up front because the three report kinds are independent: a Blaze-style
+    Reported up front because the report kinds are independent: a Blaze-style
     run is performance-only, and an agent that assumes otherwise spends calls
     discovering it one error at a time.
     """
@@ -693,6 +713,13 @@ def _inventory(instance: Instance, perf_csv: Optional[Path]) -> Dict[str, object
     for tool_name, required in TOOL_TABLES.items():
         record(tool_name, required <= tables)
 
+    # Only its first bytes here; the first call reads it whole and refuses it then.
+    record(
+        "noc_congestion",
+        instance.npe_path is not None
+        and npe_index.looks_like_trace(Path(instance.npe_path)),
+    )
+
     return {
         # Tool names only. `operations` used to appear here whenever a `db.sqlite`
         # was present, but no such tool was registered — so the list handed an
@@ -714,14 +741,18 @@ def load_report(
     registry: ReportRegistry,
     profiler_path: Optional[str] = None,
     performance_path: Optional[str] = None,
+    npe_path: Optional[str] = None,
 ) -> Dict[str, object]:
     """Register a report by path and describe what it holds."""
-    if profiler_path is None and performance_path is None:
-        raise ValueError("one of profiler_path or performance_path is required")
+    if profiler_path is None and performance_path is None and npe_path is None:
+        raise ValueError(
+            "one of profiler_path, performance_path or npe_path is required"
+        )
 
     profiler = _resolved_directory("profiler_path", profiler_path)
     performance = _resolved_directory("performance_path", performance_path)
-    handle = registry.add(profiler, performance)
+    npe = _resolved_file("npe_path", npe_path)
+    handle = registry.add(profiler, performance, npe)
     instance = registry.get(handle)
 
     metadata: Dict[str, str] = {}
@@ -734,6 +765,7 @@ def load_report(
         "handle": handle,
         "profiler_path": profiler,
         "performance_path": performance,
+        "npe_path": npe,
         "capture": metadata,
         **_hardware(instance, metadata, perf_csv),
         **_inventory(instance, perf_csv),

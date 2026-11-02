@@ -90,7 +90,7 @@ another rank's operation under the same id.
 
 | Tool | Answers |
 |---|---|
-| `load_report` | What this report contains, and which of the tools below apply to it: its signposts, architecture, device count and the tt-perf-report version. Returns a handle the others take. |
+| `load_report` | What this report contains, and which of the tools below apply to it: its signposts, architecture, device count and the tt-perf-report version. Takes a profiler directory, a performance directory, a tt-npe trace file, or any of them together. Returns a handle the others take. |
 | `top_ops` | The costliest operations by device time, op-to-op gap, total percentage, FLOPS, DRAM bandwidth or core count, over the whole report or a signpost range. Each row carries the profiler `operation_id` it links to, when the handle holds both reports — see below. `include` adds the fields that say why an operation took its time, and the performance view's heuristic flags. |
 | `op_breakdown` | Where the time went, per op or per op category, over the whole report or a signpost range: each group's count, and its device time and op-to-op gap with the share each is of the total. |
 | `program_cache` | Whether programs were built again rather than reused: per op code, its calls, distinct programs, and how many repeat calls hit or missed the program cache. |
@@ -105,13 +105,15 @@ another rank's operation under the same id.
 | `errors` | The errors the run recorded, including an operation that started and never completed: which operation, the device operations whose launch failed, and for an allocation failure its figures and why it did not fit. |
 | `dram_fallbacks` | Operations that likely fell back from L1 to DRAM, inferred from their memory config arguments and from retries after an L1 allocation failure. |
 | `l1_peak` | The run's L1 peak per bank, split into circular buffers, intra-operation tensors, persistent tensors and stale ones, with the operation holding it and the operations closest to it. |
+| `noc_congestion` | How congested the NoC links were in a tt-npe trace: the trace's own run summary, the highest demand any single link reached and when, bursts of congested timesteps ranked by peak, and the links with the highest mean demand. |
 
 `top_ops`, `op_breakdown`, `program_cache`, `zone_timings`, `core_spread` and `diff_reports`
 read the performance CSVs; the operation tools — `find_operations`, `operation_detail`,
 `memory_profile`, `tensor_flow`, `operation_provenance`, `errors`, `dram_fallbacks` and
-`l1_peak` — read the profiler report's SQLite database;
-`load_report` opens both, since its whole job is saying which of the others apply. A capture can carry either, both, or — as far as these tools are concerned —
-neither, which is what makes `load_report`'s answer worth reading first.
+`l1_peak` — read the profiler report's SQLite database; `noc_congestion` reads a tt-npe
+trace. `load_report` takes any of the three, since its whole job is saying which of the
+others apply. A capture can carry any of them, or — as far as these tools are concerned —
+none, which is what makes `load_report`'s answer worth reading first.
 
 Call `load_report` first. It reports what is answerable rather than making you discover it
 one failed call at a time, because the report kinds are independent: a performance-only
@@ -129,7 +131,9 @@ that it cannot be read or decoded).
 Each database tool is checked against the tables it actually reads, so a truncated
 capture that holds `operations` but not `buffers` is reported as answering
 `find_operations` and nothing else, rather than advertising every tool and failing most
-of them.
+of them. `noc_congestion` is listed when the handle's `npe_path` starts as a trace does, a
+zstd frame for `.zst` and a JSON object otherwise. The trace is only read whole on its
+first call, which refuses one that is not a readable tt-npe trace.
 
 `load_report` also says what the capture is:
 
@@ -672,6 +676,38 @@ replay of that operation. A kernel row whose slot, core or cycle count is not a 
 left out and counted in a caveat rather than failing the call. The first call on a handle
 reads the whole device log once for every operation in the report, and later calls answer
 from that read, with the clock it was read at.
+
+**`noc_congestion` reads tt-npe's simulation of the NoC, not a measurement.** Its figures
+are percentages of a link's bandwidth per timestep of `cycles_per_timestep` device cycles.
+Demand is what transfers asked of a link and can pass 100%; utilisation is what the link
+carried and stops at 100%, so demand over 100% is congestion. `run` is the trace's own
+summary, the figures the visualizer's NPE view shows as its run summary: each is the mean
+over timesteps of that timestep's average across links, per NoC in `by_noc` too. Its
+`highest_timestep_average_demand_percent` is the trace's `max_link_demand`, renamed
+because it is the largest per-timestep average, not one link's demand: on the local traces
+it is 5 to 28% where single links reach 112 to 439%. `worst_link` is the highest demand
+any single link reached, with its timestep and cycles: the earliest, where several tie, and
+`worst_link_ties` counts the link-timesteps at that demand, 134 on one local trace. A burst
+is a run of consecutive
+timesteps whose busiest link was over 100% demand; `bursts` ranks them by peak, each with
+its cycle span, length and the link that peaked, and `burst_count` and `congested_percent`
+say how many there were and what share of timesteps they cover. `busiest_links` ranks
+links by their mean demand over every timestep of the trace, idle ones included, with each
+link's peak and the share of timesteps it spent over 100%. `device`, `y` and `x` are the
+trace's own chip id and grid coordinates. A link demand row whose coordinates or demand
+cannot be read is left out and counted in a caveat. The trace is read through the
+visualizer's index of it when that index is built and current, and from the trace itself
+otherwise; the tool never builds the index, so it writes nothing beside the trace. The
+visualizer builds its index beside the copy it opens, which for an upload is its own copy
+under its report data directory, so an `npe_path` naming that copy reuses the index: on a
+106 MB trace, 0.22 s and 143 MB at peak against 0.56 s and 651 MB. Otherwise the first
+call on a handle parses the whole trace: on the two largest traces measured, 196,146 and
+54,686 timesteps, that took 11 and 15 seconds and 5 to 6 GB at its peak, as building the
+visualizer's index does, and the server process can keep much of that memory afterwards.
+A trace whose JSON passes 1 GiB is refused rather than parsed. Later calls answer from
+the first read, and so does every handle on the same unchanged file. A handle stays with
+the trace it first read: if the file changes afterwards, its answers say so in their
+caveat, and a fresh `load_report` reads the new one.
 
 **A performance row and a profiler operation are linked by order, not by a shared id.**
 Neither report records the other's id, so when a handle is loaded with both, the tools

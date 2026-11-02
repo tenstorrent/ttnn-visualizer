@@ -184,6 +184,7 @@ class TestReportInventory:
             "errors",
             "dram_fallbacks",
             "l1_peak",
+            "noc_congestion",
         }
         assert loaded["capture"]["ARCH"] == "wormhole_b0"
         assert loaded["performance_csv"] == "ops_perf_results_x.csv"
@@ -2348,6 +2349,7 @@ class TestTransport:
             "program_cache",
             "zone_timings",
             "core_spread",
+            "noc_congestion",
             "diff_reports",
             "find_operations",
             "operation_detail",

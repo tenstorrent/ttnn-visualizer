@@ -21,10 +21,10 @@ from ttnn_visualizer import npe_index
 from ttnn_visualizer.npe_index import (
     INDEX_VERSION,
     _as_int,
-    _truncate,
     ensure_index,
     read_summary,
     read_window,
+    truncate,
 )
 
 
@@ -84,8 +84,8 @@ def _write_npe_zst(tmp_path: Path, obj: dict, name: str = "trace.npeviz.zst") ->
 
 
 def test_truncate_and_as_int_helpers():
-    assert _truncate(224.80001831054688) == pytest.approx(224.8)
-    assert _truncate(None) is None
+    assert truncate(224.80001831054688) == pytest.approx(224.8)
+    assert truncate(None) is None
     assert _as_int(5.0) == 5
     assert _as_int(None) is None
 
@@ -252,7 +252,7 @@ def test_read_window_chunks_large_active_id_list(tmp_path):
 
 def test_zst_source_round_trips(tmp_path):
     # Production reports are zstd-compressed (.npeviz.zst); the .json fixtures skip
-    # the zstd.uncompress branch of _load_npe_object entirely, so cover it here.
+    # the zstd.uncompress branch of load_npe_object entirely, so cover it here.
     npe_path = _write_npe_zst(tmp_path, _make_npe_object(n_transfers=3, n_timesteps=4))
     db_path = ensure_index(npe_path)
 

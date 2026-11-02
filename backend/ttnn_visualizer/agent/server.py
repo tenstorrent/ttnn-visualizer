@@ -23,6 +23,7 @@ from ttnn_visualizer.agent import (
     app_links,
     failures,
     linking,
+    noc_congestion,
     operations,
     perf_detail,
     report_diff,
@@ -62,7 +63,7 @@ MAX_LINE_BYTES = 1_000_000
 # any call, so it is kept short and each description keeps only its own tool's caveats.
 INSTRUCTIONS = (
     "Read-only tools over TT-NN Visualizer performance reports (ops_perf_results CSV, "
-    "device log) and profiler reports (db.sqlite).\n"
+    "device log), profiler reports (db.sqlite) and tt-npe NoC traces.\n"
     "- Call load_report first. It returns the handle the other tools take, which of "
     "them the report can answer, its signposts, architecture and device count.\n"
     "- Two id spaces overlap. A performance row's id (a top_ops or perf_rows row's "
@@ -217,10 +218,11 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
         McpToolName.LOAD_REPORT: {
             "title": "Load report",
             "description": (
-                "Register a report directory and say what it holds: which of the "
-                "other tools it can answer, the signposts a range can name, and its "
-                "architecture and device count, each keyed by the file it was read "
-                "from. Call this first: it returns the handle every other tool takes."
+                "Register a report directory, or a tt-npe trace file, and say what it "
+                "holds: which of the other tools it can answer, the signposts a range "
+                "can name, and its architecture and device count, each keyed by the "
+                "file it was read from. Call this first: it returns the handle every "
+                "other tool takes."
             ),
             "schema": {
                 "type": "object",
@@ -234,6 +236,13 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                         "description": (
                             "Directory holding ops_perf_results*.csv and "
                             "profile_log_device.csv."
+                        ),
+                    },
+                    "npe_path": {
+                        "type": "string",
+                        "description": (
+                            "A tt-npe trace file (.json, .npeviz or .zst), for "
+                            "noc_congestion."
                         ),
                     },
                 },
@@ -388,6 +397,37 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "required": ["handle"],
             },
             "handler": lambda arguments: tools.core_spread(registry, **arguments),
+        },
+        McpToolName.NOC_CONGESTION: {
+            "title": "NoC congestion",
+            "description": (
+                "How congested the NoC links were in a tt-npe trace, loaded through "
+                "load_report's npe_path: the trace's own run summary, the highest "
+                "demand any single link reached and when, bursts of consecutive "
+                "timesteps whose busiest link was over 100% demand, ranked by peak, "
+                "and the links with the highest mean demand over the run. Demand can "
+                "pass 100% and utilisation cannot, so demand over 100% is congestion. "
+                "These are tt-npe's simulation, in device cycles, not a measurement. "
+                "The first call reads the whole trace, which takes seconds on a large "
+                "one and refuses one past 1 GiB of JSON; later calls answer from that "
+                "read, with a caveat if the trace has changed since."
+            ),
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "handle": {"type": "string"},
+                    "limit": {
+                        "type": "integer",
+                        "description": (
+                            f"Bursts and links to return, each capped at {MAX_LIMIT}."
+                        ),
+                    },
+                },
+                "required": ["handle"],
+            },
+            "handler": lambda arguments: noc_congestion.noc_congestion(
+                registry, **arguments
+            ),
         },
         McpToolName.DIFF_REPORTS: {
             "title": "Compare two reports",
