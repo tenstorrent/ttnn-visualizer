@@ -759,7 +759,9 @@ blank — counts as 0 and is still traversed, so a gap in the performance report
 the path rather than breaking it: `uncosted_operation_count` and `uncosted_operation_ids`
 say how much of the path is a gap rather than a measurement, and the caveat says so
 whenever any is. A report whose tensor edges form a cycle gets `has_cycle: true` and a path
-over the acyclic portion only. The tool needs the two reports linked, and reads the linked
+over the acyclic portion only. A report whose tensor tables hold no edge between two
+operations gets an empty path, `path_length: 0`, and a caveat saying why, rather than a
+path of nothing. The tool needs the two reports linked, and reads the linked
 rank only, since an unlinked graph has no weights and its longest chain is not a critical
 path. `device_time_share_percent` is the path's share of `report_device_time_total`, as in
 `operation_detail`. `projection` is the performance report's, as every tool that reads it

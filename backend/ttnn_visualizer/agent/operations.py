@@ -313,6 +313,20 @@ class RankedL1PressureRow(_L1PressureFigures):
     name: Optional[str]
 
 
+def _tensor_layout_fields(tensor: Tensor) -> Dict[str, object]:
+    """The fields every tool describing a tensor gives, before its own extras."""
+    return {
+        "shape": tensor.shape,
+        "dtype": tensor.dtype,
+        "layout": tensor.layout,
+        "buffer_type": (
+            _buffer_type_name(tensor.buffer_type)
+            if tensor.buffer_type is not None
+            else None
+        ),
+    }
+
+
 def _as_int(value: object) -> int:
     if value is None or isinstance(value, bool):
         return 0
@@ -989,19 +1003,12 @@ def operation_detail(
         return {
             "index": index,
             "tensor_id": tensor_id,
-            "shape": tensor.shape,
-            "dtype": tensor.dtype,
-            "layout": tensor.layout,
+            **_tensor_layout_fields(tensor),
             # Carries `memory_layout`, so an agent can tell a sharded tensor
             # from an interleaved one -- which is exactly what decides whether
             # the per-bank figures below span every bank or a shard grid.
             "memory_config": tensor.memory_config,
             "size": tensor.size,
-            "buffer_type": (
-                _buffer_type_name(tensor.buffer_type)
-                if tensor.buffer_type is not None
-                else None
-            ),
         }
 
     allocations: Dict[str, Dict[str, int]] = defaultdict(
@@ -1301,17 +1308,10 @@ def tensor_flow(
     }
     if tensor is not None:
         result["tensor"] = {
-            "shape": tensor.shape,
-            "dtype": tensor.dtype,
-            "layout": tensor.layout,
+            **_tensor_layout_fields(tensor),
             "memory_config": tensor.memory_config,
             "size": tensor.size,
             "size_unit": tensor_size_unit,
-            "buffer_type": (
-                _buffer_type_name(tensor.buffer_type)
-                if tensor.buffer_type is not None
-                else None
-            ),
         }
     return result
 
@@ -1367,14 +1367,7 @@ def _subgraph_tensor(tensor: Optional[Tensor], tensor_id: int) -> Dict[str, obje
     memory_config = tensor.memory_config
     return {
         "tensor_id": tensor_id,
-        "shape": tensor.shape,
-        "dtype": tensor.dtype,
-        "layout": tensor.layout,
-        "buffer_type": (
-            _buffer_type_name(tensor.buffer_type)
-            if tensor.buffer_type is not None
-            else None
-        ),
+        **_tensor_layout_fields(tensor),
         "memory_layout": (
             memory_config.get("memory_layout")
             if isinstance(memory_config, dict)

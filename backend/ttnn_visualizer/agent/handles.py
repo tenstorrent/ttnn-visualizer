@@ -273,14 +273,14 @@ def _resolved_directory(label: str, path: Optional[str]) -> Optional[str]:
     return str(resolved)
 
 
-# The tables each database tool reads, so answerability is decided per tool
-# rather than from one probe. Kept here, beside the inventory that consumes it,
-# because `agent.operations` imports this module; it has to stay in step with
-# the queries those tools actually run.
 # What `op_graph.read_graph` reads beside `operations`: one place, so the tools
 # reading the graph are listed by the same tables they refuse on.
 GRAPH_TABLES = ("tensors", "input_tensors", "output_tensors")
 
+# The tables each database tool reads, so answerability is decided per tool
+# rather than from one probe. Kept here, beside the inventory that consumes it,
+# because `agent.operations` imports this module; it has to stay in step with
+# the queries those tools actually run.
 TOOL_TABLES: Dict[str, frozenset] = {
     # Not `stack_traces`, even though `called_from` reads it: the raw `no such
     # table` that justified requiring it cannot happen any more, because

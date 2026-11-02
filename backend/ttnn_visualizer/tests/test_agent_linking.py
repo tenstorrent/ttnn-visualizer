@@ -1850,6 +1850,30 @@ def _add_edges(profiler_path: str, edges=_PATH_EDGES) -> None:
         connection.close()
 
 
+def _add_ranked_edges(profiler_path: str, edges_by_rank) -> None:
+    """`_add_edges` per rank, for `_write_ranked_profiler`'s ranked tensor tables."""
+    connection = sqlite3.connect(Path(profiler_path, "db.sqlite"))
+    try:
+        for rank, edges in edges_by_rank.items():
+            for producer, tensor_id, consumers in edges:
+                connection.execute(
+                    "INSERT INTO tensors VALUES (?, 'Shape([1])', 'DataType.BFLOAT16', "
+                    "'Layout.TILE', '', 0, NULL, NULL, ?)",
+                    (tensor_id, rank),
+                )
+                connection.execute(
+                    "INSERT INTO output_tensors VALUES (?, 0, ?, ?)",
+                    (producer, tensor_id, rank),
+                )
+                connection.executemany(
+                    "INSERT INTO input_tensors VALUES (?, 0, ?, ?)",
+                    [(consumer, tensor_id, rank) for consumer in consumers],
+                )
+        connection.commit()
+    finally:
+        connection.close()
+
+
 @pytest.fixture
 def path_report(linked, tmp_path):
     def _path_report(rows=_PATH_ROWS, edges=_PATH_EDGES):
@@ -1985,6 +2009,37 @@ class TestCriticalPath:
 
         with pytest.raises(ValueError, match="holds rank 0 only"):
             linking.critical_path(registry, handle, rank=1)
+
+    def test_a_graph_with_no_edges_is_an_empty_path_that_says_why(self, path_report):
+        registry, handle = path_report(edges=[])
+
+        result = linking.critical_path(registry, handle)
+
+        assert result["path_length"] == 0
+        assert result["operations"] == []
+        assert result["device_time"] == 0.0
+        assert result["has_cycle"] is False
+        assert "no tensor edge between two operations" in result["caveat"]
+
+    @pytest.mark.parametrize("rank", [None, 0])
+    def test_a_multi_host_report_is_searched_at_the_linked_rank(
+        self, linked, tmp_path, rank
+    ):
+        # Rank 1's edge from op 3 back to op 2 would close a cycle if it leaked.
+        path = _write_ranked_profiler(tmp_path / "ranked", _GRAPHS)
+        _add_ranked_edges(
+            path,
+            {0: [(1, 10, [2]), (2, 11, [3])], 1: [(1, 10, [3]), (3, 12, [2])]},
+        )
+        registry, handle, _ = linked(profiler_path=path)
+
+        result = linking.critical_path(registry, handle, rank=rank)
+
+        assert result["rank"] == 0
+        assert [entry["operation_id"] for entry in result["operations"]] == [1, 2, 3]
+        assert result["has_cycle"] is False
+        assert "multi-host report read at rank 0" in result["caveat"]
+        assert "1 of the path's 3 operations" in result["caveat"]
 
     def test_it_refuses_a_rank_other_than_the_linked_one(self, linked, tmp_path):
         """Rank 1's operation N is not the one rank 0's linked rows belong to."""

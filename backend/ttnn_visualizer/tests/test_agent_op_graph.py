@@ -234,6 +234,21 @@ class TestSubgraphBetween:
         assert limited["tensor_count"] == 3
         assert len(uncapped["tensors"]) <= MAX_DETAILED_LIMIT
 
+    def test_an_operation_alone_reads_no_tensors(self, graph_report):
+        """With no edge there is no tensor id, and an empty id list drops the filter."""
+        registry, handle = graph_report
+
+        with patch.object(
+            DatabaseQueries, "query_tensors", autospec=True
+        ) as query_tensors:
+            result = agent_operations.subgraph_between(registry, handle, 8, 8)
+
+        assert result["operations"] == [{"operation_id": 8, "name": "ttnn.isolated"}]
+        assert result["edges"] == []
+        assert result["tensors"] == []
+        assert result["tensor_count"] == 0
+        query_tensors.assert_not_called()
+
     def test_the_graph_is_read_once_per_handle_and_rank(self, graph_report):
         registry, handle = graph_report
 
@@ -330,6 +345,29 @@ class TestSubgraphBetweenRanks:
 
         assert result["edges"] == edges
         assert result["rank"] == rank
+
+    def test_each_rank_keeps_its_own_graph_in_one_registry(self, tmp_path):
+        registry, handle = _load(tmp_path, _RANKED_GRAPH_SQL)
+
+        with patch.object(
+            DatabaseQueries,
+            "query_producers_consumers",
+            autospec=True,
+            side_effect=DatabaseQueries.query_producers_consumers,
+        ) as read:
+            first = agent_operations.subgraph_between(registry, handle, 1, 3, rank=0)
+            second = agent_operations.subgraph_between(registry, handle, 1, 3, rank=1)
+            again = agent_operations.subgraph_between(registry, handle, 1, 3, rank=0)
+
+        assert [(edge["source"], edge["target"]) for edge in first["edges"]] == [
+            (1, 2),
+            (2, 3),
+        ]
+        assert [(edge["source"], edge["target"]) for edge in second["edges"]] == [
+            (1, 3)
+        ]
+        assert again["edges"] == first["edges"]
+        assert read.call_count == 2
 
     def test_a_missing_operation_names_the_rank(self, tmp_path):
         registry, handle = _load(tmp_path, _RANKED_GRAPH_SQL)

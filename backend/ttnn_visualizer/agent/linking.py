@@ -814,6 +814,14 @@ def critical_path(
         if operation_id not in device_time_by_operation_id
     ]
     caveats = []
+    if not kept:
+        # An empty path reads as "nothing took time" unless it says the graph was
+        # the reason: a capture can carry the tensor tables with no rows in them.
+        caveats.append(
+            "The graph holds no tensor edge between two operations other than "
+            "deallocate operations, so there is no path to follow: the report "
+            "recorded which operations ran but not what flowed between them."
+        )
     if uncosted:
         caveats.append(
             f"{len(uncosted)} of the path's {len(path.operation_ids)} operations "
