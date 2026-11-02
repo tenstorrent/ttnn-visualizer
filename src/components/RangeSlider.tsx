@@ -21,6 +21,7 @@ import {
 } from '../store/app';
 import ROUTES from '../definitions/Routes';
 import 'styles/components/RangeSlider.scss';
+import RemountOnResize from './RemountOnResize';
 import {
     useGetClusterDescription,
     useGetDeviceOperationListPerf,
@@ -253,8 +254,9 @@ function Range() {
                         </div>
                     </div>
 
+                    {/* The panel mounts collapsed, so each slider remounts once it can measure its track */}
                     {perfMin && perfMax && selectedPerformanceRange && (
-                        <div className='slider-container'>
+                        <RemountOnResize className='slider-container'>
                             <RangeSlider
                                 value={selectedPerformanceRange}
                                 onChange={(value) => {
@@ -274,7 +276,7 @@ function Range() {
                                 }}
                             />
                             <p>Performance</p>
-                        </div>
+                        </RemountOnResize>
                     )}
 
                     <div className='inputs'>
@@ -333,7 +335,7 @@ function Range() {
                 )}
 
                 {opMin && opMax && selectedOperationRange && (
-                    <div className='slider-container'>
+                    <RemountOnResize className='slider-container'>
                         <RangeSlider
                             value={selectedOperationRange}
                             onChange={(value) => {
@@ -351,7 +353,7 @@ function Range() {
                             }}
                         />
                         <p>Operations</p>
-                    </div>
+                    </RemountOnResize>
                 )}
 
                 {operationRange && (

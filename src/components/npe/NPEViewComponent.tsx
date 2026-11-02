@@ -48,6 +48,7 @@ import { NODE_SIZE, getLines, resetRouteColors } from './drawingApi';
 import NPETimelineComponent from './NPETimelineComponent';
 import ActiveTransferDetails from './ActiveTransferDetails';
 import { useNodeType } from '../../hooks/useAPI';
+import RemountOnResize from '../RemountOnResize';
 import { DeviceArchitecture } from '../../definitions/DeviceArchitecture';
 import { CLUSTER_COORDS } from '../../model/ClusterModel';
 import NPEMetadata from './NPEMetadata';
@@ -709,7 +710,7 @@ const NPEView = ({
                             }}
                         />
 
-                        <div>
+                        <RemountOnResize>
                             Zoom
                             <Slider
                                 handleHtmlProps={{ 'aria-label': 'Zoom' }}
@@ -721,11 +722,13 @@ const NPEView = ({
                                 onChange={(value: number) => setZoom(value)}
                                 labelRenderer={(value) => `${value.toFixed(1)}`}
                             />
-                        </div>
+                        </RemountOnResize>
                     </div>
                 </ButtonGroup>
                 <div style={{ position: 'relative', width: `${switchWidth}px` }}>
+                    {/* Its width comes from state, so remount on that to keep the slider's track measurement current */}
                     <Slider
+                        key={Math.round(switchWidth)}
                         handleHtmlProps={{ 'aria-label': 'Timeline scrubber' }}
                         min={0}
                         max={npeData.timestep_data.length - 1}
