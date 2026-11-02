@@ -166,11 +166,12 @@ export const L1PressureColumns: ColumnDefinition[] = [
 export const LOCKED_PERF_COLUMN_KEYS: ColumnKeys[] = [ColumnKeys.Id, ColumnKeys.OpCode];
 
 // The tensor drawer's disabled reason and its empty state, for a row no memory report operation launched.
+// No full stop: the reason is a tooltip fragment, and the empty state adds its own.
 export const NO_LINKED_OPERATION_TEXT = 'No linked memory report operation for this row';
 
 export const DISPLAY_COLUMNS_LABEL = 'Display columns';
 
-// L1 pressure is computed from the active profiler report's buffers (op-id sync and buffer
+// L1 pressure is computed from the active memory report's buffers (op-id sync and buffer
 // lookups are both keyed to that report), so it cannot be attributed per comparison report.
 // ColumnKeys.L1Fullness is intentionally excluded here — comparison sub-rows render an empty
 // L1 cell rather than the active report's numbers misattributed to another report.

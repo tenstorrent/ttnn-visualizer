@@ -8,6 +8,7 @@ import { getDefaultStore } from 'jotai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FileTransferSource } from '../src/definitions/FileTransferSource';
 import Endpoints from '../src/definitions/Endpoints';
+import { NO_MEMORY_REPORT_PATH_MESSAGE, NO_PERFORMANCE_PATH_MESSAGE } from '../src/definitions/RemoteConnection';
 import { REMOTE_SYNC_REQUEST_TIMEOUT_MS } from '../src/definitions/RemoteSync';
 import { StackSourceOrigin } from '../src/definitions/StackTrace';
 import {
@@ -284,14 +285,14 @@ describe('useRemoteConnection - syncRemoteFolder timeout', () => {
                 },
                 profilerFolder,
             ),
-        ).rejects.toThrow('No memory report path provided');
+        ).rejects.toThrow(NO_MEMORY_REPORT_PATH_MESSAGE);
     });
 
     it('throws when syncing a performance folder without performancePath', async () => {
         const { result } = renderHook(() => useRemoteConnection());
 
         await expect(result.current.syncRemoteFolder(connection, undefined, profilerFolder)).rejects.toThrow(
-            'No performance path provided',
+            NO_PERFORMANCE_PATH_MESSAGE,
         );
     });
 
