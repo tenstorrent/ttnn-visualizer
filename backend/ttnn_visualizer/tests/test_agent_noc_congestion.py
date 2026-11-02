@@ -22,10 +22,17 @@ import pytest
 import zstd
 from ttnn_visualizer import npe_index
 from ttnn_visualizer.agent import noc_congestion, server
-from ttnn_visualizer.agent.bounds import MAX_LIMIT
+from ttnn_visualizer.agent.app_links import APP_URL_ENV_VAR
+from ttnn_visualizer.agent.bounds import DEFAULT_LIMIT, MAX_LIMIT
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
 from ttnn_visualizer.event_logging import McpToolOutcome
+from ttnn_visualizer.tests.mcp_calls import tool_call
+from ttnn_visualizer.tests.test_agent_core_spread import THREE_CORES
 from ttnn_visualizer.tests.test_agent_perf_detail import ANSWER_BUDGET_BYTES
+from ttnn_visualizer.tests.test_device_log_columns import (
+    MODERN_HEADER,
+    write_device_log,
+)
 from ttnn_visualizer.tests.test_npe_index import _execute, _listing
 
 A = (0, 0, 0, "NOC0_EAST")
@@ -71,6 +78,15 @@ CHANGED_CAVEAT = (
 
 # A zstd frame header alone: single segment, a four-byte content size of 3 GiB.
 _THREE_GIB_FRAME_HEADER = b"\x28\xb5\x2f\xfd\xa0" + (3 << 30).to_bytes(4, "little")
+
+
+_SKIPPABLE_FRAME = (0x184D2A50).to_bytes(4, "little") + b"\x04\x00\x00\x00skip"
+
+
+def _unsized_frame(content: bytes) -> bytes:
+    """One raw block in a frame that declares no content size, as a stream writes."""
+    block = (len(content) << 3 | 0x01).to_bytes(3, "little")
+    return b"\x28\xb5\x2f\xfd\x00\x58" + block + content
 
 
 def _step(t: int, *rows: object) -> dict:
@@ -387,6 +403,13 @@ class TestAnswer:
         assert answer["burst_count"] == answer["link_count"] == 3
         assert [burst["peak"]["timestep"] for burst in answer["bursts"]] == [2]
         assert [_link_of(row) for row in answer["busiest_links"]] == [A]
+
+    def test_without_a_limit_bursts_and_links_stop_at_the_default(self, tmp_path):
+        answer = _answered(tmp_path, _crowded_trace())
+
+        assert answer["burst_count"] > DEFAULT_LIMIT
+        assert answer["link_count"] > DEFAULT_LIMIT
+        assert len(answer["bursts"]) == len(answer["busiest_links"]) == DEFAULT_LIMIT
 
     def test_a_trace_with_no_readable_rows_has_no_worst_link(self, tmp_path):
         answer = _answered(tmp_path, _trace(_step(0), _bare(1)))
@@ -716,6 +739,17 @@ class TestIndexParity:
             [ROWS_CAVEAT.format(6), TIMESTEPS_CAVEAT.format(1)]
         )
 
+    def test_a_stale_index_gives_way_to_the_trace(self, tmp_path, monkeypatch):
+        path = _write(tmp_path, _parity_trace())
+        npe_index.ensure_index(str(path))
+        _rewrite(path, _hand_checked())
+        reads = _counted_reads(monkeypatch)
+
+        answer = _answer(path)
+
+        assert reads == [path]
+        assert answer == _answered(tmp_path / "fresh", _hand_checked())
+
     def test_an_index_reads_a_boolean_cycle_as_the_trace_does(self, tmp_path):
         path = _write(tmp_path, _trace({**_step(0, [*A, 150.0]), "start_cycle": True}))
         from_trace = _answer(path)
@@ -804,7 +838,7 @@ class TestRefusals:
         "name, content, why",
         [
             ("trace.json", b"{not json", "is not a readable tt-npe trace"),
-            ("trace.json", b"[]", "holds no timestep_data list"),
+            ("trace.json", b"[]", "does not start as a tt-npe trace does"),
             ("trace.json", b"{}", "holds no timestep_data list"),
             ("trace.json", b'{"timestep_data": {}}', "holds no timestep_data list"),
             ("trace.json", b'{"timestep_data": []}', "records no timesteps"),
@@ -816,7 +850,7 @@ class TestRefusals:
             (
                 "trace.npeviz.zst",
                 b'{"timestep_data": []}',
-                "is not a readable tt-npe trace",
+                "does not start as a tt-npe trace does",
             ),
             (
                 "trace.npeviz.zst",
@@ -898,6 +932,75 @@ class TestRefusals:
             _call(registry, handle)
         assert reads == []
 
+    def test_frames_that_pass_the_limit_together_are_refused_unread(
+        self, tmp_path, monkeypatch
+    ):
+        data = orjson.dumps(_hand_checked())
+        path = tmp_path / "trace.npeviz.zst"
+        path.write_bytes(zstd.compress(data) + zstd.compress(b" " * len(data)))
+        reads = _counted_reads(monkeypatch)
+        monkeypatch.setattr(noc_congestion, "MAX_TRACE_JSON_BYTES", 2 * len(data) - 1)
+
+        with pytest.raises(ValueError, match=f"holds {2 * len(data):,} bytes of JSON"):
+            _answer(path)
+        assert reads == []
+
+        monkeypatch.setattr(noc_congestion, "MAX_TRACE_JSON_BYTES", 2 * len(data))
+        assert _answer(path)["timesteps"] == 8
+
+    def test_a_skippable_frame_does_not_hide_the_frames_after_it(
+        self, tmp_path, monkeypatch
+    ):
+        path = tmp_path / "trace.npeviz.zst"
+        path.write_bytes(
+            zstd.compress(b"{}") + _SKIPPABLE_FRAME + _THREE_GIB_FRAME_HEADER
+        )
+        reads = _counted_reads(monkeypatch)
+
+        with pytest.raises(ValueError, match="holds 3,221,225,474 bytes of JSON"):
+            _answer(path)
+        assert reads == []
+
+    @pytest.mark.parametrize(
+        "content, why",
+        [
+            (
+                lambda data: zstd.compress(data) + _unsized_frame(b" "),
+                "is not zstd frames that each declare their size",
+            ),
+            (
+                lambda data: _SKIPPABLE_FRAME + zstd.compress(data),
+                "does not start as a tt-npe trace does",
+            ),
+            (
+                lambda data: zstd.compress(data) + b"\x00\x01",
+                "is not zstd frames that each declare their size",
+            ),
+        ],
+        ids=["unsized-frame", "leading-skippable-frame", "trailing-bytes"],
+    )
+    def test_a_zst_whose_size_cannot_be_bounded_is_refused_unread(
+        self, tmp_path, monkeypatch, content, why
+    ):
+        path = tmp_path / "trace.npeviz.zst"
+        path.write_bytes(content(orjson.dumps(_hand_checked())))
+        reads = _counted_reads(monkeypatch)
+
+        with pytest.raises(ValueError, match=why):
+            _answer(path)
+        assert reads == []
+
+    def test_a_file_that_does_not_start_as_a_trace_is_refused_unread(
+        self, tmp_path, monkeypatch
+    ):
+        path = tmp_path / "trace.json"
+        path.write_bytes(b"  " + orjson.dumps([_hand_checked()]))
+        reads = _counted_reads(monkeypatch)
+
+        with pytest.raises(ValueError, match="does not start as a tt-npe trace does"):
+            _answer(path)
+        assert reads == []
+
     def test_json_past_the_limit_is_refused_unread(self, tmp_path, monkeypatch):
         path = _write(tmp_path, _hand_checked())
         size = path.stat().st_size
@@ -929,6 +1032,38 @@ class TestPinning:
 
         assert len(reads) == 1
         assert answers[0] == answers[1] == {**answers[2], "handle": first}
+
+    def test_a_rewrite_before_the_first_call_is_what_the_handle_reads(self, tmp_path):
+        path = _write(tmp_path, _hand_checked())
+        registry = ReportRegistry()
+        handle = _load(registry, path)
+        _rewrite(path, _trace(_step(0, [*A, 10.0])))
+
+        answer = _call(registry, handle)
+
+        assert answer["timesteps"] == 1
+        assert "caveat" not in answer
+
+    def test_a_first_read_that_failed_refuses_the_trace_rewritten(
+        self, tmp_path, monkeypatch
+    ):
+        path = _write(tmp_path, _hand_checked())
+        registry = ReportRegistry()
+        handle = _load(registry, path)
+        real_load = npe_index.load_npe_object
+
+        def exhausted(npe_path):
+            raise MemoryError
+
+        monkeypatch.setattr(npe_index, "load_npe_object", exhausted)
+        with pytest.raises(MemoryError):
+            _call(registry, handle)
+        monkeypatch.setattr(npe_index, "load_npe_object", real_load)
+        _rewrite(path, _trace(_step(0, [*A, 10.0])))
+
+        with pytest.raises(ValueError, match="has changed since 'report-1' first read"):
+            _call(registry, handle)
+        assert _call(registry, _load(registry, path))["timesteps"] == 1
 
     def test_a_rewritten_trace_leaves_the_old_handle_on_its_first_read(
         self, tmp_path, monkeypatch
@@ -1025,6 +1160,27 @@ class TestLoadReport:
         assert loaded["answerable"] == []
         assert "noc_congestion" in loaded["unanswerable"]
 
+    def test_a_trace_beside_a_performance_capture_answers_with_it(self, tmp_path):
+        (tmp_path / "perf").mkdir()
+        write_device_log(tmp_path / "perf", MODERN_HEADER, THREE_CORES)
+        path = _write(tmp_path, _hand_checked())
+        registry = ReportRegistry()
+
+        loaded = load_report(
+            registry, performance_path=str(tmp_path / "perf"), npe_path=str(path)
+        )
+        handle = str(loaded["handle"])
+
+        assert loaded["answerable"] == [
+            "zone_timings",
+            "zone_intervals",
+            "noc_congestion",
+        ]
+        assert tool_call(registry, "zone_timings", {"handle": handle})[1] is (
+            McpToolOutcome.OK
+        )
+        assert _call(registry, handle)["timesteps"] == 8
+
     def test_a_directory_is_refused_as_an_npe_path(self, tmp_path):
         with pytest.raises(ValueError, match="npe_path is not a file"):
             load_report(ReportRegistry(), npe_path=str(tmp_path))
@@ -1085,21 +1241,6 @@ def _crowded_trace() -> dict:
     return _trace(*steps, common_info=info)
 
 
-def _tool_call(registry: ReportRegistry, name: str, arguments: dict):
-    with patch.object(server, "record_event") as record:
-        response = server.handle_message(
-            {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "tools/call",
-                "params": {"name": name, "arguments": arguments},
-            },
-            server._tool_table(registry),
-        )
-    assert response is not None
-    return response["result"], record.call_args.kwargs["outcome"]
-
-
 class TestThroughTheServer:
     @pytest.fixture(autouse=True)
     def _never_touch_the_real_event_log(self, event_log_directory):
@@ -1108,7 +1249,7 @@ class TestThroughTheServer:
     def test_load_report_takes_a_trace_alone(self, tmp_path):
         path = _write(tmp_path, _hand_checked())
 
-        result, outcome = _tool_call(
+        result, outcome = tool_call(
             ReportRegistry(), "load_report", {"npe_path": str(path)}
         )
 
@@ -1117,11 +1258,23 @@ class TestThroughTheServer:
             "noc_congestion"
         ]
 
+    @pytest.mark.parametrize("configured", [None, "http://localhost:5173/"])
+    def test_a_trace_alone_has_no_app_link(self, tmp_path, monkeypatch, configured):
+        if configured is None:
+            monkeypatch.delenv(APP_URL_ENV_VAR, raising=False)
+        else:
+            monkeypatch.setenv(APP_URL_ENV_VAR, configured)
+        path = _write(tmp_path, _hand_checked())
+
+        result, _ = tool_call(ReportRegistry(), "load_report", {"npe_path": str(path)})
+
+        assert "app_link" not in json.loads(result["content"][0]["text"])
+
     def test_an_answer_is_recorded_as_ok(self, tmp_path):
         registry = ReportRegistry()
         handle = _load(registry, _write(tmp_path, _hand_checked()))
 
-        result, outcome = _tool_call(registry, "noc_congestion", {"handle": handle})
+        result, outcome = tool_call(registry, "noc_congestion", {"handle": handle})
 
         assert not result.get("isError")
         assert json.loads(result["content"][0]["text"])["burst_count"] == 3
@@ -1131,7 +1284,7 @@ class TestThroughTheServer:
         registry = ReportRegistry()
         handle = load_report(registry, performance_path=str(tmp_path))["handle"]
 
-        result, outcome = _tool_call(registry, "noc_congestion", {"handle": handle})
+        result, outcome = tool_call(registry, "noc_congestion", {"handle": handle})
 
         assert result["isError"] is True
         assert "without an npe_path" in result["content"][0]["text"]
@@ -1155,7 +1308,7 @@ class TestThroughTheServer:
         registry = ReportRegistry()
         handle = _load(registry, path)
 
-        result, outcome = _tool_call(registry, "noc_congestion", {"handle": handle})
+        result, outcome = tool_call(registry, "noc_congestion", {"handle": handle})
 
         assert result["isError"] is True
         assert result["content"][0]["text"].startswith(name)
@@ -1167,7 +1320,7 @@ class TestThroughTheServer:
         registry = ReportRegistry()
         handle = _load(registry, _write(tmp_path, _crowded_trace()))
 
-        result, _ = _tool_call(
+        result, _ = tool_call(
             registry, "noc_congestion", {"handle": handle, "limit": MAX_LIMIT}
         )
 

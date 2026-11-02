@@ -24,6 +24,7 @@ from ttnn_visualizer.npe_index import (
     INDEX_READ_ERRORS,
     INDEX_VERSION,
     _as_int,
+    _transfer_count,
     ensure_index,
     fresh_index,
     get_index_path,
@@ -33,7 +34,6 @@ from ttnn_visualizer.npe_index import (
     read_window,
     trace_link_demand,
     trace_size,
-    transfer_count,
     truncate,
 )
 
@@ -630,6 +630,96 @@ def test_trace_size_is_none_where_a_zst_declares_no_size(tmp_path, head):
     assert trace_size(path) is None
 
 
+_SKIPPABLE = [
+    (magic).to_bytes(4, "little") + b"\x03\x00\x00\x00abc"
+    for magic in (0x184D2A50, 0x184D2A5F)
+]
+
+
+def _block(content: bytes, last: bool, rle: bool = False) -> bytes:
+    header = len(content) << 3 | (0x02 if rle else 0) | (0x01 if last else 0)
+    return header.to_bytes(3, "little") + (content[:1] if rle else content)
+
+
+def _hand_frame(blocks: list, checksum: bool) -> bytes:
+    """A single-segment frame declaring its 4-byte size, as the blocks give it."""
+    size = sum(len(content) for content, _ in blocks)
+    descriptor = 2 << 6 | 0x20 | (0x04 if checksum else 0)
+    body = b"".join(
+        _block(content, index == len(blocks) - 1, rle)
+        for index, (content, rle) in enumerate(blocks)
+    )
+    return (
+        b"\x28\xb5\x2f\xfd"
+        + bytes([descriptor])
+        + size.to_bytes(4, "little")
+        + body
+        + (b"\xde\xad\xbe\xef" if checksum else b"")
+    )
+
+
+def test_trace_size_sums_every_frame_as_the_library_decompresses_them(tmp_path):
+    parts = [_content(200), _content(70_000), b" " * 3]
+    path = tmp_path / "trace.npeviz.zst"
+    path.write_bytes(b"".join(zstd.compress(part) for part in parts))
+
+    assert trace_size(path) == sum(map(len, parts))
+    assert trace_size(path) == len(zstd.uncompress(path.read_bytes()))
+
+
+def test_trace_size_skips_skippable_frames_as_the_library_does(tmp_path):
+    data = _content(70_000)
+    path = tmp_path / "trace.npeviz.zst"
+    path.write_bytes(_SKIPPABLE[0] + zstd.compress(data) + _SKIPPABLE[1])
+
+    assert trace_size(path) == len(data) == len(zstd.uncompress(path.read_bytes()))
+
+
+@pytest.mark.parametrize("checksum", [False, True])
+def test_trace_size_walks_raw_and_rle_blocks_to_the_next_frame(tmp_path, checksum):
+    blocks = [(b"a" * 100, False), (b"b" * 5000, True), (b"c" * 7, False)]
+    path = tmp_path / "trace.zst"
+    path.write_bytes(_hand_frame(blocks, checksum) + zstd.compress(_content(300)))
+
+    assert trace_size(path) == 5107 + 300
+
+
+@pytest.mark.parametrize(
+    "tail",
+    [
+        _frame_header(0, False, 0) + _block(b"x" * 10, last=True),
+        b"\x00\x01",
+        b"junk-after-the-frames",
+        _SKIPPABLE[0][:6],
+        _frame_header(2, True, 0) + (0x07).to_bytes(3, "little"),
+    ],
+    ids=[
+        "unsized-frame",
+        "trailing-bytes",
+        "trailing-text",
+        "cut-skippable",
+        "reserved",
+    ],
+)
+def test_trace_size_is_none_where_any_frame_cannot_be_bounded(tmp_path, tail):
+    path = tmp_path / "trace.zst"
+    path.write_bytes(zstd.compress(_content(200)) + tail)
+
+    assert trace_size(path) is None
+
+
+def test_trace_size_gives_up_past_its_budget_of_frames_and_blocks(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "trace.zst"
+    path.write_bytes(_hand_frame([(b"a", False)] * 4, checksum=False))
+    monkeypatch.setattr(npe_index, "_ZSTD_MAX_PARTS", 4)
+    assert trace_size(path) is None
+
+    monkeypatch.setattr(npe_index, "_ZSTD_MAX_PARTS", 5)
+    assert trace_size(path) == 4
+
+
 @pytest.mark.parametrize("name", ["absent.json", "absent.zst"])
 def test_trace_size_of_a_missing_file_raises(tmp_path, name):
     # `noc_congestion` refuses on an OSError; a None would let it read the file.
@@ -651,12 +741,12 @@ def test_transfer_count_counts_each_id_once():
         [1],
     ]
 
-    assert transfer_count(transfers) == 2
+    assert _transfer_count(transfers) == 2
 
 
 @pytest.mark.parametrize("transfers", [None, {}, {"id": 1}, "abc", 7])
 def test_transfer_count_of_anything_but_a_list_is_zero(transfers):
-    assert transfer_count(transfers) == 0
+    assert _transfer_count(transfers) == 0
 
 
 def test_transfer_count_is_the_row_count_of_the_index_it_describes(tmp_path):
@@ -670,7 +760,7 @@ def test_transfer_count_is_the_row_count_of_the_index_it_describes(tmp_path):
     ]
     db_path = ensure_index(_write_npe(tmp_path, obj))
 
-    assert transfer_count(obj["noc_transfers"]) == _row_count(db_path, "transfer") == 4
+    assert _transfer_count(obj["noc_transfers"]) == _row_count(db_path, "transfer") == 4
 
 
 def test_transfer_count_reads_a_numeric_string_id_as_the_index_stores_it(tmp_path):
@@ -678,7 +768,21 @@ def test_transfer_count_reads_a_numeric_string_id_as_the_index_stores_it(tmp_pat
     obj["noc_transfers"] = [{"id": 3}, {"id": "3"}]
     db_path = ensure_index(_write_npe(tmp_path, obj))
 
-    assert transfer_count(obj["noc_transfers"]) == _row_count(db_path, "transfer")
+    assert _transfer_count(obj["noc_transfers"]) == _row_count(db_path, "transfer")
+
+
+@pytest.mark.parametrize(
+    "transfers",
+    [[7], [{"id": [1]}], [{"id": "abc"}], [{"id": 1.5}]],
+    ids=["not-an-object", "list-id", "text-id", "fractional-id"],
+)
+def test_a_transfer_the_index_cannot_store_fails_its_build(tmp_path, transfers):
+    # Where `_transfer_count` and `_write_index` part ways, no index exists to disagree.
+    obj = _make_npe_object(n_transfers=0)
+    obj["noc_transfers"] = transfers
+
+    with pytest.raises((AttributeError, sqlite3.Error)):
+        ensure_index(_write_npe(tmp_path, obj))
 
 
 @pytest.mark.parametrize(

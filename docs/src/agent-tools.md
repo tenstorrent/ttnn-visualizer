@@ -724,30 +724,33 @@ carried and stops at 100%, so demand over 100% is congestion. `run` is the trace
 summary, the figures the visualizer's NPE view shows as its run summary: each is the mean
 over timesteps of that timestep's average across links, per NoC in `by_noc` too. Its
 `highest_timestep_average_demand_percent` is the trace's `max_link_demand`, renamed
-because it is the largest per-timestep average, not one link's demand: on the local traces
-it is 5 to 28% where single links reach 112 to 439%. `worst_link` is the highest demand
-any single link reached, with its timestep and cycles: the earliest, where several tie, and
-`worst_link_ties` counts the link-timesteps at that demand, 134 on one local trace. A burst
-is a run of consecutive
-timesteps whose busiest link was over 100% demand; `bursts` ranks them by peak, each with
-its cycle span, length and the link that peaked, and `burst_count` and `congested_percent`
-say how many there were and what share of timesteps they cover. `busiest_links` ranks
-links by their mean demand over every timestep of the trace, idle ones included, with each
-link's peak and the share of timesteps it spent over 100%. `device`, `y` and `x` are the
-trace's own chip id and grid coordinates. A link demand row whose coordinates or demand
-cannot be read is left out and counted in a caveat. The trace is read through the
-visualizer's index of it when that index is built and current, and from the trace itself
-otherwise; the tool never builds the index, so it writes nothing beside the trace. The
-visualizer builds its index beside the copy it opens, which for an upload is its own copy
-under its report data directory, so an `npe_path` naming that copy reuses the index: on a
-106 MB trace, 0.22 s and 143 MB at peak against 0.56 s and 651 MB. Otherwise the first
-call on a handle parses the whole trace: on the two largest traces measured, 196,146 and
-54,686 timesteps, that took 11 and 15 seconds and 5 to 6 GB at its peak, as building the
-visualizer's index does, and the server process can keep much of that memory afterwards.
-A trace whose JSON passes 1 GiB is refused rather than parsed. Later calls answer from
-the first read, and so does every handle on the same unchanged file. A handle stays with
-the trace it first read: if the file changes afterwards, its answers say so in their
-caveat, and a fresh `load_report` reads the new one.
+because it is the largest per-timestep average, not one link's demand, so it sits well
+below what the busiest single link reaches. `worst_link` is the highest demand any single
+link reached, with its timestep and cycles: the earliest, where several tie, and
+`worst_link_ties` counts the link-timesteps at that demand, that one included. A burst is a
+run of consecutive timesteps whose busiest link was over 100% demand; `bursts` ranks them
+by peak, each with its cycle span, length and the link that peaked, `burst_count` counts
+them, and `congested_timesteps` and `congested_percent` say how many timesteps they cover
+and what share of the trace that is. `busiest_links` ranks links by their mean demand over
+every timestep of the trace, idle ones included, with each link's peak and the share of
+timesteps it spent over 100%, and `link_count` counts every link with a readable demand
+row. `device`, `y` and `x` are the trace's own chip id and grid coordinates. A link demand
+row whose coordinates or demand cannot be read is left out and counted in a caveat, and a
+timestep that is not an object or holds no list of link demand counts as idle, also in a
+caveat. The trace is read through the visualizer's index of it when that index is built
+and current, and from the trace itself otherwise; the tool never builds the index, so it
+writes nothing beside the trace. The visualizer builds its index beside the copy it opens,
+which for an upload is its own copy under its report data directory, so an `npe_path`
+naming that copy reuses the index, in a fraction of the time and memory a parse takes.
+Otherwise the first call on a handle parses the whole trace: a trace of tens of thousands
+of timesteps and millions of link rows takes seconds to tens of seconds and several GB at
+its peak, as building the visualizer's index does, and the server process can keep much of
+that memory afterwards. A trace whose JSON passes 1 GiB, summed over every zstd frame, is
+refused rather than parsed, and so is a `.zst` with a frame that does not declare its
+size. Later calls answer from the first read, and so does every handle on the same
+unchanged file. A handle stays with the trace it first read: if the file changes or goes
+away afterwards, its answers say so in their caveat, and a fresh `load_report` reads the
+new one.
 
 **A performance row and a profiler operation are linked by order, not by a shared id.**
 Neither report records the other's id, so when a handle is loaded with both, the tools

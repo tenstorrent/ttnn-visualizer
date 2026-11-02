@@ -55,6 +55,7 @@ from ttnn_visualizer.exceptions import (
     PerformanceReportNotLoadedException,
     PerfReportExit,
 )
+from ttnn_visualizer.file_source import FileSource
 from ttnn_visualizer.models import Instance
 from ttnn_visualizer.utils import newest_ops_perf_file
 
@@ -623,15 +624,6 @@ class _ZonePairer:
                 pairing["dropped_starts"],
             )
         return pairing
-
-
-@dataclass(frozen=True)
-class _PerformanceReportSource:
-    path: str
-    modified_ns: int
-    changed_ns: int
-    inode: int
-    size: int
 
 
 @dataclass(frozen=True)
@@ -1902,7 +1894,7 @@ class OpsPerformanceReportQueries:
         return processed_row
 
     @staticmethod
-    def report_source(instance) -> "_PerformanceReportSource":
+    def report_source(instance) -> FileSource:
         """The CSV a report would be generated from now, and its identity on disk.
 
         The newest `ops_perf_results` file, so a capture written later is a
@@ -1911,14 +1903,7 @@ class OpsPerformanceReportQueries:
         source_path = Path(
             OpsPerformanceQueries.get_local_ops_perf_file_path(instance)
         ).resolve()
-        source_stat = source_path.stat()
-        return _PerformanceReportSource(
-            path=str(source_path),
-            modified_ns=source_stat.st_mtime_ns,
-            changed_ns=source_stat.st_ctime_ns,
-            inode=source_stat.st_ino,
-            size=source_stat.st_size,
-        )
+        return FileSource.of(str(source_path), source_path.stat())
 
     @classmethod
     def generate_report(cls, instance, **kwargs) -> Dict:
@@ -2478,7 +2463,7 @@ class DegradedPerformanceReport(Exception):
 
 
 def _generate_performance_report(
-    source: _PerformanceReportSource, options: _PerformanceReportOptions
+    source: FileSource, options: _PerformanceReportOptions
 ) -> Dict:
     csv_path = Path(source.path)
     raw_csv = csv_path.read_text()
@@ -2492,7 +2477,7 @@ def _generate_performance_report(
 
 @lru_cache(maxsize=MAX_CACHED_PERFORMANCE_REPORTS)
 def _cached_generate_performance_report_json(
-    source: _PerformanceReportSource, options: _PerformanceReportOptions
+    source: FileSource, options: _PerformanceReportOptions
 ) -> bytes:
     # Bytes rather than the dicts: under half the memory, a hit skips
     # serialisation, and callers sharing an entry cannot modify it.

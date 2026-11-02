@@ -24,6 +24,7 @@ from ttnn_visualizer.agent.cells import finite_number, whole_number
 from ttnn_visualizer.agent.handles import CacheVariant, ReportRegistry
 from ttnn_visualizer.agent.report_diff import as_answered
 from ttnn_visualizer.agent.tools import share_percent
+from ttnn_visualizer.file_source import FileSource
 
 # Demand past a link's whole bandwidth: asked of it, but more than it could carry.
 CONGESTED_PERCENT = 100.0
@@ -49,9 +50,9 @@ NOC_CONGESTION_NOTE = (
     "link's demand. worst_link is the highest demand any single link reached, the "
     "earliest where several did; worst_link_ties counts the link-timesteps at that "
     "demand, that one included. A burst is a run of consecutive timesteps whose "
-    "busiest link was "
-    "over 100%. A link's mean demand is over every timestep of the trace, idle ones "
-    "included. device, y and x are the trace's own chip id and grid coordinates."
+    "busiest link was over 100%. A link's mean demand is over every timestep of the "
+    "trace, idle ones included. device, y and x are the trace's own chip id and grid "
+    "coordinates."
 )
 
 # device, y, x, link name, as a trace's link_demand rows give them.
@@ -167,7 +168,7 @@ def _summed(rows: npe_index.LinkDemand) -> _NocRead:  # noqa: C901
     unreadable = unreadable_timesteps = timesteps = 0
     first_cycle: Optional[int] = None
     last_cycle: Optional[int] = None
-    truncate = not rows.truncated
+    truncate = None if rows.truncated else npe_index.truncate
 
     for timestep, (start_cell, end_cell, link_demand) in enumerate(rows.timesteps):
         timesteps += 1
@@ -196,8 +197,8 @@ def _summed(rows: npe_index.LinkDemand) -> _NocRead:  # noqa: C901
                 if not -_LARGEST_DEMAND < demand < _LARGEST_DEMAND:
                     unreadable += 1
                     continue
-                if truncate:
-                    demand = npe_index.truncate(demand)
+                if truncate is not None:
+                    demand = truncate(demand)
             elif type(demand) is not int:
                 unreadable += 1
                 continue
@@ -264,7 +265,17 @@ def _summed(rows: npe_index.LinkDemand) -> _NocRead:  # noqa: C901
 def _from_trace(npe_path: Path) -> _NocRead:
     try:
         size = npe_index.trace_size(npe_path)
-        if size is not None and size > MAX_TRACE_JSON_BYTES:
+        if not npe_index.looks_like_trace(npe_path):
+            raise ValueError(
+                f"{npe_path.name} does not start as a tt-npe trace does: a zstd frame "
+                "for .zst, a JSON object otherwise"
+            )
+        if size is None:
+            raise ValueError(
+                f"{npe_path.name} is not zstd frames that each declare their size, so "
+                "what parsing it costs cannot be bounded before reading it"
+            )
+        if size > MAX_TRACE_JSON_BYTES:
             raise ValueError(
                 f"{npe_path.name} holds {size:,} bytes of JSON, past the "
                 f"{MAX_TRACE_JSON_BYTES:,} this tool parses, about ten times that in "
@@ -296,26 +307,12 @@ def _read(npe_path: Path) -> _NocRead:
     return _from_trace(npe_path)
 
 
-class _TraceSource(NamedTuple):
-    """A trace's identity on disk, as the performance tools pin their CSV."""
-
-    path: str
-    modified_ns: int
-    changed_ns: int
-    inode: int
-    size: int
-
-
-def _trace_source(path: Path) -> Optional[_TraceSource]:
+def _trace_source(path: Path) -> Optional[FileSource]:
     try:
         found = path.stat()
     except OSError:
         return None
-    if not stat.S_ISREG(found.st_mode):
-        return None
-    return _TraceSource(
-        str(path), found.st_mtime_ns, found.st_ctime_ns, found.st_ino, found.st_size
-    )
+    return FileSource.of(str(path), found) if stat.S_ISREG(found.st_mode) else None
 
 
 def _pinned_read(
@@ -324,7 +321,7 @@ def _pinned_read(
     """The handle's read of the trace it first read, and whether that has changed."""
     now = _trace_source(path)
 
-    def pin(_: object) -> _TraceSource:
+    def pin(_: object) -> FileSource:
         if now is None:
             raise ValueError(
                 f"{path.name} is no longer a readable file; call load_report with the "

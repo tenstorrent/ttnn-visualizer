@@ -21,7 +21,7 @@ import sqlite3
 import tempfile
 import threading
 from pathlib import Path
-from typing import Iterable, Iterator, NamedTuple, Optional, Tuple
+from typing import BinaryIO, Iterable, Iterator, NamedTuple, Optional, Tuple
 
 import orjson
 import zstd
@@ -99,9 +99,7 @@ def _truncate_link_demand(link_demand: list) -> list:
     # trailing demand (index 4) is a float; coords / noc-id are left untouched.
     for entry in link_demand:
         if len(entry) > _LINK_DEMAND_INDEX and type(entry[_LINK_DEMAND_INDEX]) is float:
-            entry[_LINK_DEMAND_INDEX] = (
-                int(entry[_LINK_DEMAND_INDEX] * _TRUNCATE_SCALE) / _TRUNCATE_SCALE
-            )
+            entry[_LINK_DEMAND_INDEX] = truncate(entry[_LINK_DEMAND_INDEX])
         # Drop an absent fabric scope rather than ship a trailing null: the
         # frontend reads slot 5 as "unset" only when it's `undefined` (a 5-tuple),
         # so a serialized `null` would wrongly count as a present scope and
@@ -119,7 +117,7 @@ def _truncate_noc(noc: dict) -> dict:
     for noc_data in noc.values():
         for key, value in noc_data.items():
             if type(value) is float:
-                noc_data[key] = int(value * _TRUNCATE_SCALE) / _TRUNCATE_SCALE
+                noc_data[key] = truncate(value)
     return noc
 
 
@@ -156,9 +154,14 @@ def load_npe_object(npe_path: Path) -> dict:
 
 
 _ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
+# Any magic from 0x184D2A50 to 0x184D2A5F; the frame decompresses to nothing.
+_ZSTD_SKIPPABLE_MAGIC = 0x184D2A50
 # Frame_Header_Descriptor's field sizes, by flag (RFC 8878, 3.1.1.1.1).
 _ZSTD_DICTIONARY_ID_SIZES = (0, 1, 2, 4)
 _ZSTD_CONTENT_SIZE_SIZES = (0, 2, 4, 8)
+_ZSTD_RLE_BLOCK, _ZSTD_RESERVED_BLOCK = 1, 3
+# Frames and blocks walked before giving up: 1 GiB of JSON is 8,192 full blocks.
+_ZSTD_MAX_PARTS = 1 << 20
 
 
 def _head(npe_path: Path, size: int) -> bytes:
@@ -178,23 +181,77 @@ def looks_like_trace(npe_path: Path) -> bool:
     return head.lstrip()[:1] == b"{"
 
 
+def _declared_frame_size(source: BinaryIO) -> Tuple[Optional[int], bool]:
+    """After a frame's magic, its declared content size, None where it declares
+    none, and whether a checksum follows its last block."""
+    head = source.read(1)
+    if not head:
+        return None, False
+    descriptor = head[0]
+    single_segment = bool(descriptor & 0x20)
+    skipped = (0 if single_segment else 1) + _ZSTD_DICTIONARY_ID_SIZES[
+        descriptor & 0x03
+    ]
+    width = _ZSTD_CONTENT_SIZE_SIZES[descriptor >> 6] or (1 if single_segment else 0)
+    field = source.read(skipped + width)[skipped:]
+    if not width or len(field) < width:
+        return None, False
+    size = int.from_bytes(field, "little")
+    return (size + 256 if width == 2 else size), bool(descriptor & 0x04)
+
+
+def _skip_blocks(source: BinaryIO, budget: int) -> Optional[int]:
+    """Seek past a frame's blocks: how many there were, None where one is reserved
+    or there are more than `budget`. A file cut short ends the walk."""
+    blocks = 0
+    while blocks < budget:
+        header = source.read(3)
+        if len(header) < 3:
+            return blocks
+        blocks += 1
+        value = int.from_bytes(header, "little")
+        kind = (value >> 1) & 0x03
+        if kind == _ZSTD_RESERVED_BLOCK:
+            return None
+        source.seek(1 if kind == _ZSTD_RLE_BLOCK else value >> 3, os.SEEK_CUR)
+        if value & 0x01:
+            return blocks
+    return None
+
+
 def trace_size(npe_path: Path) -> Optional[int]:
     """The JSON bytes `load_npe_object` will parse, before reading them: the file's
-    size, or a `.zst` frame's declared content size, None where it declares none."""
+    size, or the sum of a `.zst`'s declared frame sizes, None where any frame
+    declares none or the file is not zstd frames."""
     if npe_path.suffix != ".zst":
-        return npe_path.stat().st_size
-    head = _head(npe_path, 18)
-    if len(head) < 6 or not head.startswith(_ZSTD_MAGIC):
-        return None
-    descriptor = head[4]
-    single_segment = bool(descriptor & 0x20)
-    position = 5 + (0 if single_segment else 1)
-    position += _ZSTD_DICTIONARY_ID_SIZES[descriptor & 0x03]
-    width = _ZSTD_CONTENT_SIZE_SIZES[descriptor >> 6] or (1 if single_segment else 0)
-    if not width or len(head) < position + width:
-        return None
-    size = int.from_bytes(head[position : position + width], "little")
-    return size + 256 if width == 2 else size
+        with npe_path.open("rb") as source:
+            return os.fstat(source.fileno()).st_size
+    total: Optional[int] = None
+    parts = 0
+    with npe_path.open("rb") as source:
+        while magic := source.read(4):
+            parts += 1
+            if len(magic) < 4 or parts > _ZSTD_MAX_PARTS:
+                return None
+            if int.from_bytes(magic, "little") & ~0x0F == _ZSTD_SKIPPABLE_MAGIC:
+                length = source.read(4)
+                if len(length) < 4:
+                    return None
+                source.seek(int.from_bytes(length, "little"), os.SEEK_CUR)
+                continue
+            if magic != _ZSTD_MAGIC:
+                return None
+            size, checksum = _declared_frame_size(source)
+            blocks = (
+                None if size is None else _skip_blocks(source, _ZSTD_MAX_PARTS - parts)
+            )
+            if size is None or blocks is None:
+                return None
+            parts += blocks
+            total = (total or 0) + size
+            if checksum:
+                source.seek(4, os.SEEK_CUR)
+    return total
 
 
 def _read_only(db_path: Path) -> sqlite3.Connection:
@@ -405,7 +462,7 @@ class LinkDemand(NamedTuple):
     unreadable_timesteps: int = 0
 
 
-def transfer_count(transfers: object) -> int:
+def _transfer_count(transfers: object) -> int:
     """Transfers as `_write_index` stores them: one row per id, none without one."""
     if not isinstance(transfers, list):
         return 0
@@ -460,7 +517,7 @@ def trace_link_demand(trace: object) -> LinkDemand:
     common_info = trace.get("common_info")
     return LinkDemand(
         common_info if isinstance(common_info, dict) else {},
-        transfer_count(trace.get("noc_transfers")),
+        _transfer_count(trace.get("noc_transfers")),
         (
             (
                 (
