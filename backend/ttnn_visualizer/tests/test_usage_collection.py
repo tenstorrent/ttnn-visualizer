@@ -1061,6 +1061,7 @@ _PRIVACY_REVIEWED_ATTRIBUTES: dict[str, dict[str, frozenset[str] | str]] = {
                 "op_breakdown",
                 "program_cache",
                 "zone_timings",
+                "zone_intervals",
                 "core_spread",
                 "diff_reports",
                 "find_operations",

@@ -675,16 +675,15 @@ def _inventory(instance: Instance, perf_csv: Optional[Path]) -> Dict[str, object
     profiler_path = instance.profiler_path
     device_log_columns = _answerable_device_log_columns(instance)
     record("zone_timings", device_log_columns is not None)
-    # Joins a perf row to its zones, so it needs both files, durations to spread
-    # (a phase column `query_core_spans` would pair on) and a clock to read their
-    # cycles as time.
-    record(
-        "core_spread",
-        perf_ready
-        and device_log_columns is not None
+    # Both read zone starts apart from ends (a phase column) as time, against a clock.
+    zones_timed = (
+        device_log_columns is not None
         and bool(DeviceLogProfilerQueries.ZONE_PHASE_TOKENS.keys() & device_log_columns)
-        and DeviceLogProfilerQueries.clock_mhz(instance) is not None,
+        and DeviceLogProfilerQueries.clock_mhz(instance) is not None
     )
+    record("zone_intervals", zones_timed)
+    # Joins a perf row to its zones, so it needs the performance CSV as well.
+    record("core_spread", perf_ready and zones_timed)
 
     # Per tool, against the tables it reads. A partial capture can answer
     # `find_operations` and none of the rest, and saying so is the whole point

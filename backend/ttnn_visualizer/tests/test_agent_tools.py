@@ -171,6 +171,7 @@ class TestReportInventory:
             "top_ops",
             "op_breakdown",
             "zone_timings",
+            "zone_intervals",
             "core_spread",
         }
         assert set(loaded["unanswerable"]) == {
@@ -319,12 +320,14 @@ class TestReportInventory:
         assert tools.zone_timings(registry, loaded["handle"])["zones"]
 
     def test_core_spread_needs_both_files(self, tmp_path):
-        """It joins a perf row to its zones, so a device log alone answers nothing."""
+        """It joins a perf row to its zones, so a device log alone answers nothing,
+        while `zone_intervals` reads the device log alone."""
         write_device_log(tmp_path, MODERN_HEADER, ZONED_ROWS)
 
         loaded = load_report(ReportRegistry(), performance_path=str(tmp_path))
 
         assert "zone_timings" in loaded["answerable"]
+        assert "zone_intervals" in loaded["answerable"]
         assert "core_spread" in loaded["unanswerable"]
 
     def test_core_spread_needs_zone_starts_and_ends(self, tmp_path):
@@ -337,6 +340,7 @@ class TestReportInventory:
 
         assert "zone_timings" in loaded["answerable"]
         assert "core_spread" in loaded["unanswerable"]
+        assert "zone_intervals" in loaded["unanswerable"]
 
     def test_a_non_utf8_device_log_does_not_break_load_report(self, tmp_path):
         """A device log with non-UTF-8 bytes in the preamble, or in a row after the
@@ -2347,6 +2351,7 @@ class TestTransport:
             "op_breakdown",
             "program_cache",
             "zone_timings",
+            "zone_intervals",
             "core_spread",
             "diff_reports",
             "find_operations",
