@@ -113,6 +113,11 @@ read the performance CSVs; the operation tools — `find_operations`, `operation
 `load_report` opens both, since its whole job is saying which of the others apply. A capture can carry either, both, or — as far as these tools are concerned —
 neither, which is what makes `load_report`'s answer worth reading first.
 
+Argument and answer names that refer to the memory report still say `profiler`, as the
+visualizer once called it: `profiler_path`, `device_count.profiler`, the
+`past_profiler_capture` reason and `first_past_profiler_capture_id`. They keep those
+names so existing clients go on working.
+
 Call `load_report` first. It reports what is answerable rather than making you discover it
 one failed call at a time, because the report kinds are independent: a performance-only
 capture has no operation graph and no tensor data, and a performance tool asked of a handle

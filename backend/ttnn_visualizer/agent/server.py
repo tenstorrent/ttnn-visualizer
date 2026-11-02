@@ -227,7 +227,10 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "properties": {
                     "profiler_path": {
                         "type": "string",
-                        "description": "Directory holding db.sqlite and config.json.",
+                        "description": (
+                            "The memory report directory, holding db.sqlite and "
+                            "config.json."
+                        ),
                     },
                     "performance_path": {
                         "type": "string",
