@@ -2,7 +2,8 @@
 #
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-"""What went wrong in a run: recorded errors, likely DRAM fallbacks, the L1 peak. #2154
+"""What went wrong in a run: recorded errors, likely DRAM fallbacks, the L1 peak, and
+tensors held past their last use. #2154, #2156
 
 Each answer reads the profiler database the way the app's routes do, so it agrees with
 what the app shows for the same report.
@@ -15,6 +16,7 @@ from functools import partial
 from typing import (
     Callable,
     Dict,
+    Hashable,
     Iterable,
     List,
     NamedTuple,
@@ -28,11 +30,14 @@ from typing import (
 from ttnn_visualizer.agent import allocation_failures, circular_buffers
 from ttnn_visualizer.agent import dram_fallbacks as fallback_rules
 from ttnn_visualizer.agent import l1_peak as peak_replay
+from ttnn_visualizer.agent import late_deallocations as late
 from ttnn_visualizer.agent.bounds import (
+    MAX_DETAILED_LIMIT,
     MAX_LIMIT,
     GraphTooLargeError,
     bounded,
     ensure_graph_readable,
+    require_choice,
 )
 from ttnn_visualizer.agent.captured_graph import UnreadableGraphError, parse_graph
 from ttnn_visualizer.agent.handles import TOOL_TABLES, CacheVariant, ReportRegistry
@@ -40,6 +45,7 @@ from ttnn_visualizer.agent.operations import (
     BUFFER_SIZE_UNIT,
     RankScope,
     caveat_field,
+    parse_frames,
     profiler_db,
     rank_scope,
     refuse_unattributable,
@@ -52,6 +58,7 @@ from ttnn_visualizer.agent.scope_outcomes import failed_device_operation_names
 from ttnn_visualizer.agent.tool_names import McpToolName
 from ttnn_visualizer.models import (
     L1_BUFFER_TYPES,
+    BufferType,
     ErrorRecord,
     InputTensor,
     Operation,
@@ -77,6 +84,18 @@ MAX_FAILED_DEVICE_OPERATIONS = 20
 MAX_PEAK_CONTRIBUTORS = 20
 # Repeats of one composition listed; one capture repeats a composition 9,679 times.
 MAX_REPEAT_OPERATION_IDS = 20
+# The app applies its late-deallocation rule to L1; DRAM is the same rule past the app.
+LATE_DEALLOCATION_BUFFER_TYPES = {"L1": BufferType.L1, "DRAM": BufferType.DRAM}
+# Individual holds beside the call sites; one capture holds 3,453 tensors in DRAM.
+MAX_LISTED_HOLDS = 20
+# A call site's last-use operations and their names listed; the rest are counted.
+MAX_LISTED_LAST_USES = 5
+# With MAX_DETAILED_LIMIT call sites, these keep a worst-case answer inside the budget.
+MAX_CALL_SITE_TEXT_CHARS = 300
+MAX_OPERATION_NAME_CHARS = 100
+_MAX_SOURCE_LINE = 1 << 31
+# Ids per `stack_traces` read, inside SQLite's oldest bound of 999 parameters.
+_STACK_TRACE_IDS_PER_READ = 500
 # The tables behind each answer's figures, so its rank refusal covers every one.
 # `query_tensors` joins `device_tensors` by id alone where it has no `rank`.
 _FALLBACK_TABLES = (
@@ -95,6 +114,13 @@ _L1_PEAK_TABLES = (
     "input_tensors",
     "output_tensors",
     "devices",
+)
+_LATE_DEALLOCATION_TABLES = (
+    "buffers",
+    "tensors",
+    "input_tensors",
+    "output_tensors",
+    "stack_traces",
 )
 
 ERRORS_NOTE = (
@@ -132,15 +158,37 @@ L1_PEAK_NOTE = (
     f"lists at most {MAX_REPEAT_OPERATION_IDS} of the operations that repeat a "
     "composition, and also_at_count counts them all."
 )
+LATE_DEALLOCATIONS_NOTE = (
+    "Buffer Summary's late-deallocation rule: a buffer in an operation's post-op "
+    "snapshot belongs to the last tensor seen at its address, and that tensor is held "
+    "late when its last consumer other than a deallocate call came earlier. The app "
+    "applies it to L1 only; DRAM is the same rule, which the app does not show. "
+    "run_start_count is the count beside the app's L1 toggle. A hold is one tensor at "
+    "one address over consecutive operations with these buffers: operations that "
+    "recorded none do not end it, and operations_held counts only the others. A hold "
+    "that opens after its tensor's buffer left the snapshot or was deallocated is a "
+    "later tensor's buffer, so it is counted in unattributed_hold_count and left out "
+    "of everything else. ending: deallocated by a deallocate call naming the tensor, "
+    "freed_otherwise when it left the snapshot or its address went to another tensor "
+    "without one, held_to_end when the capture ends first, which weights, outputs and "
+    "caches often are by design; ended counts them. byte_operations is bytes per bank "
+    "summed over the operations held, the hatched area in Buffer Summary, and both "
+    "lists rank by it. call_site is frame 0 of the last use's stack trace, as "
+    "operation_provenance gives it: where a deallocate would go. l1_peak calls a "
+    "tensor stale only where no other tensor used its address, so it can count one "
+    "held here as persistent; match a hold to l1_peak's peak by operation_id."
+)
 
 
-def _truncated(field: str, text: Optional[str]) -> Dict[str, object]:
+def _truncated(
+    field: str, text: Optional[str], cap: int = MAX_ERROR_TEXT_CHARS
+) -> Dict[str, object]:
     if not text:
         return {field: text}
-    if len(text) <= MAX_ERROR_TEXT_CHARS:
+    if len(text) <= cap:
         return {field: text}
     return {
-        field: text[:MAX_ERROR_TEXT_CHARS],
+        field: text[:cap],
         f"{field}_full_length": len(text),
     }
 
@@ -693,15 +741,17 @@ def _cached_per_rank(
     queries: DatabaseQueries,
     scope: RankScope,
     build: Callable[[DatabaseQueries, RankScope], _PerRank],
+    key: Hashable = None,
 ) -> _PerRank:
-    """`build` once per handle and rank. A build that raises is not kept."""
+    """`build` once per handle, rank and `key`. A build that raises is not kept."""
     # One pinned entry holding every rank, so a rank read cannot evict a scoped report.
-    by_rank: Dict[Optional[int], _PerRank] = registry.cached_report(
+    by_rank: Dict[Tuple[Optional[int], Hashable], _PerRank] = registry.cached_report(
         handle, lambda _: {}, variant=variant
     )
-    if scope.rank not in by_rank:
-        by_rank[scope.rank] = build(queries, scope)
-    return by_rank[scope.rank]
+    slot = (scope.rank, key)
+    if slot not in by_rank:
+        by_rank[slot] = build(queries, scope)
+    return by_rank[slot]
 
 
 def _cached_dram_fallbacks(
@@ -716,6 +766,307 @@ def _cached_dram_fallbacks(
         scope,
         report_dram_fallbacks,
     )
+
+
+@dataclass
+class LateDeallocationReport:
+    """Every hold at one buffer type, with the names and call sites it is listed by."""
+
+    operation_count: int
+    # Operations with at least one of the buffers; the rest neither hold nor end a hold.
+    buffered_operation_count: int
+    run_start_count: int
+    holds: List[late.Hold]
+    names: Dict[int, str]
+    # Frame 0 of each listed last use's stack trace, or None where it records none.
+    call_sites: Dict[int, Optional[Dict[str, object]]]
+    device_count: int
+
+
+def report_late_deallocations(
+    queries: DatabaseQueries, scope: RankScope, buffer_type: BufferType
+) -> LateDeallocationReport:
+    """Buffer Summary's late deallocations at `buffer_type`, each followed to its end."""
+    report = _report_operations(queries, scope, with_consumers=True)
+    operation_ids = [operation.operation_id for operation in report.operations]
+    names = {operation.operation_id: operation.name for operation in report.operations}
+    # By value, as the app reads them, so a report storing names reads none (#2196).
+    sizes = late.buffer_sizes_by_operation(
+        operation_ids, queries.iter_buffer_sizes(buffer_type.value, scope.rank)
+    )
+    held = late.held_tensors_by_operation(
+        operation_ids,
+        report.inputs_by_operation_id,
+        report.outputs_by_operation_id,
+        sizes,
+        report.consumers_by_tensor_id,
+        names,
+    )
+    holds = late.holds(
+        operation_ids,
+        held.held_by_operation,
+        held.buffered_operation_ids,
+        late.deallocations_by_tensor_id(report.consumers_by_tensor_id, names),
+    )
+    return LateDeallocationReport(
+        operation_count=len(operation_ids),
+        buffered_operation_count=len(held.buffered_operation_ids),
+        run_start_count=late.run_start_count(operation_ids, held.held_by_operation),
+        holds=holds,
+        names=names,
+        call_sites=_call_sites(
+            queries,
+            scope,
+            {hold.last_use_operation_id for hold in holds if hold.attributed},
+        ),
+        device_count=len(scoped_devices(queries, scope)),
+    )
+
+
+def _call_site(trace: Optional[str]) -> Optional[Dict[str, object]]:
+    try:
+        frames = parse_frames(trace or "")
+    except ValueError:
+        # A line number past Python's 4,300-digit int bound; real traces never have one.
+        return None
+    # A line past any file's is the trace's text, and its digits would fill the answer.
+    line = frames[0]["line"] if frames else None
+    if not isinstance(line, int) or not 0 < line < _MAX_SOURCE_LINE:
+        return None
+    return frames[0]
+
+
+def _call_sites(
+    queries: DatabaseQueries, scope: RankScope, operation_ids: Iterable[int]
+) -> Dict[int, Optional[Dict[str, object]]]:
+    """Frame 0 of each operation's first stack trace, as `operation_provenance` reads it."""
+    ids = sorted(operation_ids)
+    sites: Dict[int, Optional[Dict[str, object]]] = {}
+    for start in range(0, len(ids), _STACK_TRACE_IDS_PER_READ):
+        batch = ids[start : start + _STACK_TRACE_IDS_PER_READ]
+        for trace in queries.query_stack_traces(
+            scoped(queries, "stack_traces", scope, operation_id=batch)
+        ):
+            if trace.operation_id not in sites:
+                sites[trace.operation_id] = _call_site(trace.stack_trace)
+    return sites
+
+
+def _endings(holds: Iterable[late.Hold]) -> Dict[str, int]:
+    counts = {ending.value: 0 for ending in late.Ending}
+    for hold in holds:
+        counts[hold.ending.value] += 1
+    return counts
+
+
+def _call_site_entry(site: Optional[Dict[str, object]]) -> Optional[Dict[str, object]]:
+    if site is None:
+        return None
+    entry: Dict[str, object] = {}
+    for field in ("file", "line", "function", "code"):
+        value = site[field]
+        entry.update(
+            _truncated(field, value, MAX_CALL_SITE_TEXT_CHARS)
+            if isinstance(value, str)
+            else {field: value}
+        )
+    return entry
+
+
+def _location(site: Optional[Dict[str, object]]) -> Optional[str]:
+    if site is None:
+        return None
+    return f"{str(site['file'])[:MAX_CALL_SITE_TEXT_CHARS]}:{site['line']}"
+
+
+def _call_site_groups(
+    report: LateDeallocationReport, holds: Sequence[late.Hold]
+) -> List[Dict[str, object]]:
+    """One entry per last-use call site, the most bytes held over operations first."""
+    groups: Dict[Optional[Tuple[object, object]], List[late.Hold]] = defaultdict(list)
+    for hold in holds:
+        site = report.call_sites.get(hold.last_use_operation_id)
+        groups[None if site is None else (site["file"], site["line"])].append(hold)
+
+    def rank(item: Tuple[Optional[Tuple[object, object]], List[late.Hold]]) -> Tuple:
+        key, members = item
+        return (
+            -sum(hold.byte_operations for hold in members),
+            -len(members),
+            key is None,
+            "" if key is None else str(key[0]),
+            0 if key is None else key[1],
+        )
+
+    entries: List[Dict[str, object]] = []
+    for _, members in sorted(groups.items(), key=rank):
+        last_uses = sorted({hold.last_use_operation_id for hold in members})
+        last_use_names = sorted(
+            {
+                name[:MAX_OPERATION_NAME_CHARS]
+                for name in map(report.names.get, last_uses)
+                if isinstance(name, str)
+            }
+        )
+        entries.append(
+            {
+                "call_site": _call_site_entry(
+                    report.call_sites.get(members[0].last_use_operation_id)
+                ),
+                "hold_count": len(members),
+                "tensor_count": len({hold.tensor_id for hold in members}),
+                "ended": _endings(members),
+                "byte_operations": sum(hold.byte_operations for hold in members),
+                "largest_bytes_per_bank": max(hold.bytes_per_bank for hold in members),
+                "longest_hold_operations": max(
+                    hold.operations_held for hold in members
+                ),
+                "last_use_operation_ids": last_uses[:MAX_LISTED_LAST_USES],
+                "last_use_operation_count": len(last_uses),
+                "last_use_operation_names": last_use_names[:MAX_LISTED_LAST_USES],
+            }
+        )
+    return entries
+
+
+def _hold_entry(report: LateDeallocationReport, hold: late.Hold) -> Dict[str, object]:
+    entry: Dict[str, object] = {
+        "tensor_id": hold.tensor_id,
+        "address": hold.address,
+        "bytes_per_bank": hold.bytes_per_bank,
+        "operations_held": hold.operations_held,
+        "byte_operations": hold.byte_operations,
+        "held_from_operation_id": hold.first_operation_id,
+        "held_until_operation_id": hold.last_operation_id,
+        "last_use_operation_id": hold.last_use_operation_id,
+        **_truncated(
+            "last_use_operation_name",
+            report.names.get(hold.last_use_operation_id),
+            MAX_OPERATION_NAME_CHARS,
+        ),
+        "last_use_location": _location(
+            report.call_sites.get(hold.last_use_operation_id)
+        ),
+        "ending": hold.ending.value,
+    }
+    if hold.deallocated_at is not None:
+        entry["deallocated_at_operation_id"] = hold.deallocated_at
+    return entry
+
+
+def _late_deallocation_caveats(
+    report: LateDeallocationReport,
+    buffer_type: str,
+    holds: Sequence[late.Hold],
+    unattributed: Sequence[late.Hold],
+) -> List[str]:
+    caveats: List[str] = []
+    if report.buffered_operation_count == 0:
+        caveats.append(
+            f"This report records no {buffer_type} buffers under the type's number. "
+            "One that stores buffer types by name reads none here or in the app (#2196)."
+        )
+    if unattributed:
+        caveats.append(
+            f"{len(unattributed)} more holds, "
+            f"{sum(hold.byte_operations for hold in unattributed)} byte_operations, "
+            "are left out: each opened after its tensor's buffer had left the snapshot "
+            "or been deallocated, so the buffer at that address is a later tensor's "
+            "that the capture does not name. Buffer Summary hatches those rows under "
+            "the old tensor."
+        )
+    unplaced = sum(
+        1 for hold in holds if report.call_sites.get(hold.last_use_operation_id) is None
+    )
+    if unplaced:
+        caveats.append(
+            f"{unplaced} of the {len(holds)} holds have no call site: their last use "
+            "recorded no stack trace, which older reports omit, or none this tool "
+            "can read."
+        )
+    bridged = sum(1 for hold in holds if hold.bridged)
+    if bridged:
+        unbuffered = report.operation_count - report.buffered_operation_count
+        caveats.append(
+            f"{bridged} holds carry on past operations that recorded no "
+            f"{buffer_type} buffers at all, {unbuffered} of the "
+            f"{report.operation_count}. The app ends its runs at each, so "
+            "run_start_count counts the next operation with buffers as a start again."
+        )
+    if report.device_count > 1:
+        caveats.append(
+            f"This report covers {report.device_count} devices. As Buffer Summary "
+            "does, each address is read once across them, at its largest buffer."
+        )
+    return caveats
+
+
+def late_deallocations(
+    registry: ReportRegistry,
+    handle: str,
+    buffer_type: Optional[str] = None,
+    limit: Optional[int] = None,
+    rank: Optional[int] = None,
+) -> Dict[str, object]:
+    """Tensors held past their last use, grouped by the call site of that use."""
+    count = bounded(limit, MAX_DETAILED_LIMIT)
+    wanted = (
+        buffer_type.strip().upper() if isinstance(buffer_type, str) else buffer_type
+    ) or "L1"
+    require_choice("buffer_type", wanted, tuple(LATE_DEALLOCATION_BUFFER_TYPES))
+    resolved = LATE_DEALLOCATION_BUFFER_TYPES[wanted]
+    instance = registry.get(handle)
+    with profiler_db(instance) as queries:
+        scope = rank_scope(queries, rank)
+        refuse_unattributable(queries, scope, *_LATE_DEALLOCATION_TABLES)
+        report = _cached_per_rank(
+            registry,
+            handle,
+            CacheVariant.LATE_DEALLOCATIONS,
+            queries,
+            scope,
+            partial(report_late_deallocations, buffer_type=resolved),
+            key=resolved,
+        )
+
+    holds = [hold for hold in report.holds if hold.attributed]
+    unattributed = [hold for hold in report.holds if not hold.attributed]
+    call_sites = _call_site_groups(report, holds)
+    response: Dict[str, object] = {
+        "handle": handle,
+        "buffer_type": wanted,
+        "size_unit": BUFFER_SIZE_UNIT,
+        "operation_count": report.operation_count,
+        "run_start_count": report.run_start_count,
+        "hold_count": len(holds),
+        "held_tensor_count": len({hold.tensor_id for hold in holds}),
+        "unattributed_hold_count": len(unattributed),
+        "ended": _endings(holds),
+        "byte_operations": sum(hold.byte_operations for hold in holds),
+        "call_site_count": len(call_sites),
+        "returned": min(count, len(call_sites)),
+        "call_sites": call_sites[:count],
+        "top_holds": [
+            _hold_entry(report, hold)
+            for hold in sorted(
+                holds,
+                key=lambda hold: (
+                    -hold.byte_operations,
+                    hold.first_operation_id,
+                    hold.tensor_id,
+                    hold.address,
+                ),
+            )[:MAX_LISTED_HOLDS]
+        ],
+        "note": LATE_DEALLOCATIONS_NOTE,
+        **scope.as_response(),
+    }
+    response.update(
+        caveat_field(
+            scope, *_late_deallocation_caveats(report, wanted, holds, unattributed)
+        )
+    )
+    return response
 
 
 def _operation_graph(
@@ -847,17 +1198,26 @@ __all__ = [
     "DRAM_FALLBACKS_NOTE",
     "ERRORS_NOTE",
     "L1_PEAK_NOTE",
+    "LATE_DEALLOCATIONS_NOTE",
+    "LATE_DEALLOCATION_BUFFER_TYPES",
+    "MAX_CALL_SITE_TEXT_CHARS",
     "MAX_ERROR_TEXT_CHARS",
     "MAX_FAILED_DEVICE_OPERATIONS",
+    "MAX_LISTED_HOLDS",
+    "MAX_LISTED_LAST_USES",
+    "MAX_OPERATION_NAME_CHARS",
     "MAX_PARSED_MESSAGE_CHARS",
     "MAX_PEAK_CONTRIBUTORS",
     "MAX_REPEAT_OPERATION_IDS",
     "DramFallbackReport",
     "L1PeakReport",
+    "LateDeallocationReport",
     "dram_fallbacks",
     "errors",
     "l1_peak",
+    "late_deallocations",
     "operation_failure_fields",
     "report_dram_fallbacks",
     "report_l1_peak",
+    "report_late_deallocations",
 ]

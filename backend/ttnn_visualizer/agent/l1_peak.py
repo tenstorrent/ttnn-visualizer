@@ -26,13 +26,14 @@ from typing import (
 )
 
 from ttnn_visualizer.agent.js_values import MISSING, js_divide, js_number, js_truthy
+from ttnn_visualizer.agent.late_deallocations import (
+    NO_CONSUMER_OPERATION_ID,
+    last_valid_consumer,
+)
 from ttnn_visualizer.models import L1_BUFFER_TYPES, Buffer, BufferType
 
 # `L1_NUM_CORES`: the bank count a node without `max_size_per_bank` falls back to.
 DEFAULT_BANK_COUNT = 64
-NO_CONSUMER_OPERATION_ID = -1
-# `DEALLOCATE_OP_NAME_LIST` in `src/definitions/Deallocate.ts`.
-DEALLOCATE_OPERATION_NAMES = frozenset({"ttnn.deallocate", "ttnn::deallocate"})
 
 _CPP_ENUM_PREFIX = "BufferType::"
 
@@ -406,23 +407,6 @@ def build_l1_peak(
     )
 
 
-def last_valid_consumer(
-    consumers: Iterable[int], operation_names_by_id: Mapping[int, str]
-) -> int:
-    """`getLastValidConsumer`: the latest consumer that isn't a deallocate call."""
-    last = NO_CONSUMER_OPERATION_ID
-    for consumer in consumers:
-        if consumer <= last:
-            continue
-        if (
-            operation_names_by_id.get(consumer, "").lower()
-            in DEALLOCATE_OPERATION_NAMES
-        ):
-            continue
-        last = consumer
-    return last
-
-
 @dataclass
 class AddressLifetimes:
     last_use_by_address: Dict[float, int]
@@ -513,7 +497,6 @@ __all__ = [
     "Resident",
     "ResidentKind",
     "build_l1_peak",
-    "last_valid_consumer",
     "resolve_address_lifetimes",
     "top_compositions",
 ]

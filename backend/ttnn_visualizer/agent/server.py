@@ -68,7 +68,7 @@ INSTRUCTIONS = (
     "- Two id spaces overlap. A performance row's id (a top_ops or perf_rows row's "
     "id, or any *_perf_id) numbers rows of the performance CSV. operation_id is the "
     "profiler database's: find_operations, memory_profile, tensor_flow, errors, "
-    "dram_fallbacks and l1_peak return it, operation_detail and "
+    "dram_fallbacks, l1_peak and late_deallocations return it, operation_detail and "
     "operation_provenance take it. One passed as the other "
     "answers about a different operation; pass a top_ops row's operation_id on.\n"
     "- Device time and op-to-op gap are microseconds; an operation's duration is "
@@ -708,6 +708,44 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
             "handler": lambda arguments: app_links.with_operation_link_template(
                 registry,
                 failures.l1_peak(registry, **arguments),
+            ),
+        },
+        McpToolName.LATE_DEALLOCATIONS: {
+            "title": "Late deallocations",
+            "description": (
+                "Tensors still allocated after their last real use, found by Buffer "
+                "Summary's late-deallocation rule, grouped by the call site of that "
+                "last use: where a ttnn.deallocate would free them sooner. Each call "
+                "site counts its holds, how they ended (a deallocate call, freed "
+                "otherwise, or held to the end of the capture, as weights often "
+                "are), and the bytes per bank they held summed over the operations "
+                "held, which ranks them; the largest holds are listed apart, at most "
+                f"{failures.MAX_LISTED_HOLDS}. One buffer type at a time: L1, as the "
+                "app shows it, unless asked for DRAM, which the app does not show. "
+                "l1_peak's stale tensors are a floor and can miss holds listed here."
+            ),
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "handle": {"type": "string"},
+                    "buffer_type": {
+                        "type": "string",
+                        "enum": sorted(failures.LATE_DEALLOCATION_BUFFER_TYPES),
+                        "description": "L1 if omitted; DRAM applies the same rule.",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": (
+                            f"Call sites to return, capped at {MAX_DETAILED_LIMIT}."
+                        ),
+                    },
+                    "rank": _RANK_SCHEMA,
+                },
+                "required": ["handle"],
+            },
+            "handler": lambda arguments: app_links.with_operation_link_template(
+                registry,
+                failures.late_deallocations(registry, **arguments),
             ),
         },
     }

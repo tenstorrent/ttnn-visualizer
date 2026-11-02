@@ -774,7 +774,7 @@ class TestL1Peak:
         failures.l1_peak(registry, handle)
         report = registry.cached_report(
             handle, lambda _: {}, variant=failures.CacheVariant.L1_PEAK
-        )[None]
+        )[(None, None)]
 
         assert report.result.peak.operation_id == 1
         assert [

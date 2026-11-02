@@ -613,7 +613,7 @@ _TRACE_FRAME = re.compile(
 )
 
 
-def _parse_frames(trace: str) -> List[Dict[str, object]]:
+def parse_frames(trace: str) -> List[Dict[str, object]]:
     """The traceback's frames, innermost first, each with the source line under it.
 
     Innermost first is the order the capture writes: frame 0 is the `ttnn.<op>` call
@@ -633,7 +633,9 @@ def _parse_frames(trace: str) -> List[Dict[str, object]]:
         # line, so a frame with no source line borrowed its neighbour's -- and since
         # the call site is frame 0, that pointed at another file's code.
         code = None
-        for candidate in lines[index + 1 :]:
+        # By position: a slice here copied the rest of the trace once per frame.
+        for position in range(index + 1, len(lines)):
+            candidate = lines[position]
             if not candidate.strip():
                 continue
             if _TRACE_FRAME.match(candidate) is None:
@@ -733,7 +735,7 @@ def operation_provenance(
     # `splitlines` and gave the agent an AttributeError. The `called_from` path
     # guarded this and this one did not.
     raw_trace = (traces[0].stack_trace or "") if traces else ""
-    frames = _parse_frames(raw_trace)
+    frames = parse_frames(raw_trace)
     cap = bounded(limit)
     chain = frames[1 : cap + 1]
     result: Dict[str, object] = {
@@ -1352,6 +1354,7 @@ __all__ = [
     "memory_profile",
     "operation_detail",
     "operation_provenance",
+    "parse_frames",
     "profiler_db",
     "rank_caveat",
     "rank_scope",

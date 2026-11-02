@@ -11,6 +11,7 @@ import {
     LateDeallocationCount,
     LateDeallocationRunStart,
 } from '../definitions/LateDeallocation';
+import { Buffer, BuffersByOperation, Operation, Tensor } from '../model/APIData';
 import { TensorDeallocationReport, TensorsByOperationByAddress } from '../model/BufferSummary';
 
 /** Sentinel for "this tensor has no consumer we can attribute a last use to". */
@@ -27,7 +28,7 @@ export interface LastValidConsumer {
  * Resolve a tensor's last *meaningful* consumer: the highest consumer op id
  * that isn't itself a deallocate call, since a deallocate consuming the tensor
  * is the very thing we're measuring the distance to. Mirrored as `last_valid_consumer`
- * in `backend/ttnn_visualizer/agent/l1_peak.py`.
+ * in `backend/ttnn_visualizer/agent/late_deallocations.py`.
  */
 export const getLastValidConsumer = (
     consumers: readonly number[],
@@ -75,6 +76,8 @@ export interface LateDeallocationCandidate {
  * `lastConsumerByTensorId` memoises consumer resolution: a tensor alive across
  * N operations is asked N times, and its consumers can't differ between them.
  * The caller owns the cache so it lives no longer than one derivation pass.
+ *
+ * Mirrored as `late_deallocation_report` in `backend/ttnn_visualizer/agent/late_deallocations.py`.
  */
 export const getLateDeallocationReport = (
     { tensorId, address, operationId, consumers }: LateDeallocationCandidate,
@@ -110,6 +113,82 @@ export const getLateDeallocationReport = (
     };
 };
 
+/**
+ * Each operation's buffers, one per address: the largest, or the first of equal ones.
+ * Mirrored as `buffer_sizes_by_operation` in `backend/ttnn_visualizer/agent/late_deallocations.py`.
+ */
+export const getUniqueBuffersByOperation = (buffersByOperation: readonly BuffersByOperation[]): BuffersByOperation[] =>
+    buffersByOperation.map((operation) => {
+        const uniqueBuffers: Map<number, Buffer> = new Map<number, Buffer>();
+
+        operation.buffers.forEach((buffer) => {
+            const { address, size } = buffer;
+            if (address) {
+                const existingBuffer = uniqueBuffers.get(address);
+                if (!existingBuffer || size > existingBuffer.size) {
+                    uniqueBuffers.set(address, buffer);
+                }
+            }
+        });
+
+        return {
+            ...operation,
+            buffers: Array.from(uniqueBuffers.values()),
+        };
+    });
+
+/**
+ * The tensor each operation's buffers belong to, by address: the last one seen at that address.
+ * Mirrored as `held_tensors_by_operation` in `backend/ttnn_visualizer/agent/late_deallocations.py`.
+ */
+export const buildTensorsByOperationByAddress = (
+    operations: readonly Pick<Operation, 'id' | 'inputs' | 'outputs'>[],
+    uniqueBuffersByOperation: readonly BuffersByOperation[],
+): TensorsByOperationByAddress => {
+    const result: TensorsByOperationByAddress = new Map();
+
+    const buffersByOpId = new Map<number, Buffer[]>();
+    uniqueBuffersByOperation.forEach((op) => {
+        buffersByOpId.set(op.id, op.buffers);
+    });
+
+    const latestTensorByAddress = new Map<number, Tensor>();
+
+    for (const op of operations) {
+        if (op.inputs) {
+            for (const t of op.inputs) {
+                if (t && t.address !== null && t.address !== undefined) {
+                    latestTensorByAddress.set(t.address, t);
+                }
+            }
+        }
+        if (op.outputs) {
+            for (const t of op.outputs) {
+                if (t && t.address !== null && t.address !== undefined) {
+                    latestTensorByAddress.set(t.address, t);
+                }
+            }
+        }
+
+        const tensorsByBufferAddress = new Map<number, Tensor>();
+
+        for (const buffer of buffersByOpId.get(op.id) ?? []) {
+            const addr = buffer.address;
+            const tensor = addr === null || addr === undefined ? undefined : latestTensorByAddress.get(addr);
+            if (tensor) {
+                tensorsByBufferAddress.set(addr, {
+                    ...tensor,
+                    buffer_type: buffer.buffer_type,
+                });
+            }
+        }
+
+        result.set(op.id, tensorsByBufferAddress);
+    }
+
+    return result;
+};
+
 export interface BuildLateDeallocationReportsParams {
     /** Tensors alive at each operation, keyed by operation id then buffer address. */
     tensorsByOperation: TensorsByOperationByAddress;
@@ -135,6 +214,9 @@ export interface LateDeallocationReports {
  * One pass fills both indexes: they answer different questions about the same
  * finding — which rows to mark, and which tensors to offer in the Tensor List —
  * and deriving either from the other afterwards would walk the report again.
+ *
+ * `reportsByOpId` is mirrored as `held_tensors_by_operation` in
+ * `backend/ttnn_visualizer/agent/late_deallocations.py`.
  */
 export const buildLateDeallocationReports = ({
     tensorsByOperation,
@@ -197,6 +279,8 @@ const getRunKey = (report: TensorDeallocationReport): string => `${report.id}:${
  * the user has: which places are worth looking at. A run opens whenever the
  * previous row didn't report the same tensor, so a tensor that drops out and
  * comes back is two findings rather than one continuous span.
+ *
+ * Its length is mirrored as `run_start_count` in `backend/ttnn_visualizer/agent/late_deallocations.py`.
  */
 export const selectLateDeallocationRunStarts = ({
     operations,
