@@ -254,6 +254,23 @@ class TestIntervals:
         assert answer["by_device"][0]["max_us"] == 3.0
         assert f"{at_bound}R" not in json.dumps(answer)
 
+    def test_a_risc_name_too_long_to_show_past_the_limit_is_still_counted(
+        self, tmp_path
+    ):
+        long_risc = "R" * (tools.MAX_RISC_NAME_LENGTH + 1)
+        rows = [
+            *_run(0, 1, 1, "BRISC", 0, [100, 3100]),
+            *_run(0, 2, 1, "NCRISC", 0, [100, 2100]),
+            *_run(0, 3, 1, long_risc, 0, [100, 1100]),
+        ]
+
+        answer = _intervals(tmp_path, rows, limit=1)
+
+        assert [(entry["x"], entry["risc"]) for entry in answer["by_core_risc"]] == [
+            (1, "BRISC")
+        ]
+        assert answer["by_core_risc_unlisted_too_long"] == 1
+
     def test_a_zone_only_on_risc_names_too_long_to_show_still_has_device_figures(
         self, tmp_path
     ):
@@ -875,6 +892,27 @@ class TestRefusals:
             pytest.raises(ValueError, match="'LOOP' \\(3\\), and 1 more$"),
         ):
             _intervals(tmp_path, rows, zone="LOPO")
+
+    def test_the_names_too_long_to_list_are_not_counted_among_the_more(self, tmp_path):
+        rows = [
+            *_run(0, 1, 1, "BRISC", 0, [100, 1100, 2100, 3100]),
+            *_run(0, 2, 1, "BRISC", 0, [100], zone="OTHER"),
+            *_run(
+                0, 3, 1, "BRISC", 0, [100], zone="Z" * (tools.MAX_ZONE_NAME_LENGTH + 1)
+            ),
+        ]
+
+        with (
+            patch.object(tools, "MAX_LISTED_ZONES", 1),
+            pytest.raises(ValueError) as refusal,
+        ):
+            _intervals(tmp_path, rows, zone="LOPO")
+
+        assert str(refusal.value) == (
+            "no zone named 'LOPO' starts in profile_log_device.csv. Its zones by "
+            "starts, most first: 'LOOP' (4), and 2 more; 1 more have names longer "
+            "than 256 characters, which are not listed"
+        )
 
     def test_a_blank_zone_is_refused(self, tmp_path):
         with pytest.raises(ValueError, match="zone must name a zone the device log"):
