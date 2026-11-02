@@ -49,6 +49,7 @@ export const EMPTY_CRITICAL_PATH: CriticalPath = {
  * as the fuller sequence rather than a prefix of it; op id last so the pick can't
  * move with build order. Both the relaxation guard and the end-node scan decide
  * through this one comparator, because determinism only holds while they agree.
+ * Mirrored as `_is_preferred_chain` in `backend/ttnn_visualizer/agent/op_graph.py`.
  */
 const isPreferredChain = (costDelta: number, opCountDelta: number, opIdDelta: number) =>
     costDelta > 0 || (costDelta === 0 && (opCountDelta > 0 || (opCountDelta === 0 && opIdDelta < 0)));
@@ -57,6 +58,9 @@ const isPreferredChain = (costDelta: number, opCountDelta: number, opIdDelta: nu
  * Longest cumulative-duration path, where cost is carried by the ops and edges
  * are unweighted. An op with no perf row costs 0 and stays traversable, so a
  * gap in the report shortens the total rather than severing the path.
+ *
+ * Mirrored as `find_critical_path` in `backend/ttnn_visualizer/agent/op_graph.py`,
+ * and held to it by the `opGraphCriticalPathParity` golden. #2174
  */
 export const findCriticalPath = (
     nodes: readonly CriticalPathNode[],

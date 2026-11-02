@@ -14,7 +14,6 @@ from collections import defaultdict
 from dataclasses import dataclass
 from functools import partial
 from typing import (
-    Callable,
     Dict,
     Hashable,
     Iterable,
@@ -23,7 +22,6 @@ from typing import (
     Optional,
     Sequence,
     Tuple,
-    TypeVar,
     Union,
 )
 
@@ -44,6 +42,7 @@ from ttnn_visualizer.agent.handles import TOOL_TABLES, CacheVariant, ReportRegis
 from ttnn_visualizer.agent.operations import (
     BUFFER_SIZE_UNIT,
     RankScope,
+    cached_per_rank,
     caveat_field,
     parse_frames,
     profiler_db,
@@ -664,7 +663,7 @@ def l1_peak(
         refuse_unattributable(queries, scope, *_L1_PEAK_TABLES)
         # Cached once only the peak keeps its residents: every operation's would pin
         # about 100 MB on the largest local capture.
-        report = _cached_per_rank(
+        report = cached_per_rank(
             registry, handle, CacheVariant.L1_PEAK, queries, scope, report_l1_peak
         )
 
@@ -731,34 +730,11 @@ def l1_peak(
     return response
 
 
-_PerRank = TypeVar("_PerRank")
-
-
-def _cached_per_rank(
-    registry: ReportRegistry,
-    handle: str,
-    variant: CacheVariant,
-    queries: DatabaseQueries,
-    scope: RankScope,
-    build: Callable[[DatabaseQueries, RankScope], _PerRank],
-    key: Hashable = None,
-) -> _PerRank:
-    """`build` once per handle, rank and `key`. A build that raises is not kept."""
-    # One pinned entry holding every rank, so a rank read cannot evict a scoped report.
-    by_rank: Dict[Tuple[Optional[int], Hashable], _PerRank] = registry.cached_report(
-        handle, lambda _: {}, variant=variant
-    )
-    slot = (scope.rank, key)
-    if slot not in by_rank:
-        by_rank[slot] = build(queries, scope)
-    return by_rank[slot]
-
-
 def _cached_dram_fallbacks(
     registry: ReportRegistry, handle: str, queries: DatabaseQueries, scope: RankScope
 ) -> DramFallbackReport:
     """Read once per handle and rank: one operation's needs every operation's tensors."""
-    return _cached_per_rank(
+    return cached_per_rank(
         registry,
         handle,
         CacheVariant.DRAM_FALLBACKS,
@@ -1019,7 +995,7 @@ def late_deallocations(
     with profiler_db(instance) as queries:
         scope = rank_scope(queries, rank)
         refuse_unattributable(queries, scope, *_LATE_DEALLOCATION_TABLES)
-        report = _cached_per_rank(
+        report = cached_per_rank(
             registry,
             handle,
             CacheVariant.LATE_DEALLOCATIONS,

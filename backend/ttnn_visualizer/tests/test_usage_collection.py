@@ -1073,6 +1073,8 @@ _PRIVACY_REVIEWED_ATTRIBUTES: dict[str, dict[str, frozenset[str] | str]] = {
                 "dram_fallbacks",
                 "l1_peak",
                 "late_deallocations",
+                "critical_path",
+                "subgraph_between",
             }
         ),
         "outcome": frozenset({"ok", "refused", "error"}),

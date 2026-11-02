@@ -186,6 +186,8 @@ class TestReportInventory:
             "dram_fallbacks",
             "l1_peak",
             "late_deallocations",
+            "critical_path",
+            "subgraph_between",
         }
         assert loaded["capture"]["ARCH"] == "wormhole_b0"
         assert loaded["performance_csv"] == "ops_perf_results_x.csv"
@@ -2364,6 +2366,8 @@ class TestTransport:
             "dram_fallbacks",
             "l1_peak",
             "late_deallocations",
+            "critical_path",
+            "subgraph_between",
         }
         assert all(
             tool["inputSchema"]["type"] == "object"
