@@ -22,7 +22,7 @@ import { SshConfigHostsQueryResult, noSshConfigResult } from './helpers/sshConfi
 const { getServerConfigMock, SERVER_CONFIG } = vi.hoisted(() => {
     const config = {
         SSH_DEFAULT_PORT: 2222,
-        SSH_DEFAULT_PROFILER_PATH: '/mem',
+        SSH_DEFAULT_MEMORY_REPORT_PATH: '/mem',
         SSH_DEFAULT_PERFORMANCE_PATH: '/perf',
         USERNAME: 'bob',
         SERVER_MODE: false,

@@ -275,7 +275,7 @@ class ReportLoadFailureReason(str, Enum):
     """Why a report failed to load, coarsely enough to never carry a message body.
 
     ``unsupported_version`` is NPE-only today. NPE refuses an out-of-range format
-    version and never shows the report. Profiler and performance reports still
+    version and never shows the report. Memory and performance reports still
     activate on an incompatible DB major version: they toast a warning and count
     as ``report_loaded``, because the UI continues to show them.
     """
@@ -304,7 +304,7 @@ class EventLogView(str, Enum):
     clicking a nav button, which makes every navigation to it a deliberate act rather
     than something a redirect can produce. And its button is disabled unless the active
     report carries cluster data, so it must be read against *reports containing a cluster
-    descriptor* — a narrower denominator than "a profiler report is loaded", which is the
+    descriptor* — a narrower denominator than "a memory report is loaded", which is the
     ratio caveat 6 asks for everywhere else.
 
     ``styleguide`` is excluded and stays excluded: a development surface, so counting it

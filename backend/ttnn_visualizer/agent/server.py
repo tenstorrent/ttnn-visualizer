@@ -64,12 +64,12 @@ MAX_LINE_BYTES = 1_000_000
 # any call, so it is kept short and each description keeps only its own tool's caveats.
 INSTRUCTIONS = (
     "Read-only tools over TT-NN Visualizer performance reports (ops_perf_results CSV, "
-    "device log), profiler reports (db.sqlite) and tt-npe NoC traces.\n"
+    "device log), memory reports (db.sqlite) and tt-npe NoC traces.\n"
     "- Call load_report first. It returns the handle the other tools take, which of "
     "them the report can answer, its signposts, architecture and device count.\n"
     "- Two id spaces overlap. A performance row's id (a top_ops or perf_rows row's "
     "id, or any *_perf_id) numbers rows of the performance CSV. operation_id is the "
-    "profiler database's: find_operations, memory_profile, tensor_flow, errors, "
+    "memory report database's: find_operations, memory_profile, tensor_flow, errors, "
     "dram_fallbacks, l1_peak, critical_path and subgraph_between return it, "
     "operation_detail, operation_provenance and subgraph_between take it. "
     "One passed as the other answers about a different operation; pass a top_ops "
@@ -149,7 +149,7 @@ _SIGNPOST_SCHEMAS = {
 _OPERATION_ID_SCHEMA = {
     "type": "integer",
     "description": (
-        "The profiler database's operation id, as find_operations or a top_ops row's "
+        "The memory report database's operation id, as find_operations or a top_ops row's "
         "operation_id gives it; never a top_ops row's id."
     ),
 }
@@ -231,7 +231,10 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "properties": {
                     "profiler_path": {
                         "type": "string",
-                        "description": "Directory holding db.sqlite and config.json.",
+                        "description": (
+                            "The memory report directory, holding db.sqlite and "
+                            "config.json."
+                        ),
                     },
                     "performance_path": {
                         "type": "string",
@@ -262,7 +265,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "op_to_op_gap leaves out its first operation, and the gap total "
                 "excludes the gap leading into it. Each row's id numbers the "
                 "performance CSV. When the handle also holds a "
-                "profiler report, each row's operation_id is the profiler database "
+                "memory report, each row's operation_id is the memory report database "
                 "id for one rank, and operation_link says whether the reports linked, "
                 "at which rank, how many rows did not link and why, and, in its note, "
                 "when an operation_id is null. A range narrows the ranked rows only: "
@@ -338,7 +341,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "code, most repeat misses first: calls, distinct programs, repeat "
                 "calls, and how many of those hit or missed the program cache. The "
                 "response's note says how a call is counted. Reads the whole report, "
-                "with no signpost range. When the handle also holds a profiler "
+                "with no signpost range. When the handle also holds a memory "
                 "report, each op code's first repeat miss carries the operation_id "
                 "to pass to operation_provenance."
             ),
@@ -556,7 +559,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
             "title": "Find operations",
             "description": (
                 "Find operations by name substring, returning ids to ask about. "
-                "Durations here are host wall time from the profiler report; for "
+                "Durations here are host wall time from the memory report; for "
                 "device time use top_ops."
             ),
             "schema": {
@@ -807,7 +810,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "An operation with no timed row counts as 0 "
                 "and is still traversed: uncosted_operation_count says how much of "
                 "the path is a gap rather than a measurement. Needs a performance "
-                "report linked to the profiler report, and reads the linked rank "
+                "report linked to the memory report, and reads the linked rank "
                 f"only. Lists up to {MAX_LIMIT} operations; path_length is the "
                 "whole chain's."
             ),

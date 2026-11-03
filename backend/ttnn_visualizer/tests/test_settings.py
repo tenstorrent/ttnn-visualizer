@@ -35,6 +35,7 @@ from ttnn_visualizer.settings import (
     _ENV_OVERRIDE_SKIP,
     _ENV_OVERRIDE_UNCONFIGURED,
     _ENV_PARSERS,
+    _ENV_RENAMED,
     _RECOMPUTE_HONOURS,
     _STRICT_BOOLEANS,
     DEFAULT_SECRET_KEY,
@@ -821,6 +822,39 @@ def test_every_env_alias_names_a_real_setting():
     assert not set(_ENV_ALIASES.values()) & set(vars(DefaultConfig))
 
 
+def test_every_renamed_variable_names_a_real_setting():
+    # A dead key would leave the former name silently unread. A former name that is also
+    # an attribute, or an alias's variable, would have one variable feed two settings.
+    assert set(_ENV_RENAMED) <= set(vars(DefaultConfig))
+    assert not set(_ENV_RENAMED.values()) & set(vars(DefaultConfig))
+    assert not set(_ENV_RENAMED.values()) & set(_ENV_ALIASES.values())
+
+
+def test_a_renamed_variable_still_applies_under_its_former_name(monkeypatch, caplog):
+    monkeypatch.delenv("SSH_DEFAULT_MEMORY_REPORT_PATH", raising=False)
+    monkeypatch.setenv("SSH_DEFAULT_PROFILER_PATH", "/old/reports/")
+
+    config = DefaultConfig()
+    with caplog.at_level(logging.WARNING):
+        config.override_with_env_variables()
+
+    assert config.SSH_DEFAULT_MEMORY_REPORT_PATH == "/old/reports/"
+    assert "SSH_DEFAULT_PROFILER_PATH is deprecated" in caplog.text
+    assert "SSH_DEFAULT_MEMORY_REPORT_PATH" in caplog.text
+
+
+def test_a_renamed_variable_yields_to_its_current_name(monkeypatch, caplog):
+    monkeypatch.setenv("SSH_DEFAULT_MEMORY_REPORT_PATH", "/new/reports/")
+    monkeypatch.setenv("SSH_DEFAULT_PROFILER_PATH", "/old/reports/")
+
+    config = DefaultConfig()
+    with caplog.at_level(logging.WARNING):
+        config.override_with_env_variables()
+
+    assert config.SSH_DEFAULT_MEMORY_REPORT_PATH == "/new/reports/"
+    assert "SSH_DEFAULT_PROFILER_PATH" not in caplog.text
+
+
 def test_every_unread_name_is_a_descriptor_backed_setting():
     # The registry only fires for names the loop reaches through its descriptor branch,
     # so a dead entry after a rename stops the warning without failing anything else —
@@ -1129,9 +1163,9 @@ _OVERRIDABLE_SETTINGS = frozenset(
         "SECRET_KEY",
         "SERVER_MODE",
         "SESSION_MAX_UPLOADED_REPORTS",
+        "SSH_DEFAULT_MEMORY_REPORT_PATH",
         "SSH_DEFAULT_PERFORMANCE_PATH",
         "SSH_DEFAULT_PORT",
-        "SSH_DEFAULT_PROFILER_PATH",
         "SSH_REMOTE_CHECK_TIMEOUT",
         "SSH_SUBPROCESS_TIMEOUT",
         "TESTING",

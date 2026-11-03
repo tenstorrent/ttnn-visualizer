@@ -31,7 +31,7 @@ import { ExistingTarget, describeSshConfigPrefillContract } from './helpers/sshC
 const { getServerConfigMock, SERVER_CONFIG } = vi.hoisted(() => {
     const config = {
         SSH_DEFAULT_PORT: 2222,
-        SSH_DEFAULT_PROFILER_PATH: '',
+        SSH_DEFAULT_MEMORY_REPORT_PATH: '',
         SSH_DEFAULT_PERFORMANCE_PATH: '',
         USERNAME: 'bob',
         SERVER_MODE: false,
