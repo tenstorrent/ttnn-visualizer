@@ -14,7 +14,7 @@ const TENSOR_REPR = `ttnn.Tensor(shape=Shape([1, 1000]), dtype=DataType.BFLOAT16
 
 // Builds the argument as `fetchOperations` hands it to the view.
 const renderArgument = (name: string, value: string) =>
-    render(<TensorArgument argument={{ parsedValue: null, ...withParsedMemoryConfig({ name, value }) }} />);
+    render(<TensorArgument argument={withParsedMemoryConfig({ name, value })} />);
 
 afterEach(() => {
     cleanup();
@@ -33,5 +33,12 @@ describe('TensorArgument', () => {
 
         expect(screen.queryByRole('table')).not.toBeInTheDocument();
         expect(screen.getByText(TENSOR_REPR)).toBeInTheDocument();
+    });
+
+    it('renders a value that is not a memory config as its text', () => {
+        renderArgument('memory_config', 'std::nullopt');
+
+        expect(screen.queryByRole('table')).not.toBeInTheDocument();
+        expect(screen.getByText('std::nullopt')).toBeInTheDocument();
     });
 });

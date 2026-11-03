@@ -75,13 +75,23 @@ describe('withParsedMemoryConfig', () => {
         });
     });
 
+    it('parses the namespaced form older reports print', () => {
+        const value = `tt::tt_metal::${SHARDED_L1}`;
+
+        expect(withParsedMemoryConfig({ name: 'memory_config', value }).parsedValue).toEqual(
+            parseMemoryConfig(SHARDED_L1),
+        );
+    });
+
     it.each([
         ['a tensor repr', TENSOR_REPR],
         ['std::nullopt', 'std::nullopt'],
-    ])('leaves a memory_config argument holding %s unparsed', (_label, value) => {
-        const argument = { name: 'memory_config', value };
-
-        expect(withParsedMemoryConfig(argument)).toBe(argument);
+    ])('gives a memory_config argument holding %s a null parsedValue', (_label, value) => {
+        expect(withParsedMemoryConfig({ name: 'memory_config', value })).toEqual({
+            name: 'memory_config',
+            value,
+            parsedValue: null,
+        });
     });
 });
 

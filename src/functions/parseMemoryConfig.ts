@@ -46,16 +46,12 @@ const parseMemoryConfig = (string: string | null | undefined): MemoryConfig | nu
 };
 
 /**
- * An operation argument with `parsedValue` set when its value is a whole `MemoryConfig(...)`,
- * which the operation details view renders key by key. Any other argument is returned as is.
+ * An operation argument with its `parsedValue`, which the operation details view renders key by
+ * key: the parsed config when the value is a whole `MemoryConfig(...)`, otherwise null.
  */
 export const withParsedMemoryConfig = <Argument extends { value: string }>(
     argument: Argument,
-): Argument | (Argument & { parsedValue: MemoryConfig }) => {
-    const parsedValue = parseMemoryConfig(argument.value);
-
-    return parsedValue ? { ...argument, parsedValue } : argument;
-};
+): Argument & { parsedValue: MemoryConfig | null } => ({ ...argument, parsedValue: parseMemoryConfig(argument.value) });
 
 /** Whether a raw argument value is a whole `MemoryConfig(...)`, whatever buffer type it declares. */
 export const isMemoryConfigValue = (value: string | null | undefined): value is string =>
