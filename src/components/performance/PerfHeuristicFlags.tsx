@@ -4,7 +4,11 @@
 
 import { Intent, Tag, Tooltip } from '@blueprintjs/core';
 import { TypedPerfTableRow } from '../../model/PerfTable';
-import { PERF_HEURISTIC_FLAG_DEFINITIONS, PerfHeuristicFlagIntent } from '../../definitions/PerfHeuristics';
+import {
+    PERF_HEURISTIC_FLAG_DEFINITIONS,
+    PERF_HEURISTIC_FLAG_SOURCE_LABELS,
+    PerfHeuristicFlagIntent,
+} from '../../definitions/PerfHeuristics';
 import { TEST_IDS } from '../../definitions/TestIds';
 
 const FLAG_INTENT_BY_SEVERITY: Record<PerfHeuristicFlagIntent, Intent> = {
@@ -38,6 +42,9 @@ function PerfHeuristicFlags({ row }: PerfHeuristicFlagsProps) {
                         content={
                             <div className='perf-heuristic-flag-tooltip'>
                                 <strong>{definition.label}</strong>
+                                <p className='perf-heuristic-flag-source'>
+                                    {PERF_HEURISTIC_FLAG_SOURCE_LABELS[definition.source]}
+                                </p>
                                 <p>{definition.description}</p>
                                 {detail != null && <p className='perf-heuristic-flag-detail'>{detail}</p>}
                             </div>
@@ -48,6 +55,7 @@ function PerfHeuristicFlags({ row }: PerfHeuristicFlagsProps) {
                             className='perf-heuristic-flag'
                             data-testid={TEST_IDS.PERF_HEURISTIC_FLAG}
                             data-flag={flag}
+                            data-source={definition.source}
                             intent={FLAG_INTENT_BY_SEVERITY[definition.intent]}
                             minimal
                         >
