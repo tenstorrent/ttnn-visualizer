@@ -730,9 +730,7 @@ def _memory_report_argument(
     Both names are accepted together only when they agree, so a caller passing both
     cannot load a different report than the one it meant.
     """
-    if profiler_path is None:
-        return "memory_report_path", memory_report_path
-    if memory_report_path is not None and memory_report_path != profiler_path:
+    if profiler_path is not None and memory_report_path not in (None, profiler_path):
         raise ValueError(
             "memory_report_path and profiler_path name different paths; "
             "pass only memory_report_path"

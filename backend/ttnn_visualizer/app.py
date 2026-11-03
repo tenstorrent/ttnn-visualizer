@@ -496,7 +496,7 @@ def _resolve_renamed_path(
     """Fold the deprecated ``--profiler-path`` into ``--memory-report-path``.
 
     Both spellings are accepted together only when they agree, so a wrapper that
-    passes both cannot load a different report than the one it names first.
+    passes both cannot load a different report than the one it meant.
     """
     former = args.profiler_path
     del args.profiler_path
