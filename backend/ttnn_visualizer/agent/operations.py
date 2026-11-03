@@ -42,6 +42,7 @@ from ttnn_visualizer.agent.bounds import (
     MAX_DETAILED_LIMIT,
     MAX_LIMIT,
     bounded,
+    normalised_choice,
     require_choice,
 )
 from ttnn_visualizer.agent.handles import (
@@ -652,7 +653,7 @@ _TRACE_FRAME = re.compile(
 )
 
 
-def parse_frames(trace: str) -> List[Dict[str, object]]:
+def parse_frames(trace: str, limit: Optional[int] = None) -> List[Dict[str, object]]:
     """The traceback's frames, innermost first, each with the source line under it.
 
     Innermost first is the order the capture writes: frame 0 is the `ttnn.<op>` call
@@ -688,6 +689,8 @@ def parse_frames(trace: str) -> List[Dict[str, object]]:
                 "code": code,
             }
         )
+        if len(frames) == limit:
+            break
     return frames
 
 
@@ -1095,7 +1098,7 @@ def memory_profile(
     to allocations. The report carries no DRAM bank count at all, so one of the
     two denominators is not even knowable here.
     """
-    wanted = (buffer_type or "").strip().upper() or None
+    wanted = normalised_choice(buffer_type)
     # Refused up front, the way `top_ops` refuses an unknown metric. Matching
     # free text against whatever strings the report happens to hold makes a
     # typo indistinguishable from a report that allocates none of that type.

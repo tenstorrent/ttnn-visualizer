@@ -145,7 +145,7 @@ export const buildTensorsByOperationByAddress = (
     operations: readonly Pick<Operation, 'id' | 'inputs' | 'outputs'>[],
     uniqueBuffersByOperation: readonly BuffersByOperation[],
 ): TensorsByOperationByAddress => {
-    const result: TensorsByOperationByAddress = new Map();
+    const tensorsByOperationByAddress: TensorsByOperationByAddress = new Map();
 
     const buffersByOpId = new Map<number, Buffer[]>();
     uniqueBuffersByOperation.forEach((op) => {
@@ -155,18 +155,9 @@ export const buildTensorsByOperationByAddress = (
     const latestTensorByAddress = new Map<number, Tensor>();
 
     for (const op of operations) {
-        if (op.inputs) {
-            for (const t of op.inputs) {
-                if (t && t.address !== null && t.address !== undefined) {
-                    latestTensorByAddress.set(t.address, t);
-                }
-            }
-        }
-        if (op.outputs) {
-            for (const t of op.outputs) {
-                if (t && t.address !== null && t.address !== undefined) {
-                    latestTensorByAddress.set(t.address, t);
-                }
+        for (const tensor of [...(op.inputs ?? []), ...(op.outputs ?? [])]) {
+            if (tensor && tensor.address !== null && tensor.address !== undefined) {
+                latestTensorByAddress.set(tensor.address, tensor);
             }
         }
 
@@ -183,10 +174,10 @@ export const buildTensorsByOperationByAddress = (
             }
         }
 
-        result.set(op.id, tensorsByBufferAddress);
+        tensorsByOperationByAddress.set(op.id, tensorsByBufferAddress);
     }
 
-    return result;
+    return tensorsByOperationByAddress;
 };
 
 export interface BuildLateDeallocationReportsParams {

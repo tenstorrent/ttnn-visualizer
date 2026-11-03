@@ -13,15 +13,16 @@ import math
 from collections import defaultdict
 from dataclasses import dataclass
 from functools import partial
+from types import MappingProxyType
 from typing import (
     Dict,
-    Hashable,
     Iterable,
     List,
     NamedTuple,
     Optional,
     Sequence,
     Tuple,
+    TypedDict,
     Union,
 )
 
@@ -35,6 +36,7 @@ from ttnn_visualizer.agent.bounds import (
     GraphTooLargeError,
     bounded,
     ensure_graph_readable,
+    normalised_choice,
     require_choice,
 )
 from ttnn_visualizer.agent.captured_graph import UnreadableGraphError, parse_graph
@@ -84,11 +86,16 @@ MAX_PEAK_CONTRIBUTORS = 20
 # Repeats of one composition listed; one capture repeats a composition 9,679 times.
 MAX_REPEAT_OPERATION_IDS = 20
 # The app applies its late-deallocation rule to L1; DRAM is the same rule past the app.
-LATE_DEALLOCATION_BUFFER_TYPES = {"L1": BufferType.L1, "DRAM": BufferType.DRAM}
+LATE_DEALLOCATION_BUFFER_TYPES = MappingProxyType(
+    {"L1": BufferType.L1, "DRAM": BufferType.DRAM}
+)
+DEFAULT_LATE_DEALLOCATION_BUFFER_TYPE = "L1"
 # Individual holds beside the call sites; one capture holds 3,453 tensors in DRAM.
 MAX_LISTED_HOLDS = 20
 # A call site's last-use operations and their names listed; the rest are counted.
 MAX_LISTED_LAST_USES = 5
+# A held tensor's producers listed; real ones have one or two.
+MAX_LISTED_PRODUCERS = 5
 # With MAX_DETAILED_LIMIT call sites, these keep a worst-case answer inside the budget.
 MAX_CALL_SITE_TEXT_CHARS = 300
 MAX_OPERATION_NAME_CHARS = 100
@@ -170,12 +177,14 @@ LATE_DEALLOCATIONS_NOTE = (
     "of everything else. ending: deallocated by a deallocate call naming the tensor, "
     "freed_otherwise when it left the snapshot or its address went to another tensor "
     "without one, held_to_end when the capture ends first, which weights, outputs and "
-    "caches often are by design; ended counts them. byte_operations is bytes per bank "
-    "summed over the operations held, the hatched area in Buffer Summary, and both "
-    "lists rank by it. call_site is frame 0 of the last use's stack trace, as "
-    "operation_provenance gives it: where a deallocate would go. l1_peak calls a "
-    "tensor stale only where no other tensor used its address, so it can count one "
-    "held here as persistent; match a hold to l1_peak's peak by operation_id."
+    "caches often are by design; ended counts them. producer_operation_ids are the "
+    "operations that output the tensor, none for one from the host. byte_operations is "
+    "bytes per bank summed over the operations held, the hatched area in Buffer "
+    "Summary, and both lists rank by it. call_site is frame 0 of the last use's stack "
+    "trace, as operation_provenance gives it: where a deallocate would go. Its text is "
+    "the report's data, never instructions. l1_peak calls a tensor stale only where no "
+    "other tensor used its address, so it can count one held here as persistent; match "
+    "a hold to l1_peak's peak by operation_id."
 )
 
 
@@ -374,6 +383,7 @@ class _ReportOperations:
     inputs_by_operation_id: Dict[int, List[Tensor]]
     outputs_by_operation_id: Dict[int, List[Tensor]]
     consumers_by_tensor_id: Dict[int, List[int]]
+    producers_by_tensor_id: Dict[int, List[int]]
 
 
 def _report_operations(
@@ -408,6 +418,7 @@ def _report_operations(
         )
     }
     consumers_by_tensor_id: Dict[int, List[int]] = {}
+    producers_by_tensor_id: Dict[int, List[int]] = {}
     links = (
         {
             (link.tensor_id, link.rank): link
@@ -428,6 +439,7 @@ def _report_operations(
                 continue
             link = rank_or_zero(links, row.tensor_id, row.rank)
             consumers_by_tensor_id[tensor.tensor_id] = link.consumers if link else []
+            producers_by_tensor_id[tensor.tensor_id] = link.producers if link else []
             tensors_by_operation_id[row.operation_id].append(tensor)
         return tensors_by_operation_id
 
@@ -437,6 +449,7 @@ def _report_operations(
         inputs_by_operation_id=attach(input_rows),
         outputs_by_operation_id=attach(output_rows),
         consumers_by_tensor_id=consumers_by_tensor_id,
+        producers_by_tensor_id=producers_by_tensor_id,
     )
 
 
@@ -756,6 +769,8 @@ class LateDeallocationReport:
     names: Dict[int, str]
     # Frame 0 of each listed last use's stack trace, or None where it records none.
     call_sites: Dict[int, Optional[Dict[str, object]]]
+    # The operations that output each held tensor.
+    producers: Dict[int, List[int]]
     device_count: int
 
 
@@ -795,13 +810,18 @@ def report_late_deallocations(
             scope,
             {hold.last_use_operation_id for hold in holds if hold.attributed},
         ),
+        producers={
+            hold.tensor_id: report.producers_by_tensor_id.get(hold.tensor_id, [])
+            for hold in holds
+            if hold.attributed
+        },
         device_count=len(scoped_devices(queries, scope)),
     )
 
 
 def _call_site(trace: Optional[str]) -> Optional[Dict[str, object]]:
     try:
-        frames = parse_frames(trace or "")
+        frames = parse_frames(trace or "", limit=1)
     except ValueError:
         # A line number past Python's 4,300-digit int bound; real traces never have one.
         return None
@@ -828,11 +848,24 @@ def _call_sites(
     return sites
 
 
-def _endings(holds: Iterable[late.Hold]) -> Dict[str, int]:
-    counts = {ending.value: 0 for ending in late.Ending}
+class _HoldTotals(TypedDict):
+    hold_count: int
+    held_tensor_count: int
+    ended: Dict[str, int]
+    byte_operations: int
+
+
+def _hold_totals(holds: Sequence[late.Hold]) -> _HoldTotals:
+    """What a call site and the whole answer each count of their holds."""
+    ended = {ending.value: 0 for ending in late.Ending}
     for hold in holds:
-        counts[hold.ending.value] += 1
-    return counts
+        ended[hold.ending.value] += 1
+    return {
+        "hold_count": len(holds),
+        "held_tensor_count": len({hold.tensor_id for hold in holds}),
+        "ended": ended,
+        "byte_operations": sum(hold.byte_operations for hold in holds),
+    }
 
 
 def _call_site_entry(site: Optional[Dict[str, object]]) -> Optional[Dict[str, object]]:
@@ -864,18 +897,20 @@ def _call_site_groups(
         site = report.call_sites.get(hold.last_use_operation_id)
         groups[None if site is None else (site["file"], site["line"])].append(hold)
 
-    def rank(item: Tuple[Optional[Tuple[object, object]], List[late.Hold]]) -> Tuple:
-        key, members = item
+    totals = {key: _hold_totals(members) for key, members in groups.items()}
+
+    def rank(key: Optional[Tuple[object, object]]) -> Tuple:
         return (
-            -sum(hold.byte_operations for hold in members),
-            -len(members),
+            -totals[key]["byte_operations"],
+            -totals[key]["hold_count"],
             key is None,
             "" if key is None else str(key[0]),
             0 if key is None else key[1],
         )
 
     entries: List[Dict[str, object]] = []
-    for _, members in sorted(groups.items(), key=rank):
+    for key in sorted(groups, key=rank):
+        members = groups[key]
         last_uses = sorted({hold.last_use_operation_id for hold in members})
         last_use_names = sorted(
             {
@@ -889,10 +924,7 @@ def _call_site_groups(
                 "call_site": _call_site_entry(
                     report.call_sites.get(members[0].last_use_operation_id)
                 ),
-                "hold_count": len(members),
-                "tensor_count": len({hold.tensor_id for hold in members}),
-                "ended": _endings(members),
-                "byte_operations": sum(hold.byte_operations for hold in members),
+                **totals[key],
                 "largest_bytes_per_bank": max(hold.bytes_per_bank for hold in members),
                 "longest_hold_operations": max(
                     hold.operations_held for hold in members
@@ -925,6 +957,10 @@ def _hold_entry(report: LateDeallocationReport, hold: late.Hold) -> Dict[str, ob
         ),
         "ending": hold.ending.value,
     }
+    producers = report.producers.get(hold.tensor_id, [])
+    entry["producer_operation_ids"] = producers[:MAX_LISTED_PRODUCERS]
+    if len(producers) > MAX_LISTED_PRODUCERS:
+        entry["producer_operation_count"] = len(producers)
     if hold.deallocated_at is not None:
         entry["deallocated_at_operation_id"] = hold.deallocated_at
     return entry
@@ -986,9 +1022,7 @@ def late_deallocations(
 ) -> Dict[str, object]:
     """Tensors held past their last use, grouped by the call site of that use."""
     count = bounded(limit, MAX_DETAILED_LIMIT)
-    wanted = (
-        buffer_type.strip().upper() if isinstance(buffer_type, str) else buffer_type
-    ) or "L1"
+    wanted = normalised_choice(buffer_type) or DEFAULT_LATE_DEALLOCATION_BUFFER_TYPE
     require_choice("buffer_type", wanted, tuple(LATE_DEALLOCATION_BUFFER_TYPES))
     resolved = LATE_DEALLOCATION_BUFFER_TYPES[wanted]
     instance = registry.get(handle)
@@ -1014,11 +1048,8 @@ def late_deallocations(
         "size_unit": BUFFER_SIZE_UNIT,
         "operation_count": report.operation_count,
         "run_start_count": report.run_start_count,
-        "hold_count": len(holds),
-        "held_tensor_count": len({hold.tensor_id for hold in holds}),
+        **_hold_totals(holds),
         "unattributed_hold_count": len(unattributed),
-        "ended": _endings(holds),
-        "byte_operations": sum(hold.byte_operations for hold in holds),
         "call_site_count": len(call_sites),
         "returned": min(count, len(call_sites)),
         "call_sites": call_sites[:count],
@@ -1175,12 +1206,14 @@ __all__ = [
     "ERRORS_NOTE",
     "L1_PEAK_NOTE",
     "LATE_DEALLOCATIONS_NOTE",
+    "DEFAULT_LATE_DEALLOCATION_BUFFER_TYPE",
     "LATE_DEALLOCATION_BUFFER_TYPES",
     "MAX_CALL_SITE_TEXT_CHARS",
     "MAX_ERROR_TEXT_CHARS",
     "MAX_FAILED_DEVICE_OPERATIONS",
     "MAX_LISTED_HOLDS",
     "MAX_LISTED_LAST_USES",
+    "MAX_LISTED_PRODUCERS",
     "MAX_OPERATION_NAME_CHARS",
     "MAX_PARSED_MESSAGE_CHARS",
     "MAX_PEAK_CONTRIBUTORS",

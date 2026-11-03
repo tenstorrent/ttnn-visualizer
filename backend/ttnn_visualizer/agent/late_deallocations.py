@@ -35,7 +35,7 @@ NO_CONSUMER_OPERATION_ID = -1
 DEALLOCATE_OPERATION_NAMES = frozenset({"ttnn.deallocate", "ttnn::deallocate"})
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class HeldTensor:
     """`TensorDeallocationReport`: allocated at an operation after its last use."""
 
@@ -100,7 +100,7 @@ def last_valid_consumer(
 def buffer_sizes_by_operation(
     operation_ids: Sequence[int], buffers: Iterable[Tuple[object, int, object]]
 ) -> Iterator[Dict[int, int]]:
-    """`uniqueBuffersByOperationList`: each operation's largest buffer per address, in
+    """`getUniqueBuffersByOperation`: each operation's largest buffer per address, in
     `operation_ids` order, from (operation id, address, size per bank) rows in
     operation order. One operation's rows are held at a time."""
     # Coerced per operation, not per row: the key runs 3.2M times on one capture.
@@ -155,8 +155,9 @@ def held_tensors_by_operation(
     consumers_by_tensor_id: Mapping[int, Sequence[int]],
     operation_names_by_id: Mapping[int, str],
 ) -> HeldTensors:
-    """`buildLateDeallocationReports`' `reportsByOpId`, over `tensorsByOperationByAddress`,
-    with the operations that recorded any of these buffers."""
+    """`buildLateDeallocationReports`' `reportsByOpId`, over
+    `buildTensorsByOperationByAddress`, with the operations that recorded any of these
+    buffers."""
     latest_tensor_by_address: Dict[int, Tensor] = {}
     last_use_by_tensor_id: Dict[int, int] = {}
     held_by_operation: Dict[int, List[HeldTensor]] = {}
@@ -257,7 +258,7 @@ def holds(
     operation_ids: Sequence[int],
     held_by_operation: Mapping[int, Sequence[HeldTensor]],
     buffered_operation_ids: Set[int],
-    deallocations: Mapping[int, Sequence[int]],
+    deallocate_calls_by_tensor_id: Mapping[int, Sequence[int]],
 ) -> List[Hold]:
     """The app's runs followed to their end, carried across operations that recorded
     none of these buffers, where the app starts each one again."""
@@ -285,7 +286,7 @@ def holds(
                         entry,
                         operation_id,
                         buffered_so_far,
-                        deallocations.get(entry.tensor_id, ()),
+                        deallocate_calls_by_tensor_id.get(entry.tensor_id, ()),
                     ),
                 )
             elif skipped:
@@ -296,12 +297,16 @@ def holds(
             hold.byte_operations += entry.bytes_per_bank
             current[key] = hold
         for hold in open_holds.values():
-            _end(hold, operation_id, deallocations.get(hold.tensor_id, ()))
+            _end(
+                hold,
+                operation_id,
+                deallocate_calls_by_tensor_id.get(hold.tensor_id, ()),
+            )
             ended.append(hold)
         open_holds = current
         skipped = False
     for hold in open_holds.values():
-        _end(hold, None, deallocations.get(hold.tensor_id, ()))
+        _end(hold, None, deallocate_calls_by_tensor_id.get(hold.tensor_id, ()))
     return ended + list(open_holds.values())
 
 

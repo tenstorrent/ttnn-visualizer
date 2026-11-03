@@ -24,6 +24,7 @@ from ttnn_visualizer.agent.handles import ReportRegistry, load_report
 from ttnn_visualizer.agent.operations import BUFFER_SIZE_UNIT
 from ttnn_visualizer.models import BufferType, Tensor
 from ttnn_visualizer.queries import DatabaseQueries
+from ttnn_visualizer.tests.memory_report_db import load_memory_report
 from ttnn_visualizer.tests.test_agent_perf_detail import ANSWER_BUDGET_BYTES
 
 L1 = BufferType.L1.value
@@ -438,28 +439,20 @@ def _load(
     stack_traces_table: bool = True,
 ) -> Tuple[ReportRegistry, str]:
     """A report of `rows_by_rank`; under `None`, one with no rank column."""
-    ranked = None not in rows_by_rank
     tables = [name for name in _TABLES if stack_traces_table or name != "stack_traces"]
-    directory = tmp_path / "profiler"
-    directory.mkdir()
-    connection = sqlite3.connect(directory / "db.sqlite")
-    try:
-        for table in tables:
-            rank_column = "rank int, " if ranked else ""
-            connection.execute(f"CREATE TABLE {table} ({rank_column}{_TABLES[table]})")
-        for rank, rows_by_table in rows_by_rank.items():
-            for table in tables:
-                for row in rows_by_table[table]:
-                    values = row if rank is None else (rank, *row)
-                    placeholders = ", ".join("?" * len(values))
-                    connection.execute(
-                        f"INSERT INTO {table} VALUES ({placeholders})", values
-                    )
-        connection.commit()
-    finally:
-        connection.close()
-    registry = ReportRegistry()
-    return registry, str(load_report(registry, profiler_path=str(directory))["handle"])
+    rank_column = "" if None in rows_by_rank else "rank int, "
+    return load_memory_report(
+        tmp_path,
+        "".join(
+            f"CREATE TABLE {table} ({rank_column}{_TABLES[table]});" for table in tables
+        ),
+        (
+            (table, row if rank is None else (rank, *row))
+            for rank, rows_by_table in rows_by_rank.items()
+            for table in tables
+            for row in rows_by_table[table]
+        ),
+    )
 
 
 def _report(
@@ -622,7 +615,7 @@ class TestTheAnswer:
                         "code": "y = ttnn.matmul(a, b)",
                     },
                     "hold_count": 2,
-                    "tensor_count": 2,
+                    "held_tensor_count": 2,
                     "ended": {"deallocated": 1, "freed_otherwise": 0, "held_to_end": 1},
                     "byte_operations": 700,
                     "largest_bytes_per_bank": 200,
@@ -639,7 +632,7 @@ class TestTheAnswer:
                         "code": "z = ttnn.add(y, b)",
                     },
                     "hold_count": 1,
-                    "tensor_count": 1,
+                    "held_tensor_count": 1,
                     "ended": {"deallocated": 0, "freed_otherwise": 1, "held_to_end": 0},
                     "byte_operations": 300,
                     "largest_bytes_per_bank": 300,
@@ -676,9 +669,35 @@ class TestTheAnswer:
             "last_use_operation_name": "ttnn.matmul",
             "last_use_location": "/m/model.py:10",
             "ending": "deallocated",
+            "producer_operation_ids": [1],
             "deallocated_at_operation_id": 4,
         }
         assert "deallocated_at_operation_id" not in top[0]
+
+    def test_each_listed_hold_names_the_operations_that_output_its_tensor(
+        self, tmp_path
+    ):
+        """10 is output twice, 11 never, as a host tensor is, and 12 more times than
+        are listed."""
+        rows = _rows(
+            operations=[(op, "ttnn.op") for op in range(1, 10)],
+            tensors=[(10, 1000), (11, 2000), (12, 3000)],
+            inputs=[(3, 10), (3, 11), (8, 12)],
+            outputs=[(1, 10), (2, 10), *((op, 12) for op in range(1, 8))],
+            buffers=_snapshot(9, {1000: 100, 2000: 200, 3000: 300}),
+        )
+        registry, handle = _report(tmp_path, rows)
+
+        top = failures.late_deallocations(registry, handle)["top_holds"]
+
+        assert [
+            (
+                hold["tensor_id"],
+                hold["producer_operation_ids"],
+                hold.get("producer_operation_count"),
+            )
+            for hold in top
+        ] == [(12, [1, 2, 3, 4, 5], 7), (11, [], None), (10, [1, 2], None)]
 
     @pytest.mark.parametrize(
         ("buffer_type", "named", "tensor_id"),
@@ -756,7 +775,7 @@ class TestTheAnswer:
 
 
 class TestCallSites:
-    def test_holds_are_grouped_by_the_last_last_usesframe_0_and_ranked_by_bytes(
+    def test_holds_are_grouped_by_their_last_uses_frame_0_and_ranked_by_bytes(
         self, tmp_path
     ):
         """The outer frames differ, and the call site is still one."""
@@ -806,6 +825,76 @@ class TestCallSites:
         ]
         assert "2 of the 3 holds have no call site" in result["caveat"]
 
+    @pytest.mark.parametrize("line", ["9" * 4301, 0])
+    def test_a_line_number_no_file_has_is_no_call_site(self, tmp_path, line):
+        """Past 4,300 digits Python's `int` refuses the line; line 0 is no line."""
+        registry, handle = _held_once(
+            tmp_path, [(100, _trace("/m/model.py", line), "ttnn.matmul")]
+        )
+
+        result = failures.late_deallocations(registry, handle)
+
+        assert result["call_sites"][0]["call_site"] is None
+        assert "1 of the 1 holds have no call site" in result["caveat"]
+
+    def test_the_last_uses_past_one_read_of_traces_get_their_call_sites(self, tmp_path):
+        count = failures._STACK_TRACE_IDS_PER_READ + 1
+        uses = [
+            (10, _trace("/m/model.py", index + 1), "ttnn.matmul")
+            for index in range(count)
+        ]
+        # The highest last use, read in the second batch, holds the most.
+        uses[-1] = (1000, _trace("/m/model.py", count), "ttnn.matmul")
+        registry, handle = _held_once(tmp_path, uses)
+
+        with patch.object(
+            DatabaseQueries,
+            "query_stack_traces",
+            autospec=True,
+            side_effect=DatabaseQueries.query_stack_traces,
+        ) as read:
+            result = failures.late_deallocations(registry, handle)
+
+        assert read.call_count == 2
+        assert result["call_site_count"] == count
+        assert "no call site" not in result.get("caveat", "")
+        assert (
+            result["top_holds"][0]["last_use_operation_id"],
+            result["top_holds"][0]["last_use_location"],
+        ) == (count + 1, f"/m/model.py:{count}")
+
+    def test_an_operation_with_two_traces_is_placed_by_its_first(self, tmp_path):
+        rows = _rows(
+            operations=[(1, "ttnn.from_torch"), (2, "ttnn.matmul"), (3, "ttnn.add")],
+            tensors=[(10, 1000)],
+            inputs=[(2, 10)],
+            outputs=[(1, 10)],
+            buffers=_snapshot(3, {1000: 100}),
+            traces=[(2, _trace("/m/model.py", 10)), (2, _trace("/m/model.py", 20))],
+        )
+        registry, handle = _report(tmp_path, rows)
+
+        (site,) = failures.late_deallocations(registry, handle)["call_sites"]
+
+        assert site["call_site"]["line"] == 10
+
+    def test_call_sites_holding_as_much_rank_by_file_and_line_then_none(self, tmp_path):
+        registry, handle = _held_once(
+            tmp_path,
+            [
+                (100, None, "ttnn.add"),
+                (100, _trace("/m/model.py", 10), "ttnn.matmul"),
+                (100, _trace("/m/a.py", 30), "ttnn.relu"),
+            ],
+        )
+
+        sites = failures.late_deallocations(registry, handle)["call_sites"]
+
+        assert [
+            None if site["call_site"] is None else site["call_site"]["file"]
+            for site in sites
+        ] == ["/m/a.py", "/m/model.py", None]
+
     def test_a_report_without_stack_traces_answers_without_call_sites(self, tmp_path):
         rows = _rows(
             operations=[(1, "ttnn.from_torch"), (2, "ttnn.add"), (3, "ttnn.add")],
@@ -850,7 +939,7 @@ class TestCallSites:
         assert hold["last_use_operation_name_full_length"] == len(name)
         assert hold["last_use_location"] == f"{file[:cap]}:10"
 
-    def test_a_call_site_lists_a_few_last_last_usesand_counts_them_all(self, tmp_path):
+    def test_a_call_site_lists_a_few_last_uses_and_counts_them_all(self, tmp_path):
         registry, handle = _many_call_sites(tmp_path, sites=1, uses=7)
 
         (site,) = failures.late_deallocations(registry, handle)["call_sites"]
@@ -1070,6 +1159,14 @@ class TestIterBufferSizes:
 
         assert [row[0] for row in rows] == [1, 1, 3]
         assert sorted(rows) == [(1, 100, 10), (1, 110, 11), (3, 300, 30)]
+
+    def test_text_operation_ids_are_stored_and_read_as_numbers(self):
+        """The column's integer affinity stores them as numbers, so "10" follows "2"."""
+        queries = self._queries(
+            False, [("10", 0, 100, 10, L1, 0), ("2", 0, 200, 20, L1, 0)]
+        )
+
+        assert list(queries.iter_buffer_sizes(L1)) == [(2, 200, 20), (10, 100, 10)]
 
     def test_a_rank_is_read_where_the_table_has_one(self):
         rows = [(0, 1, 0, 100, 10, L1, 0), (1, 1, 0, 200, 20, L1, 0)]

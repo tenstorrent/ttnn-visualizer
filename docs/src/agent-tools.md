@@ -655,7 +655,9 @@ site `operation_provenance` gives, which is where a `ttnn.deallocate` would free
 sooner: 192 L1 holds come from 7 call sites on a 1,199-op llama capture, and 3,453 DRAM
 holds from 14 on a 9,940-op one. Both lists rank by `byte_operations`, bytes per bank summed
 over the operations held, which is the hatched area in Buffer Summary. `limit` caps
-`call_sites` at 25; `top_holds` lists the 20 largest holds whatever the limit.
+`call_sites` at 25; `top_holds` lists the 20 largest holds whatever the limit, each with
+`producer_operation_ids`, the operations that output its tensor: none for a tensor from the
+host, and two for some.
 
 Each hold's `ending` says how it stopped, and `ended` counts them: `deallocated` by a
 deallocate call naming the tensor, `freed_otherwise` when it left the snapshot or its

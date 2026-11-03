@@ -29,7 +29,7 @@ from typing import (
     Set,
 )
 
-from ttnn_visualizer.agent.late_deallocations import DEALLOCATE_OPERATION_NAMES
+from ttnn_visualizer.agent.late_deallocations import is_deallocate
 from ttnn_visualizer.queries import DatabaseQueries
 
 # `US_TO_NS` in `src/functions/perfOverlay.ts`: the app weighs the path in nanoseconds.
@@ -108,7 +108,7 @@ def kept_operation_ids(graph: OpGraph) -> FrozenSet[int]:
     return frozenset(
         operation_id
         for operation_id in connected
-        if graph.names.get(operation_id, "").lower() not in DEALLOCATE_OPERATION_NAMES
+        if not is_deallocate(graph.names.get(operation_id))
     )
 
 

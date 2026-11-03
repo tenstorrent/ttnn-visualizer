@@ -762,7 +762,8 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "otherwise, or held to the end of the capture, as weights often "
                 "are), and the bytes per bank they held summed over the operations "
                 "held, which ranks them; the largest holds are listed apart, at most "
-                f"{failures.MAX_LISTED_HOLDS}. One buffer type at a time: L1, as the "
+                f"{failures.MAX_LISTED_HOLDS}, with the operations that produced each "
+                "tensor. One buffer type at a time: L1, as the "
                 "app shows it, unless asked for DRAM, which the app does not show. "
                 "l1_peak's stale tensors are a floor and can miss holds listed here."
             ),
