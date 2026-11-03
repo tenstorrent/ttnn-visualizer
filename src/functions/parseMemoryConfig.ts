@@ -6,8 +6,9 @@ import { MemoryConfig, MemoryKeys, ShardSpec, TensorMemoryLayout } from '../mode
 import { BufferType, toBufferType } from '../model/BufferType';
 
 // Anchored at both ends, like the backend's `re.match`, so a tensor argument whose repr merely
-// contains a memory config is not read as one. Older reports namespace the type.
-const memoryConfigPattern = /^(?:tt::tt_metal::)?MemoryConfig\((.*)\)$/;
+// contains a memory config is not read as one. Older reports namespace the type. `\n?` matches
+// Python's `$`, which also allows one trailing newline.
+const memoryConfigPattern = /^(?:tt::tt_metal::)?MemoryConfig\((.*)\)\n?$/;
 const bufferTypePattern = /buffer_type=BufferType::([A-Z0-9_]+)/;
 const memoryLayoutPattern = /memory_layout=([A-Za-z_:]+)/;
 const shardSpecPattern =
@@ -62,9 +63,8 @@ export const isMemoryConfigValue = (value: string | null | undefined): value is 
  * `parse_memory_config_buffer_type`. Kept out of `parseMemoryConfig`, whose result the
  * operation details view renders key by key.
  */
-export const getMemoryConfigBufferType = (value: string | null | undefined): BufferType | null => {
-    return toBufferType(getMemoryConfigBody(value)?.match(bufferTypePattern)?.[1]);
-};
+export const getMemoryConfigBufferType = (value: string | null | undefined): BufferType | null =>
+    toBufferType(getMemoryConfigBody(value)?.match(bufferTypePattern)?.[1]);
 
 export const MEMORY_CONFIG_HEADERS = {
     shard_spec: 'ShardSpec',

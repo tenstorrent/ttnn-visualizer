@@ -1016,6 +1016,8 @@ def test_parse_memory_config_buffer_type_is_none_without_a_declared_type(
         (_HEIGHT_SHARDED_L1, "L1"),
         # Older reports namespace the type.
         (f"tt::tt_metal::{_HEIGHT_SHARDED_L1}", "L1"),
+        # `$` allows one trailing newline; the frontend's pattern does the same.
+        (f"{_HEIGHT_SHARDED_L1}\n", "L1"),
     ],
 )
 def test_parse_memory_config_buffer_type_reads_the_declared_type(

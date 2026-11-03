@@ -5,15 +5,12 @@
 import { Switch } from '@blueprintjs/core';
 import { useState } from 'react';
 import 'styles/components/TensorArgument.scss';
-import { MemoryConfig, ShardSpec } from '../model/MemoryConfig';
+import { OperationArgument } from '../model/APIData';
+import { ShardSpec } from '../model/MemoryConfig';
 import MemoryConfigRow from './MemoryConfigRow';
 
 interface TensorArgumentProps {
-    argument: {
-        name: string;
-        value: string;
-        parsedValue: MemoryConfig | null;
-    };
+    argument: OperationArgument;
     onCollapse?: () => void;
 }
 

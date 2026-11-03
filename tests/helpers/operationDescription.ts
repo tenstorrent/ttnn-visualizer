@@ -16,6 +16,13 @@ export const makeMemoryConfigArgument = (bufferType: string, name = 'memory_conf
     parsedValue: null,
 });
 
+/**
+ * A tensor argument's repr as reports print it, with `memoryConfig` mid-string. Pass `data` to
+ * print the values first, as reports do for a tensor small enough to show; they may span lines.
+ */
+export const makeTensorRepr = (memoryConfig: string, data: string | null = null) =>
+    `ttnn.Tensor(${data != null ? `${data}, ` : ''}shape=Shape([1, 1000]), dtype=DataType.BFLOAT16, layout=Layout.TILE, memory_config=${memoryConfig}, storage_type=StorageType.DEVICE, tensor_id=214, placements=['PlacementReplicate()'])`;
+
 export const makeTensor = (overrides: Partial<Tensor> = {}): Tensor =>
     ({
         id: 1,

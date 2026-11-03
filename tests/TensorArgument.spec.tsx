@@ -7,10 +7,11 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import TensorArgument from '../src/components/TensorArgument';
 import { withParsedMemoryConfig } from '../src/functions/parseMemoryConfig';
+import { makeTensorRepr } from './helpers/operationDescription';
 
 const MEMORY_CONFIG =
     'MemoryConfig(memory_layout=TensorMemoryLayout::WIDTH_SHARDED,buffer_type=BufferType::L1,shard_spec=std::nullopt,nd_shard_spec=std::nullopt,created_with_nd_shard_spec=0)';
-const TENSOR_REPR = `ttnn.Tensor(shape=Shape([1, 1000]), dtype=DataType.BFLOAT16, layout=Layout.TILE, memory_config=${MEMORY_CONFIG}, storage_type=StorageType.DEVICE, placements=['PlacementReplicate()'])`;
+const TENSOR_REPR = makeTensorRepr(MEMORY_CONFIG);
 
 // Builds the argument as `fetchOperations` hands it to the view.
 const renderArgument = (name: string, value: string) =>
@@ -26,6 +27,7 @@ describe('TensorArgument', () => {
 
         expect(screen.getByRole('table')).toBeInTheDocument();
         expect(screen.getByText('MemoryLayout')).toBeInTheDocument();
+        expect(screen.getByText('WIDTH_SHARDED')).toBeInTheDocument();
     });
 
     it('renders a tensor repr as its text, not as its memory config', () => {
@@ -36,8 +38,7 @@ describe('TensorArgument', () => {
     });
 
     it('renders a multi-line tensor repr as a collapsed tensor, not as its memory config', () => {
-        const value = `ttnn.Tensor([[1.0, 2.0],\n [3.0, 4.0]], memory_config=${MEMORY_CONFIG})`;
-        renderArgument('memory_config', value);
+        renderArgument('memory_config', makeTensorRepr(MEMORY_CONFIG, '[[1.0, 2.0],\n [3.0, 4.0]]'));
 
         expect(screen.queryByRole('table')).not.toBeInTheDocument();
         expect(screen.getByLabelText('Show full tensor')).toBeInTheDocument();
