@@ -250,6 +250,7 @@ export interface ReportMetadataResponse {
     git_sha?: string;
     world_size?: string;
 }
+
 export interface OperationArgument {
     name: string;
     value: string;

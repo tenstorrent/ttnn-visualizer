@@ -242,7 +242,7 @@ Applies on touch to views that draw data-proportional visuals (NPE chip cluster 
   | `get*` | Pure accessor or formatter |
   | `is*`, `has*` | Boolean predicate |
   | `fetch*` | Async axios wrapper returning `Promise<T>` |
-  | `with*` | Copy of its input with one field added or replaced |
+  | `with*` | Its input with one property added or changed |
 
 - **Prefer named constants over magic strings or numbers.** Promote semantic literals — user-visible copy, status keys, thresholds, durations, retry counts, storage keys — to **`SCREAMING_SNAKE_CASE`** at module scope; `const` for module-private, exported from `src/definitions/` when shared. The bar is "could a reviewer guess *why* this value, not just *what*?". Self-evident arithmetic and one-shot constructor arguments stay inline. Colour and shared layout literals follow the stricter [CSS / SCSS](#css--scss) rules instead. Worked examples: [CONVENTIONS.md](./CONVENTIONS.md#prefer-named-constants-over-magic-strings-or-numbers).
 - **Prefer an enum when constants belong to a related set** — status values, mode kinds, error codes, toast types — declared in `src/definitions/` (or the owning module) rather than a bag of independent consts. **String-valued** when the value crosses a serialisation boundary (JSON, URL params, storage keys, backend comparisons); numeric only for purely internal sets. Every call site uses the member, never the underlying literal. **Members are `SCREAMING_SNAKE_CASE`** — older PascalCase enums exist, new code doesn't copy them. Rationale: [CONVENTIONS.md](./CONVENTIONS.md#prefer-an-enum-for-a-related-set-of-constants).

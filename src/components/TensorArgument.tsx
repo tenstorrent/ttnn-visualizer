@@ -26,24 +26,23 @@ function TensorArgument({ argument, onCollapse }: TensorArgumentProps) {
         }
     };
 
-    if (argument?.parsedValue) {
+    if (argument.parsedValue) {
         return (
             <table className='ttnn-table alt-two-tone-rows arguments-table'>
                 <tbody>
-                    {argument.parsedValue &&
-                        Object.entries(argument.parsedValue)?.map(([key, value]) => (
-                            <MemoryConfigRow
-                                key={key}
-                                header={key}
-                                value={value as string | ShardSpec}
-                            />
-                        ))}
+                    {Object.entries(argument.parsedValue).map(([key, value]) => (
+                        <MemoryConfigRow
+                            key={key}
+                            header={key}
+                            value={value as string | ShardSpec}
+                        />
+                    ))}
                 </tbody>
             </table>
         );
     }
 
-    if (typeof argument.value === 'string' && !isLengthyTensor(argument.value)) {
+    if (!isLengthyTensor(argument.value)) {
         return argument.value;
     }
 
@@ -57,7 +56,7 @@ function TensorArgument({ argument, onCollapse }: TensorArgumentProps) {
 
             {isExpanded ? (
                 <>
-                    {typeof argument.value === 'string' && <pre>{argument.value as string}</pre>}
+                    <pre>{argument.value}</pre>
 
                     {onCollapse && (
                         <Switch
@@ -68,13 +67,11 @@ function TensorArgument({ argument, onCollapse }: TensorArgumentProps) {
                     )}
                 </>
             ) : (
-                Array.isArray(splitArgument) && (
-                    <>
-                        <p className='monospace'>{splitArgument[0]}</p>
-                        <p className='monospace'>.........</p>
-                        <p className='monospace'>{splitArgument[splitArgument.length - 1]}</p>
-                    </>
-                )
+                <>
+                    <p className='monospace'>{splitArgument[0]}</p>
+                    <p className='monospace'>.........</p>
+                    <p className='monospace'>{splitArgument[splitArgument.length - 1]}</p>
+                </>
             )}
         </div>
     );

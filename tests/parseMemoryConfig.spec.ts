@@ -14,9 +14,8 @@ import { makeMemoryConfigArgument, makeTensorRepr } from './helpers/operationDes
 // The older form, without the nd_shard_spec fields.
 const SHARDED_L1 =
     'MemoryConfig(memory_layout=TensorMemoryLayout::HEIGHT_SHARDED,buffer_type=BufferType::L1,shard_spec=ShardSpec(grid={[(x=0,y=0) - (x=7,y=7)]},shape={32, 64},orientation=ShardOrientation::ROW_MAJOR,halo=0))';
-// The repr still ends in `)`, so a pattern unanchored at the start reads the whole tail as the
-// config. Printed with its data, only the last line holds it, which the same pattern, without
-// the `m` flag, still matched.
+// Tensor arguments hold a memory config mid-string; printed with their data, on the last line.
+// Only an anchored pattern rejects both.
 const TENSOR_REPR = makeTensorRepr(SHARDED_L1);
 const MULTI_LINE_TENSOR_REPR = makeTensorRepr(SHARDED_L1, '[[1.0, 2.0],\n [3.0, 4.0]]');
 // Values that contain a memory config without being one, labelled so test names stay readable.
@@ -24,6 +23,9 @@ const NOT_A_MEMORY_CONFIG: [string, string][] = [
     ['a tensor repr that contains a memory config', TENSOR_REPR],
     ['a multi-line tensor repr whose last line contains a memory config', MULTI_LINE_TENSOR_REPR],
     ['a value that only ends in a memory config', `ttnn.Tensor(..., memory_config=${SHARDED_L1}`],
+    // The backend's `$` allows one trailing newline and no more; `test_utils.py` pins the same.
+    ['a config with two trailing newlines', `${SHARDED_L1}\n\n`],
+    ['a config with trailing whitespace', `${SHARDED_L1} `],
 ];
 const EMPTY_VALUES: [string, string | null | undefined][] = [
     ['null', null],
@@ -83,14 +85,11 @@ describe('withParsedMemoryConfig', () => {
     });
 
     it.each([
-        ['a tensor repr', TENSOR_REPR],
-        ['std::nullopt', 'std::nullopt'],
-    ])('gives a memory_config argument holding %s a null parsedValue', (_label, value) => {
-        expect(withParsedMemoryConfig({ name: 'memory_config', value })).toEqual({
-            name: 'memory_config',
-            value,
-            parsedValue: null,
-        });
+        ['memory_config', TENSOR_REPR],
+        ['memory_config', 'std::nullopt'],
+        ['input_tensor', TENSOR_REPR],
+    ])('gives a %s argument that is not a whole memory config a null parsedValue', (name, value) => {
+        expect(withParsedMemoryConfig({ name, value })).toEqual({ name, value, parsedValue: null });
     });
 });
 

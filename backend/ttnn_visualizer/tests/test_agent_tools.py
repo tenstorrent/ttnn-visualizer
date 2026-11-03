@@ -160,12 +160,13 @@ def _touch_after(older, newer, times=None):
     the filesystem's clock, so only the order of the calls decides. Back to back,
     both can land on one tick of a coarse clock and tie, and a tie falls to glob
     order. Touch `newer` again until its ctime is strictly later, whatever the
-    timestamp resolution.
+    timestamp resolution. Compare as it does, with the float `os.path.getctime`,
+    which can call two ctimes a few nanoseconds apart equal.
     """
     deadline = time.monotonic() + 5
     while True:
         os.utime(newer, times)
-        if newer.stat().st_ctime_ns > older.stat().st_ctime_ns:
+        if os.path.getctime(newer) > os.path.getctime(older):
             return
         assert time.monotonic() < deadline, "ctimes never separated"
         time.sleep(0.01)

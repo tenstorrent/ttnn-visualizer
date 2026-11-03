@@ -792,7 +792,7 @@ New routes add an entry to `routeObjectList` and (if they require an active repo
 | `get*` | Pure accessor or formatter | `getResponseError`, `getNodeRelationToFocused` |
 | `is*`, `has*` | Boolean predicate | `isDeviceOperation`, `hasRangeSelected` |
 | `fetch*` | Async axios wrapper returning `Promise<T>` | `fetchInstance`, `fetchBufferPages` |
-| `with*` | Copy of its input with one field added or replaced | `withParsedMemoryConfig`, `withAlpha` |
+| `with*` | Its input with one property added or changed | `withParsedMemoryConfig`, `withAlpha` |
 
 `src/hooks/useAPI.tsx`
 

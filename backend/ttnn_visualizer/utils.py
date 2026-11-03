@@ -1278,7 +1278,8 @@ def update_last_synced(directory: Path) -> None:
         file.write(str(timestamp))
 
 
-# Older reports namespace the type as `tt::tt_metal::MemoryConfig(...)`.
+# Older reports namespace the type as `tt::tt_metal::MemoryConfig(...)`. Mirrored
+# by `memoryConfigPattern` in src/functions/parseMemoryConfig.ts; change both.
 MEMORY_CONFIG_PATTERN = re.compile(r"(?:tt::tt_metal::)?MemoryConfig\((.*)\)$")
 MEMORY_LAYOUT_PATTERN = re.compile(r"memory_layout=([A-Za-z_:]+)")
 MEMORY_BUFFER_TYPE_PATTERN = re.compile(r"buffer_type=BufferType::([A-Z0-9_]+)")

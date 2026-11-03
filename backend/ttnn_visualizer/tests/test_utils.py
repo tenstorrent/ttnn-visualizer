@@ -991,6 +991,14 @@ _HEIGHT_SHARDED_L1 = (
     "buffer_type=BufferType::L1,shard_spec=ShardSpec(grid={[(x=0,y=0) - (x=7,y=7)]},"
     "shape={32, 64},orientation=ShardOrientation::ROW_MAJOR,halo=0))"
 )
+# Values that contain a memory config without being one. The frontend's
+# `NOT_A_MEMORY_CONFIG` rejects the same, so loosening either pattern fails here.
+_NOT_A_MEMORY_CONFIG = [
+    f"ttnn.Tensor(shape=Shape([1, 1000]), memory_config={_HEIGHT_SHARDED_L1}, "
+    "storage_type=StorageType.DEVICE)",
+    f"{_HEIGHT_SHARDED_L1}\n\n",
+    f"{_HEIGHT_SHARDED_L1} ",
+]
 
 
 @pytest.mark.parametrize(
@@ -1001,6 +1009,7 @@ _HEIGHT_SHARDED_L1 = (
         "",
         "garbage",
         "MemoryConfig(memory_layout=TensorMemoryLayout::INTERLEAVED,shard_spec=std::nullopt)",
+        *_NOT_A_MEMORY_CONFIG,
     ],
 )
 def test_parse_memory_config_buffer_type_is_none_without_a_declared_type(
@@ -1026,7 +1035,9 @@ def test_parse_memory_config_buffer_type_reads_the_declared_type(
     assert parse_memory_config_buffer_type(memory_config) == expected
 
 
-@pytest.mark.parametrize("memory_config", [None, {}, "", "garbage"])
+@pytest.mark.parametrize(
+    "memory_config", [None, {}, "", "garbage", *_NOT_A_MEMORY_CONFIG]
+)
 def test_parse_memory_config_is_none_for_anything_but_a_memory_config(
     memory_config,
 ):
