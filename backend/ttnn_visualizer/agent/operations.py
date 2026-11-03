@@ -5,7 +5,7 @@
 """What the run allocated and what flowed between its operations.
 
 Round one answered where the time went, from the performance CSVs. These read
-the profiler report's SQLite database instead, which is the half of bring-up the
+the memory report's SQLite database instead, which is the half of bring-up the
 first slice could not reach: an out-of-memory failure or an unintended DRAM
 spill is as common as a slow op, and no tool exposed a byte. #2012
 
@@ -87,7 +87,7 @@ BUFFER_TYPE_NAMES = tuple(sorted(member.name for member in BufferType))
 
 
 class ProfilerDatabaseMissingError(ValueError):
-    """Raised when a handle has no profiler database to read."""
+    """Raised when a handle has no memory report database to read."""
 
 
 @contextmanager
@@ -106,7 +106,7 @@ def profiler_db(instance: Instance) -> Iterator[DatabaseQueries]:
     if not instance.profiler_path:
         raise ProfilerDatabaseMissingError(
             "this handle was loaded without a profiler_path; memory and operation "
-            "questions need the profiler report directory"
+            "questions need the memory report directory"
         )
     db_file = Path(instance.profiler_path, PROFILER_DB_FILE)
     if not db_file.is_file():
@@ -724,7 +724,7 @@ def operation_provenance(
 ) -> Dict[str, object]:
     """What an operation was called with, and where in the model code it came from.
 
-    Takes the profiler database's `operation_id`, the same one `memory_profile`,
+    Takes the memory report database's `operation_id`, the same one `memory_profile`,
     `operation_detail` and `find_operations` use -- *not* the `id` from `top_ops`,
     which numbers rows of the performance CSV. The two are small
     integers in overlapping ranges, so passing a CSV row number here does not

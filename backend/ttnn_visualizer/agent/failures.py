@@ -5,7 +5,7 @@
 """What went wrong in a run: recorded errors, likely DRAM fallbacks, the L1 peak, and
 tensors held past their last use. #2154, #2156
 
-Each answer reads the profiler database the way the app's routes do, so it agrees with
+Each answer reads the memory report database the way the app's routes do, so it agrees with
 what the app shows for the same report.
 """
 

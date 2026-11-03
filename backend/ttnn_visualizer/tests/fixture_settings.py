@@ -45,9 +45,9 @@ PINNED_ENV_SETTINGS = frozenset(
         "SECRET_KEY",
         "SERVER_MODE",
         "SESSION_MAX_UPLOADED_REPORTS",
+        "SSH_DEFAULT_MEMORY_REPORT_PATH",
         "SSH_DEFAULT_PERFORMANCE_PATH",
         "SSH_DEFAULT_PORT",
-        "SSH_DEFAULT_PROFILER_PATH",
         "TESTING",
         "TT_METAL_HOME",
         "USE_WEBSOCKETS",
@@ -110,7 +110,7 @@ def base_test_settings(tmpdir: str, **overrides: Any) -> Dict[str, Any]:
         # exists to displace: it binds at import from the environment.
         "SESSION_MAX_UPLOADED_REPORTS": _DEFAULT_SESSION_MAX_UPLOADED_REPORTS,
         "SSH_DEFAULT_PORT": 22,
-        "SSH_DEFAULT_PROFILER_PATH": "",
+        "SSH_DEFAULT_MEMORY_REPORT_PATH": "",
         "SSH_DEFAULT_PERFORMANCE_PATH": "",
         # The allowlist the descriptor would resolve with no operator variable set.
         # Derived from ``DefaultConfig`` rather than written as a literal so it follows a

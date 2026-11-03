@@ -94,12 +94,12 @@ Recorded by the server once during a successful local launch.
 
 Recorded after a report is loaded successfully.
 
-- `kind`: `profiler`, `performance`, `npe`, `mlir`, `cluster_descriptor`.
+- `kind`: `profiler` (the memory report), `performance`, `npe`, `mlir`, `cluster_descriptor`.
 - `source`: `upload`, `remote_sync`, `local_tt_metal`, `demo`.
   - `upload`: a report uploaded from the browser. Under `SERVER_MODE`, this also counts every reselection of one of the session's earlier uploads from the report list, so hosted `upload` counts are loads, not uploads.
   - `remote_sync`: a report synced from a remote host.
   - `local_tt_metal`: a report selected from the local installation's report folders. Without `TT_METAL_HOME`, uploads are saved into those same folders, so this includes reselecting an earlier upload on a local installation. Never recorded under `SERVER_MODE`.
-  - `demo`: a bundled demo report. That is any NPE demo, and, under `SERVER_MODE`, any profiler or performance report in one of the folders unpacked from `demo-reports/`, such as `WH_DEMO_N300-LLAMA` or `BH_DEMO_bge_m3`. The exact folder names are listed in `DEMO_PROFILER_DIRECTORY_NAMES` and `DEMO_PERFORMANCE_DIRECTORY_NAMES` in `views.py`.
+  - `demo`: a bundled demo report. That is any NPE demo, and, under `SERVER_MODE`, any memory or performance report in one of the folders unpacked from `demo-reports/`, such as `WH_DEMO_N300-LLAMA` or `BH_DEMO_bge_m3`. The exact folder names are listed in `DEMO_PROFILER_DIRECTORY_NAMES` and `DEMO_PERFORMANCE_DIRECTORY_NAMES` in `views.py`.
 
 Because reselected uploads count as `upload` when hosted but as `local_tt_metal` locally, do not compare upload share between hosted and local logs.
 
@@ -109,7 +109,7 @@ Before 0.107.0, hosted event logs tagged every report picked from the hosted rep
 
 Recorded after a report cannot be loaded.
 
-- `kind`: `profiler`, `performance`, `npe`, `mlir`, `cluster_descriptor`.
+- `kind`: `profiler` (the memory report), `performance`, `npe`, `mlir`, `cluster_descriptor`.
 - `reason_class`: `unsupported_version`, `missing_file`, `parse_error`, `too_large`, `permission`, `other`.
 
 The reason is deliberately classified rather than copied from an error message.

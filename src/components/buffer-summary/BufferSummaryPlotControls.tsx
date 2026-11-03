@@ -31,6 +31,10 @@ import { LateDeallocationCount } from '../../definitions/LateDeallocation';
 import { TEST_IDS } from '../../definitions/TestIds';
 import 'styles/components/BufferSummaryControls.scss';
 
+const L1_PRESSURE_UNAVAILABLE_TOOLTIP = "L1 pressure data isn't available for this memory report.";
+
+const UNLINKED_TOP_N_TOOLTIP = "Loaded performance report doesn't match this memory report (no operations in common).";
+
 // Static copy for the disabled-toggle tooltip, keyed by (mode, availability
 // state). Mirrors the PERF_OVERLAY_TOOLTIP map in definitions/PerfOverlayStatus
 // so the two surfaces use the same vocabulary for the same problem.
@@ -41,36 +45,32 @@ import 'styles/components/BufferSummaryControls.scss';
 const TOP_N_STATUS_TOOLTIP: Record<TopNAnnotationMode, Record<TopNAnnotationStatus, string>> = {
     [TopNAnnotationMode.PERF_TIME]: {
         [TopNAnnotationStatus.UNAVAILABLE]: 'Load a performance report to enable kernel-duration highlights.',
-        [TopNAnnotationStatus.UNLINKED]:
-            "Loaded performance report doesn't match this profiler report (no operations in common).",
+        [TopNAnnotationStatus.UNLINKED]: UNLINKED_TOP_N_TOOLTIP,
         [TopNAnnotationStatus.NO_DATA]: "Loaded performance report doesn't include kernel-duration data.",
         [TopNAnnotationStatus.READY]: 'Highlight the top-N ops on the timeline by kernel duration.',
     },
     [TopNAnnotationMode.PERF_OP_TO_OP_GAP]: {
         [TopNAnnotationStatus.UNAVAILABLE]: 'Load a performance report to enable op-to-op gap highlights.',
-        [TopNAnnotationStatus.UNLINKED]:
-            "Loaded performance report doesn't match this profiler report (no operations in common).",
+        [TopNAnnotationStatus.UNLINKED]: UNLINKED_TOP_N_TOOLTIP,
         [TopNAnnotationStatus.NO_DATA]: "Loaded performance report doesn't include op-to-op gap data.",
         [TopNAnnotationStatus.READY]: 'Highlight the top-N ops by dispatch / host-side stall (op-to-op gap).',
     },
     [TopNAnnotationMode.PERF_DRAM_PERCENT]: {
         [TopNAnnotationStatus.UNAVAILABLE]: 'Load a performance report to enable DRAM-utilization highlights.',
-        [TopNAnnotationStatus.UNLINKED]:
-            "Loaded performance report doesn't match this profiler report (no operations in common).",
+        [TopNAnnotationStatus.UNLINKED]: UNLINKED_TOP_N_TOOLTIP,
         [TopNAnnotationStatus.NO_DATA]: "Loaded performance report doesn't include DRAM-utilization data.",
         [TopNAnnotationStatus.READY]: 'Highlight the top-N ops by DRAM bandwidth utilization.',
     },
     [TopNAnnotationMode.PERF_FLOPS_PERCENT]: {
         [TopNAnnotationStatus.UNAVAILABLE]: 'Load a performance report to enable FLOPS-utilization highlights.',
-        [TopNAnnotationStatus.UNLINKED]:
-            "Loaded performance report doesn't match this profiler report (no operations in common).",
+        [TopNAnnotationStatus.UNLINKED]: UNLINKED_TOP_N_TOOLTIP,
         [TopNAnnotationStatus.NO_DATA]: "Loaded performance report doesn't include FLOPS-utilization data.",
         [TopNAnnotationStatus.READY]: 'Highlight the top-N ops by FLOPS utilization.',
     },
     [TopNAnnotationMode.L1_FULLNESS]: {
         [TopNAnnotationStatus.UNAVAILABLE]: 'L1 fullness highlights are only available on the L1 tab.',
-        [TopNAnnotationStatus.UNLINKED]: "L1 pressure data isn't available for this profiler report.",
-        [TopNAnnotationStatus.NO_DATA]: "L1 pressure data isn't available for this profiler report.",
+        [TopNAnnotationStatus.UNLINKED]: L1_PRESSURE_UNAVAILABLE_TOOLTIP,
+        [TopNAnnotationStatus.NO_DATA]: L1_PRESSURE_UNAVAILABLE_TOOLTIP,
         [TopNAnnotationStatus.READY]: 'Highlight the top-N ops on the timeline by L1 fullness.',
     },
 };

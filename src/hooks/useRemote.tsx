@@ -8,6 +8,7 @@ import { ConnectionTestStates } from '../definitions/ConnectionStatus';
 import Endpoints from '../definitions/Endpoints';
 import { FileTransferSource } from '../definitions/FileTransferSource';
 import { MountRemoteFolder, RemoteConnection, RemoteFolder } from '../model/RemoteConnection';
+import { NO_MEMORY_REPORT_PATH_MESSAGE, NO_PERFORMANCE_PATH_MESSAGE } from '../definitions/RemoteConnection';
 import { REMOTE_SYNC_REQUEST_TIMEOUT_MS } from '../definitions/RemoteSync';
 import { StackSourceOrigin } from '../definitions/StackTrace';
 import { clearFileTransferProgressForSource } from '../store/app';
@@ -160,11 +161,11 @@ const useRemoteConnection = () => {
 
         // Performance-only connections use empty profilerPath; require a path for the folder being synced.
         if (profilerRemoteFolder && !connection.profilerPath) {
-            throw new Error('No profiler path provided');
+            throw new Error(NO_MEMORY_REPORT_PATH_MESSAGE);
         }
 
         if (performanceRemoteFolder && !connection.performancePath) {
-            throw new Error('No performance path provided');
+            throw new Error(NO_PERFORMANCE_PATH_MESSAGE);
         }
 
         // Bound the hang and guarantee REMOTE_SYNC cleanup for every caller —
