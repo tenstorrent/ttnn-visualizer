@@ -117,10 +117,27 @@ function warnOnUnrecognisedServerMode(value: unknown): void {
     );
 }
 
-function getSshDefaults(port: unknown, profilerPath: unknown, performancePath: unknown) {
+// The memory report path's variable was `VITE_SSH_DEFAULT_PROFILER_PATH`. The old name is still
+// read when the new one is unset, so an existing `.env` keeps working, with a warning to rename it.
+function getViteMemoryReportPath(): unknown {
+    const current = import.meta.env.VITE_SSH_DEFAULT_MEMORY_REPORT_PATH;
+    if (current !== undefined) {
+        return current;
+    }
+
+    const former = import.meta.env.VITE_SSH_DEFAULT_PROFILER_PATH;
+    if (former !== undefined) {
+        // eslint-disable-next-line no-console -- there is no UI yet at config-read time, and this branch is dev-only.
+        console.warn('VITE_SSH_DEFAULT_PROFILER_PATH is deprecated; rename it to VITE_SSH_DEFAULT_MEMORY_REPORT_PATH.');
+    }
+
+    return former;
+}
+
+function getSshDefaults(port: unknown, memoryReportPath: unknown, performancePath: unknown) {
     return {
         SSH_DEFAULT_PORT: getValidSshDefaultPort(port),
-        SSH_DEFAULT_PROFILER_PATH: getOptionalPathDefault(profilerPath),
+        SSH_DEFAULT_MEMORY_REPORT_PATH: getOptionalPathDefault(memoryReportPath),
         SSH_DEFAULT_PERFORMANCE_PATH: getOptionalPathDefault(performancePath),
     };
 }
@@ -145,7 +162,7 @@ const getServerConfig = (): ServerConfig => {
             USERNAME: import.meta.env.VITE_USERNAME,
             ...getSshDefaults(
                 import.meta.env.VITE_SSH_DEFAULT_PORT,
-                import.meta.env.VITE_SSH_DEFAULT_PROFILER_PATH,
+                getViteMemoryReportPath(),
                 import.meta.env.VITE_SSH_DEFAULT_PERFORMANCE_PATH,
             ),
         };
@@ -166,7 +183,7 @@ const getServerConfig = (): ServerConfig => {
         USERNAME: windowConfig?.USERNAME,
         ...getSshDefaults(
             windowConfig?.SSH_DEFAULT_PORT,
-            windowConfig?.SSH_DEFAULT_PROFILER_PATH,
+            windowConfig?.SSH_DEFAULT_MEMORY_REPORT_PATH,
             windowConfig?.SSH_DEFAULT_PERFORMANCE_PATH,
         ),
     };

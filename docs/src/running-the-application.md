@@ -8,7 +8,7 @@ Data can be loaded from your local file system or remotely via ssh.
 
 <img width="595" alt="Local folder upload" src="https://github.com/user-attachments/assets/8fce6283-689b-4389-b8c5-4f77a76ae8e9" />
 
-For both profiler and performance data, TT-NN Visualizer expects the relevant files to be in their own directories. Ensure that the directory you select contains the necessary files for the input type you are working with.
+For both memory and performance reports, TT-NN Visualizer expects the relevant files to be in their own directories. Ensure that the directory you select contains the necessary files for the input type you are working with.
 
 Please note that currently NPE data can only be loaded locally on the NPE screen.
 
@@ -16,11 +16,11 @@ Please note that currently NPE data can only be loaded locally on the NPE screen
 
 <img width="595" alt="Remote folder sync" src="https://github.com/user-attachments/assets/366ae8cd-ee5a-4dfe-a7f0-3229df003c6f" />
 
-Loading data remotely requires you to have SSH access to the relevant machine. You will have to specify paths on the remote machine to look for the profiler and performance data.
+Loading data remotely requires you to have SSH access to the relevant machine. You will have to specify paths on the remote machine to look for memory and performance reports.
 
 <img width="615" alt="Remote connection fields" src="https://github.com/user-attachments/assets/973ef716-8b7f-4986-919d-c904a56aa4dc" />
 
-You can have multiple sets of profiler data on the remote paths, but they must be separated into their own folders.
+You can have multiple memory reports on the remote paths, but they must be separated into their own folders.
 
 The application will sync the files from the remote server to your local machine for analysis.
 
@@ -30,12 +30,12 @@ The application will sync the files from the remote server to your local machine
 
 The `ttnn-visualizer` command supports CLI arguments for passing custom data paths:
 
-* `--profiler-path` - specify the local path to the folder containing profiler data
+* `--profiler-path` - specify the local path to the folder containing the memory report
 * `--performance-path` - specify the local path to the folder containing performance data
 * `--tt-metal-home` - specify the path to the TT Metal repo when running directly on the machine where reports are being generated
 
-These options allow you to pass the folders when starting the visualizer, instead of uploading the report and profiler
-data files from the browser after loading the site. This can be used for starting `ttnn-visualizer` from other tools
+These options allow you to pass the folders when starting the visualizer, instead of uploading the memory and performance
+report files from the browser after loading the site. This can be used for starting `ttnn-visualizer` from other tools
 with the data preloaded, or for restarting the visualizer with the same data, without having to upload it again.
 
 ```bash

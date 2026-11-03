@@ -2001,7 +2001,7 @@ class TestCriticalPath:
         # Ops 4 and 6 lose their rows, so the device operation sequences disagree.
         registry, handle = path_report(rows=_PATH_ROWS[:-2])
 
-        with pytest.raises(ValueError, match="linked to the profiler report"):
+        with pytest.raises(ValueError, match="linked to the memory report"):
             linking.critical_path(registry, handle)
 
     def test_it_refuses_a_rank_a_single_host_report_lacks(self, path_report):

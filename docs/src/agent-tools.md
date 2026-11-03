@@ -41,7 +41,7 @@ not as old.
 
 The same response carries `instructions`: the rules every tool shares, which a client
 puts in the agent's system prompt before any call. They say to call `load_report` first,
-that a performance row's `id` and a profiler `operation_id` are different id spaces,
+that a performance row's `id` and a memory report `operation_id` are different id spaces,
 which units the figures are in, how a signpost range is read, what the `projection`,
 `note` and `caveat` fields are for, and that text from the report itself, such as an op
 code or an error message, is data to read rather than instructions to follow. Each tool's
@@ -92,7 +92,7 @@ another rank's operation under the same id.
 | Tool | Answers |
 |---|---|
 | `load_report` | What this report contains, and which of the tools below apply to it: its signposts, architecture, device count and the tt-perf-report version. Returns a handle the others take. |
-| `top_ops` | The costliest operations by device time, op-to-op gap, total percentage, FLOPS, DRAM bandwidth or core count, over the whole report or a signpost range. Each row carries the profiler `operation_id` it links to, when the handle holds both reports — see below. `include` adds the fields that say why an operation took its time, and the performance view's heuristic flags. |
+| `top_ops` | The costliest operations by device time, op-to-op gap, total percentage, FLOPS, DRAM bandwidth or core count, over the whole report or a signpost range. Each row carries the memory report `operation_id` it links to, when the handle holds both reports — see below. `include` adds the fields that say why an operation took its time, and the performance view's heuristic flags. |
 | `op_breakdown` | Where the time went, per op or per op category, over the whole report or a signpost range: each group's count, and its device time and op-to-op gap with the share each is of the total. |
 | `program_cache` | Whether programs were built again rather than reused: per op code, its calls, distinct programs, and how many repeat calls hit or missed the program cache. |
 | `zone_timings` | Per-zone, per-RISC totals from `profile_log_device.csv` — firmware and kernel phases, as measured on device. |
@@ -113,11 +113,16 @@ another rank's operation under the same id.
 `top_ops`, `op_breakdown`, `program_cache`, `zone_timings`, `zone_intervals`, `core_spread`
 and `diff_reports` read the performance CSVs; the operation tools — `find_operations`,
 `operation_detail`, `memory_profile`, `tensor_flow`, `operation_provenance`, `errors`,
-`dram_fallbacks`, `l1_peak` and `subgraph_between` — read the profiler report's SQLite database;
+`dram_fallbacks`, `l1_peak` and `subgraph_between` — read the memory report's SQLite database;
 `critical_path` reads both, and is listed only when the performance CSV can be reported on
 and the database holds the graph's tables and its captured graphs;
 `load_report` opens both, since its whole job is saying which of the others apply. A capture can carry either, both, or — as far as these tools are concerned —
 neither, which is what makes `load_report`'s answer worth reading first.
+
+Argument and answer names that refer to the memory report still say `profiler`, as the
+visualizer once called it: `profiler_path`, `device_count.profiler`, the
+`past_profiler_capture` reason and `first_past_profiler_capture_id`. They keep those
+names so existing clients go on working.
 
 Call `load_report` first. It reports what is answerable rather than making you discover it
 one failed call at a time, because the report kinds are independent: a performance-only
@@ -151,13 +156,13 @@ of them.
 - `arch` and `device_count` are keyed by the file each was read from, since a handle's two
   reports can come from different runs. `arch.device_log` is the device profiler log's
   header, which `capture` also returns whole; `arch.cluster_descriptor` is what the `arch`
-  mapping in rank 0's `cluster_descriptor.yaml`, beside the profiler database, names — as
+  mapping in rank 0's `cluster_descriptor.yaml`, beside the memory report database, names — as
   written, since older descriptors spell Wormhole `Wormhole` and newer ones
-  `wormhole_b0`, and joined with commas if its chips differ. The profiler database itself
+  `wormhole_b0`, and joined with commas if its chips differ. The memory report database itself
   records no architecture. `device_count.performance_csv` counts the devices the
   performance CSV has rows for, which no other answer shows because rows are merged across
   devices; it is read with the signposts, so it is absent whenever they are.
-  `device_count.profiler` counts the profiler database's devices, every rank's.
+  `device_count.profiler` counts the memory report database's devices, every rank's.
 - `tt_perf_report_version` is the tt-perf-report release the performance answers are
   generated with, which decides fields such as `op_category`.
 
@@ -470,7 +475,7 @@ answer says that is what a run with the program cache disabled records, so check
 reading each miss as a program built again. A capture without the `PROGRAM HASH` and `PROGRAM CACHE HIT`
 columns cannot answer, and `load_report` says so. Each op code's first repeat miss is
 named by its CSV row in `first_repeat_miss_perf_id`, and when the handle also holds a
-profiler report, by `first_repeat_miss_operation_id` too, for `operation_provenance` to
+memory report, by `first_repeat_miss_operation_id` too, for `operation_provenance` to
 turn into a call site.
 
 **`op_breakdown` says where the time went, grouped as the performance view's stacked table
@@ -717,9 +722,9 @@ is refused. A zone whose every start was unreadable is refused with how many had
 that is not a finite number and how many lay past the 200,000 core-RISC timelines followed
 at once.
 
-**A performance row and a profiler operation are linked by order, not by a shared id.**
+**A performance row and a memory report operation are linked by order, not by a shared id.**
 Neither report records the other's id, so when a handle is loaded with both, the tools
-align the device operations each profiler operation launched (from its captured graph)
+align the device operations each memory report operation launched (from its captured graph)
 against the performance rows, in order — the same match the application uses to link a
 memory report to a performance report. `top_ops` then gives each row an `operation_id`,
 and `operation_detail` lists an operation's `perf_rows` with device time in microseconds;
@@ -751,16 +756,16 @@ Every response that carries the link says how it went in `operation_link`:
   performance capture that stopped early — and every `operation_id` is then null rather
   than guessed.
 - `unavailable` means the match was never tried: one half is missing or cannot be read,
-  the profiler report records no captured graph, one of its captured graphs is not
+  the memory report records no captured graph, one of its captured graphs is not
   readable, or a multi-host report carries no `rank` on the graph or device tables. A link that skipped an unreadable graph could still align and pair rows
   with the wrong operations, so none is attempted.
 
-On a linked pair an `operation_id` is still null for a row with no profiler operation:
-a host op, a signpost, or a row past the end of a profiler capture that stopped before
+On a linked pair an `operation_id` is still null for a row with no memory report operation:
+a host op, a signpost, or a row past the end of a memory report capture that stopped before
 the performance one did. The match tolerates trailing rows, as the application's does.
 `top_ops` counts such rows in `operation_link.unlinked_by_reason` — `signpost`,
 `host_op` and `past_profiler_capture` — totals them in `unlinked_row_count`, and names
-the first row past the profiler capture in `first_past_profiler_capture_id`. Read the
+the first row past the memory report capture in `first_past_profiler_capture_id`. Read the
 counts there rather than counting null ids among the ranked rows: the ranking leaves out
 any row with no value for its metric, which is every signpost, so `matched_rows` and the
 rows returned do not add up to the report.

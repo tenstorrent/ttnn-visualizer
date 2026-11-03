@@ -18,6 +18,6 @@ export interface ServerConfig {
     // when recording is off.
     USAGE_RECORDING_ACTIVE?: boolean;
     SSH_DEFAULT_PORT: number;
-    SSH_DEFAULT_PROFILER_PATH: string;
+    SSH_DEFAULT_MEMORY_REPORT_PATH: string;
     SSH_DEFAULT_PERFORMANCE_PATH: string;
 }
