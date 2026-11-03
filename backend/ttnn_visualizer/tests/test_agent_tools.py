@@ -152,23 +152,29 @@ def _signposts_in(*handles):
     return patch.object(tools, "_resolve_signposts", side_effect=resolve)
 
 
-def _touch_in_order(older, newer):
-    """Make `newer` the ops_perf CSV `newest_ops_perf_file` picks over `older`.
+def _touch_after(older, newer, times=None):
+    """Make `newer` the ops_perf CSV `newest_ops_perf_file` picks over `older`,
+    leaving `older` untouched.
 
     It ranks by ctime, which a test cannot set: every `os.utime` stamps it with
     the filesystem's clock, so only the order of the calls decides. Back to back,
     both can land on one tick of a coarse clock and tie, and a tie falls to glob
     order. Touch `newer` again until its ctime is strictly later, whatever the
-    timestamp resolution. The mtimes are aged too, for any reader that uses them.
+    timestamp resolution.
     """
-    os.utime(older, (1000, 1000))
     deadline = time.monotonic() + 5
     while True:
-        os.utime(newer, (2000, 2000))
+        os.utime(newer, times)
         if newer.stat().st_ctime_ns > older.stat().st_ctime_ns:
             return
         assert time.monotonic() < deadline, "ctimes never separated"
         time.sleep(0.01)
+
+
+def _touch_in_order(older, newer):
+    """`_touch_after`, with both mtimes aged too, for any reader that uses them."""
+    os.utime(older, (1000, 1000))
+    _touch_after(older, newer, (2000, 2000))
 
 
 class TestReportInventory:
@@ -1682,9 +1688,12 @@ class TestSignpostRangeEndToEnd:
         handle = self._handle(registry, tmp_path)
         self._ranged(registry, handle)
 
+        original = tmp_path / "signposted" / "ops_perf_results.csv"
         newer = tmp_path / "signposted" / "ops_perf_results_newer.csv"
-        newer.write_text((tmp_path / "signposted" / "ops_perf_results.csv").read_text())
-        os.utime(newer, ns=(time.time_ns() + 10**9, time.time_ns() + 10**9))
+        newer.write_text(original.read_text())
+        # Touching the original would change its fingerprint and refuse for the
+        # wrong reason, so only `newer` moves.
+        _touch_after(original, newer, (time.time() + 1, time.time() + 1))
 
         with pytest.raises(ValueError, match="has changed since it was first read"):
             tools.top_ops(registry, handle)

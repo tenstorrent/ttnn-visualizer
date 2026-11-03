@@ -35,6 +35,15 @@ describe('TensorArgument', () => {
         expect(screen.getByText(TENSOR_REPR)).toBeInTheDocument();
     });
 
+    it('renders a multi-line tensor repr as a collapsed tensor, not as its memory config', () => {
+        const value = `ttnn.Tensor([[1.0, 2.0],\n [3.0, 4.0]], memory_config=${MEMORY_CONFIG})`;
+        renderArgument('memory_config', value);
+
+        expect(screen.queryByRole('table')).not.toBeInTheDocument();
+        expect(screen.getByLabelText('Show full tensor')).toBeInTheDocument();
+        expect(screen.getByText('ttnn.Tensor([[1.0, 2.0],')).toBeInTheDocument();
+    });
+
     it('renders a value that is not a memory config as its text', () => {
         renderArgument('memory_config', 'std::nullopt');
 
