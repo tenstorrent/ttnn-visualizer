@@ -2057,7 +2057,7 @@ class TestRankScope:
 
 
 class TestProfilerDatabase:
-    def test_a_handle_without_a_profiler_path_is_refused_readably(self, tmp_path):
+    def test_a_handle_without_a_memory_report_path_is_refused_readably(self, tmp_path):
         """The performance-only case. An agent gets told which path it is
         missing, not a stack trace from sqlite."""
         registry = ReportRegistry()
@@ -2065,7 +2065,7 @@ class TestProfilerDatabase:
         handle = load_report(registry, performance_path=str(tmp_path))["handle"]
 
         with pytest.raises(
-            agent_operations.ProfilerDatabaseMissingError, match="profiler_path"
+            agent_operations.ProfilerDatabaseMissingError, match="memory_report_path"
         ):
             agent_operations.memory_profile(registry, handle)
 

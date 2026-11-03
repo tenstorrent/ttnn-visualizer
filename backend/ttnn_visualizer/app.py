@@ -431,12 +431,21 @@ def check_socket_bind(host: str, port) -> tuple[bool, str | None]:
         return False, str(e)
 
 
-def parse_args():
+def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="A tool for visualizing the Tenstorrent Neural Network model (TT-NN)"
     )
     parser.add_argument(
-        "--profiler-path", type=str, help="Specify a memory report path", default=None
+        "--memory-report-path",
+        type=str,
+        help="Specify a memory report path",
+        default=None,
+    )
+    parser.add_argument(
+        "--profiler-path",
+        type=str,
+        help="Deprecated: use --memory-report-path",
+        default=None,
     )
     parser.add_argument(
         "--performance-path", help="Specify a performance path", default=None
@@ -476,7 +485,30 @@ def parse_args():
             "with --server to check the hosted posture"
         ),
     )
-    return parser.parse_args()
+    args = parser.parse_args(argv)
+    _resolve_renamed_path(parser, args)
+    return args
+
+
+def _resolve_renamed_path(
+    parser: argparse.ArgumentParser, args: argparse.Namespace
+) -> None:
+    """Fold the deprecated ``--profiler-path`` into ``--memory-report-path``.
+
+    Both spellings are accepted together only when they agree, so a wrapper that
+    passes both cannot load a different report than the one it meant.
+    """
+    former = args.profiler_path
+    del args.profiler_path
+    if former is None:
+        return
+    if args.memory_report_path is not None and args.memory_report_path != former:
+        parser.error(
+            "--memory-report-path and --profiler-path name different paths; "
+            "pass only --memory-report-path"
+        )
+    logger.warning("--profiler-path is deprecated; use --memory-report-path instead.")
+    args.memory_report_path = former
 
 
 def run_preflight(args: argparse.Namespace) -> int:
@@ -771,17 +803,17 @@ def main():
 
     # If profiler/performance paths are provided, create an instance
     # This requires DB access, so we create the app temporarily
-    if args.profiler_path or args.performance_path:
+    if args.memory_report_path or args.performance_path:
         app = create_app()
         with app.app_context():
             try:
                 session = create_instance_from_local_paths(
-                    profiler_path=args.profiler_path,
+                    profiler_path=args.memory_report_path,
                     performance_path=args.performance_path,
                 )
                 instance_id = session.instance_id
             except InvalidReportPath:
-                sys.exit(f"❌ Invalid memory report path: {args.profiler_path}")
+                sys.exit(f"❌ Invalid memory report path: {args.memory_report_path}")
             except InvalidProfilerPath:
                 sys.exit(f"❌ Invalid performance path: {args.performance_path}")
 

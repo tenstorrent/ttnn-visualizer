@@ -104,7 +104,7 @@ def profiler_db(instance: Instance) -> Iterator[DatabaseQueries]:
     """
     if not instance.profiler_path:
         raise ProfilerDatabaseMissingError(
-            "this handle was loaded without a profiler_path; memory and operation "
+            "this handle was loaded without a memory_report_path; memory and operation "
             "questions need the memory report directory"
         )
     db_file = Path(instance.profiler_path, PROFILER_DB_FILE)

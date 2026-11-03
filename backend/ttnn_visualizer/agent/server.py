@@ -227,11 +227,18 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
             "schema": {
                 "type": "object",
                 "properties": {
-                    "profiler_path": {
+                    "memory_report_path": {
                         "type": "string",
                         "description": (
                             "The memory report directory, holding db.sqlite and "
                             "config.json."
+                        ),
+                    },
+                    "profiler_path": {
+                        "type": "string",
+                        "description": (
+                            "Deprecated: the former name of memory_report_path, still "
+                            "accepted. Passing both with different paths is refused."
                         ),
                     },
                     "performance_path": {

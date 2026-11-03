@@ -48,7 +48,7 @@ def _instance(client, instance_id):
 @pytest.mark.usefixtures("local_mode")
 class TestLocalPaths:
     def test_it_makes_an_instance_on_the_directories(self, client, report_dirs):
-        """As `ttnn-visualizer --profiler-path` does, so the app reads them in place."""
+        """As `ttnn-visualizer --memory-report-path` does, so the app reads them in place."""
         profiler, performance = report_dirs
 
         response = client.post(

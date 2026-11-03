@@ -57,7 +57,7 @@ one call:
 
 ```bash
 printf '%s\n' \
-  '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"load_report","arguments":{"profiler_path":"/path/to/memory/report"}}}' \
+  '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"load_report","arguments":{"memory_report_path":"/path/to/memory/report"}}}' \
   '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"memory_profile","arguments":{"handle":"report-1","buffer_type":"L1","limit":5}}}' \
   | uv run ttnn-visualizer-mcp
 ```

@@ -63,7 +63,7 @@ Answers link to the same thing in the web application, for the reader to open:
   `{operation_id}` takes any operation id the answer lists.
 
 A link names the report by its directories, and the visualizer opens them when the link is
-followed, as `ttnn-visualizer --profiler-path` does: each followed link starts a new session
+followed, as `ttnn-visualizer --memory-report-path` does: each followed link starts a new session
 on that report, so it lands on the report the agent read, not on whatever the reader had
 open. The server itself still makes no request; following the link is what opens the
 report. A link carries those directories as absolute paths on this machine, so it is for
@@ -119,8 +119,10 @@ and the database holds the graph's tables and its captured graphs;
 `load_report` opens both, since its whole job is saying which of the others apply. A capture can carry either, both, or — as far as these tools are concerned —
 neither, which is what makes `load_report`'s answer worth reading first.
 
-Argument and answer names that refer to the memory report still say `profiler`, as the
-visualizer once called it: `profiler_path`, `device_count.profiler`, the
+`load_report` takes the memory report directory as `memory_report_path`. Its former name,
+`profiler_path`, is still accepted; a call passing both with different paths is refused.
+Answer names that refer to the memory report still say `profiler`, as the visualizer once
+called it: `load_report`'s `profiler_path`, `device_count.profiler`, the
 `past_profiler_capture` reason and `first_past_profiler_capture_id`. They keep those
 names so existing clients go on working.
 

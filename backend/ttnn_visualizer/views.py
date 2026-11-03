@@ -2736,7 +2736,7 @@ def update_current_instance(instance: Instance):
 @api.route("/instance/local-paths", methods=["POST"])
 @local_only
 def open_local_report_paths():
-    """A new instance on report directories named by path, as `--profiler-path` makes.
+    """A new instance on report directories named by path, as `--memory-report-path` makes.
 
     How a link from the agent tools opens the report the agent read (#2047). Any page
     can send the reader here with paths of its choosing, so only a directory holding a
