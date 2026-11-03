@@ -42,7 +42,7 @@ from ttnn_visualizer.csv_queries import (
 from ttnn_visualizer.models import Instance
 from ttnn_visualizer.utils import pick_cluster_descriptor_path
 
-# The SQLite database a profiler report carries. Named here rather than imported
+# The SQLite database a memory report carries. Named here rather than imported
 # because the agent surface once read no tables; its presence is what makes the
 # operation, memory and tensor questions answerable, and `agent.operations`
 # opens it read-only by this name. #2012
@@ -348,7 +348,7 @@ def _read_profiler_db(
     read: Callable[[sqlite3.Connection], Answer],
     default: Answer,
 ) -> Answer:
-    """`read` on the profiler database, or `default` when there is none to read.
+    """`read` on the memory report database, or `default` when there is none to read.
 
     A truncated or non-SQLite file is a broken capture, and `default` is the honest
     answer for it, as for a missing one.
@@ -371,7 +371,7 @@ def _read_profiler_db(
 
 
 def _readable_tables(profiler_path: Optional[str]) -> frozenset:
-    """The tables a profiler database actually holds, or nothing.
+    """The tables a memory report database actually holds, or nothing.
 
     Presence of the file is not enough, twice over. A zero-byte `db.sqlite`
     opens as a valid empty database, and a truncated capture can hold
@@ -522,7 +522,7 @@ def _distinct_devices(connection: sqlite3.Connection) -> Optional[int]:
 
 
 def _profiler_device_count(profiler_path: Optional[str]) -> Optional[int]:
-    """Devices in the profiler database, each rank's counted, or None without them.
+    """Devices in the memory report database, each rank's counted, or None without them.
 
     Distinct, since some captures write a device's row more than once.
     """
@@ -584,7 +584,7 @@ def _descriptor_arch_names(text: str) -> List[str]:
 def _cluster_descriptor_arch(profiler_path: Optional[str]) -> Optional[str]:
     """The chip architecture rank 0's cluster descriptor names, as it spells it.
 
-    The profiler database records no architecture; tt-metal writes this file beside
+    The memory report database records no architecture; tt-metal writes this file beside
     it. Older descriptors spell Wormhole `Wormhole`, so the name is passed through
     rather than normalised, and chips that differ are joined with commas.
     """

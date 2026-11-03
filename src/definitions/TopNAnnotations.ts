@@ -32,9 +32,9 @@ export enum TopNAnnotationMode {
  * populate `op_to_op_gap`) can be distinguished from "no report loaded".
  *
  * `UNAVAILABLE` — the required source report isn't present (e.g. no perf
- *   report loaded for the perf modes, no profiler report for `L1_FULLNESS`).
+ *   report loaded for the perf modes, no memory report for `L1_FULLNESS`).
  * `UNLINKED` — source report is loaded but doesn't line up with the active
- *   profiler report (mismatched op-id space — same case
+ *   memory report (mismatched op-id space — same case
  *   `useGetDeviceOperationListPerf` returns `[]`).
  * `NO_DATA` — source report is loaded *and* linked, but no row contributes a
  *   usable value for this specific metric. The perf-report side can produce

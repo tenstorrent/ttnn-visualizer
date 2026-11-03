@@ -2,16 +2,16 @@
 #
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-"""The join between a performance row and the profiler operation that launched it.
+"""The join between a performance row and the memory report operation that launched it.
 
 The two halves of a report number different things: `top_ops` ids are rows of the
-performance CSV, and every profiler tool takes the database's `operation_id`. Nothing
+performance CSV, and every memory report tool takes the database's `operation_id`. Nothing
 in either report carries the other's id -- the captured graph records no device
-operation id, and the CSV records no profiler operation -- so an agent holding the
+operation id, and the CSV records no memory report operation -- so an agent holding the
 slowest row had no way to ask where in the model it came from.
 
 The app already answers this for the report link, by aligning the sequence of device
-operations each profiler operation launched against the performance rows, in order.
+operations each memory report operation launched against the performance rows, in order.
 This is a port of that match (`src/functions/deviceOperationMatching.ts`) rather than a
 second answer to the same question: two joins that disagreed would send an agent and a
 person looking at the same report to different operations. `TestMatcherParity` restates
@@ -83,7 +83,7 @@ class MatchedOn(str, Enum):
 
 
 class UnlinkedReason(str, Enum):
-    """Why a row on a linked pair has no profiler operation. Exhaustive: host ops
+    """Why a row on a linked pair has no memory report operation. Exhaustive: host ops
     and signposts are kept out of the alignment, and every other row either
     aligned or came after the last one that did."""
 
@@ -93,7 +93,7 @@ class UnlinkedReason(str, Enum):
 
 
 class DeviceOperation(NamedTuple):
-    """One device operation a profiler operation launched, in launch order."""
+    """One device operation a memory report operation launched, in launch order."""
 
     operation_id: int
     name: str
@@ -104,7 +104,7 @@ class UnlinkedRows(NamedTuple):
 
     Counted rather than listed so the answer stays one size whatever the capture: a
     report with hundreds of host ops would otherwise outweigh the rows `top_ops` was
-    asked for. The first row past the profiler capture is named because it is the
+    asked for. The first row past the memory report capture is named because it is the
     one place the two reports stopped agreeing; host ops and signposts are expected.
     """
 
@@ -451,15 +451,15 @@ def _build_link(
         rank, names_by_operation, num_devices, has_graph = _read_profiler_side(instance)
     except operations.ProfilerDatabaseMissingError as error:
         return OperationLink(LinkStatus.UNAVAILABLE, reason=str(error))
-    # A profiler database `top_ops` never needed must not cost it its answer. Not
+    # A memory report database `top_ops` never needed must not cost it its answer. Not
     # cached: a locked database raises the same `sqlite3.Error` as a corrupt one, and
     # re-reading a corrupt one fails on its first query.
     except sqlite3.Error as error:
-        logger.warning("profiler database unreadable for the link: %s", error)
+        logger.warning("memory report database unreadable for the link: %s", error)
         raise _UncachedLink(
             OperationLink(
                 LinkStatus.UNAVAILABLE,
-                reason=f"the profiler database could not be read: {_redacted(error)}",
+                reason=f"the memory report database could not be read: {_redacted(error)}",
             )
         ) from None
     except (GraphTooLargeError, operations.UnattributableRankError) as error:
@@ -487,7 +487,7 @@ def _build_link(
         all_rows = _canonical_rows(registry, handle)
     # Broad on purpose: tt-perf-report raises whatever its parse hits, and a CSV it
     # cannot read must cost `operation_detail` its perf rows, not the whole answer
-    # about a profiler operation that was read fine. The traceback is logged because
+    # about a memory report operation that was read fine. The traceback is logged because
     # this also catches bugs of our own, which nothing re-raises. Not cached, as the
     # canonical report is not: a temp-file failure in tt-perf-report can pass.
     except Exception as error:
@@ -524,7 +524,7 @@ def _build_link(
             LinkStatus.UNLINKED,
             rank=rank,
             reason=(
-                "the device operations this profiler report launched do not line up, "
+                "the device operations this memory report launched do not line up, "
                 "in order, with the performance rows -- usually two different runs, or "
                 "a performance capture that stopped early. No id is guessed; use "
                 "find_operations with the op name instead."
@@ -574,15 +574,15 @@ def operation_link(registry: ReportRegistry, handle: str) -> OperationLink:
 # The one full statement of what `operation_id` means; the tool description points
 # here rather than restating it, so the two cannot drift.
 TOP_OPS_LINK_NOTE = (
-    "operation_id is the profiler database id for this row, to pass to "
+    "operation_id is the memory report database id for this row, to pass to "
     "operation_provenance or operation_detail, and it belongs to the rank named in "
     "operation_link. It is null on every row when the two reports did not link. On a "
-    "linked pair it is null for a row with no profiler operation: a host op, a "
-    "signpost, or a row past the end of a profiler capture that stopped before the "
+    "linked pair it is null for a row with no memory report operation: a host op, a "
+    "signpost, or a row past the end of a memory report capture that stopped before the "
     "performance one did -- matched_rows says how many rows linked, "
     "unlinked_by_reason counts every row that did not by why, including rows the "
     "ranking leaves out for having no value for the metric, and "
-    "first_past_profiler_capture_id names the first row past the profiler capture."
+    "first_past_profiler_capture_id names the first row past the memory report capture."
 )
 
 # `operation_link.scope` on a ranged `top_ops`: the link's counts are the whole
@@ -608,7 +608,7 @@ def top_ops(
     end_signpost: Optional[str] = None,
     include: Optional[List[str]] = None,
 ) -> Dict[str, object]:
-    """`tools.top_ops`, with each row's profiler operation id where one is known.
+    """`tools.top_ops`, with each row's memory report operation id where one is known.
 
     Ids are CSV positions in a ranged report as in the whole one, so the
     whole-report link answers a windowed row too.
@@ -627,7 +627,7 @@ def top_ops(
     for row in ops if isinstance(ops, list) else []:
         row["operation_id"] = link.operation_by_perf_id.get(str(row.get("id")))
     response = link.as_response()
-    # Only a handle with a profiler report has an operation_id worth explaining.
+    # Only a handle with a memory report has an operation_id worth explaining.
     if registry.get(handle).profiler_path:
         response["note"] = TOP_OPS_LINK_NOTE
         # Read from the projection, which already names any range it read, so
@@ -780,7 +780,7 @@ def critical_path(
     if link.status is not LinkStatus.LINKED:
         raise ValueError(
             "the critical path needs device time per operation, which needs the "
-            "performance report linked to the profiler report: "
+            "performance report linked to the memory report: "
             f"{link.reason or link.status.value}"
         )
     instance = registry.get(handle)
@@ -869,10 +869,10 @@ def critical_path(
 
 
 PROGRAM_CACHE_LINK_NOTE = (
-    "first_repeat_miss_operation_id is the profiler database id of the operation that "
+    "first_repeat_miss_operation_id is the memory report database id of the operation that "
     "launched the op code's first repeat miss, to pass to operation_provenance for its "
     "call site. It is null when the reports did not link, or for a row with no "
-    "profiler operation."
+    "memory report operation."
 )
 
 

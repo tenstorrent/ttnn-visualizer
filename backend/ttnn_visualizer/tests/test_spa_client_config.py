@@ -95,7 +95,7 @@ def test_build_spa_client_config_includes_ssh_defaults_when_not_server_mode():
             "TT_METAL_HOME": "/metal",
             "REPORT_DATA_DIRECTORY": "/reports",
             "SSH_DEFAULT_PORT": 45985,
-            "SSH_DEFAULT_PROFILER_PATH": "/mem",
+            "SSH_DEFAULT_MEMORY_REPORT_PATH": "/mem",
             "SSH_DEFAULT_PERFORMANCE_PATH": "/perf",
         }
     )
@@ -103,7 +103,7 @@ def test_build_spa_client_config_includes_ssh_defaults_when_not_server_mode():
     config = _build_spa_client_config(app)
 
     assert config["SSH_DEFAULT_PORT"] == 45985
-    assert config["SSH_DEFAULT_PROFILER_PATH"] == "/mem"
+    assert config["SSH_DEFAULT_MEMORY_REPORT_PATH"] == "/mem"
     assert config["SSH_DEFAULT_PERFORMANCE_PATH"] == "/perf"
     assert config["SERVER_MODE"] is False
 
@@ -116,7 +116,7 @@ def test_build_spa_client_config_omits_ssh_defaults_under_server_mode():
             "TT_METAL_HOME": "/metal",
             "REPORT_DATA_DIRECTORY": "/reports",
             "SSH_DEFAULT_PORT": 45985,
-            "SSH_DEFAULT_PROFILER_PATH": "/secret/home/reports",
+            "SSH_DEFAULT_MEMORY_REPORT_PATH": "/secret/home/reports",
             "SSH_DEFAULT_PERFORMANCE_PATH": "/secret/home/perf",
         }
     )
@@ -124,7 +124,7 @@ def test_build_spa_client_config_omits_ssh_defaults_under_server_mode():
     config = _build_spa_client_config(app)
 
     assert "SSH_DEFAULT_PORT" not in config
-    assert "SSH_DEFAULT_PROFILER_PATH" not in config
+    assert "SSH_DEFAULT_MEMORY_REPORT_PATH" not in config
     assert "SSH_DEFAULT_PERFORMANCE_PATH" not in config
     assert config["USERNAME"] is None
     assert config["SERVER_MODE"] is True
@@ -149,7 +149,7 @@ def test_build_spa_client_config_publishes_the_request_limit():
 def test_serialize_spa_js_config_escapes_script_breakout():
     js = _serialize_spa_js_config(
         {
-            "SSH_DEFAULT_PROFILER_PATH": "</script><script>alert(1)</script>",
+            "SSH_DEFAULT_MEMORY_REPORT_PATH": "</script><script>alert(1)</script>",
         }
     )
 
@@ -159,12 +159,15 @@ def test_serialize_spa_js_config_escapes_script_breakout():
     match = re.search(r"window\.TTNN_VISUALIZER_CONFIG = (.*);$", js)
     assert match is not None
     payload = json.loads(match.group(1))
-    assert payload["SSH_DEFAULT_PROFILER_PATH"] == "</script><script>alert(1)</script>"
+    assert (
+        payload["SSH_DEFAULT_MEMORY_REPORT_PATH"]
+        == "</script><script>alert(1)</script>"
+    )
 
 
 def test_app_config_exposes_ssh_default_settings(client, app):
     assert app.config["SSH_DEFAULT_PORT"] == 22
-    assert app.config["SSH_DEFAULT_PROFILER_PATH"] == ""
+    assert app.config["SSH_DEFAULT_MEMORY_REPORT_PATH"] == ""
     assert app.config["SSH_DEFAULT_PERFORMANCE_PATH"] == ""
 
 
