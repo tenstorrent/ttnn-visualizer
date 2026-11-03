@@ -6,6 +6,8 @@ This file orients coding agents and contributors who work on this repository.
 
 TT-NN Visualizer lets users inspect **memory** and **performance** reports produced when using the Tenstorrent **TTNN** library (with TT-Metal). The UI is built around loading, browsing, and analyzing those reports—not general-purpose ML training or arbitrary workloads.
 
+**"Memory report" and "profiler report" are the same thing:** the `db.sqlite` database (with its `config.json`) that TTNN writes for a run. User-facing text says "memory report"; it was once called the profiler report, and code still uses that name — `profiler_path`, `profilerPath`, `activeProfilerReport`, `ReportKind.PROFILER`, `/api/profiler`, `--profiler-path`. In this codebase, `profiler` means the memory report unless it is about the **device profiler** or Tracy (the device log, `generated/profiler/reports/`), which produce the *performance* report. Write "memory report" in new user-facing text.
+
 ## Where reports come from
 
 Reports can reach the app in several ways:

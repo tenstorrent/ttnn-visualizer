@@ -18,6 +18,7 @@ class McpToolName(str, Enum):
     OP_BREAKDOWN = "op_breakdown"
     PROGRAM_CACHE = "program_cache"
     ZONE_TIMINGS = "zone_timings"
+    ZONE_INTERVALS = "zone_intervals"
     CORE_SPREAD = "core_spread"
     DIFF_REPORTS = "diff_reports"
     FIND_OPERATIONS = "find_operations"
@@ -28,3 +29,5 @@ class McpToolName(str, Enum):
     ERRORS = "errors"
     DRAM_FALLBACKS = "dram_fallbacks"
     L1_PEAK = "l1_peak"
+    CRITICAL_PATH = "critical_path"
+    SUBGRAPH_BETWEEN = "subgraph_between"

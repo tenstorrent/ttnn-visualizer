@@ -623,8 +623,9 @@ class DefaultConfig(object):
 
     # Remote SSH connection dialog defaults (local install only — suppressed under SERVER_MODE).
     SSH_DEFAULT_PORT = _parse_ssh_port(os.getenv("SSH_DEFAULT_PORT"))
-    # Falls back to its former name through ``_ENV_RENAMED`` in the override loop.
-    SSH_DEFAULT_MEMORY_REPORT_PATH = os.getenv("SSH_DEFAULT_MEMORY_REPORT_PATH", "")
+    SSH_DEFAULT_MEMORY_REPORT_PATH = os.getenv(
+        "SSH_DEFAULT_MEMORY_REPORT_PATH", os.getenv("SSH_DEFAULT_PROFILER_PATH", "")
+    )
     SSH_DEFAULT_PERFORMANCE_PATH = os.getenv("SSH_DEFAULT_PERFORMANCE_PATH", "")
     # Remote SSH subprocess timeouts (seconds).
     SSH_SUBPROCESS_TIMEOUT = int(os.getenv("SSH_SUBPROCESS_TIMEOUT", "120"))
