@@ -1192,7 +1192,7 @@ class TestLoadReport:
     def test_with_no_path_the_refusal_names_all_three(self):
         with pytest.raises(
             ValueError,
-            match="one of profiler_path, performance_path or npe_path is required",
+            match="one of memory_report_path, performance_path or npe_path is required",
         ):
             load_report(ReportRegistry())
 

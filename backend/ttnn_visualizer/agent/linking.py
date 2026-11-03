@@ -444,7 +444,7 @@ def _build_link(
     if not instance.profiler_path:
         return OperationLink(
             LinkStatus.UNAVAILABLE,
-            reason="this handle was loaded without a profiler_path",
+            reason="this handle was loaded without a memory_report_path",
         )
 
     try:
