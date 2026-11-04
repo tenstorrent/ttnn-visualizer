@@ -25,6 +25,9 @@ const normaliseSelector = (selector: string) =>
         .replace(/=(["'])([^"']*)\1/g, '=$2')
         .trim();
 
+/** The selectors in a selector list, splitting only on commas outside :where(), :not() and other brackets. */
+const splitSelectorList = (selectorList: string) => selectorList.split(/,(?![^(]*\))/);
+
 // The same options Vite builds with, so these checks see the CSS that ships
 const SASS_OPTIONS = createSassOptions(ROOT);
 
@@ -68,7 +71,7 @@ const indexDeclarations = (source: string) => {
                     const property = declaration.slice(0, colon).trim();
                     const value = normaliseValue(declaration.slice(colon + 1));
 
-                    selectorList.split(',').forEach((selector) => {
+                    splitSelectorList(selectorList).forEach((selector) => {
                         valueBySelectorProperty.set(`${normaliseSelector(selector)}|${property}`, value);
                     });
                 });
@@ -82,7 +85,7 @@ const selectorsDeclaring = (source: string, token: string) => {
     const declaration = new RegExp(`(?<![\\w-])${token}\\s*:`);
     const selectors = readRules(source)
         .filter(([, text]) => declaration.test(text))
-        .flatMap(([selectorList]) => selectorList.split(',').map(normaliseSelector));
+        .flatMap(([selectorList]) => splitSelectorList(selectorList).map(normaliseSelector));
 
     return [...new Set(selectors)];
 };
@@ -116,6 +119,8 @@ const adjustedShade = (colour: string, lightness: string) =>
         `@use 'sass:color'; @use 'definitions/colours' as *; a { b: color.adjust(${colour}, $lightness: ${lightness}); }`,
         { ...SASS_OPTIONS, loadPaths: [...SASS_OPTIONS.loadPaths, join(ROOT, 'src/scss')] },
     ).css.match(/b:\s*([^;]+);/)![1];
+
+const DEFAULT_BUTTON_HOVER = adjustedShade('$tt-grey-2', '-5%');
 
 // [token, value], set on :root because Blueprint declares the intent tokens there
 const ROOT_TOKENS: [string, string][] = [
@@ -210,6 +215,24 @@ const OVERRIDDEN_VALUES: [string, string, string][] = [
         'box-shadow',
         `inset 0 0 0 1px rgba(246, 188, 66, 0.752), 0 0 0 calc(var(--bp-surface-spacing) * 0.5) rgba(246, 188, 66, 0.752), ${DARK_INPUT_BOX_SHADOW}`,
     ],
+    [
+        '.bp6-dark .bp6-button:not([class*=bp6-intent-]):where(:not(.bp6-minimal, .bp6-outlined))',
+        'background-color',
+        '#343434',
+    ],
+    ['.bp6-dark .bp6-html-select select', 'background-color', '#343434'],
+    ['.bp6-dark .bp6-file-upload-input::after', 'background-color', '#343434'],
+    [
+        '.bp6-dark .bp6-button:not([class*=bp6-intent-]):where(:not(.bp6-minimal, .bp6-outlined, :disabled, .bp6-disabled, :active, .bp6-active)):hover',
+        'background-color',
+        DEFAULT_BUTTON_HOVER,
+    ],
+    [
+        '.bp6-dark .bp6-html-select select:where(:not(:disabled, .bp6-disabled, :active, .bp6-active)):hover',
+        'background-color',
+        DEFAULT_BUTTON_HOVER,
+    ],
+    ['.bp6-dark .bp6-file-upload-input:where(:not(:active)):hover::after', 'background-color', DEFAULT_BUTTON_HOVER],
     // Still read from Sass in Blueprint 6.21, so a release that moves them onto tokens would silently drop them
     ['.bp6-dark a', 'color', '#3eb7de'],
     ['.bp6-control input:checked ~ .bp6-control-indicator', 'background-color', '#3eb7de'],

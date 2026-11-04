@@ -5,6 +5,7 @@
 @use 'sass:color';
 @use 'sass:map';
 @use './definitions/colours' as *;
+@use './definitions/variables';
 @use '@blueprintjs/colors/lib/scss/colors' as *;
 
 $dark-primary-background-base: $tt-purple-shade;
@@ -264,6 +265,26 @@ $dark-input-focus-ring: (
     // The file input's focus also keeps Blueprint's dark input border and highlight
     .bp6-file-input input:focus + .bp6-file-upload-input {
         box-shadow: $dark-input-focus-ring, blueprint.$pt-dark-input-box-shadow;
+    }
+
+    // Default buttons, the HTML select and the file input's Browse button keep the neutral grey. Blueprint mixes their
+    // fills from the default token and its blue-tinted black, and a neutral default token would shift tags, cards and
+    // disabled inputs too. :where keeps these at Blueprint's specificity, so minimal, outlined, disabled and pressed
+    // controls keep their own rules.
+    .bp6-button:not([class*='bp6-intent-']):where(:not(.bp6-minimal, .bp6-outlined)),
+    .bp6-html-select select,
+    .bp6-select select,
+    .bp6-file-upload-input::after {
+        background-color: variables.$dark-button-background-base;
+    }
+
+    .bp6-button:not([class*='bp6-intent-']):where(
+            :not(.bp6-minimal, .bp6-outlined, :disabled, .bp6-disabled, :active, .bp6-active)
+        ):hover,
+    .bp6-html-select select:where(:not(:disabled, .bp6-disabled, :active, .bp6-active)):hover,
+    .bp6-select select:where(:not(:disabled, .bp6-disabled, :active, .bp6-active)):hover,
+    .bp6-file-upload-input:where(:not(:active)):hover::after {
+        background-color: color.adjust(variables.$dark-button-background-base, $lightness: -5%);
     }
 
     // Intent inputs and their icons. Blueprint lightens the intent token for these by fixed amounts tuned to its own
