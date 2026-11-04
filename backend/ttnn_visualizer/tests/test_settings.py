@@ -1245,6 +1245,13 @@ def test_every_app_under_test_is_built_from_the_shared_baseline():
             if not isinstance(node, ast.Call):
                 continue
 
+            # A bare ``create_app()`` takes the developer's real settings (#2278).
+            called_name = getattr(node.func, "id", getattr(node.func, "attr", None))
+            if called_name == "create_app" and not any(
+                keyword.arg == "settings_override" for keyword in node.keywords
+            ):
+                offenders.append(f"{path.relative_to(tests_root)}:{node.lineno}")
+
             for keyword in node.keywords:
                 if keyword.arg != "settings_override":
                     continue

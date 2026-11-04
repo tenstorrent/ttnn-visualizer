@@ -187,14 +187,12 @@ def test_every_client_facing_enum_is_paired():
     assert declared == set(_PAIRED_ENUMS) | _SERVER_ONLY_ENUMS
 
 
-def test_the_client_posts_to_the_route_the_blueprint_registers():
+def test_the_client_posts_to_the_route_the_blueprint_registers(app):
     """The path is duplicated in TypeScript, and a mismatch is silent on both sides.
 
     A renamed route would make every post a 404 that the client swallows by design, so
     nothing anywhere would report it.
     """
-    from ttnn_visualizer.app import create_app
-
     declared = _require_match(
         r"EVENT_LOGGING = '([^']+)'",
         _read(_ENDPOINTS),
@@ -204,7 +202,7 @@ def test_the_client_posts_to_the_route_the_blueprint_registers():
 
     rules = {
         str(rule)
-        for rule in create_app().url_map.iter_rules()
+        for rule in app.url_map.iter_rules()
         if "POST" in (rule.methods or set())
     }
 
