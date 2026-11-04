@@ -55,12 +55,12 @@ import type { IncomingEdgeView, OutgoingEdge, SourceNode } from '../components/m
 // Ends at 1 so the widest bar is shown against the node it has to stay inside.
 const PERF_BAR_SAMPLE_SCORES = [0.05, 0.35, 0.7, 1] as const;
 
-const BUTTON_INTENTS = [
-    { intent: Intent.NONE, icon: null },
-    { intent: Intent.PRIMARY, icon: IconNames.ADD },
-    { intent: Intent.SUCCESS, icon: IconNames.TICK },
-    { intent: Intent.WARNING, icon: IconNames.WARNING_SIGN },
-    { intent: Intent.DANGER, icon: IconNames.ISSUE },
+const INTENTS = [
+    { intent: Intent.NONE, label: 'None', icon: null },
+    { intent: Intent.PRIMARY, label: 'Primary', icon: IconNames.ADD },
+    { intent: Intent.SUCCESS, label: 'Success', icon: IconNames.TICK },
+    { intent: Intent.WARNING, label: 'Warning', icon: IconNames.WARNING_SIGN },
+    { intent: Intent.DANGER, label: 'Danger', icon: IconNames.ISSUE },
 ] as const;
 
 // Disabled rows sit under their enabled variant so a theme change to either is easy to compare
@@ -73,12 +73,9 @@ const BUTTON_ROWS = [
     { label: 'Minimal disabled', variant: ButtonVariant.MINIMAL, disabled: true },
 ] as const;
 
-const TAG_INTENTS = [
-    { intent: Intent.NONE, label: 'None' },
-    { intent: Intent.PRIMARY, label: 'Primary' },
-    { intent: Intent.WARNING, label: 'Warning' },
-    { intent: Intent.SUCCESS, label: 'Success' },
-    { intent: Intent.DANGER, label: 'Danger' },
+const TAG_ROWS = [
+    { minimal: false, suffix: '' },
+    { minimal: true, suffix: ' minimal' },
 ] as const;
 
 const SELECT_OPTIONS = ['First option', 'Second option'];
@@ -455,7 +452,7 @@ export default function Styleguide() {
                     {BUTTON_ROWS.map(({ label, variant, disabled }) => (
                         <tr key={label}>
                             <th>{label}</th>
-                            {BUTTON_INTENTS.map(({ intent, icon }) => (
+                            {INTENTS.map(({ intent, icon }) => (
                                 <td key={intent}>
                                     <Button
                                         icon={icon}
@@ -572,29 +569,14 @@ export default function Styleguide() {
             </FormGroup>
 
             <div className='container flex'>
-                <InputGroup
-                    onChange={() => {}}
-                    intent={Intent.PRIMARY}
-                    leftIcon={IconNames.FOLDER_NEW}
-                />
-
-                <InputGroup
-                    onChange={() => {}}
-                    intent={Intent.WARNING}
-                    leftIcon={IconNames.FOLDER_NEW}
-                />
-
-                <InputGroup
-                    onChange={() => {}}
-                    intent={Intent.SUCCESS}
-                    leftIcon={IconNames.FOLDER_NEW}
-                />
-
-                <InputGroup
-                    onChange={() => {}}
-                    intent={Intent.DANGER}
-                    leftIcon={IconNames.FOLDER_NEW}
-                />
+                {INTENTS.filter(({ intent }) => intent !== Intent.NONE).map(({ intent }) => (
+                    <InputGroup
+                        key={intent}
+                        onChange={() => {}}
+                        intent={intent}
+                        leftIcon={IconNames.FOLDER_NEW}
+                    />
+                ))}
 
                 <InputGroup
                     onChange={() => {}}
@@ -678,35 +660,31 @@ export default function Styleguide() {
 
             <h3>Tags</h3>
 
-            <div className='container flex'>
-                {TAG_INTENTS.map(({ intent, label }) => (
-                    <Tag
-                        key={intent}
-                        intent={intent}
-                        size={Size.LARGE}
-                    >
-                        {label}
-                    </Tag>
-                ))}
+            {TAG_ROWS.map(({ minimal, suffix }) => (
+                <div
+                    key={suffix}
+                    className='container flex'
+                >
+                    {INTENTS.map(({ intent, label }) => (
+                        <Tag
+                            key={intent}
+                            intent={intent}
+                            size={Size.LARGE}
+                            minimal={minimal}
+                        >
+                            {label}
+                            {suffix}
+                        </Tag>
+                    ))}
+                </div>
+            ))}
 
+            <div className='container flex'>
                 <MemoryTag memory={BufferTypeLabel[BufferType.DRAM]} />
                 <MemoryTag memory={BufferTypeLabel[BufferType.L1]} />
                 <MemoryTag memory={BufferTypeLabel[BufferType.L1_SMALL]} />
                 <MemoryTag memory={BufferTypeLabel[BufferType.SYSTEM_MEMORY]} />
                 <MemoryTag memory={BufferTypeLabel[BufferType.TRACE]} />
-            </div>
-
-            <div className='container flex'>
-                {TAG_INTENTS.map(({ intent, label }) => (
-                    <Tag
-                        key={intent}
-                        intent={intent}
-                        size={Size.LARGE}
-                        minimal
-                    >
-                        {label} minimal
-                    </Tag>
-                ))}
             </div>
 
             <h3>Progress bar</h3>
