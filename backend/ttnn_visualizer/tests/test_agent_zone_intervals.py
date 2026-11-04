@@ -20,6 +20,7 @@ from ttnn_visualizer import csv_queries
 from ttnn_visualizer.agent import server, tools
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
 from ttnn_visualizer.event_logging import McpToolOutcome
+from ttnn_visualizer.tests.mcp_calls import tool_call
 from ttnn_visualizer.tests.smoke_capture import SMOKE_CAPTURE_DIR
 from ttnn_visualizer.tests.test_agent_tools import (
     UNTYPED_HEADER,
@@ -1086,17 +1087,7 @@ class TestRefusals:
 
 class TestServer:
     def _call(self, registry, arguments):
-        with patch.object(server, "record_event") as record:
-            response = server.handle_message(
-                {
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "tools/call",
-                    "params": {"name": "zone_intervals", "arguments": arguments},
-                },
-                server._tool_table(registry),
-            )
-        return response["result"], record.call_args.kwargs["outcome"]
+        return tool_call(registry, "zone_intervals", arguments)
 
     def test_it_answers_through_the_server(self, tmp_path):
         registry = ReportRegistry()

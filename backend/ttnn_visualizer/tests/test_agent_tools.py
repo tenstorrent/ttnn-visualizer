@@ -187,6 +187,7 @@ class TestReportInventory:
             "dram_fallbacks",
             "l1_peak",
             "late_deallocations",
+            "noc_congestion",
             "critical_path",
             "subgraph_between",
         }
@@ -2541,6 +2542,7 @@ class TestTransport:
             "zone_timings",
             "zone_intervals",
             "core_spread",
+            "noc_congestion",
             "diff_reports",
             "find_operations",
             "operation_detail",

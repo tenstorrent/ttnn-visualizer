@@ -29,10 +29,13 @@ from typing import (
     List,
     Optional,
     Tuple,
+    Type,
     TypeVar,
+    Union,
     cast,
 )
 
+from ttnn_visualizer import npe_index
 from ttnn_visualizer.csv_queries import (
     PROGRAM_CACHE_HIT_COLUMN,
     PROGRAM_HASH_COLUMN,
@@ -81,6 +84,10 @@ class CacheVariant(str, Enum):
     CORE_SPREAD = "core_spread"
     # Buffer Summary's late deallocations by rank and buffer type.
     LATE_DEALLOCATIONS = "late_deallocations"
+    # A tt-npe trace's link demand, summed per link and burst from one read.
+    NOC_CONGESTION = "noc_congestion"
+    # The tt-npe trace a handle first read, so its later calls answer from that read.
+    NOC_SOURCE = "noc_source"
     # The operation graph by rank, which `critical_path` and `subgraph_between` read
     # whole and an agent reading a model block by block asks for again and again.
     OP_GRAPH = "op_graph"
@@ -148,13 +155,19 @@ class ReportRegistry:
         ) = OrderedDict()
         self._next_id = 1
 
-    def add(self, profiler_path: Optional[str], performance_path: Optional[str]) -> str:
+    def add(
+        self,
+        profiler_path: Optional[str],
+        performance_path: Optional[str],
+        npe_path: Optional[str] = None,
+    ) -> str:
         handle = f"report-{self._next_id}"
         self._next_id += 1
         self._instances[handle] = Instance(
             instance_id=handle,
             profiler_path=profiler_path,
             performance_path=performance_path,
+            npe_path=npe_path,
         )
         return handle
 
@@ -266,12 +279,46 @@ class ReportRegistry:
         self._next_id = 1
 
 
-def _resolved_directory(label: str, path: Optional[str]) -> Optional[str]:
+def read_once(
+    registry: ReportRegistry,
+    handle: str,
+    read: Callable[[Instance], Cached],
+    *,
+    variant: CacheVariant,
+    share_key: Hashable,
+    refusals: Tuple[Type[Exception], ...],
+    check: Callable[[Instance], None] = lambda _: None,
+) -> Cached:
+    """`read` of a handle's source once per `share_key`, a `refusals` raise cached too,
+    since the same bytes fail the same way. On a miss `check` may refuse, uncached.
+
+    The cached error drops its traceback, context and cause, whose frames would keep
+    the failed read's data alive for the registry's lifetime.
+    """
+
+    def build(instance: Instance) -> Union[Cached, Exception]:
+        check(instance)
+        try:
+            return read(instance)
+        except refusals as error:
+            error.__traceback__ = error.__context__ = error.__cause__ = None
+            return error
+
+    outcome = registry.cached_report(
+        handle, build, variant=variant, share_key=share_key
+    )
+    if isinstance(outcome, Exception):
+        raise outcome.with_traceback(None)
+    return outcome
+
+
+def _resolved(label: str, path: Optional[str], directory: bool) -> Optional[str]:
     if path is None:
         return None
     resolved = Path(path).expanduser().resolve()
-    if not resolved.is_dir():
-        raise ValueError(f"{label} is not a directory: {resolved}")
+    if not (resolved.is_dir() if directory else resolved.is_file()):
+        kind = "directory" if directory else "file"
+        raise ValueError(f"{label} is not a {kind}: {resolved}")
     return str(resolved)
 
 
@@ -666,7 +713,7 @@ def _answerable_device_log_columns(instance: Instance) -> Optional[frozenset]:
 def _inventory(instance: Instance, perf_csv: Optional[Path]) -> Dict[str, object]:
     """What this report can actually answer.
 
-    Reported up front because the three report kinds are independent: a Blaze-style
+    Reported up front because the report kinds are independent: a Blaze-style
     run is performance-only, and an agent that assumes otherwise spends calls
     discovering it one error at a time.
     """
@@ -711,6 +758,13 @@ def _inventory(instance: Instance, perf_csv: Optional[Path]) -> Dict[str, object
     # tables, the captured graphs the link aligns, and a CSV to align them with.
     record("critical_path", perf_ready and _CRITICAL_PATH_TABLES <= tables)
 
+    # Only its first bytes here; the first call reads it whole and refuses it then.
+    record(
+        "noc_congestion",
+        instance.npe_path is not None
+        and npe_index.looks_like_trace(Path(instance.npe_path)),
+    )
+
     return {
         # Tool names only. `operations` used to appear here whenever a `db.sqlite`
         # was present, but no such tool was registered — so the list handed an
@@ -751,22 +805,26 @@ def load_report(
     profiler_path: Optional[str] = None,
     performance_path: Optional[str] = None,
     memory_report_path: Optional[str] = None,
+    npe_path: Optional[str] = None,
 ) -> Dict[str, object]:
     """Register a report by path and describe what it holds.
 
     ``memory_report_path`` is the preferred name for the memory report directory;
-    ``profiler_path`` is its former name, still accepted. Last in the signature so
-    positional callers keep binding the former names.
+    ``profiler_path`` is its former name, still accepted. Each new argument goes after
+    the ones before it, so positional callers keep binding what they did.
     """
     memory_label, memory_path = _memory_report_argument(
         memory_report_path, profiler_path
     )
-    if memory_path is None and performance_path is None:
-        raise ValueError("one of memory_report_path or performance_path is required")
+    if memory_path is None and performance_path is None and npe_path is None:
+        raise ValueError(
+            "one of memory_report_path, performance_path or npe_path is required"
+        )
 
-    profiler = _resolved_directory(memory_label, memory_path)
-    performance = _resolved_directory("performance_path", performance_path)
-    handle = registry.add(profiler, performance)
+    profiler = _resolved(memory_label, memory_path, directory=True)
+    performance = _resolved("performance_path", performance_path, directory=True)
+    npe = _resolved("npe_path", npe_path, directory=False)
+    handle = registry.add(profiler, performance, npe)
     instance = registry.get(handle)
 
     metadata: Dict[str, str] = {}
@@ -779,6 +837,7 @@ def load_report(
         "handle": handle,
         "profiler_path": profiler,
         "performance_path": performance,
+        "npe_path": npe,
         "capture": metadata,
         **_hardware(instance, metadata, perf_csv),
         **_inventory(instance, perf_csv),
@@ -791,4 +850,5 @@ __all__ = [
     "UnknownHandleError",
     "load_report",
     "perf_csv_columns",
+    "read_once",
 ]

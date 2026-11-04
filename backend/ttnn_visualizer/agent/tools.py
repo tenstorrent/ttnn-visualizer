@@ -28,7 +28,6 @@ from typing import (
     Set,
     Tuple,
     TypeVar,
-    Union,
     cast,
 )
 
@@ -46,6 +45,7 @@ from ttnn_visualizer.agent.handles import (
     UnkeptSnapshot,
     UnsharedSnapshot,
     perf_csv_columns,
+    read_once,
 )
 from ttnn_visualizer.csv_queries import (
     L1_ZONE_MARKER_CAPACITY,
@@ -331,20 +331,17 @@ def _per_capture(
 ) -> _Read:
     """`read` of the handle's capture, once per capture -- or why it cannot be read."""
     _require_performance_report(registry, handle)
-
-    def build(instance: Instance) -> Union[_Read, DataFormatError]:
-        _require_same_source(registry, handle, instance)
-        try:
-            return read(instance)
-        except DataFormatError as error:
-            # The same bytes fail the same way, and a rewritten CSV is another source.
-            return error
-
-    source = _pin_source(registry, handle)
-    resolved = registry.cached_report(handle, build, variant=variant, share_key=source)
-    if isinstance(resolved, DataFormatError):
-        raise resolved.with_traceback(None)
-    return resolved
+    # A hit answers from the first read even if the CSV has changed since, saying
+    # nothing: unlike `noc_congestion._pinned_read`'s, this read is never the answer.
+    return read_once(
+        registry,
+        handle,
+        read,
+        variant=variant,
+        share_key=_pin_source(registry, handle),
+        refusals=(DataFormatError,),
+        check=lambda instance: _require_same_source(registry, handle, instance),
+    )
 
 
 def _signposts(registry: ReportRegistry, handle: str) -> ResolvedSignposts:
@@ -780,6 +777,7 @@ def zone_timings(
     registry: ReportRegistry, handle: str, limit: Optional[int] = None
 ) -> Dict[str, object]:
     """Per-zone, per-RISC totals from the device profiler log."""
+    _require_performance_report(registry, handle)
     count = bounded(limit)
     instance = registry.get(handle)
     metadata = DeviceLogProfilerQueries.read_capture_metadata(instance)

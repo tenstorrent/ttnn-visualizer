@@ -91,7 +91,7 @@ another rank's operation under the same id.
 
 | Tool | Answers |
 |---|---|
-| `load_report` | What this report contains, and which of the tools below apply to it: its signposts, architecture, device count and the tt-perf-report version. Returns a handle the others take. |
+| `load_report` | What this report contains, and which of the tools below apply to it: its signposts, architecture, device count and the tt-perf-report version. Takes a memory report directory, a performance directory, a tt-npe trace file, or any of them together. Returns a handle the others take. |
 | `top_ops` | The costliest operations by device time, op-to-op gap, total percentage, FLOPS, DRAM bandwidth or core count, over the whole report or a signpost range. Each row carries the memory report `operation_id` it links to, when the handle holds both reports — see below. `include` adds the fields that say why an operation took its time, and the performance view's heuristic flags. |
 | `op_breakdown` | Where the time went, per op or per op category, over the whole report or a signpost range: each group's count, and its device time and op-to-op gap with the share each is of the total. |
 | `program_cache` | Whether programs were built again rather than reused: per op code, its calls, distinct programs, and how many repeat calls hit or missed the program cache. |
@@ -108,6 +108,7 @@ another rank's operation under the same id.
 | `dram_fallbacks` | Operations that likely fell back from L1 to DRAM, inferred from their memory config arguments and from retries after an L1 allocation failure. |
 | `l1_peak` | The run's L1 peak per bank, split into circular buffers, intra-operation tensors, persistent tensors and stale ones, with the operation holding it and the operations closest to it. |
 | `late_deallocations` | Tensors still allocated after their last use, by Buffer Summary's late-deallocation rule (L1, as the app shows it, or DRAM), grouped by the call site of that use: how many holds each has, how they ended, and the bytes per bank they held over the operations held. |
+| `noc_congestion` | How congested the NoC links were in a tt-npe trace: the trace's own run summary, the highest demand any single link reached and when, bursts of congested timesteps ranked by peak, and the links with the highest mean demand. |
 | `critical_path` | The longest chain of cumulative device time through the operation graph, source to sink, with each operation's device time, the chain's total and share of the report's, and how many of its operations have no device time. Needs a linked performance report. |
 | `subgraph_between` | The operations, tensor edges and tensors on every path from one operation to another, each tensor once with its shape, dtype, layout, buffer type and memory layout, so a block can be read without walking it one tensor at a time. |
 
@@ -117,9 +118,10 @@ and `diff_reports` read the performance CSVs; the operation tools — `find_oper
 `dram_fallbacks`, `l1_peak`, `late_deallocations` and `subgraph_between` — read the memory
 report's SQLite database; `critical_path` reads both, and is listed only when the
 performance CSV can be reported on and the database holds the graph's tables and its
-captured graphs;
-`load_report` opens both, since its whole job is saying which of the others apply. A capture can carry either, both, or — as far as these tools are concerned —
-neither, which is what makes `load_report`'s answer worth reading first.
+captured graphs; `noc_congestion` reads a tt-npe trace. `load_report` takes any of the
+three, since its whole job is saying which of the others apply. A capture can carry any of
+them, or — as far as these tools are concerned — none, which is what makes `load_report`'s
+answer worth reading first.
 
 `load_report` takes the memory report directory as `memory_report_path`. Its former name,
 `profiler_path`, is still accepted; a call passing both with different paths is refused.
@@ -144,7 +146,9 @@ be reported on, and when it cannot, `performance_csv_problem` says why (`empty`,
 Each database tool is checked against the tables it actually reads, so a truncated
 capture that holds `operations` but not `buffers` is reported as answering
 `find_operations` and nothing else, rather than advertising every tool and failing most
-of them.
+of them. `noc_congestion` is listed when the handle's `npe_path` starts as a trace does, a
+zstd frame for `.zst` and a JSON object otherwise. The trace is only read whole on its
+first call, which refuses one that is not a readable tt-npe trace.
 
 `load_report` also says what the capture is:
 
@@ -771,6 +775,42 @@ zone-and-RISC entries, not names, so a long zone name on five RISCs counts five.
 though its kernels still count in their cores' spans. `zone_intervals` leaves such a
 timeline out of `by_core_risc`, counted in `by_core_risc_unlisted_too_long`, though its
 intervals still count in `by_device` and `timeline_count`.
+
+**`noc_congestion` reads tt-npe's simulation of the NoC, not a measurement.** Its figures
+are percentages of a link's bandwidth per timestep of `cycles_per_timestep` device cycles.
+Demand is what transfers asked of a link and can pass 100%; utilisation is what the link
+carried and stops at 100%, so demand over 100% is congestion. `run` is the trace's own
+summary, the figures the visualizer's NPE view shows as its run summary: each is the mean
+over timesteps of that timestep's average across links, per NoC in `by_noc` too. Its
+`highest_timestep_average_demand_percent` is the trace's `max_link_demand`, renamed
+because it is the largest per-timestep average, not one link's demand, so it sits well
+below what the busiest single link reaches. `worst_link` is the highest demand any single
+link reached, with its timestep and cycles: the earliest, where several tie, and
+`worst_link_ties` counts the link-timesteps at that demand, that one included. A burst is
+a run of consecutive timesteps whose busiest link was over 100% demand; `bursts` ranks
+them by peak, each with its cycle span, length and the link that peaked, `burst_count`
+counts them, and `congested_timesteps` and `congested_percent` say how many timesteps they
+cover and what share of the trace that is. `busiest_links` ranks links by their mean
+demand over every timestep of the trace, idle ones included, with each link's peak and the
+share of timesteps it spent over 100%, and `link_count` counts every link with a readable
+demand row. `device`, `y` and `x` are the trace's own chip id and grid coordinates. A link
+demand row whose coordinates or demand cannot be read is left out and counted in a caveat,
+and a timestep that is not an object or holds no list of link demand counts as idle, also
+in a caveat. Links past the first 65,536 distinct ones read are left out and counted in a
+caveat; the most in a local trace is 4,653. The trace is read through the visualizer's
+index of it when that index is built and current, and from the trace itself otherwise; the
+tool never builds the index, so it writes nothing beside the trace. The visualizer builds
+its index beside the copy it opens, which for an upload is its own copy under its report
+data directory, so an `npe_path` naming that copy reuses the index, in a fraction of the
+time and memory a parse takes. Otherwise the first call on a handle parses the whole
+trace: a trace of tens of thousands of timesteps and millions of link rows takes seconds
+to tens of seconds and several GB at its peak, as building the visualizer's index does,
+and the server process can keep much of that memory afterwards. A trace whose JSON passes
+1 GiB, summed over every zstd frame, or a `.zst` file itself past that size, is refused
+rather than parsed, and so is a `.zst` with a frame that does not declare its size. Later
+calls answer from the first read, and so does every handle on the same unchanged file. A
+handle stays with the trace it first read: if the file changes or goes away afterwards,
+its answers say so in their caveat, and a fresh `load_report` reads the new one.
 
 **A performance row and a memory report operation are linked by order, not by a shared id.**
 Neither report records the other's id, so when a handle is loaded with both, the tools

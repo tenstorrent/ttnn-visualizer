@@ -22,6 +22,7 @@ from ttnn_visualizer.csv_queries import DeviceLogProfilerQueries, SpanRequest
 from ttnn_visualizer.event_logging import McpToolOutcome
 from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.models import Instance
+from ttnn_visualizer.tests.mcp_calls import tool_call
 from ttnn_visualizer.tests.smoke_capture import (
     SMOKE_CAPTURE_DIR,
     smoke_rows,
@@ -975,25 +976,12 @@ class TestThroughTheServer:
         registry = ReportRegistry()
         write_device_log(tmp_path, header, log_rows)
         load_report(registry, performance_path=str(tmp_path))
-        with (
-            patch.object(
-                tools, "_generate_canonical_report", return_value=_perf_report([_op()])
-            ),
-            patch.object(server, "record_event") as record,
+        with patch.object(
+            tools, "_generate_canonical_report", return_value=_perf_report([_op()])
         ):
-            response = server.handle_message(
-                {
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "tools/call",
-                    "params": {
-                        "name": "core_spread",
-                        "arguments": {"handle": "report-1", **arguments},
-                    },
-                },
-                server._tool_table(registry),
+            return tool_call(
+                registry, "core_spread", {"handle": "report-1", **arguments}
             )
-        return response["result"], record.call_args.kwargs["outcome"]
 
     def test_an_integer_perf_id_answers(self, tmp_path):
         """The schema takes a string or an integer; ids are matched as text."""
@@ -1023,25 +1011,13 @@ class TestThroughTheServer:
         registry = ReportRegistry()
         load_report(registry, performance_path=str(tmp_path))
 
-        with (
-            patch.object(
-                tools, "_generate_canonical_report", return_value=_perf_report([_op()])
-            ),
-            patch.object(server, "record_event") as record,
+        with patch.object(
+            tools, "_generate_canonical_report", return_value=_perf_report([_op()])
         ):
-            response = server.handle_message(
-                {
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "tools/call",
-                    "params": {
-                        "name": "core_spread",
-                        "arguments": {"handle": "report-1", "perf_id": "1"},
-                    },
-                },
-                server._tool_table(registry),
+            result, outcome = tool_call(
+                registry, "core_spread", {"handle": "report-1", "perf_id": "1"}
             )
 
-        assert response["result"]["isError"] is True
-        assert "CHIP_FREQ" in response["result"]["content"][0]["text"]
-        assert record.call_args.kwargs["outcome"] is McpToolOutcome.REFUSED
+        assert result["isError"] is True
+        assert "CHIP_FREQ" in result["content"][0]["text"]
+        assert outcome is McpToolOutcome.REFUSED

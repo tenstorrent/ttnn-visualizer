@@ -20,6 +20,7 @@ class McpToolName(str, Enum):
     ZONE_TIMINGS = "zone_timings"
     ZONE_INTERVALS = "zone_intervals"
     CORE_SPREAD = "core_spread"
+    NOC_CONGESTION = "noc_congestion"
     DIFF_REPORTS = "diff_reports"
     FIND_OPERATIONS = "find_operations"
     OPERATION_DETAIL = "operation_detail"

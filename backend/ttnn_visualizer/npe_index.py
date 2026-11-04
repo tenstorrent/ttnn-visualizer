@@ -21,7 +21,16 @@ import sqlite3
 import tempfile
 import threading
 from pathlib import Path
-from typing import Iterator, Optional
+from typing import (
+    Any,
+    BinaryIO,
+    Iterable,
+    Iterator,
+    List,
+    NamedTuple,
+    Optional,
+    Tuple,
+)
 
 import orjson
 import zstd
@@ -83,7 +92,7 @@ _TRUNCATE_DECIMALS = 3
 _TRUNCATE_SCALE = 10**_TRUNCATE_DECIMALS
 
 
-def _truncate(value: Optional[float]) -> Optional[float]:
+def truncate(value: Optional[float]) -> Optional[float]:
     if value is None:
         return None
     return int(value * _TRUNCATE_SCALE) / _TRUNCATE_SCALE
@@ -99,9 +108,7 @@ def _truncate_link_demand(link_demand: list) -> list:
     # trailing demand (index 4) is a float; coords / noc-id are left untouched.
     for entry in link_demand:
         if len(entry) > _LINK_DEMAND_INDEX and type(entry[_LINK_DEMAND_INDEX]) is float:
-            entry[_LINK_DEMAND_INDEX] = (
-                int(entry[_LINK_DEMAND_INDEX] * _TRUNCATE_SCALE) / _TRUNCATE_SCALE
-            )
+            entry[_LINK_DEMAND_INDEX] = truncate(entry[_LINK_DEMAND_INDEX])
         # Drop an absent fabric scope rather than ship a trailing null: the
         # frontend reads slot 5 as "unset" only when it's `undefined` (a 5-tuple),
         # so a serialized `null` would wrongly count as a present scope and
@@ -119,7 +126,7 @@ def _truncate_noc(noc: dict) -> dict:
     for noc_data in noc.values():
         for key, value in noc_data.items():
             if type(value) is float:
-                noc_data[key] = int(value * _TRUNCATE_SCALE) / _TRUNCATE_SCALE
+                noc_data[key] = truncate(value)
     return noc
 
 
@@ -149,17 +156,137 @@ def _build_guard(db_path: Path) -> Iterator[None]:
             os.close(fd)
 
 
-def _load_npe_object(npe_path: Path) -> dict:
-    if npe_path.suffix == ".zst":
-        return orjson.loads(zstd.uncompress(npe_path.read_bytes()))
-    return orjson.loads(npe_path.read_bytes())
+def load_npe_object(npe_path: Path) -> dict:
+    return parse_trace(npe_path.read_bytes(), npe_path.suffix == ".zst")
+
+
+def parse_trace(data: bytes, compressed: bool) -> dict:
+    """A trace's bytes as `load_npe_object` reads them: zstd frames, or JSON."""
+    if compressed:
+        # Rebound, so the compressed bytes are freed before the parse.
+        data = zstd.uncompress(data)
+    return orjson.loads(data)
+
+
+ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
+# Any magic from 0x184D2A50 to 0x184D2A5F; the frame decompresses to nothing.
+_ZSTD_SKIPPABLE_MAGIC = 0x184D2A50
+# Frame_Header_Descriptor's field sizes, by flag (RFC 8878, 3.1.1.1.1).
+_ZSTD_DICTIONARY_ID_SIZES = (0, 1, 2, 4)
+_ZSTD_CONTENT_SIZE_SIZES = (0, 2, 4, 8)
+_ZSTD_RLE_BLOCK, _ZSTD_RESERVED_BLOCK = 1, 3
+# Frames and blocks walked before giving up: 1 GiB of JSON is 8,192 full blocks.
+_ZSTD_MAX_PARTS = 1 << 20
+
+
+# Enough of a trace's start to tell it from another file, leading whitespace and all.
+TRACE_HEAD_BYTES = 64
+
+
+def starts_as_trace(head: bytes, compressed: bool) -> bool:
+    """Whether bytes start as `parse_trace` will read them: a zstd frame when
+    compressed, else a JSON object."""
+    if compressed:
+        return head.startswith(ZSTD_MAGIC)
+    return head.lstrip()[:1] == b"{"
+
+
+def looks_like_trace(npe_path: Path) -> bool:
+    """Whether the file starts as `load_npe_object` will read it."""
+    try:
+        with npe_path.open("rb") as source:
+            head = source.read(TRACE_HEAD_BYTES)
+    except OSError:
+        return False
+    return starts_as_trace(head, npe_path.suffix == ".zst")
+
+
+def _declared_frame_size(source: BinaryIO) -> Tuple[Optional[int], bool]:
+    """After a frame's magic, its declared content size, None where it declares
+    none, and whether a checksum follows its last block."""
+    head = source.read(1)
+    if not head:
+        return None, False
+    descriptor = head[0]
+    single_segment = bool(descriptor & 0x20)
+    skipped = (0 if single_segment else 1) + _ZSTD_DICTIONARY_ID_SIZES[
+        descriptor & 0x03
+    ]
+    width = _ZSTD_CONTENT_SIZE_SIZES[descriptor >> 6] or (1 if single_segment else 0)
+    field = source.read(skipped + width)[skipped:]
+    if not width or len(field) < width:
+        return None, False
+    size = int.from_bytes(field, "little")
+    return (size + 256 if width == 2 else size), bool(descriptor & 0x04)
+
+
+def _skip_blocks(source: BinaryIO, budget: int) -> Optional[int]:
+    """Seek past a frame's blocks: how many there were, None where one is reserved
+    or there are more than `budget`. A file cut short ends the walk."""
+    blocks = 0
+    while blocks < budget:
+        header = source.read(3)
+        if len(header) < 3:
+            return blocks
+        blocks += 1
+        value = int.from_bytes(header, "little")
+        kind = (value >> 1) & 0x03
+        if kind == _ZSTD_RESERVED_BLOCK:
+            return None
+        source.seek(1 if kind == _ZSTD_RLE_BLOCK else value >> 3, os.SEEK_CUR)
+        if value & 0x01:
+            return blocks
+    return None
+
+
+def trace_size(npe_path: Path) -> Optional[int]:
+    """The JSON bytes `load_npe_object` will parse, before reading them: the file's
+    size, or the sum of a `.zst`'s declared frame sizes, None where any frame
+    declares none or the file is not zstd frames."""
+    with npe_path.open("rb") as source:
+        if npe_path.suffix != ".zst":
+            return os.fstat(source.fileno()).st_size
+        return declared_content_size(source)
+
+
+def declared_content_size(source: BinaryIO) -> Optional[int]:
+    """The sum of zstd frames' declared content sizes, from the source's position on,
+    None where any frame declares none or the source is not zstd frames."""
+    total: Optional[int] = None
+    parts = 0
+    while magic := source.read(4):
+        parts += 1
+        if len(magic) < 4 or parts > _ZSTD_MAX_PARTS:
+            return None
+        if int.from_bytes(magic, "little") & ~0x0F == _ZSTD_SKIPPABLE_MAGIC:
+            length = source.read(4)
+            if len(length) < 4:
+                return None
+            source.seek(int.from_bytes(length, "little"), os.SEEK_CUR)
+            continue
+        if magic != ZSTD_MAGIC:
+            return None
+        size, checksum = _declared_frame_size(source)
+        blocks = None if size is None else _skip_blocks(source, _ZSTD_MAX_PARTS - parts)
+        if size is None or blocks is None:
+            return None
+        parts += blocks
+        total = (total or 0) + size
+        if checksum:
+            source.seek(4, os.SEEK_CUR)
+    return total
+
+
+def _read_only(db_path: Path) -> sqlite3.Connection:
+    # Never creates the file, so a probe cannot leave an empty index beside a trace.
+    return sqlite3.connect(f"{db_path.resolve().as_uri()}?mode=ro", uri=True)
 
 
 def _is_index_fresh(db_path: Path, source_mtime_ns: int) -> bool:
     if not db_path.exists():
         return False
     try:
-        conn = sqlite3.connect(db_path)
+        conn = _read_only(db_path)
         try:
             version = conn.execute(
                 "SELECT value FROM meta WHERE key = 'index_version'"
@@ -169,17 +296,17 @@ def _is_index_fresh(db_path: Path, source_mtime_ns: int) -> bool:
             ).fetchone()
         finally:
             conn.close()
-    except sqlite3.Error:
+        if not version or not mtime:
+            return False
+        return int(version[0]) == INDEX_VERSION and int(mtime[0]) == source_mtime_ns
+    # A damaged meta row is a stale index, not a failed request.
+    except (sqlite3.Error, TypeError, ValueError):
         return False
-
-    if not version or not mtime:
-        return False
-    return int(version[0]) == INDEX_VERSION and int(mtime[0]) == source_mtime_ns
 
 
 def _build_index(npe_path: Path, db_path: Path, source_mtime_ns: int) -> None:
     logger.info(f"Building NPE index for {npe_path} -> {db_path}")
-    obj = _load_npe_object(npe_path)
+    obj = load_npe_object(npe_path)
 
     transfers = obj.get("noc_transfers", [])
     timesteps = obj.get("timestep_data", [])
@@ -205,6 +332,17 @@ def _build_index(npe_path: Path, db_path: Path, source_mtime_ns: int) -> None:
     logger.info(
         f"NPE index built: {len(transfers)} transfers, {len(timesteps)} timesteps"
     )
+
+
+def _transfer_id(transfer: dict) -> object:
+    """The id `_write_index` stores a transfer under, None for one without. SQLite
+    turns it into the row's integer key, or refuses it; see `_transfer_count`."""
+    return transfer.get("id")
+
+
+def _step_cells(step: dict) -> Tuple[Any, Any, Any]:
+    """A step's start_cycle, end_cycle and link_demand, as `_write_index` reads them."""
+    return step.get("start_cycle"), step.get("end_cycle"), step.get("link_demand", [])
 
 
 def _write_index(
@@ -254,7 +392,7 @@ def _write_index(
         batch = []
         skipped_no_id = 0
         for transfer in transfers:
-            tid = transfer.get("id")
+            tid = _transfer_id(transfer)
             if tid is None:
                 # A transfer with no id can't be resolved (active_transfers are id
                 # lists) and id is the table PK — skip it rather than KeyError the
@@ -277,8 +415,9 @@ def _write_index(
 
         timestep_rows = []
         for t, step in enumerate(timesteps):
+            start_cycle, end_cycle, link_demand = _step_cells(step)
             active_ids = step.get("active_transfers", [])
-            link_demand = _truncate_link_demand(step.get("link_demand", []))
+            link_demand = _truncate_link_demand(link_demand)
             noc = _truncate_noc(step.get("noc", {}))
             max_link_demand = step.get("max_link_demand")
             if max_link_demand is None and link_demand:
@@ -295,12 +434,12 @@ def _write_index(
             timestep_rows.append(
                 (
                     t,
-                    _as_int(step.get("start_cycle")),
-                    _as_int(step.get("end_cycle")),
-                    _truncate(step.get("avg_link_demand")),
-                    _truncate(step.get("avg_link_util")),
-                    _truncate(max_link_demand),
-                    _truncate(step.get("mcast_write_link_util")),
+                    _as_int(start_cycle),
+                    _as_int(end_cycle),
+                    truncate(step.get("avg_link_demand")),
+                    truncate(step.get("avg_link_util")),
+                    truncate(max_link_demand),
+                    truncate(step.get("mcast_write_link_util")),
                     len(active_ids),
                     orjson.dumps(noc),
                     orjson.dumps(active_ids),
@@ -322,6 +461,119 @@ def _write_index(
         conn.commit()
     finally:
         conn.close()
+
+
+def fresh_index(npe_path: str) -> Optional[Path]:
+    """The trace's index when one is built and current, or None. Never builds one, for
+    a reader that must not write beside the trace."""
+    db_path = get_index_path(npe_path)
+    try:
+        source_mtime_ns = Path(npe_path).stat().st_mtime_ns
+    except OSError:
+        return None
+    return db_path if _is_index_fresh(db_path, source_mtime_ns) else None
+
+
+# What an index replaced or damaged after `fresh_index` checked it raises while read.
+INDEX_READ_ERRORS = (
+    sqlite3.Error,
+    orjson.JSONDecodeError,
+    KeyError,
+    TypeError,
+    ValueError,
+)
+
+
+class LinkDemand(NamedTuple):
+    """A trace's per-timestep link demand, from its current index or the trace."""
+
+    common_info: dict
+    transfer_count: int
+    # (start_cycle, end_cycle, link_demand) per timestep, in order.
+    timesteps: Iterable[Tuple[object, object, object]]
+    # Whether float demands are already cut by `truncate`, as the index stores them.
+    truncated: bool
+    # Timesteps that are not an object, which an index build cannot store.
+    unreadable_timesteps: int = 0
+
+
+def _transfer_count(transfers: object) -> int:
+    """Transfers as `_write_index` stores them: one row per id, none without one."""
+    if not isinstance(transfers, list):
+        return 0
+    ids = set()
+    spelled: List[object] = []
+    for transfer in transfers:
+        if isinstance(transfer, dict):
+            tid = _transfer_id(transfer)
+            if isinstance(tid, int):
+                ids.add(tid)
+            elif isinstance(tid, (float, str)):
+                spelled.append(tid)
+    return len(ids.union(_integer_keys(spelled)))
+
+
+def _integer_keys(values: List[object]) -> List[int]:
+    """The integer keys SQLite stores these as in `_write_index`'s transfer table, by
+    asking it: "3.0", "3e0" and " 3" are all 3, and "1_000" and 3.5 are refused."""
+    if not values:
+        return []
+    conn = sqlite3.connect(":memory:")
+    try:
+        conn.execute("CREATE TABLE transfer (id INTEGER PRIMARY KEY)")
+        for value in values:
+            # A value it refuses fails `_write_index`'s build, so no index disagrees.
+            with contextlib.suppress(sqlite3.Error):
+                conn.execute("INSERT OR IGNORE INTO transfer (id) VALUES (?)", (value,))
+        return [key for (key,) in conn.execute("SELECT id FROM transfer")]
+    finally:
+        conn.close()
+
+
+@contextlib.contextmanager
+def indexed_link_demand(npe_path: Path) -> Iterator[Optional[LinkDemand]]:
+    """The trace's link demand from its index when that is current, else None. Read
+    only; a damaged index raises one of `INDEX_READ_ERRORS` while it is read."""
+    db_path = fresh_index(str(npe_path))
+    if db_path is None:
+        yield None
+        return
+    conn = _read_only(db_path)
+    try:
+        meta = dict(conn.execute("SELECT key, value FROM meta").fetchall())
+        common_info = orjson.loads(meta["common_info"])
+        (transfers,) = conn.execute("SELECT count(*) FROM transfer").fetchone()
+        yield LinkDemand(
+            common_info if isinstance(common_info, dict) else {},
+            transfers,
+            (
+                (start, end, orjson.loads(link_demand))
+                for start, end, link_demand in conn.execute(
+                    "SELECT start_cycle, end_cycle, link_demand FROM timestep ORDER BY t"
+                )
+            ),
+            truncated=True,
+        )
+    finally:
+        conn.close()
+
+
+def trace_link_demand(trace: object) -> LinkDemand:
+    """A parsed trace's link demand, read as `_write_index` would store it."""
+    if not isinstance(trace, dict) or not isinstance(trace.get("timestep_data"), list):
+        raise ValueError("it holds no timestep_data list, so it is not a tt-npe trace")
+    steps = trace["timestep_data"]
+    common_info = trace.get("common_info")
+    return LinkDemand(
+        common_info if isinstance(common_info, dict) else {},
+        _transfer_count(trace.get("noc_transfers")),
+        (
+            _step_cells(step) if isinstance(step, dict) else (None, None, [])
+            for step in steps
+        ),
+        truncated=False,
+        unreadable_timesteps=sum(1 for step in steps if not isinstance(step, dict)),
+    )
 
 
 def ensure_index(npe_path: str) -> Path:

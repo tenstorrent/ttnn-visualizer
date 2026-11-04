@@ -1063,6 +1063,7 @@ _PRIVACY_REVIEWED_ATTRIBUTES: dict[str, dict[str, frozenset[str] | str]] = {
                 "zone_timings",
                 "zone_intervals",
                 "core_spread",
+                "noc_congestion",
                 "diff_reports",
                 "find_operations",
                 "operation_detail",
