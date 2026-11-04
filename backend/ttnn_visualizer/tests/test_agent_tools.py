@@ -71,6 +71,7 @@ from ttnn_visualizer.tests.test_device_log_columns import (
     _drop_column,
     write_device_log,
 )
+from ttnn_visualizer.utils import newest_ops_perf_file
 
 ZONED_ROWS = [
     # Two cores running the same zone, so `cores` counts distinctly from
@@ -1692,9 +1693,10 @@ class TestSignpostRangeEndToEnd:
         original = tmp_path / "signposted" / "ops_perf_results.csv"
         newer = tmp_path / "signposted" / "ops_perf_results_newer.csv"
         newer.write_text(original.read_text())
-        # Touching the original would change its fingerprint and refuse for the
-        # wrong reason, so only `newer` moves.
+        # Touching the original would change the source `_require_same_source`
+        # compares and refuse for the wrong reason, so only `newer` moves.
         _touch_after(original, newer, (time.time() + 1, time.time() + 1))
+        assert newest_ops_perf_file(original.parent) == newer
 
         with pytest.raises(ValueError, match="has changed since it was first read"):
             tools.top_ops(registry, handle)

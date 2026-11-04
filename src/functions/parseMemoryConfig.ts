@@ -48,8 +48,9 @@ const parseMemoryConfig = (string: string | null | undefined): MemoryConfig | nu
 };
 
 /**
- * An operation argument with its `parsedValue`, which the operation details view renders key by
- * key: the parsed config when the value is a whole `MemoryConfig(...)`, otherwise null.
+ * An operation argument with its `parsedValue`, which the operations list and operation details
+ * view render key by key: the parsed config when the value is a whole `MemoryConfig(...)`,
+ * otherwise null.
  */
 export const withParsedMemoryConfig = <Argument extends { value: string }>(
     argument: Argument,
@@ -62,7 +63,7 @@ export const isMemoryConfigValue = (value: string | null | undefined): value is 
 /**
  * The buffer type a raw `MemoryConfig(...)` string declares, mirroring the backend's
  * `parse_memory_config_buffer_type`. Kept out of `parseMemoryConfig`, whose result the
- * operation details view renders key by key.
+ * operations list and operation details view render key by key.
  */
 export const getMemoryConfigBufferType = (value: string | null | undefined): BufferType | null =>
     toBufferType(getMemoryConfigBody(value)?.match(bufferTypePattern)?.[1]);

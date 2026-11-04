@@ -16,7 +16,9 @@ interface TensorArgumentProps {
 
 function TensorArgument({ argument, onCollapse }: TensorArgumentProps) {
     const [isExpanded, setIsExpanded] = useState(false);
-    const splitArgument = argument.value.split('\n');
+    // The column is nullable, though no capture checked so far has a NULL value.
+    const argumentValue = argument.value ?? '';
+    const splitArgument = argumentValue.split('\n');
 
     const handleExpandToggle = () => {
         setIsExpanded((previousValue) => !previousValue);
@@ -42,8 +44,8 @@ function TensorArgument({ argument, onCollapse }: TensorArgumentProps) {
         );
     }
 
-    if (!isLengthyTensor(argument.value)) {
-        return argument.value;
+    if (!isLengthyTensor(argumentValue)) {
+        return argumentValue;
     }
 
     return (
@@ -56,7 +58,7 @@ function TensorArgument({ argument, onCollapse }: TensorArgumentProps) {
 
             {isExpanded ? (
                 <>
-                    <pre>{argument.value}</pre>
+                    <pre>{argumentValue}</pre>
 
                     {onCollapse && (
                         <Switch

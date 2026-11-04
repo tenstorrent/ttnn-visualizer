@@ -992,7 +992,8 @@ _HEIGHT_SHARDED_L1 = (
     "shape={32, 64},orientation=ShardOrientation::ROW_MAJOR,halo=0))"
 )
 # Values that contain a memory config without being one. The frontend's
-# `NOT_A_MEMORY_CONFIG` rejects the same, so loosening either pattern fails here.
+# `NOT_A_MEMORY_CONFIG` rejects these too, among others, so loosening either
+# pattern fails a test.
 _NOT_A_MEMORY_CONFIG = [
     f"ttnn.Tensor(shape=Shape([1, 1000]), memory_config={_HEIGHT_SHARDED_L1}, "
     "storage_type=StorageType.DEVICE)",
@@ -1044,8 +1045,16 @@ def test_parse_memory_config_is_none_for_anything_but_a_memory_config(
     assert parse_memory_config(memory_config) is None
 
 
-def test_parse_memory_config_reads_the_layout_and_shard_spec():
-    assert parse_memory_config(_HEIGHT_SHARDED_L1) == {
+@pytest.mark.parametrize(
+    "memory_config",
+    [
+        _HEIGHT_SHARDED_L1,
+        # `$` allows one trailing newline; the frontend's pattern does the same.
+        f"{_HEIGHT_SHARDED_L1}\n",
+    ],
+)
+def test_parse_memory_config_reads_the_layout_and_shard_spec(memory_config):
+    assert parse_memory_config(memory_config) == {
         "memory_layout": "TensorMemoryLayout::HEIGHT_SHARDED",
         "shard_spec": {
             "grid": "[(x=0,y=0) - (x=7,y=7)]",

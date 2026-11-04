@@ -110,6 +110,10 @@ describe('getMemoryConfigBufferType', () => {
         expect(getMemoryConfigBufferType(`tt::tt_metal::${SHARDED_L1}`)).toBe(BufferType.L1);
     });
 
+    it('reads a config with one trailing newline, as the backend does', () => {
+        expect(getMemoryConfigBufferType(`${SHARDED_L1}\n`)).toBe(BufferType.L1);
+    });
+
     it('is null when the config declares no buffer type', () => {
         expect(
             getMemoryConfigBufferType(
@@ -128,7 +132,7 @@ describe('getMemoryConfigBufferType', () => {
 });
 
 describe('isMemoryConfigValue', () => {
-    it.each([SHARDED_L1, `tt::tt_metal::${SHARDED_L1}`])('accepts %s', (value) => {
+    it.each([SHARDED_L1, `tt::tt_metal::${SHARDED_L1}`, `${SHARDED_L1}\n`])('accepts %j', (value) => {
         expect(isMemoryConfigValue(value)).toBe(true);
     });
 

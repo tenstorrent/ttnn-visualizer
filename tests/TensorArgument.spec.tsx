@@ -51,4 +51,13 @@ describe('TensorArgument', () => {
         expect(screen.queryByRole('table')).not.toBeInTheDocument();
         expect(screen.getByText('std::nullopt')).toBeInTheDocument();
     });
+
+    it('renders a NULL value from the database without crashing', () => {
+        // The column is nullable, though the type says otherwise.
+        const argument = { name: 'memory_config', value: null as unknown as string, parsedValue: null };
+        const { container } = render(<TensorArgument argument={argument} />);
+
+        expect(screen.queryByRole('table')).not.toBeInTheDocument();
+        expect(container).toBeInTheDocument();
+    });
 });
