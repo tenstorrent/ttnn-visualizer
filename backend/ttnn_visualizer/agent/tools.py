@@ -1390,6 +1390,7 @@ def core_spread(
         index.malformed.get(run_id, 0) for run_id in {run_id for run_id, _ in runs}
     )
     if malformed:
+        # No "run": `query_core_spans` keeps only rows of a requested run before this.
         caveats.append(
             f"{malformed} kernel rows of these operations' call counts have a slot, "
             f"core or cycle count {UNREADABLE_NUMBER_REASON}, and were left out, so the "

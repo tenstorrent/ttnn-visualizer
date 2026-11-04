@@ -806,6 +806,57 @@ class TestGaps:
         assert entry["max_us"] == round(2**62 / 1000, 3)
         assert "left out" not in answer.get("caveat", "")
 
+    def test_the_top_value_beside_one_past_it_is_kept_exactly(self, tmp_path):
+        """2**63 makes pandas read the column as uint64, which still holds the top."""
+        top = 2**63 - 1
+        rows = [
+            modern_row(0, 1, 1, "BRISC", 0, "BRISC-KERNEL", "ZONE_START"),
+            *(
+                modern_row(0, 1, 1, "BRISC", cycles, LOOP, "ZONE_START")
+                for cycles in (top - 2000, top - 1000, top, str(2**63))
+            ),
+        ]
+
+        answer = _intervals(tmp_path, rows)
+
+        (entry,) = answer["by_core_risc"]
+        assert (entry["occurrences"], entry["intervals"]) == (3, 2)
+        assert (entry["min_us"], entry["max_us"]) == (1.0, 1.0)
+        assert "1 rows have a slot, core, run or cycle count" in answer["caveat"]
+
+    def test_a_float_column_drops_the_top_value_and_counts_it(self, tmp_path):
+        """A blank cell makes the column floats, where the top rounds up to 2**63."""
+        rows = _run(0, 1, 1, "BRISC", 0, [100, 1100, 2100])
+        rows.insert(3, modern_row(0, 1, 1, "BRISC", "", LOOP, "ZONE_START"))
+        rows.insert(-1, modern_row(0, 1, 1, "BRISC", 2**63 - 1, LOOP, "ZONE_START"))
+
+        answer = _intervals(tmp_path, rows)
+
+        (entry,) = answer["by_core_risc"]
+        assert (entry["intervals"], entry["max_us"]) == (2, 1.0)
+        assert "2 rows have a slot, core, run or cycle count" in answer["caveat"]
+
+    def test_a_negative_core_is_kept(self, tmp_path):
+        """Only a cycle count is refused below zero."""
+        answer = _intervals(tmp_path, _run(0, -1, 1, "BRISC", 0, [100, 1100, 2100]))
+
+        (entry,) = answer["by_core_risc"]
+        assert (entry["x"], entry["intervals"]) == (-1, 2)
+        assert "left out" not in answer.get("caveat", "")
+
+    def test_a_later_chunk_past_int64_reads_as_the_whole_log_does(self, tmp_path):
+        """Each chunk infers its own dtypes, so only the last one reads as uint64."""
+        rows = _run(0, 1, 1, "BRISC", 0, [100, 1100, 2100])
+        rows.insert(-1, modern_row(0, 1, 1, "BRISC", str(2**63), LOOP, "ZONE_START"))
+        whole = _intervals(tmp_path, rows)
+
+        with patch.object(csv_queries, "CSV_CHUNK_SIZE", 3):
+            chunked = _intervals(tmp_path, rows)
+
+        assert chunked == whole
+        assert whole["by_core_risc"][0]["intervals"] == 2
+        assert "1 rows have a slot, core, run or cycle count" in whole["caveat"]
+
     def test_starts_whose_difference_would_overflow_answer_rather_than_fail(
         self, tmp_path
     ):

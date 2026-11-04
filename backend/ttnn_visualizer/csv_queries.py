@@ -943,7 +943,7 @@ class DeviceLogProfilerQueries:
     # REQUIRED_DEVICE_LOG_COLUMNS because only the zone queries need them; see the
     # comment in `_zone_phase` before folding the two together.
     ZONE_SUMMARY_COLUMNS = frozenset(_ZONE_COLUMNS)
-    # The columns the span and interval readers hold as whole numbers.
+    # The `_ZONE_COLUMNS` the span and interval readers hold as whole numbers.
     _WHOLE_NUMBER_COLUMNS = (
         "PCIe slot",
         "core_x",
@@ -951,6 +951,9 @@ class DeviceLogProfilerQueries:
         "run host ID",
         _CYCLES_COLUMN,
     )
+    # Of those, the ones a negative value makes unreadable: the "negative cycle
+    # count" of UNREADABLE_NUMBER_REASON.
+    _NON_NEGATIVE_COLUMNS = (_CYCLES_COLUMN,)
     # The column that marks a zone's start and end, with its two tokens, in the
     # order one is preferred when a capture has both. Two spellings of the same
     # fact, neither required: a current capture writes `type` as ZONE_START /
@@ -1400,7 +1403,9 @@ class DeviceLogProfilerQueries:
                 .str.endswith(KERNEL_ZONE_SUFFIX)
             ]
             whole, readable = _whole_number_rows(
-                chunk, self._WHOLE_NUMBER_COLUMNS, non_negative=(_CYCLES_COLUMN,)
+                chunk,
+                self._WHOLE_NUMBER_COLUMNS,
+                non_negative=self._NON_NEGATIVE_COLUMNS,
             )
             if not readable.all():
                 malformed.update(chunk["run host ID"][~readable].astype(int).tolist())
@@ -1514,7 +1519,9 @@ class DeviceLogProfilerQueries:
             )
 
             whole, readable = _whole_number_rows(
-                chunk, self._WHOLE_NUMBER_COLUMNS, non_negative=(_CYCLES_COLUMN,)
+                chunk,
+                self._WHOLE_NUMBER_COLUMNS,
+                non_negative=self._NON_NEGATIVE_COLUMNS,
             )
             malformed += int((~readable).sum())
             malformed_starts += int(

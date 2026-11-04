@@ -557,6 +557,43 @@ class TestUnreadableCells:
         }
         assert "left out" not in result.get("caveat", "")
 
+    def test_the_top_value_beside_one_past_it_is_kept_exactly(self, tmp_path):
+        """2**63 makes pandas read the column as uint64, which still holds the top."""
+        top = 2**63 - 1
+        rows = [
+            *THREE_CORES[:-2],
+            *_zone(0, 3, 1, "BRISC", top - 3000, top),
+            *_zone(0, 4, 1, "BRISC", 0, str(2**63)),
+        ]
+
+        result = _spread(tmp_path, rows, [_op()], perf_id="1")
+
+        op = result["ops"][0]
+        assert op["cores_in_log"] == 3
+        assert op["slowest_cores"][0] == {"x": 3, "y": 1, "span_us": 3.0}
+        assert result["caveat"].startswith(
+            "1 kernel rows of these operations' call counts have a slot, core or "
+            "cycle count"
+        )
+
+    def test_a_float_column_drops_the_top_value_and_counts_it(self, tmp_path):
+        """A blank cell makes the column floats, where the top rounds up to 2**63."""
+        rows = [
+            *THREE_CORES,
+            *_zone(0, 4, 1, "BRISC", "", 9000),
+            *_zone(0, 5, 1, "BRISC", 0, 2**63 - 1),
+        ]
+
+        result = _spread(tmp_path, rows, [_op()], perf_id="1")
+
+        op = result["ops"][0]
+        assert op["cores_in_log"] == 3
+        assert op["core_span"]["max_us"] == 3.0
+        assert result["caveat"].startswith(
+            "2 kernel rows of these operations' call counts have a slot, core or "
+            "cycle count"
+        )
+
     def test_a_blank_run_elsewhere_keeps_the_join_and_whole_coordinates(self, tmp_path):
         """A blank cell makes pandas read the column as floats."""
         rows = THREE_CORES + _zone(0, 5, 1, "BRISC", 0, 500, run="")
