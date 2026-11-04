@@ -70,6 +70,7 @@ const winningValue = (selector: string, property: string) =>
 
 const DARK_BORDER_SHADOW = 'inset 0 0 0 1px rgba(255, 255, 255, 0.2)';
 const DARK_DROP_SHADOW = 'rgba(17, 20, 24, 0.4)';
+const DARK_FOCUS_RING = 'rgba(138, 187, 255, 0.752)';
 
 // [token, value], set on :root because Blueprint declares the intent tokens there
 const ROOT_TOKENS: [string, string][] = [
@@ -126,6 +127,25 @@ const OVERRIDDEN_VALUES: [string, string, string][] = [
     ['.bp6-dark .bp6-tag.bp6-minimal.bp6-intent-warning', 'color', '#f6bc42'],
     ['.bp6-dark .bp6-tag.bp6-minimal.bp6-intent-danger', 'color', '#ff9e8a'],
     ['.bp6-tag.bp6-intent-warning', 'background', 'var(--bp-intent-warning-rest)'],
+    ['.bp6-tag.bp6-intent-success', 'background', '#238551'],
+    ['.bp6-tag.bp6-intent-success.bp6-interactive:hover', 'background-color', '#1c6e42'],
+    ['.bp6-tag.bp6-intent-success.bp6-interactive:active', 'background-color', '#165a36'],
+    ['.bp6-dark .bp6-input:focus', 'box-shadow', `inset 0 0 0 1px ${DARK_FOCUS_RING}, 0 0 0 1px ${DARK_FOCUS_RING}`],
+    [
+        '.bp6-dark .bp6-input[readonly]:focus',
+        'box-shadow',
+        `inset 0 0 0 1px ${DARK_FOCUS_RING}, 0 0 0 1px ${DARK_FOCUS_RING}`,
+    ],
+    [
+        '.bp6-dark .bp6-file-upload-input:focus',
+        'box-shadow',
+        `inset 0 0 0 1px ${DARK_FOCUS_RING}, 0 0 0 1px ${DARK_FOCUS_RING}`,
+    ],
+    [
+        '.bp6-dark .bp6-file-input input:focus + .bp6-file-upload-input',
+        'box-shadow',
+        `inset 0 0 0 1px ${DARK_FOCUS_RING}, 0 0 0 1px ${DARK_FOCUS_RING}, ${DARK_BORDER_SHADOW}, inset 0 -1px 1px 0 rgba(255, 255, 255, 0.3)`,
+    ],
     // Still read from Sass in Blueprint 6.21, so a release that moves them onto tokens would silently drop them
     ['.bp6-dark a', 'color', '#3eb7de'],
     ['.bp6-control input:checked ~ .bp6-control-indicator', 'background-color', '#3eb7de'],

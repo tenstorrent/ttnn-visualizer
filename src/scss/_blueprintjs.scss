@@ -90,7 +90,8 @@ $pt-intent-text-colors: (
             )
         ),
     // Solid tags: (background, hover, pressed, text). Blueprint lightens the warning token for warning tags, which
-    // turns the yellow almost white; the other intents repeat Blueprint's own token entries.
+    // turns the yellow almost white, and success tags keep the darker green they have always had rather than the
+    // buttons' one; the other intents repeat Blueprint's own token entries.
     $tag-intent-colors: (
             'primary': (
                 var(--bp-intent-primary-rest),
@@ -99,9 +100,9 @@ $pt-intent-text-colors: (
                 var(--bp-intent-primary-foreground),
             ),
             'success': (
-                var(--bp-intent-success-rest),
-                var(--bp-intent-success-hover),
-                var(--bp-intent-success-active),
+                $green3,
+                $green2,
+                $green1,
                 var(--bp-intent-success-foreground),
             ),
             'warning': (
@@ -238,5 +239,25 @@ $pt-intent-text-colors: (
         &.bp6-active {
             color: $dark-primary-intent-color;
         }
+    }
+
+    // Text input focus ring. Blueprint lightens the primary token for it, which drains the purple shade to a grey;
+    // this is the colour tag inputs and focused buttons still take from Sass, so every focus ring matches.
+    .bp6-input,
+    .bp6-file-upload-input {
+        &:focus,
+        &[readonly]:focus {
+            box-shadow:
+                inset 0 0 0 1px blueprint.$pt-dark-focus-indicator-color,
+                0 0 0 1px blueprint.$pt-dark-focus-indicator-color;
+        }
+    }
+
+    // The file input's focus also keeps Blueprint's dark input border and highlight
+    .bp6-file-input input:focus + .bp6-file-upload-input {
+        box-shadow:
+            inset 0 0 0 1px blueprint.$pt-dark-focus-indicator-color,
+            0 0 0 1px blueprint.$pt-dark-focus-indicator-color,
+            blueprint.$pt-dark-input-box-shadow;
     }
 }
