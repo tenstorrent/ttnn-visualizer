@@ -18,7 +18,7 @@ import { GraphBundle } from '../src/model/MLIRJsonModel';
 import { isActivatingReportAtom, mlirFileResultsAtom, mlirServersAtom, selectedMlirServerAtom } from '../src/store/app';
 import { TestProviders } from './helpers/TestProviders';
 import { SshConfigHostsQueryResult, noSshConfigResult } from './helpers/sshConfigFixtures';
-import testForPortal from './helpers/testForPortal';
+import { openPopover } from './helpers/testForPortal';
 
 const testMlirServerConnectionMock = vi.hoisted(() => vi.fn<() => Promise<ConnectionStatus[]>>());
 const useSshConfigHostsMock = vi.hoisted(() => vi.fn<(enabled?: boolean) => SshConfigHostsQueryResult>());
@@ -94,8 +94,7 @@ const serverTriggerName = (server: MlirServerConnection) => new RegExp(`^${serve
 
 /** Row actions only exist while the Select popover is open; the trigger shows the server in use. */
 const openServerDropdown = async (server: MlirServerConnection = SERVER) => {
-    fireEvent.click(screen.getByRole('button', { name: serverTriggerName(server) }));
-    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+    await openPopover(screen.getByRole('button', { name: serverTriggerName(server) }), WAIT_FOR_OPTIONS);
 };
 
 /** Rename the open dialog's server and save it, which needs a passing test result first. */

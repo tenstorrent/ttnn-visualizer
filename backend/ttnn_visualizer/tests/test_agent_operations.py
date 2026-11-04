@@ -1514,10 +1514,10 @@ class TestOperationProvenance:
 
 
 class TestFrameParity:
-    """`_parse_frames` against the rule `src/functions/stackTraceSource.ts` applies.
+    """`parse_frames` against the rule `src/functions/stackTraceSource.ts` applies.
 
     The frontend takes the first `File "..."` and the first `line N,` for the
-    operation details panel. The claim in `_parse_frames`' comment is that the call
+    operation details panel. The claim in `parse_frames`' comment is that the call
     site here is that frame, so these pin where the two agree -- and, for the inputs
     where the frontend's looser regexes would answer differently, which answer this
     side gives. Three prose claims of parity with nothing enforcing them was the
@@ -1544,7 +1544,7 @@ class TestFrameParity:
             '  File "/m/tests/infra.py", line 317, in run\n'
             "    self.output = self.model(\n"
         )
-        call_site = agent_operations._parse_frames(trace)[0]
+        call_site = agent_operations.parse_frames(trace)[0]
 
         assert (call_site["file"], call_site["line"]) == self._frontend(trace)
 
@@ -1555,7 +1555,7 @@ class TestFrameParity:
         `("/m/partial.py", None)` would be worse than none."""
         trace = '  File "/m/partial.py"\n  File "/m/real.py", line 7, in fn\n    x()\n'
 
-        frames = agent_operations._parse_frames(trace)
+        frames = agent_operations.parse_frames(trace)
 
         assert [frame["file"] for frame in frames] == ["/m/real.py"]
         assert self._frontend(trace)[0] == "/m/partial.py"
@@ -1571,7 +1571,7 @@ class TestFrameParity:
         rather than the absence of a row."""
         trace = '  File "/m/we"ird.py", line 20, in f\n    x()\n'
 
-        assert agent_operations._parse_frames(trace) == []
+        assert agent_operations.parse_frames(trace) == []
         assert self._frontend(trace) == ('/m/we"ird.py', 20)
 
     def test_a_source_line_is_never_taken_from_another_frame(self):
@@ -1584,14 +1584,14 @@ class TestFrameParity:
             "    x = ttnn.matmul(a, b)\n"
         )
 
-        frames = agent_operations._parse_frames(trace)
+        frames = agent_operations.parse_frames(trace)
 
         assert frames[0]["code"] is None
         assert frames[1]["code"] == "x = ttnn.matmul(a, b)"
 
     def test_it_reads_nothing_out_of_a_non_python_trace(self):
-        assert agent_operations._parse_frames("#0 0x7f in ttnn::run()") == []
-        assert agent_operations._parse_frames("") == []
+        assert agent_operations.parse_frames("#0 0x7f in ttnn::run()") == []
+        assert agent_operations.parse_frames("") == []
 
 
 class TestFindOperations:
@@ -2057,7 +2057,7 @@ class TestRankScope:
 
 
 class TestProfilerDatabase:
-    def test_a_handle_without_a_profiler_path_is_refused_readably(self, tmp_path):
+    def test_a_handle_without_a_memory_report_path_is_refused_readably(self, tmp_path):
         """The performance-only case. An agent gets told which path it is
         missing, not a stack trace from sqlite."""
         registry = ReportRegistry()
@@ -2065,7 +2065,7 @@ class TestProfilerDatabase:
         handle = load_report(registry, performance_path=str(tmp_path))["handle"]
 
         with pytest.raises(
-            agent_operations.ProfilerDatabaseMissingError, match="profiler_path"
+            agent_operations.ProfilerDatabaseMissingError, match="memory_report_path"
         ):
             agent_operations.memory_profile(registry, handle)
 

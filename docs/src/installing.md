@@ -8,6 +8,10 @@ Follow instructions for setting up [TT-Metalium](https://docs.tenstorrent.com/tt
 
 ### Memory reports
 
+A memory report is the `db.sqlite` database TT-NN writes for a run, alongside its `config.json`. Despite the name it holds more than memory: it also records the op graph, tensor flow, Python stack traces and, with comparison mode on, comparison results.
+
+Earlier releases called it the **profiler report**, and some setting names still say `profiler`. Both names mean the same `db.sqlite` report. It is unrelated to tt-metal's device profiler and Tracy, whose output feeds the performance report. The `--memory-report-path` option was once `--profiler-path`, which still works but is deprecated.
+
 Recommended pytest config when generating your data:
 
 ``` bash

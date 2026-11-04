@@ -29,19 +29,17 @@ import {
 } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
 import { summariseOperationBuffers } from '../functions/summariseOperationBuffers';
-import parseMemoryConfig, { isParsableMemoryConfigArgument } from '../functions/parseMemoryConfig';
-import { MemoryConfig } from '../model/MemoryConfig';
+import { withParsedMemoryConfig } from '../functions/parseMemoryConfig';
 import getServerConfig from '../functions/getServerConfig';
 import { PerfTableRow } from '../model/PerfTable';
 import { DeviceOperationMapping, DeviceOperationOrderCandidates } from '../model/DeviceOperationMapping';
 import { matchDeviceOperationOrdersToPerf } from '../functions/deviceOperationMatching';
-import { getSiblingOpIds, groupDeviceRowsLikeMerge } from '../functions/deviceRowGroups';
+import { getDeviceRowOpIds } from '../functions/deviceRowOpIds';
 import { getOpIdByPerfId } from '../functions/enrichPerfRowData';
 import memoiseLatest from '../functions/memoiseLatest';
 import {
     PerformanceReportParams,
     getLinkedPerformanceReportParams,
-    getLinkedUnmergedPerformanceReportParams,
     getPerformanceComparisonReportQueryKey,
     getPerformanceReportQueryKey,
 } from '../functions/performanceReportQueryKey';
@@ -101,7 +99,11 @@ import { ReportFolder, SINGLE_HOST_WORLD_SIZE } from '../definitions/Reports';
 import { RemoteFolder } from '../model/RemoteConnection';
 import createToastNotification from '../functions/createToastNotification';
 import { ToastType } from '../definitions/ToastType';
-import { buildLateDeallocationReports } from '../functions/lateDeallocation';
+import {
+    buildLateDeallocationReports,
+    buildTensorsByOperationByAddress,
+    getUniqueBuffersByOperation,
+} from '../functions/lateDeallocation';
 import { processInputsOutputs } from '../functions/processMemoryAllocations';
 import { SemVer, semverParse } from '../functions/semverParse';
 import { parseNpeAxiosResponseData } from '../functions/parseNpeAxiosResponseData';
@@ -241,14 +243,7 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
             return { ...tensor, io: 'input' };
         });
 
-        const argumentsWithParsedValues = operation.arguments.map((argument) =>
-            isParsableMemoryConfigArgument(argument)
-                ? {
-                      ...argument,
-                      parsedValue: argument.value ? (parseMemoryConfig(argument.value) as MemoryConfig) : null,
-                  }
-                : argument,
-        );
+        const argumentsWithParsedValues = operation.arguments.map(withParsedMemoryConfig);
 
         return {
             ...operation,
@@ -1321,9 +1316,6 @@ const useViewPerformanceReportParams = (): PerformanceReportParams => {
 // scope for a stable identity; the query key is hashed structurally, so this is for
 // readers rather than for React Query.
 const LINKED_PERFORMANCE_REPORT_PARAMS: PerformanceReportParams = Object.freeze(getLinkedPerformanceReportParams());
-const LINKED_UNMERGED_PERFORMANCE_REPORT_PARAMS: PerformanceReportParams = Object.freeze(
-    getLinkedUnmergedPerformanceReportParams(),
-);
 
 const usePerformanceReportQuery = (name: string | null, params: PerformanceReportParams) => {
     const location = useAtomValue(performanceReportLocationAtom);
@@ -1370,37 +1362,31 @@ export const useLinkedPerformanceReport = () => {
  * @description `useOpToPerfIdFiltered` extended onto unmerged rows, for joining
  * the performance table. With devices unmerged, every per-device row of a linked
  * operation gets an entry, not only the one the merge kept (#2084). With devices
- * merged, or until the unmerged report arrives, this is `useOpToPerfIdFiltered`
- * unchanged. No unmerged report is requested while merged, or while no operation
- * is linked.
+ * merged this is `useOpToPerfIdFiltered` unchanged.
+ *
+ * The per-device rows come from the linked report's `device_row_ids`, so this
+ * requests nothing of its own: the linked report is already resident whenever an
+ * operation is linked (#2177).
  */
 export const useOpToPerfIdForPerfTable = () => {
-    const name = useAtomValue(activePerformanceReportFolderNameAtom);
     const mergeDevices = useAtomValue(mergeDevicesAtom);
     const opIdsMap = useOpToPerfIdFiltered();
-    // With no linked operations there is nothing to extend, so a performance-only
-    // session never fetches the whole-run unmerged report.
-    const { data: unmerged } = usePerformanceReportQuery(
-        mergeDevices || opIdsMap.length === 0 ? null : name,
-        LINKED_UNMERGED_PERFORMANCE_REPORT_PARAMS,
-    );
-    // Re-merging disables the query by nulling `name`, which moves it to a key that never
-    // held data, so `unmerged` is already empty then.
-    const unmergedRows = unmerged?.report;
+    const { data: linked } = useLinkedPerformanceReport();
+    const linkedRows = mergeDevices ? null : linked?.report;
 
     return useMemo(() => {
-        if (!unmergedRows?.length) {
+        if (!linkedRows?.length || opIdsMap.length === 0) {
             return opIdsMap;
         }
 
-        const siblingOpIdByPerfId = getSiblingOpIds(groupDeviceRowsLikeMerge(unmergedRows), getOpIdByPerfId(opIdsMap));
+        const opIdByDeviceRowId = getDeviceRowOpIds(linkedRows, getOpIdByPerfId(opIdsMap));
 
-        if (siblingOpIdByPerfId.size === 0) {
+        if (opIdByDeviceRowId.size === 0) {
             return opIdsMap;
         }
 
-        return [...opIdsMap, ...[...siblingOpIdByPerfId].map(([perfId, opId]) => ({ opId, perfId }))];
-    }, [opIdsMap, unmergedRows]);
+        return [...opIdsMap, ...[...opIdByDeviceRowId].map(([perfId, opId]) => ({ opId, perfId }))];
+    }, [opIdsMap, linkedRows]);
 };
 
 interface ComparisonReportResult {
@@ -1651,87 +1637,18 @@ export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = Buf
     const { data: operations, status: operationsStatus } = useOperationsList();
     const operationRange = useAtomValue(selectedOperationRangeAtom);
 
-    const uniqueBuffersByOperationList = useMemo(() => {
-        return buffersByOperation?.map((operation) => {
-            const uniqueBuffers: Map<number, Buffer> = new Map<number, Buffer>();
+    const uniqueBuffersByOperationList = useMemo(
+        () => (buffersByOperation ? getUniqueBuffersByOperation(buffersByOperation) : undefined),
+        [buffersByOperation],
+    );
 
-            operation.buffers.forEach((buffer) => {
-                const { address, size } = buffer;
-                if (address) {
-                    const existingBuffer = uniqueBuffers.get(address);
-                    if (!existingBuffer || size > existingBuffer.size) {
-                        uniqueBuffers.set(address, buffer);
-                    }
-                }
-            });
-
-            return {
-                ...operation,
-                buffers: Array.from(uniqueBuffers.values()),
-            };
-        });
-    }, [buffersByOperation]);
-
-    const tensorsByOperationByAddress = useMemo(() => {
-        const result: TensorsByOperationByAddress = new Map();
-
-        if (!operations || !buffersByOperation) {
-            return result;
-        }
-
-        const buffersByOpId = new Map<number, Buffer[]>();
-        uniqueBuffersByOperationList?.forEach((op) => {
-            buffersByOpId.set(op.id, op.buffers);
-        });
-
-        const latestTensorByAddress = new Map<number, Tensor>();
-
-        for (const op of operations) {
-            if (op.inputs) {
-                for (const t of op.inputs) {
-                    if (t && t.address !== null && t.address !== undefined) {
-                        latestTensorByAddress.set(t.address, t);
-                    }
-                }
-            }
-            if (op.outputs) {
-                for (const t of op.outputs) {
-                    if (t && t.address !== null && t.address !== undefined) {
-                        latestTensorByAddress.set(t.address, t);
-                    }
-                }
-            }
-
-            const buffers = buffersByOpId.get(op.id);
-            if (!buffers?.length) {
-                result.set(op.id, new Map());
-                // eslint-disable-next-line no-continue
-                continue;
-            }
-
-            const tensorsByBufferAddress = new Map<number, Tensor>();
-
-            for (const buffer of buffers) {
-                const addr = buffer.address;
-                if (addr === null || addr === undefined) {
-                    // eslint-disable-next-line no-continue
-                    continue;
-                }
-
-                const tensor = latestTensorByAddress.get(addr);
-                if (tensor) {
-                    tensorsByBufferAddress.set(addr, {
-                        ...tensor,
-                        buffer_type: buffer.buffer_type,
-                    });
-                }
-            }
-
-            result.set(op.id, tensorsByBufferAddress);
-        }
-
-        return result;
-    }, [buffersByOperation, operations, uniqueBuffersByOperationList]);
+    const tensorsByOperationByAddress = useMemo(
+        (): TensorsByOperationByAddress =>
+            operations && uniqueBuffersByOperationList
+                ? buildTensorsByOperationByAddress(operations, uniqueBuffersByOperationList)
+                : new Map(),
+        [operations, uniqueBuffersByOperationList],
+    );
 
     // The map is empty until both queries settle, so callers need this to tell
     // "nothing here" from "not known yet".

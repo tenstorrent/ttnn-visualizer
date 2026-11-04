@@ -276,6 +276,16 @@ In component stylesheets, prefer styling classes we own (for example wrapper or 
 
 This keeps styles resilient to Blueprint markup changes and avoids cross-component side effects.
 
+### Blueprint theming layers
+
+Blueprint 6.7+ draws most dark-theme colours from `--bp-*` design tokens and ignores many of the Sass variables we configure, so keeping the app's look on 6.21 takes three layers, emitted in this order:
+
+1. **Configuration** — the `@use '@blueprintjs/core/src/blueprint.scss' with (…)` block in `src/scss/_blueprintjs.scss`. Change a colour here first when Blueprint still reads the variable.
+2. **Parity** — `src/scss/_blueprintjs-parity.scss` restores Blueprint 6.6's dark-theme rules where 6.21 stopped reading the configuration. It copies 6.6's selectors and rule order so specificity is unchanged, and `tests/blueprintParityStyles.spec.ts` pins a sample of its 6.6 values. Keep it a faithful copy: don't put app-specific changes here.
+3. **App deviations** — the rules at the end of `src/scss/_blueprintjs.scss`, after the parity layer, for anything the app deliberately does differently from Blueprint.
+
+The Blueprint packages are pinned to `~` ranges and upgraded together. On a minor bump, re-check the parity layer against the new release (the spec's version check fails until you do), and update the version noted in its header. #2252 tracks replacing the parity layer with theming through the design tokens.
+
 ### Stylesheet imports go through the `styles/` alias
 
 The `styles/` alias is wired up in three places that must stay in sync — `tsconfig.json`, `vite.config.ts`, and `vitest.config.ts`. Relative paths still resolve, but they drift when files move and look noisy in long import blocks.
@@ -422,12 +432,12 @@ For HTTP API calls going through `axiosInstance`, the frontend never embeds the 
 
 **Documented exception.** The Socket.IO connection URL is built at module scope in `src/libs/SocketProvider.tsx` (`io(\`${BASE_PATH}?instanceId=${getOrCreateInstanceId()}\`)`) because `io(...)` doesn't go through axios and there's no interceptor to inject the param. The instance ID still travels as a `?instanceId=...` query string — just one assembled by hand rather than injected.
 
-**Report-bound read errors.** Memory-profiler routes (`/api/operations`, `/api/tensors`, `/api/buffers`, …) open the instance's `profiler_path` via `LocalQueryRunner` (`backend/ttnn_visualizer/queries.py`); performance routes (`/api/performance/...`) open `performance_path` via `backend/ttnn_visualizer/csv_queries.py`. Status codes:
+**Report-bound read errors.** Memory report routes (`/api/operations`, `/api/tensors`, `/api/buffers`, …) open the instance's `profiler_path` via `LocalQueryRunner` (`backend/ttnn_visualizer/queries.py`); performance routes (`/api/performance/...`) open `performance_path` via `backend/ttnn_visualizer/csv_queries.py`. Status codes:
 
 | Condition | HTTP | Body `error` |
 |-----------|------|--------------|
 | `instanceId` query param absent | **400** | `Missing required query parameter: instanceId` (`@with_instance`) |
-| `instanceId` present, instance has no `profiler_path` | **404** | `No profiler report loaded for this instance` (`ProfilerReportNotLoadedException`) |
+| `instanceId` present, instance has no `profiler_path` | **404** | `No memory report loaded for this instance` (`ProfilerReportNotLoadedException`) |
 | `instanceId` present, instance has no `performance_path` | **404** | `No performance report loaded for this instance` (`PerformanceReportNotLoadedException`) |
 | `profiler_path` set but `db.sqlite` missing on disk | **404** | `Database not found at path: <path>` (`DatabaseFileNotFoundException`) |
 
@@ -782,6 +792,7 @@ New routes add an entry to `routeObjectList` and (if they require an active repo
 | `get*` | Pure accessor or formatter | `getResponseError`, `getNodeRelationToFocused` |
 | `is*`, `has*` | Boolean predicate | `isDeviceOperation`, `hasRangeSelected` |
 | `fetch*` | Async axios wrapper returning `Promise<T>` | `fetchInstance`, `fetchBufferPages` |
+| `with*` | A copy of its input with a field added or replaced; also a wrapper that runs a callback inside some state | `withParsedMemoryConfig`, `withExternalEndpoints`, `withActivatingReport` |
 
 `src/hooks/useAPI.tsx`
 
@@ -1391,7 +1402,7 @@ SERVER_MODE = _parse_env_bool("SERVER_MODE", False)
 
 `bool(os.getenv("SERVER_MODE", "false"))` is **truthy** for the string `"false"` — a common foot-gun.
 
-**Two parse paths, and they must agree.** Every setting is parsed twice: once in the class body at import, and once in `override_with_env_variables` — which runs after `create_app` calls `load_dotenv`, so a `.env` can introduce a spelling the class body never vetted. That is why every rule below is registered **per setting** in a keyed registry (`_ENV_PARSERS`, `_STRICT_BOOLEANS`, `_ENV_ALIASES`, `_ENV_OVERRIDE_SKIP`) rather than passed at a call site: a rule only one path honoured would leave the other accepting what it refuses. The sub-sections that follow are applications of this one premise.
+**Two parse paths, and they must agree.** Every setting is parsed twice: once in the class body at import, and once in `override_with_env_variables` — which runs after `create_app` calls `load_dotenv`, so a `.env` can introduce a spelling the class body never vetted. That is why every rule below is registered **per setting** in a keyed registry (`_ENV_PARSERS`, `_STRICT_BOOLEANS`, `_ENV_ALIASES`, `_ENV_RENAMED`, `_ENV_OVERRIDE_SKIP`) rather than passed at a call site: a rule only one path honoured would leave the other accepting what it refuses. The sub-sections that follow are applications of this one premise.
 
 #### `parse_bool` owns the vocabulary; never re-declare the tokens
 
@@ -1434,7 +1445,7 @@ Because a narrow vocabulary makes previously-accepted spellings fatal, **treat w
 Settings that parse more richly than their type register a named parser in `_ENV_PARSERS`: `SSH_DEFAULT_PORT` (range check) and `MAX_CONTENT_LENGTH` (empty means no limit) would both be broken by plain `int` dispatch. Three rules for that registry, and for `_STRICT_BOOLEANS` / `_ENV_OVERRIDE_SKIP` alongside it:
 
 - **One named function where both paths parse the same setting** (`_parse_max_content_length`). Where the two genuinely differ, say why in the docstring: `_parse_ssh_port` falls back to the default because the class body has nothing else to keep, while the registry uses `require_tcp_port` so a bad override is reported rather than silently changing the port. The range itself is still written once, in `require_tcp_port`, which `parse_tcp_port` wraps. Don't "fix" that asymmetry — it is the difference between having a declared value to keep and not.
-- **Key every registry by the attribute name.** `_ENV_PARSERS`, `_STRICT_BOOLEANS`, `_ENV_ALIASES`, `_ENV_OVERRIDE_SKIP` and `_ENV_NAME_UNREAD` are all keyed by attribute. For every one but `_ENV_NAME_UNREAD` the variable is then resolved through `_env_name_for` at lookup time and used only in messages; `_ENV_NAME_UNREAD` reads the attribute name directly, because a setting listed there has no alias by definition — see [the descriptor rules below](#the-loop-walks-the-mro-and-skips-derived-settings). Keying one by the *variable* would pass the guard tests and never fire for the one setting that has an alias.
+- **Key every registry by the attribute name.** `_ENV_PARSERS`, `_STRICT_BOOLEANS`, `_ENV_ALIASES`, `_ENV_RENAMED`, `_ENV_OVERRIDE_SKIP` and `_ENV_NAME_UNREAD` are all keyed by attribute. For every one but `_ENV_NAME_UNREAD` the variable is then resolved through `_env_name_for` at lookup time and used only in messages; `_ENV_NAME_UNREAD` reads the attribute name directly, because a setting listed there has no alias by definition — see [the descriptor rules below](#the-loop-walks-the-mro-and-skips-derived-settings). Keying one by the *variable* would pass the guard tests and never fire for the one setting that has an alias.
 - **Keys are strings, so nothing binds them to the attribute.** A rename leaves a dead entry that silently falls back to type dispatch — or, in `_STRICT_BOOLEANS`, downgrades a refusal to a warning; or, in `_ENV_OVERRIDE_SKIP`, starts accepting env strings for a derived attribute. `test_every_env_parser_names_a_real_setting`, `test_every_strict_boolean_names_a_real_boolean_setting`, `test_every_env_override_skip_names_a_real_setting`, `test_every_unread_name_is_a_descriptor_backed_setting` and `test_every_registry_is_keyed_the_way_it_is_looked_up` are what catch it.
 
 #### `_ENV_ALIASES` where the variable isn't named after the attribute
@@ -1442,6 +1453,12 @@ Settings that parse more richly than their type register a named parser in `_ENV
 Every setting that reads a variable at all reads one named after its attribute, which is right for all of them but `DEBUG`: it is fed by `FLASK_DEBUG`, because a bare `DEBUG` is the development knob (below). `USAGE_RECORDING_ACTIVE` is the other departure and is not an alias — it reads no variable of its own at all; see [the descriptor rules below](#the-loop-walks-the-mro-and-skips-derived-settings). `_ENV_ALIASES` maps the attribute to the variable that owns it and `_env_name_for` is the single reader, so the aliased spelling is written once. Without it, `DEBUG=true` — what `pnpm flask:start-debug` sets — turned on Flask's debug mode under `FLASK_ENV=production`, which suppresses the catch-all error handler and returns tracebacks. Add an entry here rather than a special case in the loop if another setting ever grows a differently-named variable.
 
 **The two names are deliberate, and both stay.** `FLASK_DEBUG` is Flask's own variable for its debug mode, so it keeps the name every Flask user and `.vscode/launch.json` already know. The bare `DEBUG` variable is not a config setting at all: it is the development knob `pnpm flask:start-debug` sets, read only through `_is_dev_debug_requested()` in `app.py`, and it means debug-level logging plus gunicorn `--reload`. Unlike the attribute, `SERVER_MODE` does not switch it off, so a hosted deployment that sets it still logs at debug level and reloads on file changes: it is for development only. Renaming either would break whoever sets it today, and no single new name would describe what bare `DEBUG` does. Read the name at the call site rather than assuming. (#1922)
+
+#### `_ENV_RENAMED` where a variable was renamed
+
+An alias is permanent and silent: the attribute reads only the aliased variable. A rename is the opposite on both counts, so it is a registry of its own rather than an `_ENV_ALIASES` entry. `_ENV_RENAMED` maps the attribute, which is also the new variable's name, to the name it used to read. `_read_renamed_variable` reads the former name only when the new one is unset, so the new name always wins, and warns so the operator renames it. `SSH_DEFAULT_MEMORY_REPORT_PATH`, formerly `SSH_DEFAULT_PROFILER_PATH`, is the only entry.
+
+Both parse paths honour it, as the premise above requires: the class body falls back to the former name with a nested `os.getenv`, and the override loop goes through `_read_renamed_variable`. Only the loop warns, since a warning at import lands before logging is configured. `test_settings.py` checks that every key is a real setting, that no former name is one, and that no former name is also an alias.
 
 #### The loop walks the MRO and skips derived settings
 

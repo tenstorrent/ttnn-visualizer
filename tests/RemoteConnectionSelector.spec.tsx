@@ -20,13 +20,13 @@ import {
     getDeleteConnectionLabel,
     getEditConnectionLabel,
 } from './helpers/remoteConnectionSelectors';
-import testForPortal from './helpers/testForPortal';
+import { openPopover } from './helpers/testForPortal';
 import { SshConfigHostsQueryResult, noSshConfigResult } from './helpers/sshConfigFixtures';
 
 const { getServerConfigMock } = vi.hoisted(() => ({
     getServerConfigMock: vi.fn(() => ({
         SSH_DEFAULT_PORT: 2222,
-        SSH_DEFAULT_PROFILER_PATH: '/mem',
+        SSH_DEFAULT_MEMORY_REPORT_PATH: '/mem',
         SSH_DEFAULT_PERFORMANCE_PATH: '/perf',
         USERNAME: 'bob',
         SERVER_MODE: false,
@@ -98,8 +98,7 @@ const renderSelector = (overrides: Partial<ComponentProps<typeof RemoteConnectio
 
 /** Row actions only exist while the Select popover is open; the trigger shows the selection. */
 const openConnectionDropdown = async (selected: RemoteConnection = FIRST_CONNECTION) => {
-    fireEvent.click(getConnectionTrigger(selected));
-    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+    await openPopover(getConnectionTrigger(selected), WAIT_FOR_OPTIONS);
 };
 
 /** Rename the open dialog's connection and save it, which needs a passing test result first. */

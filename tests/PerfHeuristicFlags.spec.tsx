@@ -8,7 +8,12 @@ import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import PerfHeuristicFlags from '../src/components/performance/PerfHeuristicFlags';
 import { TypedPerfTableRow } from '../src/model/PerfTable';
-import { PERF_HEURISTIC_FLAG_DEFINITIONS, PerfHeuristicFlag } from '../src/definitions/PerfHeuristics';
+import {
+    PERF_HEURISTIC_FLAG_DEFINITIONS,
+    PERF_HEURISTIC_FLAG_SOURCE_LABELS,
+    PerfHeuristicFlag,
+    PerfHeuristicFlagSource,
+} from '../src/definitions/PerfHeuristics';
 import { OpType } from '../src/definitions/Performance';
 import { TEST_IDS } from '../src/definitions/TestIds';
 
@@ -87,5 +92,33 @@ describe('PerfHeuristicFlags', () => {
             within(tooltipContent).getByText(PERF_HEURISTIC_FLAG_DEFINITIONS[PerfHeuristicFlag.DRAM_BOUND].description),
         ).toBeInTheDocument();
         expect(within(tooltipContent).getByText('Bound: DRAM')).toBeInTheDocument();
+    });
+
+    it.each(Object.values(PerfHeuristicFlag))('renders the source of the %s flag', (flag) => {
+        const { source } = PERF_HEURISTIC_FLAG_DEFINITIONS[flag];
+
+        render(<PerfHeuristicFlags row={makeRow({ heuristicFlags: [flag] })} />);
+
+        expect(screen.getByTestId(TEST_IDS.PERF_HEURISTIC_FLAG)).toHaveAttribute('data-source', source);
+        expect(
+            within(screen.getByTestId('tooltip-content')).getByText(PERF_HEURISTIC_FLAG_SOURCE_LABELS[source]),
+        ).toBeInTheDocument();
+    });
+});
+
+describe('PERF_HEURISTIC_FLAG_DEFINITIONS', () => {
+    it('attributes each flag to the report it comes from', () => {
+        const sourceByFlag = Object.fromEntries(
+            Object.entries(PERF_HEURISTIC_FLAG_DEFINITIONS).map(([flag, { source }]) => [flag, source]),
+        );
+
+        expect(sourceByFlag).toEqual({
+            [PerfHeuristicFlag.DRAM_BOUND]: PerfHeuristicFlagSource.PERF_REPORT,
+            [PerfHeuristicFlag.LOW_UTILISATION]: PerfHeuristicFlagSource.PERF_REPORT,
+            [PerfHeuristicFlag.UNDERUTILISED_CORES]: PerfHeuristicFlagSource.PERF_REPORT,
+            [PerfHeuristicFlag.RECOMPUTE_CANDIDATE]: PerfHeuristicFlagSource.PERF_REPORT,
+            [PerfHeuristicFlag.ALLOCATION_FAILURE]: PerfHeuristicFlagSource.MEMORY_REPORT_RECORDED,
+            [PerfHeuristicFlag.DRAM_FALLBACK]: PerfHeuristicFlagSource.MEMORY_REPORT_INFERRED,
+        });
     });
 });

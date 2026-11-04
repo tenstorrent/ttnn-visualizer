@@ -250,13 +250,16 @@ export interface ReportMetadataResponse {
     git_sha?: string;
     world_size?: string;
 }
+
+export interface OperationArgument {
+    name: string;
+    value: string;
+    parsedValue: MemoryConfig | null;
+}
+
 export interface OperationDescription extends Operation {
     duration: number;
-    arguments: {
-        name: string;
-        value: string;
-        parsedValue: MemoryConfig | null;
-    }[];
+    arguments: OperationArgument[];
     processedConnections: DeviceOperationNode[];
     deviceOperationNameList: string[]; // List of device operation names. actual device ops only
 }

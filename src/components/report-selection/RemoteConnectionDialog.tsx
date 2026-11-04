@@ -89,7 +89,7 @@ const getDefaultConnection = (): RemoteConnection => {
         name: '',
         host: '',
         port: serverConfig.SSH_DEFAULT_PORT,
-        profilerPath: serverConfig.SSH_DEFAULT_PROFILER_PATH,
+        profilerPath: serverConfig.SSH_DEFAULT_MEMORY_REPORT_PATH,
         performancePath: serverConfig.SSH_DEFAULT_PERFORMANCE_PATH,
         username: serverConfig.USERNAME ?? '',
     };

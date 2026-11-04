@@ -11,6 +11,8 @@ export const SYNC_DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
 
 export const REMOTE_MEMORY_PATH_LABEL = 'Remote Memory Report Folder Path';
 export const REMOTE_PERFORMANCE_PATH_LABEL = 'Remote Performance Report Folder Path';
+export const NO_MEMORY_REPORT_PATH_MESSAGE = 'No memory report path provided';
+export const NO_PERFORMANCE_PATH_MESSAGE = 'No performance path provided';
 export const MULTIHOST_GROUP_LABEL = 'Multihost Performance Reports';
 export const MULTIHOST_CHECKBOX_LABEL = 'Search per-rank subdirectories';
 export const FETCH_REMOTE_FOLDERS_LABEL = 'Fetch remote folders';

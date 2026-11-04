@@ -22,6 +22,7 @@ from ttnn_visualizer.csv_queries import DeviceLogProfilerQueries, SpanRequest
 from ttnn_visualizer.event_logging import McpToolOutcome
 from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.models import Instance
+from ttnn_visualizer.tests.mcp_calls import tool_call
 from ttnn_visualizer.tests.smoke_capture import (
     SMOKE_CAPTURE_DIR,
     smoke_rows,
@@ -32,6 +33,7 @@ from ttnn_visualizer.tests.test_device_log_columns import (
     MODERN_HEADER,
     PRE_RENAME_HEADER,
     PREAMBLE,
+    modern_row,
     write_device_log,
 )
 
@@ -43,8 +45,8 @@ def _zone(slot, x, y, risc, start, end, run=RUN, zone=None):
     """A paired zone in `MODERN_HEADER`'s layout, a kernel unless named otherwise."""
     zone = zone or f"{risc.split('_')[0]}-KERNEL"
     return [
-        f"{slot},{x},{y},{risc},1,{start},0,{run},,,{zone},ZONE_START,1,k.cc,",
-        f"{slot},{x},{y},{risc},2,{end},0,{run},,,{zone},ZONE_END,1,k.cc,",
+        modern_row(slot, x, y, risc, start, zone, "ZONE_START", run=run),
+        modern_row(slot, x, y, risc, end, zone, "ZONE_END", run=run),
     ]
 
 
@@ -97,6 +99,7 @@ class TestStatistics:
             {"x": 2, "y": 1, "span_us": 2.0},
             {"x": 1, "y": 1, "span_us": 1.2},
         ]
+        assert "by_risc_unlisted_too_long" not in op
 
     def test_each_risc_is_spread_on_its_own(self, tmp_path):
         op = _spread(tmp_path, THREE_CORES, [_op()], perf_id="1")["ops"][0]
@@ -108,6 +111,31 @@ class TestStatistics:
             "imbalance": 1.5,
         }
         assert op["by_risc"]["TRISC_0"]["max_us"] == 1.1
+
+    def test_a_risc_name_too_long_to_show_is_counted_rather_than_listed(self, tmp_path):
+        """Its kernel still sets its core's span, which names no RISC."""
+        at_bound = "R" * tools.MAX_RISC_NAME_LENGTH
+        rows = [
+            *THREE_CORES,
+            *_zone(0, 1, 1, at_bound, 0, 4000),
+            *_zone(0, 2, 1, f"{at_bound}R", 0, 5000),
+        ]
+
+        op = _spread(tmp_path, rows, [_op()], perf_id="1")["ops"][0]
+
+        assert sorted(op["by_risc"]) == ["BRISC", at_bound, "TRISC_0"]
+        assert op["by_risc_unlisted_too_long"] == 1
+        assert op["slowest_cores"][0] == {"x": 2, "y": 1, "span_us": 5.0}
+
+    def test_an_op_only_on_risc_names_too_long_to_show_keeps_its_spread(self, tmp_path):
+        long_risc = "R" * (tools.MAX_RISC_NAME_LENGTH + 1)
+
+        op = _spread(
+            tmp_path, _zone(0, 1, 1, long_risc, 0, 2000), [_op(cores="1")], perf_id="1"
+        )["ops"][0]
+
+        assert (op["by_risc"], op["by_risc_unlisted_too_long"]) == ({}, 1)
+        assert op["core_span"]["max_us"] == 2.0
 
     def test_the_slowest_cores_are_capped(self, tmp_path):
         rows = [
@@ -472,28 +500,100 @@ class TestFirmwareWindows:
 
 
 class TestUnreadableCells:
-    """A cell that is not a number costs its row, not every operation's answer."""
+    """A cell that cannot be read costs its row, not every operation's answer."""
 
+    # No run case: a run cell that cannot be read matches no requested run, so it is
+    # filtered out before its row's cells are checked.
     @pytest.mark.parametrize(
-        "bad",
+        "bad, rows",
         [
-            _zone(0, "abc", 1, "BRISC", 0, 9000),
-            _zone(0, 4, 1, "BRISC", "", 9000),
-            _zone(0, 4, 1, "BRISC", "inf", "inf"),
-            _zone(0, 4, 1, "BRISC", "nan", 9000),
-            _zone("x", 4, 1, "BRISC", 0, 9000),
+            pytest.param(_zone(0, "abc", 1, "BRISC", 0, 9000), 2, id="core"),
+            pytest.param(_zone(0, 4, 1, "BRISC", "", 9000), 1, id="blank-cycles"),
+            pytest.param(_zone(0, 4, 1, "BRISC", "inf", "inf"), 2, id="inf"),
+            pytest.param(_zone(0, 4, 1, "BRISC", "nan", 9000), 1, id="nan"),
+            pytest.param(_zone("x", 4, 1, "BRISC", 0, 9000), 2, id="slot"),
+            pytest.param(
+                _zone(0, 4, 1, "BRISC", 0, "1e300"), 1, id="cycles-past-int64"
+            ),
+            pytest.param(_zone(0, 4, 1, "BRISC", -5, 9000), 1, id="negative-cycles"),
+            pytest.param(
+                _zone("1e30", 4, 1, "BRISC", 0, 9000), 2, id="slot-past-int64"
+            ),
+            pytest.param(
+                _zone(0, 4, 1, "BRISC", 0, str(2**63)), 1, id="cycles-at-2-63"
+            ),
+            pytest.param(
+                _zone(0, "-1e30", 1, "BRISC", 0, 9000), 2, id="core-below-int64"
+            ),
         ],
-        ids=["core", "blank-cycles", "inf", "nan", "slot"],
     )
-    def test_a_row_with_a_cell_that_is_not_a_number_is_left_out(self, tmp_path, bad):
+    def test_a_row_with_a_cell_that_cannot_be_read_is_left_out(
+        self, tmp_path, bad, rows
+    ):
         result = _spread(tmp_path, THREE_CORES + bad, [_op()], perf_id="1")
 
         op = result["ops"][0]
         assert op["in_log"] is True
         assert op["cores_in_log"] == 3
         assert op["core_span"]["max_us"] == 3.0
-        assert "kernel rows" in result["caveat"]
-        assert "not a number" in result["caveat"]
+        assert result["caveat"].startswith(
+            f"{rows} kernel rows of these operations' call counts have a slot, core or "
+            "cycle count that is not a number or does not fit a 64-bit integer, or a "
+            "negative cycle count, and were left out"
+        )
+
+    def test_large_whole_numbers_are_kept(self, tmp_path):
+        """An int64 column keeps its top value, which as a float rounds up to 2**63."""
+        top = 2**63 - 1
+        rows = [*THREE_CORES[:-2], *_zone(0, top, 1, "BRISC", 0, top)]
+
+        result = _spread(tmp_path, rows, [_op()], perf_id="1")
+
+        op = result["ops"][0]
+        assert op["cores_in_log"] == 3
+        assert op["slowest_cores"][0] == {
+            "x": top,
+            "y": 1,
+            "span_us": round(top / 1000, 3),
+        }
+        assert "left out" not in result.get("caveat", "")
+
+    def test_the_top_value_beside_one_past_it_is_kept_exactly(self, tmp_path):
+        """2**63 makes pandas read the column as uint64, which still holds the top."""
+        top = 2**63 - 1
+        rows = [
+            *THREE_CORES[:-2],
+            *_zone(0, 3, 1, "BRISC", top - 3000, top),
+            *_zone(0, 4, 1, "BRISC", 0, str(2**63)),
+        ]
+
+        result = _spread(tmp_path, rows, [_op()], perf_id="1")
+
+        op = result["ops"][0]
+        assert op["cores_in_log"] == 3
+        assert op["slowest_cores"][0] == {"x": 3, "y": 1, "span_us": 3.0}
+        assert result["caveat"].startswith(
+            "1 kernel rows of these operations' call counts have a slot, core or "
+            "cycle count"
+        )
+
+    def test_a_float_column_drops_the_top_value_and_counts_it(self, tmp_path):
+        """A blank cell makes the column floats, where the top rounds up to 2**63."""
+        rows = [
+            *THREE_CORES,
+            *_zone(0, 4, 1, "BRISC", "", 9000),
+            *_zone(0, 5, 1, "BRISC", 0, 2**63 - 1),
+        ]
+
+        result = _spread(tmp_path, rows, [_op()], perf_id="1")
+
+        op = result["ops"][0]
+        assert op["cores_in_log"] == 3
+        assert op["core_span"]["max_us"] == 3.0
+        assert result["caveat"].startswith(
+            "2 kernel rows of these operations' call counts have a slot, core or "
+            "cycle count"
+        )
 
     def test_a_blank_run_elsewhere_keeps_the_join_and_whole_coordinates(self, tmp_path):
         """A blank cell makes pandas read the column as floats."""
@@ -876,25 +976,12 @@ class TestThroughTheServer:
         registry = ReportRegistry()
         write_device_log(tmp_path, header, log_rows)
         load_report(registry, performance_path=str(tmp_path))
-        with (
-            patch.object(
-                tools, "_generate_canonical_report", return_value=_perf_report([_op()])
-            ),
-            patch.object(server, "record_event") as record,
+        with patch.object(
+            tools, "_generate_canonical_report", return_value=_perf_report([_op()])
         ):
-            response = server.handle_message(
-                {
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "tools/call",
-                    "params": {
-                        "name": "core_spread",
-                        "arguments": {"handle": "report-1", **arguments},
-                    },
-                },
-                server._tool_table(registry),
+            return tool_call(
+                registry, "core_spread", {"handle": "report-1", **arguments}
             )
-        return response["result"], record.call_args.kwargs["outcome"]
 
     def test_an_integer_perf_id_answers(self, tmp_path):
         """The schema takes a string or an integer; ids are matched as text."""
@@ -924,25 +1011,13 @@ class TestThroughTheServer:
         registry = ReportRegistry()
         load_report(registry, performance_path=str(tmp_path))
 
-        with (
-            patch.object(
-                tools, "_generate_canonical_report", return_value=_perf_report([_op()])
-            ),
-            patch.object(server, "record_event") as record,
+        with patch.object(
+            tools, "_generate_canonical_report", return_value=_perf_report([_op()])
         ):
-            response = server.handle_message(
-                {
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "tools/call",
-                    "params": {
-                        "name": "core_spread",
-                        "arguments": {"handle": "report-1", "perf_id": "1"},
-                    },
-                },
-                server._tool_table(registry),
+            result, outcome = tool_call(
+                registry, "core_spread", {"handle": "report-1", "perf_id": "1"}
             )
 
-        assert response["result"]["isError"] is True
-        assert "CHIP_FREQ" in response["result"]["content"][0]["text"]
-        assert record.call_args.kwargs["outcome"] is McpToolOutcome.REFUSED
+        assert result["isError"] is True
+        assert "CHIP_FREQ" in result["content"][0]["text"]
+        assert outcome is McpToolOutcome.REFUSED

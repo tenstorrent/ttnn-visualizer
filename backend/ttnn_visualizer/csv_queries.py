@@ -14,10 +14,11 @@ import tempfile
 import threading
 import traceback
 import warnings
+from array import array
 from bisect import bisect_right
 from collections import Counter, defaultdict
 from contextlib import contextmanager, redirect_stdout
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 from io import StringIO
 from pathlib import Path
@@ -26,11 +27,13 @@ from typing import (
     Callable,
     Dict,
     Hashable,
+    Iterable,
     Iterator,
     List,
     Literal,
     NamedTuple,
     Optional,
+    Sequence,
     Set,
     Tuple,
     Union,
@@ -52,6 +55,7 @@ from ttnn_visualizer.exceptions import (
     PerformanceReportNotLoadedException,
     PerfReportExit,
 )
+from ttnn_visualizer.file_source import FileSource
 from ttnn_visualizer.models import Instance
 from ttnn_visualizer.utils import newest_ops_perf_file
 
@@ -145,6 +149,100 @@ def _stacked_report_plot_skipped():
         perf_report.HAS_MATPLOTLIB = has_matplotlib
 
 
+def _has_groupable_device_rows(df: pd.DataFrame) -> bool:
+    """Whether `merge_device_rows` must group some of `df`: a device op whose device
+    id is usable. Without one, every row passes through and the column never appears.
+
+    Usable is tt-perf-report's rule (`get_int`, 1.5.0): a whole, non-negative, finite
+    number. NaN and infinity give NaN from the modulo, so neither passes."""
+    if _OP_TYPE_COLUMN not in df.columns or _DEVICE_ID_COLUMN not in df.columns:
+        return False
+    device_ids = pd.to_numeric(df[_DEVICE_ID_COLUMN], errors="coerce")
+    usable = (device_ids % 1 == 0) & (device_ids >= 0)
+    return bool(((df[_OP_TYPE_COLUMN] == _DEVICE_OP_TYPE) & usable).any())
+
+
+def _read_merged_device_rows(merged: pd.DataFrame) -> Dict[int, Tuple[int, ...]]:
+    """Each merged row's id, mapped to the ids of the per-device rows it stands for."""
+    column = perf_report.MERGED_ROWS_COLUMN
+    if column not in merged.columns:
+        return {}
+    # Host ops, signposts and device ops without a usable device id are passed
+    # through unmerged and leave the column blank (NaN), so only tuples are groups.
+    return {
+        int(row_id): tuple(int(member) for member in members)
+        for row_id, members in zip(merged["ORIGINAL_ROW"], merged[column])
+        if isinstance(members, tuple)
+    }
+
+
+@contextmanager
+def _merged_device_rows_captured(
+    enabled: bool,
+) -> Iterator[Dict[int, Tuple[int, ...]]]:
+    """Record which per-device rows each merged row stands for (#2177).
+
+    `merge_device_rows` works this out for every merged row, in its
+    `MERGED_ROWS_COLUMN` (1.5.0), but tt-perf-report writes no such column to its
+    output, so this wraps the module's function for the duration of one build and
+    reads the column from what it returns. Reading the merge's own answer is what
+    lets the frontend link every device's row of an operation without reproducing
+    the merge.
+
+    TODO(#2178): read tt-perf-report's own merge-group column instead, once it
+    writes one, and drop this wrapper.
+
+    Enter it inside `_perf_report_output_bounded`, so the module global is only
+    swapped while the build lock is held. Entering it while no build holds the lock
+    raises, which catches the build's context managers being reordered; the lock has
+    no owner, so it cannot tell this build's hold from another's. A
+    failure to read the column must not fail the report: tt-perf-report's caller
+    turns any exception into a 422, so it is logged and the map left empty, and rows
+    then simply carry no members. The tests pin both names, and a merge that had
+    rows to group but wrote no column is logged, in case an upstream rename
+    silently drops the field.
+    """
+    members_by_row: Dict[int, Tuple[int, ...]] = {}
+    if not enabled:
+        yield members_by_row
+        return
+    if not _PERF_REPORT_OUTPUT_LOCK.locked():
+        # Swapped outside the lock, another build could call this one's wrapper and
+        # write its rows into this map.
+        raise RuntimeError(
+            "merge_device_rows is only swapped under _PERF_REPORT_OUTPUT_LOCK"
+        )
+
+    # Looked up on entry rather than at import, so whatever is installed now -- a
+    # test's patch included -- is what gets wrapped and put back.
+    merge_device_rows = perf_report.merge_device_rows
+
+    def merge_device_rows_capturing(df):
+        merged = merge_device_rows(df)
+        try:
+            if (
+                perf_report.MERGED_ROWS_COLUMN not in merged.columns
+                and _has_groupable_device_rows(df)
+            ):
+                # The frontend falls back to linking only the row the merge kept.
+                logger.warning(
+                    "tt-perf-report merged device rows but named none of their members"
+                )
+            members_by_row.update(_read_merged_device_rows(merged))
+        except Exception:
+            members_by_row.clear()
+            logger.warning(
+                "Could not read tt-perf-report's merged device rows", exc_info=True
+            )
+        return merged
+
+    perf_report.merge_device_rows = merge_device_rows_capturing
+    try:
+        yield members_by_row
+    finally:
+        perf_report.merge_device_rows = merge_device_rows
+
+
 _PERF_REPORT_DIR = os.path.dirname(os.path.abspath(perf_report.__file__))
 
 # Stdlib frames that sit between a library's call and the `SystemExit`: the `exit()`
@@ -200,9 +298,15 @@ _HOST_START_COLUMN = "HOST START TS"
 # Read in the same pass for the agent's `load_report`, which reports the device count.
 _DEVICE_ID_COLUMN = "DEVICE ID"
 
+# The `OP TYPE` of a device op: the only rows `merge_device_rows` groups across devices.
+_DEVICE_OP_TYPE = "tt_dnn_device"
+
 # A row's program and whether the program cache held it. Older captures lack both.
 PROGRAM_HASH_COLUMN = "PROGRAM HASH"
 PROGRAM_CACHE_HIT_COLUMN = "PROGRAM CACHE HIT"
+
+# The device log's timestamp, which no row may hold negative.
+_CYCLES_COLUMN = "time[cycles since reset]"
 
 # Signpost names a refusal lists. A capture can emit one per layer or iteration;
 # the list is there to show a typo its neighbours, not to inventory the report.
@@ -221,6 +325,26 @@ CSV_CHUNK_SIZE = 50_000
 # and still cannot be reached by a real log. Past it, starts are counted rather
 # than kept, so the total reports what it could pair and says what it dropped.
 MAX_OPEN_ZONE_STARTS = 200_000
+
+# Zone markers, a start and an end each, a RISC's L1 profiler buffer holds per kernel
+# run beside the firmware and kernel zones' slots: PROFILER_L1_OPTIONAL_MARKER_COUNT.
+L1_ZONE_MARKER_CAPACITY = 250
+# The device profiler's own zones, such as a full buffer's flush partway through a run.
+PROFILER_ZONE_PREFIX = "PROFILER-"
+# The firmware's own zones, in slots of their own, as tt-metal's device analyses match
+# them: a firmware zone wraps each run, and a kernel zone starts it.
+FIRMWARE_ZONE_SUFFIX = "-FW"
+KERNEL_ZONE_SUFFIX = "-KERNEL"
+RESERVED_ZONE_SUFFIXES = (FIRMWARE_ZONE_SUFFIX, KERNEL_ZONE_SUFFIX)
+# How a timestamped data row's `type` begins (TS_DATA and kin); it shares the buffer.
+TIMESTAMPED_PHASE_PREFIX = "TS_"
+# Flushes tt-metal writes only in accumulate mode, where one buffer spans several runs.
+ACCUMULATE_FLUSH_ZONES = frozenset({"PROFILER-DRAM-PUSH", "PROFILER-NOC-FLUSH"})
+# Ceiling on core-RISC timelines followed at once: one per slot, core and RISC, so about
+# 21k on the widest local capture, where a malformed log can start one on every row.
+MAX_ZONE_TIMELINES = 200_000
+# Distinct zone names counted for a refusal to list; a malformed log can name every row.
+MAX_COUNTED_ZONE_NAMES = 1_000
 
 # Serialised reports kept per process. The cache is shared by every user, instance
 # and comparison report the worker serves, so four entries only cover one session's
@@ -323,9 +447,122 @@ class CoreSpans:
     zoned: Set[DeviceRun]
     # `_ZonePairer.pairing`'s counts per run, for runs where anything failed to pair.
     pairing: Dict[DeviceRun, Dict[str, int]]
-    # Kernel rows of a requested run ID left out for a slot, core or cycle count that
-    # is not a finite number, by run host ID: the slot itself may be what is broken.
+    # Kernel rows of a requested run ID that `_whole_number_rows` left out, by run host
+    # ID: the slot itself may be what is broken.
     malformed: Dict[int, int]
+
+
+# One core's RISC on one device: `(PCIe slot, core_x, core_y, RISC processor type)`.
+RiscTimeline = Tuple[int, int, int, str]
+
+
+@dataclass(slots=True)
+class ZoneRepeats:
+    """One zone's starts on one RISC timeline, and the cycles between them in a run."""
+
+    occurrences: int = 0
+    # Runs the zone started in, and those whose zone markers filled the L1 buffer.
+    runs: int = 0
+    full_runs: int = 0
+    intervals: "array[int]" = field(default_factory=lambda: array("q"))
+
+
+def interval_statistics(
+    timelines: Iterable[ZoneRepeats],
+) -> Optional[Tuple[float, int, int]]:
+    """The median, min and max cycles of some timelines' intervals together."""
+    cycles = [
+        np.frombuffer(repeats.intervals, dtype=np.int64)
+        for repeats in timelines
+        if repeats.intervals
+    ]
+    if not cycles:
+        return None
+    pooled = np.concatenate(cycles)
+    return float(np.median(pooled)), int(pooled.min()), int(pooled.max())
+
+
+# int64 holds [-2**63, 2**63), and a float holds both ends exactly.
+_INT64_END = 2.0**63
+_INT64_MAX = np.uint64(2**63 - 1)
+# What `_whole_number_rows` leaves out, as the caveats that count it say.
+UNREADABLE_NUMBER_REASON = (
+    "that is not a number or does not fit a 64-bit integer, or a negative cycle count"
+)
+
+
+def _fits_int64(numbers: pd.Series) -> np.ndarray:
+    """Whether each cell holds an int64, checked in the column's own dtype: read as
+    floats, an int64 column's top 512 values would round up to 2**63."""
+    if pd.api.types.is_signed_integer_dtype(numbers):
+        return np.ones(len(numbers), dtype=bool)
+    if pd.api.types.is_unsigned_integer_dtype(numbers):
+        return (numbers <= _INT64_MAX).to_numpy()
+    # A cell that made the column floats rounded it too, so the top end is a float's.
+    values = numbers.to_numpy(dtype=float)
+    # NaN fails both comparisons, so a cell that is not a number is left out too.
+    return (values >= -_INT64_END) & (values < _INT64_END)
+
+
+def _whole_number_rows(
+    chunk: pd.DataFrame, columns: Sequence[str], *, non_negative: Sequence[str]
+) -> Tuple[pd.DataFrame, np.ndarray]:
+    """The rows whose ``columns`` all hold int64s, none of ``non_negative`` below
+    zero, those columns as int64, and the mask that chose them, so each caller counts
+    the rest its own way. Two non-negative values kept differ by less than 2**63."""
+    numbers = chunk[list(columns)].apply(pd.to_numeric, errors="coerce")
+    readable: np.ndarray = np.ones(len(chunk), dtype=bool)
+    for column in columns:
+        readable &= _fits_int64(numbers[column])
+    for column in non_negative:
+        readable &= (numbers[column] >= 0).to_numpy()
+    # A blank cell elsewhere makes pandas read a column as floats; keys stay ints.
+    whole = chunk[readable].assign(
+        **{column: numbers[column][readable].astype("int64") for column in columns}
+    )
+    return whole, readable
+
+
+@dataclass(slots=True)
+class _OpenRun:
+    """What a RISC timeline's current run has recorded, as far as the log has read."""
+
+    run_id: int
+    # The run's place on its timeline, so one run's zones never pair another's.
+    seq: int = 0
+    # Zone markers since the run began or the profiler last flushed, which empties it.
+    markers: int = 0
+    full: bool = False
+    # A profiler zone since the zone last started, which would taint the next interval.
+    flush_pending: bool = False
+    starts: int = 0
+    last_start: Optional[int] = None
+
+
+@dataclass
+class ZoneIntervals:
+    """What `query_zone_intervals` read of one zone."""
+
+    timelines: Dict[RiscTimeline, ZoneRepeats]
+    # Starts per zone name across the log, for a refusal to list, and whether names past
+    # `MAX_COUNTED_ZONE_NAMES` went uncounted; the zone asked for is always counted.
+    zone_starts: Counter
+    zone_names_capped: bool
+    pairing: Dict[str, int]
+    # Intervals left out: across one of the profiler's own zones, or out of time order.
+    across_flush: int
+    out_of_order: int
+    # Whether the log holds an accumulate-mode flush, which the per-run count misreads.
+    accumulated: bool
+    # Whether the log records timestamped data, which shares the buffer with zones.
+    timestamped: bool
+    # Rows that `_whole_number_rows` left out.
+    malformed: int
+    # Rows of timelines past `MAX_ZONE_TIMELINES`, which were not followed.
+    untracked: int
+    # The zone's own starts left out for either reason, which a refusal reports.
+    malformed_starts: int
+    untracked_starts: int
 
 
 class _ZonePairer:
@@ -420,15 +657,6 @@ class _ZonePairer:
 
 
 @dataclass(frozen=True)
-class _PerformanceReportSource:
-    path: str
-    modified_ns: int
-    changed_ns: int
-    inode: int
-    size: int
-
-
-@dataclass(frozen=True)
 class _PerformanceReportOptions:
     start_signpost: Optional[str]
     end_signpost: Optional[str]
@@ -439,6 +667,10 @@ class _PerformanceReportOptions:
     group_by: Optional[str]
     no_stacked_report: bool
     detail_columns: bool
+    # Each merged row's per-device row ids, as `device_row_ids`, on rows that stand for
+    # more than their own. Opt-in: the agent's registry keeps its reports' dicts per
+    # handle and no tool reads them.
+    device_row_ids: bool
 
 
 class LocalCSVQueryRunner:
@@ -697,20 +929,29 @@ class DeviceLogProfilerQueries:
         "core_x",
         "core_y",
         "run host ID",
-        "time[cycles since reset]",
+        _CYCLES_COLUMN,
     )
     # The same columns as a set to check a header against. Kept apart from
     # REQUIRED_DEVICE_LOG_COLUMNS because only the zone queries need them; see the
     # comment in `_zone_phase` before folding the two together.
     ZONE_SUMMARY_COLUMNS = frozenset(_ZONE_COLUMNS)
-    # The columns `query_core_spans` reads as numbers, besides the run it filters on.
-    _SPAN_NUMBER_COLUMNS = ("PCIe slot", "core_x", "core_y", "time[cycles since reset]")
+    # The `_ZONE_COLUMNS` the span and interval readers hold as whole numbers.
+    _WHOLE_NUMBER_COLUMNS = (
+        "PCIe slot",
+        "core_x",
+        "core_y",
+        "run host ID",
+        _CYCLES_COLUMN,
+    )
+    # Of those, the ones a negative value makes unreadable: the "negative cycle
+    # count" of UNREADABLE_NUMBER_REASON.
+    _NON_NEGATIVE_COLUMNS = (_CYCLES_COLUMN,)
     # The column that marks a zone's start and end, with its two tokens, in the
     # order one is preferred when a capture has both. Two spellings of the same
     # fact, neither required: a current capture writes `type` as ZONE_START /
     # ZONE_END, and a pre-rename one `zone phase` as begin/end (`PRE_RENAME_HEADER`
     # pins that shape). The agent inventory reads this too, so it never lists a
-    # log `core_spread` would refuse.
+    # log `core_spread` or `zone_intervals` would refuse.
     ZONE_PHASE_TOKENS: Dict[str, Tuple[str, str]] = {
         "type": ("ZONE_START", "ZONE_END"),
         "zone phase": ("begin", "end"),
@@ -928,6 +1169,17 @@ class DeviceLogProfilerQueries:
                 return column, start_token, end_token
         return None, "", ""
 
+    def _required_zone_phase(self, purpose: str, needs: str) -> Tuple[str, str, str]:
+        """`_zone_phase` for a query that cannot read a log without one: ``needs`` says
+        what the log then lacks."""
+        phase_column, start_token, end_token = self._zone_phase(purpose)
+        if phase_column is None:
+            raise DataFormatError(
+                f"{self.DEVICE_LOG_FILE} marks no zone starts or ends (neither a "
+                f"`type` nor a `zone phase` column), so {needs}"
+            )
+        return phase_column, start_token, end_token
+
     def _zone_chunks(self, columns: List[str]) -> Iterator[pd.DataFrame]:
         """The log in `CSV_CHUNK_SIZE` chunks, holding only ``columns``.
 
@@ -980,15 +1232,13 @@ class DeviceLogProfilerQueries:
         """The device clock the log's first line names, or None where it names none.
 
         A zero clock is none: no cycle count can be read as time against it. The
-        agent's inventory and `core_spread` both ask this, so the tool is listed
-        exactly when it can read cycles as time.
+        agent's inventory, `core_spread` and `zone_intervals` all ask this, so each
+        tool is listed exactly when it can read cycles as time.
         """
         meta = cls.read_device_meta(instance)
         return meta.frequency if meta is not None and meta.frequency else None
 
-    def query_zone_summary(
-        self, limit: Optional[int] = None
-    ) -> Tuple[List[Dict[str, object]], Dict[str, int]]:
+    def query_zone_summary(self) -> Tuple[List[Dict[str, object]], Dict[str, int]]:
         """Aggregate the whole log into one row per (zone, RISC).
 
         The two existing zone queries both need you to already know the zone you
@@ -1085,7 +1335,7 @@ class DeviceLogProfilerQueries:
         )
 
         pairing = pairer.pairing(self.DEVICE_LOG_FILE)
-        return (summary[:limit] if limit is not None else summary), pairing
+        return summary, pairing
 
     def query_core_spans(self, requests: Set[SpanRequest]) -> CoreSpans:
         """Each core's kernel zones for the given perf rows' runs and windows.
@@ -1102,18 +1352,13 @@ class DeviceLogProfilerQueries:
         Rows of other runs are dropped a chunk at a time before pairing, so the
         open starts held are only the requested runs'. Pairing counts are kept per
         run, so a caller reads only its own operations'. A kernel row whose slot,
-        core or cycles is not a finite number is left out and counted rather than
-        failing every operation's read.
+        core or cycles `_whole_number_rows` cannot read is left out and counted
+        rather than failing every operation's read.
         """
-        phase_column, start_token, end_token = self._zone_phase(
-            "split into per-core kernel spans"
-        )
         # Spread is a spread of durations, and without a phase there are none.
-        if phase_column is None:
-            raise DataFormatError(
-                f"{self.DEVICE_LOG_FILE} marks no zone starts or ends (neither a "
-                "`type` nor a `zone phase` column), so it holds no kernel durations"
-            )
+        phase_column, start_token, end_token = self._required_zone_phase(
+            "split into per-core kernel spans", "it holds no kernel durations"
+        )
 
         spans: Dict[SpanRequest, Dict[Tuple[int, int], CoreSpan]] = {
             request: {} for request in requests
@@ -1144,24 +1389,19 @@ class DeviceLogProfilerQueries:
             # BRISC-, NCRISC- and TRISC-KERNEL: the firmware zones wrap them, and
             # tt-metal's per-core figures read the kernels.
             chunk = chunk[
-                chunk["zone name"].astype(str).str.strip().str.endswith("-KERNEL")
+                chunk["zone name"]
+                .astype(str)
+                .str.strip()
+                .str.endswith(KERNEL_ZONE_SUFFIX)
             ]
-            numbers = chunk[list(self._SPAN_NUMBER_COLUMNS)].apply(
-                pd.to_numeric, errors="coerce"
+            whole, readable = _whole_number_rows(
+                chunk,
+                self._WHOLE_NUMBER_COLUMNS,
+                non_negative=self._NON_NEGATIVE_COLUMNS,
             )
-            finite = np.isfinite(numbers.to_numpy(dtype=float)).all(axis=1)
-            if not finite.all():
-                malformed.update(chunk["run host ID"][~finite].astype(int).tolist())
-            # Whole numbers from here, so a blank cell elsewhere in a column, which
-            # makes pandas read it as floats, still keys and reports as ints.
-            kept = chunk[finite]
-            chunk = kept.assign(
-                **{
-                    column: numbers[column][finite].astype("int64")
-                    for column in self._SPAN_NUMBER_COLUMNS
-                },
-                **{"run host ID": kept["run host ID"].astype("int64")},
-            )
+            if not readable.all():
+                malformed.update(chunk["run host ID"][~readable].astype(int).tolist())
+            chunk = whole
             for zone, risc, slot, x, y, run_id, cycles, phase in zip(
                 *(chunk[column].tolist() for column in columns)
             ):
@@ -1190,6 +1430,169 @@ class DeviceLogProfilerQueries:
             zoned=zoned,
             pairing=cast(Dict[DeviceRun, Dict[str, int]], pairer.pairing_by_group()),
             malformed=dict(malformed),
+        )
+
+    def query_zone_intervals(self, zone: str) -> ZoneIntervals:
+        """Cycles from each start of ``zone`` to its next in one run, per RISC timeline.
+
+        tt-metal writes each RISC's markers in time order, so a run ends as its rows
+        arrive: at a kernel start, which also parts a traced op's replays, or a new run
+        host ID. The trace columns are not read: they can change partway through a run.
+        """
+        phase_column, start_token, end_token = self._required_zone_phase(
+            "read for zone intervals", "no zone start can be told apart"
+        )
+        columns = list(self._ZONE_COLUMNS) + [phase_column]
+        # Each kept row's flags ride beside its cells, named apart from any log column.
+        row_columns = [*columns, "_kernel_start", "_marker", "_flush"]
+
+        timelines: Dict[RiscTimeline, ZoneRepeats] = {}
+        open_runs: Dict[RiscTimeline, _OpenRun] = {}
+        zone_starts: Counter = Counter()
+        pairer = _ZonePairer(start_token, end_token)
+        across_flush = out_of_order = malformed = untracked = 0
+        malformed_starts = untracked_starts = displaced = 0
+        accumulated = timestamped = zone_names_capped = False
+        # A firmware or kernel zone has its own slot, so a full buffer never cuts it.
+        reserved_zone = zone.endswith(RESERVED_ZONE_SUFFIXES)
+        # A firmware zone starts before the kernel start that opens its run, so it pairs
+        # by run host ID; any other zone pairs within its own run.
+        firmware_zone = zone.endswith(FIRMWARE_ZONE_SUFFIX)
+
+        def close(timeline: RiscTimeline, run: _OpenRun) -> None:
+            if not run.starts:
+                return
+            repeats = timelines[timeline]
+            repeats.runs += 1
+            if run.full and not reserved_zone:
+                repeats.full_runs += 1
+
+        for chunk in self._zone_chunks(columns):
+            names = chunk["zone name"].astype(str).str.strip()
+            phases = chunk[phase_column].astype(str).str.strip()
+            starts = phases == start_token
+            timestamped = timestamped or (
+                not reserved_zone
+                and bool(phases.str.startswith(TIMESTAMPED_PHASE_PREFIX).any())
+            )
+            for name, count in names[starts].value_counts().items():
+                if (
+                    name == zone
+                    or name in zone_starts
+                    or len(zone_starts) < MAX_COUNTED_ZONE_NAMES
+                ):
+                    zone_starts[name] += count
+                else:
+                    zone_names_capped = True
+            # Firmware and kernel zones have slots of their own, outside the L1 cap.
+            reserved = names.str.endswith(RESERVED_ZONE_SUFFIXES)
+            kernel_starts = names.str.endswith(KERNEL_ZONE_SUFFIX) & starts
+            markers = ~reserved & (starts | (phases == end_token))
+            if reserved_zone:
+                # Nothing counts markers for a zone the cap never cuts.
+                markers = markers & False
+            flushes = markers & names.str.startswith(PROFILER_ZONE_PREFIX)
+            accumulated = accumulated or bool(
+                (flushes & names.isin(ACCUMULATE_FLUSH_ZONES)).any()
+            )
+            wanted = names == zone
+            kept = kernel_starts | markers | wanted
+            chunk = chunk[kept].assign(
+                **{
+                    "zone name": names[kept],
+                    "RISC processor type": chunk["RISC processor type"][kept]
+                    .astype(str)
+                    .str.strip(),
+                    phase_column: phases[kept],
+                    "_kernel_start": kernel_starts[kept],
+                    "_marker": markers[kept],
+                    "_flush": flushes[kept],
+                }
+            )
+
+            whole, readable = _whole_number_rows(
+                chunk,
+                self._WHOLE_NUMBER_COLUMNS,
+                non_negative=self._NON_NEGATIVE_COLUMNS,
+            )
+            malformed += int((~readable).sum())
+            malformed_starts += int(
+                (~readable & (wanted & starts)[kept].to_numpy()).sum()
+            )
+            chunk = whole
+
+            for (
+                name,
+                risc,
+                slot,
+                x,
+                y,
+                run_id,
+                cycles,
+                phase,
+                kernel_start,
+                marker,
+                flush,
+            ) in zip(*(chunk[column].tolist() for column in row_columns)):
+                timeline = (slot, x, y, risc)
+                run = open_runs.get(timeline)
+                if run is None:
+                    if len(open_runs) >= MAX_ZONE_TIMELINES:
+                        untracked += 1
+                        untracked_starts += name == zone and phase == start_token
+                        continue
+                    run = open_runs[timeline] = _OpenRun(run_id)
+                elif run.run_id != run_id or kernel_start:
+                    close(timeline, run)
+                    run = open_runs[timeline] = _OpenRun(run_id, seq=run.seq + 1)
+
+                if flush:
+                    run.markers = 0
+                    run.flush_pending = run.flush_pending or name != zone
+                elif marker:
+                    run.markers += 1
+                    run.full = run.full or run.markers >= L1_ZONE_MARKER_CAPACITY
+                if name != zone:
+                    continue
+                key = (timeline, run_id if firmware_zone else run.seq)
+                if phase != start_token:
+                    pairer.offer(key, phase, cycles)
+                    continue
+                # The pairer keeps one open start a key, so a start replaced unended
+                # would otherwise go uncounted.
+                displaced += key in pairer.open_starts
+                pairer.offer(key, phase, cycles)
+                repeats = timelines.setdefault(timeline, ZoneRepeats())
+                repeats.occurrences += 1
+                run.starts += 1
+                if run.last_start is not None and cycles < run.last_start:
+                    out_of_order += 1
+                    continue
+                if run.last_start is not None:
+                    if run.flush_pending:
+                        across_flush += 1
+                    else:
+                        repeats.intervals.append(cycles - run.last_start)
+                run.flush_pending = False
+                run.last_start = cycles
+
+        for timeline, run in open_runs.items():
+            close(timeline, run)
+        pairing = pairer.pairing(self.DEVICE_LOG_FILE)
+        pairing["unmatched_starts"] += displaced
+        return ZoneIntervals(
+            timelines=timelines,
+            zone_starts=zone_starts,
+            zone_names_capped=zone_names_capped,
+            pairing=pairing,
+            across_flush=across_flush,
+            out_of_order=out_of_order,
+            accumulated=accumulated,
+            timestamped=timestamped,
+            malformed=malformed,
+            untracked=untracked,
+            malformed_starts=malformed_starts,
+            untracked_starts=untracked_starts,
         )
 
     @staticmethod
@@ -1432,6 +1835,7 @@ class OpsPerformanceReportQueries:
     DEFAULT_NO_HOST_OPS = False
     DEFAULT_NO_STACKED_REPORT = False
     DEFAULT_DETAIL_COLUMNS = False
+    DEFAULT_DEVICE_ROW_IDS = False
     DEFAULT_NO_STACK_BY_IN0 = True
     DEFAULT_MERGE_DEVICES = True
     DEFAULT_STACKED_CSV_FILE = None  # Stacked report CSV output file
@@ -1532,7 +1936,7 @@ class OpsPerformanceReportQueries:
         return processed_row
 
     @staticmethod
-    def report_source(instance) -> "_PerformanceReportSource":
+    def report_source(instance) -> FileSource:
         """The CSV a report would be generated from now, and its identity on disk.
 
         The newest `ops_perf_results` file, so a capture written later is a
@@ -1541,14 +1945,7 @@ class OpsPerformanceReportQueries:
         source_path = Path(
             OpsPerformanceQueries.get_local_ops_perf_file_path(instance)
         ).resolve()
-        source_stat = source_path.stat()
-        return _PerformanceReportSource(
-            path=str(source_path),
-            modified_ns=source_stat.st_mtime_ns,
-            changed_ns=source_stat.st_ctime_ns,
-            inode=source_stat.st_ino,
-            size=source_stat.st_size,
-        )
+        return FileSource.of(str(source_path), source_path.stat())
 
     @classmethod
     def generate_report(cls, instance, **kwargs) -> Dict:
@@ -1597,6 +1994,7 @@ class OpsPerformanceReportQueries:
                 "no_stacked_report", cls.DEFAULT_NO_STACKED_REPORT
             ),
             detail_columns=kwargs.get("detail_columns", cls.DEFAULT_DETAIL_COLUMNS),
+            device_row_ids=kwargs.get("device_row_ids", cls.DEFAULT_DEVICE_ROW_IDS),
         )
 
     @classmethod
@@ -1657,9 +2055,17 @@ class OpsPerformanceReportQueries:
             else:
                 ignore_signposts = cls.DEFAULT_IGNORE_SIGNPOSTS
 
+            # Only a merged build calls `merge_device_rows` with more than one device.
+            capture_device_rows = options.device_row_ids and merge_devices
             open_figures = set(plt.get_fignums())
             try:
-                with _stacked_report_plot_skipped(), _perf_report_output_bounded():
+                with (
+                    _stacked_report_plot_skipped(),
+                    _perf_report_output_bounded(),
+                    _merged_device_rows_captured(
+                        capture_device_rows
+                    ) as device_rows_by_id,
+                ):
                     perf_report.generate_perf_report(
                         [csv_file],
                         start_signpost,
@@ -1786,6 +2192,15 @@ class OpsPerformanceReportQueries:
                                         cls.set_hash_from_results(
                                             processed_row, idx, ops_perf_results
                                         )
+
+                                        # A row that stands only for itself has no
+                                        # other device's row to link, so it's left
+                                        # off: most captures are single-device.
+                                        device_row_ids = device_rows_by_id.get(op_id)
+                                        if device_row_ids and len(device_row_ids) > 1:
+                                            processed_row["device_row_ids"] = list(
+                                                device_row_ids
+                                            )
 
                                         report.append(processed_row)
                                     except (ValueError, IndexError) as e:
@@ -2090,7 +2505,7 @@ class DegradedPerformanceReport(Exception):
 
 
 def _generate_performance_report(
-    source: _PerformanceReportSource, options: _PerformanceReportOptions
+    source: FileSource, options: _PerformanceReportOptions
 ) -> Dict:
     csv_path = Path(source.path)
     raw_csv = csv_path.read_text()
@@ -2104,7 +2519,7 @@ def _generate_performance_report(
 
 @lru_cache(maxsize=MAX_CACHED_PERFORMANCE_REPORTS)
 def _cached_generate_performance_report_json(
-    source: _PerformanceReportSource, options: _PerformanceReportOptions
+    source: FileSource, options: _PerformanceReportOptions
 ) -> bytes:
     # Bytes rather than the dicts: under half the memory, a hit skips
     # serialisation, and callers sharing an entry cannot modify it.

@@ -5,7 +5,7 @@
 """What the run allocated and what flowed between its operations.
 
 Round one answered where the time went, from the performance CSVs. These read
-the profiler report's SQLite database instead, which is the half of bring-up the
+the memory report's SQLite database instead, which is the half of bring-up the
 first slice could not reach: an out-of-memory failure or an unintended DRAM
 spill is as common as a slow op, and no tool exposed a byte. #2012
 
@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import (
     Callable,
     Dict,
+    Hashable,
     Iterator,
     List,
     Mapping,
@@ -33,15 +34,32 @@ from typing import (
     Set,
     Tuple,
     TypedDict,
+    TypeVar,
 )
 
-from ttnn_visualizer.agent.bounds import MAX_LIMIT, bounded, require_choice
+from ttnn_visualizer.agent import op_graph
+from ttnn_visualizer.agent.bounds import (
+    MAX_DETAILED_LIMIT,
+    MAX_LIMIT,
+    bounded,
+    normalised_choice,
+    require_choice,
+)
 from ttnn_visualizer.agent.handles import (
+    GRAPH_TABLES,
     PROFILER_DB_FILE,
+    CacheVariant,
     ReportRegistry,
     read_only_connection,
 )
-from ttnn_visualizer.models import Buffer, BufferType, Device, Instance, Operation
+from ttnn_visualizer.models import (
+    Buffer,
+    BufferType,
+    Device,
+    Instance,
+    Operation,
+    Tensor,
+)
 from ttnn_visualizer.queries import DatabaseQueries
 
 # Every allocation figure derived from `buffers` is in these units, and the
@@ -70,7 +88,7 @@ BUFFER_TYPE_NAMES = tuple(sorted(member.name for member in BufferType))
 
 
 class ProfilerDatabaseMissingError(ValueError):
-    """Raised when a handle has no profiler database to read."""
+    """Raised when a handle has no memory report database to read."""
 
 
 @contextmanager
@@ -88,8 +106,8 @@ def profiler_db(instance: Instance) -> Iterator[DatabaseQueries]:
     """
     if not instance.profiler_path:
         raise ProfilerDatabaseMissingError(
-            "this handle was loaded without a profiler_path; memory and operation "
-            "questions need the profiler report directory"
+            "this handle was loaded without a memory_report_path; memory and operation "
+            "questions need the memory report directory"
         )
     db_file = Path(instance.profiler_path, PROFILER_DB_FILE)
     if not db_file.is_file():
@@ -175,6 +193,14 @@ def rank_scope(queries: DatabaseQueries, rank: Optional[int]) -> RankScope:
             f"{', '.join(str(entry) for entry in ranks)}"
         )
     return scope
+
+
+def no_such_operation(operation_id: int, scope: RankScope) -> ValueError:
+    """The refusal for an operation id the report does not hold at `scope`'s rank."""
+    return ValueError(
+        f"no operation {operation_id} in this report"
+        + (f" at rank {scope.rank}" if scope.rank is not None else "")
+    )
 
 
 class UnattributableRankError(ValueError):
@@ -287,6 +313,20 @@ class L1Pressure(_L1PressureFigures):
 class RankedL1PressureRow(_L1PressureFigures):
     operation_id: int
     name: Optional[str]
+
+
+def _tensor_layout_fields(tensor: Tensor) -> Dict[str, object]:
+    """The fields every tool describing a tensor gives, before its own extras."""
+    return {
+        "shape": tensor.shape,
+        "dtype": tensor.dtype,
+        "layout": tensor.layout,
+        "buffer_type": (
+            _buffer_type_name(tensor.buffer_type)
+            if tensor.buffer_type is not None
+            else None
+        ),
+    }
 
 
 def _as_int(value: object) -> int:
@@ -613,7 +653,7 @@ _TRACE_FRAME = re.compile(
 )
 
 
-def _parse_frames(trace: str) -> List[Dict[str, object]]:
+def parse_frames(trace: str, limit: Optional[int] = None) -> List[Dict[str, object]]:
     """The traceback's frames, innermost first, each with the source line under it.
 
     Innermost first is the order the capture writes: frame 0 is the `ttnn.<op>` call
@@ -633,7 +673,9 @@ def _parse_frames(trace: str) -> List[Dict[str, object]]:
         # line, so a frame with no source line borrowed its neighbour's -- and since
         # the call site is frame 0, that pointed at another file's code.
         code = None
-        for candidate in lines[index + 1 :]:
+        # By position: a slice here copied the rest of the trace once per frame.
+        for position in range(index + 1, len(lines)):
+            candidate = lines[position]
             if not candidate.strip():
                 continue
             if _TRACE_FRAME.match(candidate) is None:
@@ -647,6 +689,8 @@ def _parse_frames(trace: str) -> List[Dict[str, object]]:
                 "code": code,
             }
         )
+        if len(frames) == limit:
+            break
     return frames
 
 
@@ -683,7 +727,7 @@ def operation_provenance(
 ) -> Dict[str, object]:
     """What an operation was called with, and where in the model code it came from.
 
-    Takes the profiler database's `operation_id`, the same one `memory_profile`,
+    Takes the memory report database's `operation_id`, the same one `memory_profile`,
     `operation_detail` and `find_operations` use -- *not* the `id` from `top_ops`,
     which numbers rows of the performance CSV. The two are small
     integers in overlapping ranges, so passing a CSV row number here does not
@@ -710,10 +754,7 @@ def operation_provenance(
 
         operations = list(queries.query_operations(filters=filters))
         if not operations:
-            raise ValueError(
-                f"no operation {wanted} in this report"
-                + (f" at rank {scope.rank}" if scope.rank is not None else "")
-            )
+            raise no_such_operation(wanted, scope)
         operation = operations[0]
 
         arguments = list(
@@ -733,7 +774,7 @@ def operation_provenance(
     # `splitlines` and gave the agent an AttributeError. The `called_from` path
     # guarded this and this one did not.
     raw_trace = (traces[0].stack_trace or "") if traces else ""
-    frames = _parse_frames(raw_trace)
+    frames = parse_frames(raw_trace)
     cap = bounded(limit)
     chain = frames[1 : cap + 1]
     result: Dict[str, object] = {
@@ -906,10 +947,7 @@ def operation_detail(
             )
         )
         if not operations:
-            raise ValueError(
-                f"no operation {operation_id} in this report"
-                + (f" at rank {scope.rank}" if scope.rank is not None else "")
-            )
+            raise no_such_operation(operation_id, scope)
         operation = operations[0]
 
         tensor_size_unit = (
@@ -971,19 +1009,12 @@ def operation_detail(
         return {
             "index": index,
             "tensor_id": tensor_id,
-            "shape": tensor.shape,
-            "dtype": tensor.dtype,
-            "layout": tensor.layout,
+            **_tensor_layout_fields(tensor),
             # Carries `memory_layout`, so an agent can tell a sharded tensor
             # from an interleaved one -- which is exactly what decides whether
             # the per-bank figures below span every bank or a shard grid.
             "memory_config": tensor.memory_config,
             "size": tensor.size,
-            "buffer_type": (
-                _buffer_type_name(tensor.buffer_type)
-                if tensor.buffer_type is not None
-                else None
-            ),
         }
 
     allocations: Dict[str, Dict[str, int]] = defaultdict(
@@ -1067,7 +1098,7 @@ def memory_profile(
     to allocations. The report carries no DRAM bank count at all, so one of the
     two denominators is not even knowable here.
     """
-    wanted = (buffer_type or "").strip().upper() or None
+    wanted = normalised_choice(buffer_type)
     # Refused up front, the way `top_ops` refuses an unknown metric. Matching
     # free text against whatever strings the report happens to hold makes a
     # typo indistinguishable from a report that allocates none of that type.
@@ -1222,9 +1253,7 @@ def tensor_flow(
     instance = registry.get(handle)
     with profiler_db(instance) as queries:
         scope = rank_scope(queries, rank)
-        refuse_unattributable(
-            queries, scope, "tensors", "input_tensors", "output_tensors"
-        )
+        refuse_unattributable(queries, scope, *GRAPH_TABLES)
         wanted = int(tensor_id)
         edges = [
             entry
@@ -1285,19 +1314,155 @@ def tensor_flow(
     }
     if tensor is not None:
         result["tensor"] = {
-            "shape": tensor.shape,
-            "dtype": tensor.dtype,
-            "layout": tensor.layout,
+            **_tensor_layout_fields(tensor),
             "memory_config": tensor.memory_config,
             "size": tensor.size,
             "size_unit": tensor_size_unit,
-            "buffer_type": (
-                _buffer_type_name(tensor.buffer_type)
-                if tensor.buffer_type is not None
-                else None
-            ),
         }
     return result
+
+
+_PerRank = TypeVar("_PerRank")
+
+
+def cached_per_rank(
+    registry: ReportRegistry,
+    handle: str,
+    variant: CacheVariant,
+    queries: DatabaseQueries,
+    scope: RankScope,
+    build: Callable[[DatabaseQueries, RankScope], _PerRank],
+    key: Hashable = None,
+) -> _PerRank:
+    """`build` once per handle, rank and `key`. A build that raises is not kept."""
+    # One pinned entry holding every rank, so a rank read cannot evict a scoped report.
+    by_rank: Dict[Tuple[Optional[int], Hashable], _PerRank] = registry.cached_report(
+        handle, lambda _: {}, variant=variant
+    )
+    slot = (scope.rank, key)
+    if slot not in by_rank:
+        by_rank[slot] = build(queries, scope)
+    return by_rank[slot]
+
+
+def _read_graph(queries: DatabaseQueries, scope: RankScope) -> op_graph.OpGraph:
+    return op_graph.read_graph(
+        queries, scoped(queries, "operations", scope), scope.rank
+    )
+
+
+def read_scoped_graph(
+    registry: ReportRegistry,
+    handle: str,
+    queries: DatabaseQueries,
+    scope: RankScope,
+) -> op_graph.OpGraph:
+    """The whole operation graph at `scope`'s rank, read once per handle and rank.
+
+    The refusal is checked on every call rather than kept with the graph.
+    """
+    refuse_unattributable(queries, scope, *GRAPH_TABLES)
+    return cached_per_rank(
+        registry, handle, CacheVariant.OP_GRAPH, queries, scope, _read_graph
+    )
+
+
+def _subgraph_tensor(tensor: Optional[Tensor], tensor_id: int) -> Dict[str, object]:
+    """What a subgraph edge carries: enough to read a block's layout, not its sizes,
+    which `operation_detail` gives with the unit they need."""
+    if tensor is None:
+        return {"tensor_id": tensor_id}
+    memory_config = tensor.memory_config
+    return {
+        "tensor_id": tensor_id,
+        **_tensor_layout_fields(tensor),
+        "memory_layout": (
+            memory_config.get("memory_layout")
+            if isinstance(memory_config, dict)
+            else None
+        ),
+    }
+
+
+def subgraph_between(
+    registry: ReportRegistry,
+    handle: str,
+    from_operation_id: int,
+    to_operation_id: int,
+    limit: Optional[int] = None,
+    rank: Optional[int] = None,
+) -> Dict[str, object]:
+    """The operations and tensors on every path from one operation to another."""
+    instance = registry.get(handle)
+    source, target = int(from_operation_id), int(to_operation_id)
+    cap = bounded(limit, MAX_LIMIT)
+    with profiler_db(instance) as queries:
+        scope = rank_scope(queries, rank)
+        graph = read_scoped_graph(registry, handle, queries, scope)
+
+        for operation_id in (source, target):
+            if operation_id not in graph.names:
+                raise no_such_operation(operation_id, scope)
+        members = op_graph.operations_between(graph, source, target)
+        if not members:
+            reverse = (
+                " (there is one from "
+                f"{target} to {source}: swap from_operation_id and to_operation_id)"
+                if op_graph.operations_between(graph, target, source)
+                else ""
+            )
+            raise ValueError(f"no path from operation {source} to {target}{reverse}")
+
+        edges = sorted(
+            op_graph.edges_within(graph.drawn_edges, members),
+            key=lambda edge: (edge.source, edge.target, edge.tensor_id),
+        )
+        tensor_ids = sorted({edge.tensor_id for edge in edges})
+        # Each tensor parses its memory config, so only the listed ones are read --
+        # and never with an empty id list, which drops the filter.
+        listed_ids = tensor_ids[: min(cap, MAX_DETAILED_LIMIT)]
+        tensors = (
+            {
+                tensor.tensor_id: tensor
+                for tensor in queries.query_tensors(
+                    filters=scoped(queries, "tensors", scope, tensor_id=listed_ids),
+                    size_from_buffers=False,
+                )
+            }
+            if listed_ids
+            else {}
+        )
+
+    ordered = sorted(members)
+    return {
+        "handle": handle,
+        "from_operation_id": source,
+        "to_operation_id": target,
+        "operation_count": len(ordered),
+        "edge_count": len(edges),
+        "tensor_count": len(tensor_ids),
+        "operations": [
+            {"operation_id": operation_id, "name": graph.names.get(operation_id)}
+            for operation_id in ordered[:cap]
+        ],
+        "operations_truncated": len(ordered) > cap,
+        "edges": [
+            {
+                "source": edge.source,
+                "target": edge.target,
+                "tensor_id": edge.tensor_id,
+            }
+            for edge in edges[:cap]
+        ],
+        "edges_truncated": len(edges) > cap,
+        "tensors": [
+            _subgraph_tensor(tensors.get(tensor_id), tensor_id)
+            for tensor_id in listed_ids
+        ],
+        "tensors_truncated": len(tensor_ids) > len(listed_ids),
+        **scope.as_response(),
+        **_caveats(scope),
+    }
 
 
 def rank_caveat(scope: RankScope) -> Optional[str]:
@@ -1346,18 +1511,23 @@ __all__ = [
     "RankScope",
     "TENSOR_SIZE_UNIT",
     "ProfilerDatabaseMissingError",
+    "cached_per_rank",
     "caveat_field",
     "find_operations",
     "joined_caveat",
     "memory_profile",
+    "no_such_operation",
     "operation_detail",
     "operation_provenance",
+    "parse_frames",
     "profiler_db",
     "rank_caveat",
     "rank_scope",
+    "read_scoped_graph",
     "refuse_unattributable",
     "scoped",
     "scoped_devices",
+    "subgraph_between",
     "tensor_flow",
     "unattributable_reason",
     "withheld_caveat",

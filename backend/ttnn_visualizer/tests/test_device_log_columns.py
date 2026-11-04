@@ -18,6 +18,7 @@ either is checked in. See #1941.
 from pathlib import Path
 from unittest.mock import patch
 
+import pandas as pd
 import pytest
 from ttnn_visualizer import csv_queries
 from ttnn_visualizer.csv_queries import DeviceLogProfilerQueries
@@ -85,6 +86,16 @@ PRE_RENAME_ROWS = [
     "0,1,1,BRISC,924,11464554183483,0,0,480,BRISC-FW,begin,396,brisc.cc",
     "0,1,1,BRISC,66460,11464555014278,0,0,480,BRISC-FW,end,396,brisc.cc",
 ]
+
+
+def modern_row(
+    slot, x, y, risc, cycles, zone, phase, run=1024, trace="", counter=""
+) -> str:
+    """One row in `MODERN_HEADER`'s layout."""
+    return (
+        f"{slot},{x},{y},{risc},1,{cycles},0,{run},{trace},{counter},"
+        f"{zone},{phase},1,k.cc,"
+    )
 
 
 def write_device_log(directory: Path, header: str, rows: list[str]) -> Path:
@@ -356,3 +367,33 @@ def test_timer_id_query_matches_the_column_it_filters(tmp_path):
 
     assert len(matched) == 1
     assert matched[0]["zone_name"] == "BRISC-FW"
+
+
+@pytest.mark.parametrize(
+    "numbers, fits",
+    [
+        pytest.param(pd.Series([-(2**63), 2**63 - 1]), [True, True], id="int64"),
+        pytest.param(
+            pd.Series([2**63 - 1, 2**63], dtype="uint64"), [True, False], id="uint64"
+        ),
+        pytest.param(
+            pd.Series([-(2.0**63), 2.0**63, float("nan")]),
+            [True, False, False],
+            id="float64",
+        ),
+    ],
+)
+def test_int64_range_is_checked_in_the_columns_own_dtype(numbers, fits):
+    assert csv_queries._fits_int64(numbers).tolist() == fits
+
+
+def test_only_the_non_negative_columns_refuse_a_negative():
+    chunk = pd.DataFrame({"cycles": [-1.0, 5.0, 7.0], "core": [-1.0, -2.0, 3.0]})
+
+    whole, readable = csv_queries._whole_number_rows(
+        chunk, ["cycles", "core"], non_negative=["cycles"]
+    )
+
+    assert readable.tolist() == [False, True, True]
+    assert whole.to_dict("list") == {"cycles": [5, 7], "core": [-2, 3]}
+    assert whole.dtypes.tolist() == ["int64", "int64"]

@@ -65,6 +65,11 @@ def bounded(limit: Optional[int], maximum: int = MAX_LIMIT) -> int:
     return max(1, min(requested, maximum))
 
 
+def normalised_choice(value: Optional[str]) -> Optional[str]:
+    """A choice as `require_choice` compares it: trimmed and upper-cased, None if blank."""
+    return (value.strip().upper() or None) if isinstance(value, str) else value
+
+
 def require_choice(kind: str, value: str, allowed: Iterable[str]) -> None:
     """Refuse `value` unless it is one of `allowed`, naming every choice."""
     if value not in allowed:
@@ -81,5 +86,6 @@ __all__ = [
     "MAX_LIMIT",
     "bounded",
     "ensure_graph_readable",
+    "normalised_choice",
     "require_choice",
 ]

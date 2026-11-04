@@ -289,6 +289,10 @@ $perf-table-max-height: calc(
             margin: 4px 0 0;
         }
 
+        .perf-heuristic-flag-source {
+            opacity: 0.75;
+        }
+
         .perf-heuristic-flag-detail {
             font-family: $base-font;
             opacity: 0.85;

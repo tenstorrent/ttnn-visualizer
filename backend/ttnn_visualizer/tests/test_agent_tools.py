@@ -69,8 +69,10 @@ from ttnn_visualizer.tests.test_device_log_columns import (
     MODERN_HEADER,
     PREAMBLE,
     _drop_column,
+    modern_row,
     write_device_log,
 )
+from ttnn_visualizer.utils import newest_ops_perf_file
 
 ZONED_ROWS = [
     # Two cores running the same zone, so `cores` counts distinctly from
@@ -152,6 +154,32 @@ def _signposts_in(*handles):
     return patch.object(tools, "_resolve_signposts", side_effect=resolve)
 
 
+def _touch_after(older, newer, times=None):
+    """Make `newer` the ops_perf CSV `newest_ops_perf_file` picks over `older`,
+    leaving `older` untouched.
+
+    It ranks by ctime, which a test cannot set: every `os.utime` stamps it with
+    the filesystem's clock, so only the order of the calls decides. Back to back,
+    both can land on one tick of a coarse clock and tie, and a tie falls to glob
+    order. Touch `newer` again until its ctime is strictly later, whatever the
+    timestamp resolution. Compare as it does, with the float `os.path.getctime`,
+    which can call two ctimes a few nanoseconds apart equal.
+    """
+    deadline = time.monotonic() + 5
+    while True:
+        os.utime(newer, times)
+        if os.path.getctime(newer) > os.path.getctime(older):
+            return
+        assert time.monotonic() < deadline, "ctimes never separated"
+        time.sleep(0.01)
+
+
+def _touch_in_order(older, newer):
+    """`_touch_after`, with both mtimes aged too, for any reader that uses them."""
+    os.utime(older, (1000, 1000))
+    _touch_after(older, newer, (2000, 2000))
+
+
 class TestReportInventory:
     def test_a_performance_only_report_says_which_tools_apply(self, tmp_path):
         """The Blaze-shaped case: perf data, no SQLite, no graph capture.
@@ -171,6 +199,7 @@ class TestReportInventory:
             "top_ops",
             "op_breakdown",
             "zone_timings",
+            "zone_intervals",
             "core_spread",
         }
         assert set(loaded["unanswerable"]) == {
@@ -184,6 +213,10 @@ class TestReportInventory:
             "errors",
             "dram_fallbacks",
             "l1_peak",
+            "late_deallocations",
+            "noc_congestion",
+            "critical_path",
+            "subgraph_between",
         }
         assert loaded["capture"]["ARCH"] == "wormhole_b0"
         assert loaded["performance_csv"] == "ops_perf_results_x.csv"
@@ -235,6 +268,32 @@ class TestReportInventory:
             "l1_peak",
         } <= set(loaded["unanswerable"])
 
+    @pytest.mark.parametrize(
+        ("tables", "answerable"),
+        [
+            (("operations", "tensors", "input_tensors", "output_tensors"), False),
+            (
+                ("operations", "buffers", "tensors", "input_tensors", "output_tensors"),
+                True,
+            ),
+        ],
+    )
+    def test_late_deallocations_needs_buffers_and_not_stack_traces(
+        self, tmp_path, tables, answerable
+    ):
+        profiler = tmp_path / "profiler"
+        profiler.mkdir()
+        connection = sqlite3.connect(profiler / "db.sqlite")
+        for table in tables:
+            connection.execute(f"CREATE TABLE {table} (operation_id int)")
+        connection.commit()
+        connection.close()
+
+        loaded = load_report(ReportRegistry(), profiler_path=str(profiler))
+
+        assert ("late_deallocations" in loaded["answerable"]) is answerable
+        assert ("late_deallocations" in loaded["unanswerable"]) is not answerable
+
     def test_an_empty_database_file_is_not_answerable(self, tmp_path):
         """A zero-byte `db.sqlite` opens as a valid empty database.
 
@@ -261,8 +320,7 @@ class TestReportInventory:
         )
         newer = tmp_path / "ops_perf_results_new.csv"
         newer.write_bytes(b"")
-        os.utime(older, (1000, 1000))
-        os.utime(newer, (2000, 2000))
+        _touch_in_order(older, newer)
 
         loaded = load_report(ReportRegistry(), performance_path=str(tmp_path))
 
@@ -319,12 +377,14 @@ class TestReportInventory:
         assert tools.zone_timings(registry, loaded["handle"])["zones"]
 
     def test_core_spread_needs_both_files(self, tmp_path):
-        """It joins a perf row to its zones, so a device log alone answers nothing."""
+        """It joins a perf row to its zones, so a device log alone answers nothing,
+        while `zone_intervals` reads the device log alone."""
         write_device_log(tmp_path, MODERN_HEADER, ZONED_ROWS)
 
         loaded = load_report(ReportRegistry(), performance_path=str(tmp_path))
 
         assert "zone_timings" in loaded["answerable"]
+        assert "zone_intervals" in loaded["answerable"]
         assert "core_spread" in loaded["unanswerable"]
 
     def test_core_spread_needs_zone_starts_and_ends(self, tmp_path):
@@ -337,6 +397,7 @@ class TestReportInventory:
 
         assert "zone_timings" in loaded["answerable"]
         assert "core_spread" in loaded["unanswerable"]
+        assert "zone_intervals" in loaded["unanswerable"]
 
     def test_a_non_utf8_device_log_does_not_break_load_report(self, tmp_path):
         """A device log with non-UTF-8 bytes in the preamble, or in a row after the
@@ -392,7 +453,7 @@ class TestReportInventory:
             load_report(ReportRegistry(), performance_path=str(tmp_path / "absent"))
 
     def test_at_least_one_path_is_required(self):
-        with pytest.raises(ValueError, match="one of profiler_path"):
+        with pytest.raises(ValueError, match="one of memory_report_path"):
             load_report(ReportRegistry())
 
     def test_an_unknown_handle_names_the_handles_that_exist(self, tmp_path):
@@ -445,6 +506,59 @@ def _write_descriptor(directory, arch, name="cluster_descriptor.yaml"):
     directory.mkdir(parents=True, exist_ok=True)
     lines = ["arch:", *(f"  {chip}: {chip_arch}" for chip, chip_arch in arch.items())]
     (directory / name).write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+class TestLoadReportMemoryReportPath:
+    """`memory_report_path` is the preferred name; `profiler_path` still works."""
+
+    @staticmethod
+    def _memory_report(tmp_path):
+        directory = tmp_path / "memory"
+        directory.mkdir()
+        (directory / "db.sqlite").write_text("", encoding="utf-8")
+        return str(directory)
+
+    @staticmethod
+    def _call(arguments):
+        handler = server._tool_table(ReportRegistry())["load_report"]["handler"]
+        return handler(arguments)
+
+    @pytest.mark.parametrize("name", ["memory_report_path", "profiler_path"])
+    def test_either_name_loads_the_memory_report(self, tmp_path, name):
+        path = self._memory_report(tmp_path)
+
+        loaded = self._call({name: path})
+
+        # The answer keeps its former key whichever name the call used.
+        assert loaded["profiler_path"] == str(tmp_path.resolve() / "memory")
+
+    def test_both_names_agreeing_load_the_one_report(self, tmp_path):
+        path = self._memory_report(tmp_path)
+
+        loaded = self._call({"memory_report_path": path, "profiler_path": path})
+
+        assert loaded["profiler_path"] == str(tmp_path.resolve() / "memory")
+
+    def test_both_names_disagreeing_are_refused(self, tmp_path):
+        path = self._memory_report(tmp_path)
+        other = tmp_path / "other"
+        other.mkdir()
+
+        with pytest.raises(ValueError, match="name different paths"):
+            self._call({"memory_report_path": path, "profiler_path": str(other)})
+
+    @pytest.mark.parametrize("name", ["memory_report_path", "profiler_path"])
+    def test_a_missing_directory_is_refused_under_the_name_used(self, tmp_path, name):
+        with pytest.raises(ValueError, match=f"^{name} is not a directory"):
+            self._call({name: str(tmp_path / "absent")})
+
+    def test_the_schema_offers_both_names(self):
+        properties = server._tool_table(ReportRegistry())["load_report"]["schema"][
+            "properties"
+        ]
+
+        assert {"memory_report_path", "profiler_path"} <= set(properties)
+        assert "Deprecated" in properties["profiler_path"]["description"]
 
 
 class TestReportFacts:
@@ -662,8 +776,7 @@ class TestReportFacts:
         newer = write_ops_perf(
             tmp_path, [{**row, "DEVICE ID": "0"} for row in smoke_rows()]
         )
-        os.utime(older, (1000, 1000))
-        os.utime(newer, (2000, 2000))
+        _touch_in_order(older, newer)
         registry = ReportRegistry()
 
         loaded = tools.with_signposts(
@@ -1659,9 +1772,13 @@ class TestSignpostRangeEndToEnd:
         handle = self._handle(registry, tmp_path)
         self._ranged(registry, handle)
 
+        original = tmp_path / "signposted" / "ops_perf_results.csv"
         newer = tmp_path / "signposted" / "ops_perf_results_newer.csv"
-        newer.write_text((tmp_path / "signposted" / "ops_perf_results.csv").read_text())
-        os.utime(newer, ns=(time.time_ns() + 10**9, time.time_ns() + 10**9))
+        newer.write_text(original.read_text())
+        # Touching the original would change the source `_require_same_source`
+        # compares and refuse for the wrong reason, so only `newer` moves.
+        _touch_after(original, newer, (time.time() + 1, time.time() + 1))
+        assert newest_ops_perf_file(original.parent) == newer
 
         with pytest.raises(ValueError, match="has changed since it was first read"):
             tools.top_ops(registry, handle)
@@ -2219,7 +2336,112 @@ class TestZoneSummary:
         assert PREAMBLE.startswith("ARCH")
 
 
+def _zone_log(tmp_path, zones):
+    """A loaded log with one paired zone for each ``(zone, risc, cycles)``."""
+    rows = [
+        row
+        for zone, risc, cycles in zones
+        for row in (
+            modern_row(1, 1, 1, risc, 0, zone, "ZONE_START"),
+            modern_row(1, 1, 1, risc, cycles, zone, "ZONE_END"),
+        )
+    ]
+    registry = ReportRegistry()
+    write_device_log(tmp_path, MODERN_HEADER, rows)
+    load_report(registry, performance_path=str(tmp_path))
+    return registry
+
+
+def _zone_timings(tmp_path, zones, **arguments):
+    return tools.zone_timings(_zone_log(tmp_path, zones), "report-1", **arguments)
+
+
 class TestZoneTimingsTool:
+    def test_a_name_too_long_to_show_is_counted_rather_than_listed(self, tmp_path):
+        result = _zone_timings(
+            tmp_path,
+            [
+                ("Z" * (tools.MAX_ZONE_NAME_LENGTH + 1), "BRISC", 9000),
+                ("MATMUL", "R" * (tools.MAX_RISC_NAME_LENGTH + 1), 8000),
+                ("MATMUL", "BRISC", 500),
+                ("READ", "NCRISC", 100),
+            ],
+            limit=1,
+        )
+
+        # The costliest two are not listed, so they do not use up the limit, and
+        # READ is listable though past it.
+        assert [(zone["zone"], zone["risc"]) for zone in result["zones"]] == [
+            ("MATMUL", "BRISC")
+        ]
+        assert result["returned"] == 1
+        assert result["zones_unlisted_too_long"] == 2
+
+    def test_a_name_too_long_to_show_past_the_limit_is_still_counted(self, tmp_path):
+        result = _zone_timings(
+            tmp_path,
+            [
+                ("MATMUL", "BRISC", 9000),
+                ("READ", "NCRISC", 500),
+                ("Z" * (tools.MAX_ZONE_NAME_LENGTH + 1), "BRISC", 100),
+            ],
+            limit=1,
+        )
+
+        assert [(zone["zone"], zone["risc"]) for zone in result["zones"]] == [
+            ("MATMUL", "BRISC")
+        ]
+        assert result["zones_unlisted_too_long"] == 1
+
+    def test_an_entry_with_both_names_too_long_is_counted_once(self, tmp_path):
+        result = _zone_timings(
+            tmp_path,
+            [
+                (
+                    "Z" * (tools.MAX_ZONE_NAME_LENGTH + 1),
+                    "R" * (tools.MAX_RISC_NAME_LENGTH + 1),
+                    9000,
+                ),
+                ("MATMUL", "BRISC", 500),
+            ],
+        )
+
+        assert result["zones_unlisted_too_long"] == 1
+        assert result["returned"] == 1
+
+    def test_a_huge_name_does_not_reach_the_answer(self, tmp_path):
+        """A crafted log's names are its own text, and one could fill the answer."""
+        result = _zone_timings(
+            tmp_path, [("Z" * 100_000, "BRISC", 9000), ("MATMUL", "BRISC", 500)]
+        )
+
+        assert result["zones_unlisted_too_long"] == 1
+        assert len(json.dumps(result)) < 2_000
+
+    def test_names_at_the_bounds_are_listed(self, tmp_path):
+        zone = "Z" * tools.MAX_ZONE_NAME_LENGTH
+        risc = "R" * tools.MAX_RISC_NAME_LENGTH
+
+        result = _zone_timings(tmp_path, [(zone, risc, 500)])
+
+        assert [(entry["zone"], entry["risc"]) for entry in result["zones"]] == [
+            (zone, risc)
+        ]
+        assert "zones_unlisted_too_long" not in result
+
+    def test_a_bad_limit_is_refused_before_the_log_is_read(self, tmp_path):
+        registry = _zone_log(tmp_path, [("MATMUL", "BRISC", 500)])
+
+        with (
+            patch.object(DeviceLogProfilerQueries, "read_capture_metadata") as metadata,
+            patch.object(DeviceLogProfilerQueries, "query_zone_summary") as summary,
+            pytest.raises(ValueError, match="limit must be a whole number"),
+        ):
+            tools.zone_timings(registry, "report-1", limit="abc")
+
+        metadata.assert_not_called()
+        summary.assert_not_called()
+
     def test_cycles_are_converted_with_the_capture_clock(self, tmp_path):
         registry = ReportRegistry()
         write_device_log(tmp_path, MODERN_HEADER, ZONED_ROWS)
@@ -2347,7 +2569,9 @@ class TestTransport:
             "op_breakdown",
             "program_cache",
             "zone_timings",
+            "zone_intervals",
             "core_spread",
+            "noc_congestion",
             "diff_reports",
             "find_operations",
             "operation_detail",
@@ -2357,6 +2581,9 @@ class TestTransport:
             "errors",
             "dram_fallbacks",
             "l1_peak",
+            "late_deallocations",
+            "critical_path",
+            "subgraph_between",
         }
         assert all(
             tool["inputSchema"]["type"] == "object"

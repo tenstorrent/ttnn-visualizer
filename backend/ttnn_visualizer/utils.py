@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 LAST_SYNCED_FILE_NAME = ".last-synced"
 
-# TTNN profiler report directory may contain a single config.json or per-rank
+# TTNN memory report directory may contain a single config.json or per-rank
 # config_<n>_of_<world_size>.json files from multi-host runs. The first number is
 # 1-based (1..world_size), not MPI rank; logical rank == that number minus one.
 PROFILER_CONFIG_BASENAME = "config.json"
@@ -263,7 +263,7 @@ def pick_profiler_config_paths(report_dir: Path) -> List[Path]:
 
 
 def read_profiler_report_name(report_dir: Path) -> Optional[str]:
-    """Read report_name from profiler config(s), or None if absent / unreadable."""
+    """Read report_name from memory report config(s), or None if absent / unreadable."""
     paths = pick_profiler_config_paths(report_dir)
     if not paths:
         return None
@@ -272,7 +272,7 @@ def read_profiler_report_name(report_dir: Path) -> Optional[str]:
         with open(primary, encoding="utf-8") as f:
             data = json.load(f)
     except (OSError, json.JSONDecodeError) as e:
-        logger.warning("Failed to read profiler config %s: %s", primary, e)
+        logger.warning("Failed to read memory report config %s: %s", primary, e)
         return None
     return data.get("report_name") if isinstance(data, dict) else None
 
@@ -281,7 +281,7 @@ def read_profiler_config_api_payload(
     report_dir: Path, logical_rank: int = 0
 ) -> tuple[Optional[Dict[str, Any]], Optional[str]]:
     """
-    Read one profiler config file for /api/config.
+    Read one memory report config file for /api/config.
 
     Same JSON shape as a standalone ``config.json``: the parsed object from that
     file only.
@@ -305,7 +305,7 @@ def read_profiler_config_api_payload(
             with open(single, encoding="utf-8") as f:
                 data = json.load(f)
         except (OSError, json.JSONDecodeError) as e:
-            logger.warning("Failed to read profiler config %s: %s", single, e)
+            logger.warning("Failed to read memory report config %s: %s", single, e)
             return None, "parse_error"
         if not isinstance(data, dict):
             return None, "parse_error"
@@ -334,7 +334,7 @@ def read_profiler_config_api_payload(
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
     except (OSError, json.JSONDecodeError) as e:
-        logger.warning("Failed to read profiler config %s: %s", path, e)
+        logger.warning("Failed to read memory report config %s: %s", path, e)
         return None, "parse_error"
     if not isinstance(data, dict):
         return None, "parse_error"
@@ -724,7 +724,7 @@ def remote_host_report_path(
 
 
 def is_valid_profiler_report_dir(directory: Path) -> bool:
-    """True when the folder has the files needed to load a memory/profiler report."""
+    """True when the folder has the files needed to load a memory report."""
     return all((directory / name).is_file() for name in PROFILER_REPORT_REQUIRED_FILES)
 
 
@@ -792,14 +792,14 @@ class PathResolver:
             return local_dir / dir_name
 
     def get_profiler_path(self, profiler_name: str, remote_connection=None):
-        """Get the full path to a profiler report's db.sqlite file."""
+        """Get the full path to a memory report's db.sqlite file."""
         if not profiler_name:
             return ""
 
         base_path = self.get_base_report_path("profiler", remote_connection)
 
         if self.is_direct_report_mode and not base_path.exists():
-            logger.warning(f"TT-Metal profiler reports not found: {base_path}")
+            logger.warning(f"TT-Metal memory reports not found: {base_path}")
             return ""
 
         profiler_path = base_path / profiler_name
@@ -856,7 +856,7 @@ class PathResolver:
 
         messages = []
         if not profiler_base.exists():
-            messages.append(f"Profiler reports directory not found: {profiler_base}")
+            messages.append(f"Memory reports directory not found: {profiler_base}")
         if not performance_base.exists():
             messages.append(
                 f"Performance reports directory not found: {performance_base}"
@@ -1051,7 +1051,7 @@ def get_available_reports(current_app):
 
     reports = {"profiler": [], "performance": []}
 
-    # Get profiler reports
+    # Get memory reports
     try:
         profiler_base = resolver.get_base_report_path("profiler")
         if profiler_base.exists():
@@ -1065,7 +1065,7 @@ def get_available_reports(current_app):
                         }
                     )
     except Exception as e:
-        logger.warning(f"Error reading profiler reports: {e}")
+        logger.warning(f"Error reading memory reports: {e}")
 
     # Get performance reports
     try:
@@ -1278,7 +1278,8 @@ def update_last_synced(directory: Path) -> None:
         file.write(str(timestamp))
 
 
-# Older reports namespace the type as `tt::tt_metal::MemoryConfig(...)`.
+# Older reports namespace the type as `tt::tt_metal::MemoryConfig(...)`. Mirrored
+# by `memoryConfigPattern` in src/functions/parseMemoryConfig.ts; change both.
 MEMORY_CONFIG_PATTERN = re.compile(r"(?:tt::tt_metal::)?MemoryConfig\((.*)\)$")
 MEMORY_LAYOUT_PATTERN = re.compile(r"memory_layout=([A-Za-z_:]+)")
 MEMORY_BUFFER_TYPE_PATTERN = re.compile(r"buffer_type=BufferType::([A-Z0-9_]+)")

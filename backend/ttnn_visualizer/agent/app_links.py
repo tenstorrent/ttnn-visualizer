@@ -6,7 +6,7 @@
 
 An `app_link` (or an `app_link_template` for a list) names the report by its
 directories, and the app opens them when the link is followed, as
-`ttnn-visualizer --profiler-path` does. So a link lands on the report the agent
+`ttnn-visualizer --memory-report-path` does. So a link lands on the report the agent
 read rather than on whatever the reader's tab has open, and the server itself
 still makes no request and writes nothing.
 

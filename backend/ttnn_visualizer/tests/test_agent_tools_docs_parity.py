@@ -21,7 +21,13 @@ from ttnn_visualizer.agent import report_diff, server, tools
 from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_LIMIT
 from ttnn_visualizer.agent.handles import MAX_SCOPED_DIFF_TOTALS, ReportRegistry
 from ttnn_visualizer.agent.perf_detail import DetailGroup
-from ttnn_visualizer.csv_queries import MAX_LISTED_SIGNPOSTS
+from ttnn_visualizer.csv_queries import (
+    ACCUMULATE_FLUSH_ZONES,
+    L1_ZONE_MARKER_CAPACITY,
+    MAX_LISTED_SIGNPOSTS,
+    MAX_ZONE_TIMELINES,
+    PROFILER_ZONE_PREFIX,
+)
 from ttnn_visualizer.tests.docs_parity import reject_duplicates
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -179,11 +185,27 @@ def test_the_page_carries_the_core_spread_caveats():
     assert "`device_time` is the mean across devices" in page
 
 
+def test_the_page_carries_the_zone_intervals_caveats():
+    """The marker limit is stated in numbers and the flush by its zone's prefix, so
+    nothing else ties them to the code; and devices never pool."""
+    page = " ".join(_read(_AGENT_DOCS).split())
+
+    assert f"holds {L1_ZONE_MARKER_CAPACITY} zone markers per kernel run" in page
+    assert f"at most {L1_ZONE_MARKER_CAPACITY // 2} zones" in page
+    assert f"zones, named `{PROFILER_ZONE_PREFIX}…`" in page
+    assert all(f"`{name}`" in page for name in ACCUMULATE_FLUSH_ZONES)
+    assert f"longer than {tools.MAX_ZONE_NAME_LENGTH} characters" in page
+    assert f"past the {MAX_ZONE_TIMELINES:,} core-RISC timelines" in page
+    assert "never pooled, since each runs its own clock" in page
+
+
 def test_the_detailed_row_cap_the_page_states_is_the_enforced_one():
     """The page states both caps as numbers, so nothing else ties them to the code."""
     page = " ".join(_read(_AGENT_DOCS).split())
 
     assert f"capped at {MAX_DETAILED_LIMIT} rather than {MAX_LIMIT}" in page
+    # `subgraph_between`'s tensor list, which the docs quote as a number.
+    assert f"or {MAX_DETAILED_LIMIT}, whichever is smaller" in page
 
 
 def test_the_signpost_name_limit_the_page_states_is_the_enforced_one():
@@ -191,6 +213,16 @@ def test_the_signpost_name_limit_the_page_states_is_the_enforced_one():
     page = " ".join(_read(_AGENT_DOCS).split())
 
     assert f"a name longer than {tools.MAX_SIGNPOST_NAME_LENGTH} characters" in page
+
+
+def test_the_zone_tools_name_bounds_the_page_states_are_the_enforced_ones():
+    """The page states both bounds as numbers, so nothing else ties them to the code."""
+    page = " ".join(_read(_AGENT_DOCS).split())
+
+    assert (
+        f"a zone name longer than {tools.MAX_ZONE_NAME_LENGTH} characters or a RISC "
+        f"name longer than {tools.MAX_RISC_NAME_LENGTH} characters"
+    ) in page
 
 
 @pytest.mark.parametrize(

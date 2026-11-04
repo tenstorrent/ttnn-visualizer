@@ -14,3 +14,7 @@ onlyBuiltDependencies:
   - es5-ext
   - esbuild
   - unrs-resolver
+
+overrides:
+  # uuid is installed as a peer of vis-data/vis-network; 13.0.0 is GHSA-w5hq-g745-h8pq.
+  uuid: ^13.0.1
