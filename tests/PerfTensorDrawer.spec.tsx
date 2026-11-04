@@ -8,6 +8,7 @@ import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PerfTensorDrawer from '../src/components/performance/PerfTensorDrawer';
 import { TypedPerfTableRow } from '../src/model/PerfTable';
 import { OpType } from '../src/definitions/Performance';
+import { NO_LINKED_OPERATION_TEXT } from '../src/definitions/PerfTable';
 import ROUTES from '../src/definitions/Routes';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { useOperationsList } from '../src/hooks/useAPI';
@@ -114,7 +115,9 @@ describe('PerfTensorDrawer', () => {
             </TestProviders>,
         );
 
-        expect(screen.getByText('No linked profiler operation for this row.')).toBeInTheDocument();
+        expect(NO_LINKED_OPERATION_TEXT).toMatch(/memory report operation/i);
+        expect(NO_LINKED_OPERATION_TEXT).not.toMatch(/\.$/);
+        expect(screen.getByText(`${NO_LINKED_OPERATION_TEXT}.`)).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Memory Details' })).not.toBeInTheDocument();
         expect(screen.queryByRole('link', { name: /matmul_op/i })).not.toBeInTheDocument();
     });

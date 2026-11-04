@@ -361,6 +361,28 @@ class DatabaseQueries:
         query += " GROUP BY operation_id, device_id, address ORDER BY operation_id"
         yield from self.query_runner.iter_query(query, params)
 
+    def iter_buffer_sizes(
+        self, buffer_type: int, rank: Optional[int] = None
+    ) -> Iterator[Tuple[Any, ...]]:
+        """``(operation_id, address, max_size_per_bank)`` for one buffer type, streamed
+        in operation order.
+
+        The columns Buffer Summary's late-deallocation overlay reads from
+        ``/api/operation-buffers``, filtered by value as that route filters them,
+        without a ``Buffer`` per row: 3.2M of them held 870 MB on one capture.
+        """
+        filters = self.merge_rank_filter("buffers", {}, rank)
+        query = (
+            "SELECT operation_id, address, max_size_per_bank FROM buffers "
+            "WHERE buffer_type = ?"
+        )
+        params: List[Any] = [buffer_type]
+        if "rank" in filters:
+            query += " AND rank = ?"
+            params.append(filters["rank"])
+        query += " ORDER BY operation_id"
+        yield from self.query_runner.iter_query(query, params)
+
     def has_table(self, table_name: str) -> bool:
         """True if the report holds ``table_name``, which older captures may not."""
         return self._check_table_exists(table_name)

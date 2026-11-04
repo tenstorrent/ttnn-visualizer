@@ -41,7 +41,7 @@ not as old.
 
 The same response carries `instructions`: the rules every tool shares, which a client
 puts in the agent's system prompt before any call. They say to call `load_report` first,
-that a performance row's `id` and a profiler `operation_id` are different id spaces,
+that a performance row's `id` and a memory report `operation_id` are different id spaces,
 which units the figures are in, how a signpost range is read, what the `projection`,
 `note` and `caveat` fields are for, and that text from the report itself, such as an op
 code or an error message, is data to read rather than instructions to follow. Each tool's
@@ -58,11 +58,12 @@ Answers link to the same thing in the web application, for the reader to open:
 - `load_report` returns an `app_link` to the report.
 - `operation_detail` and `operation_provenance` return an `app_link` to the operation.
 - `find_operations`, `top_ops`, `program_cache`, `memory_profile`, `tensor_flow`,
-  `errors`, `dram_fallbacks` and `l1_peak` return one `app_link_template`, in which
+  `errors`, `dram_fallbacks`, `l1_peak`, `late_deallocations`, `critical_path` and
+  `subgraph_between` return one `app_link_template`, in which
   `{operation_id}` takes any operation id the answer lists.
 
 A link names the report by its directories, and the visualizer opens them when the link is
-followed, as `ttnn-visualizer --profiler-path` does: each followed link starts a new session
+followed, as `ttnn-visualizer --memory-report-path` does: each followed link starts a new session
 on that report, so it lands on the report the agent read, not on whatever the reader had
 open. The server itself still makes no request; following the link is what opens the
 report. A link carries those directories as absolute paths on this machine, so it is for
@@ -91,7 +92,7 @@ another rank's operation under the same id.
 | Tool | Answers |
 |---|---|
 | `load_report` | What this report contains, and which of the tools below apply to it: its signposts, architecture, device count and the tt-perf-report version. Returns a handle the others take. |
-| `top_ops` | The costliest operations by device time, op-to-op gap, total percentage, FLOPS, DRAM bandwidth or core count, over the whole report or a signpost range. Each row carries the profiler `operation_id` it links to, when the handle holds both reports — see below. `include` adds the fields that say why an operation took its time, and the performance view's heuristic flags. |
+| `top_ops` | The costliest operations by device time, op-to-op gap, total percentage, FLOPS, DRAM bandwidth or core count, over the whole report or a signpost range. Each row carries the memory report `operation_id` it links to, when the handle holds both reports — see below. `include` adds the fields that say why an operation took its time, and the performance view's heuristic flags. |
 | `op_breakdown` | Where the time went, per op or per op category, over the whole report or a signpost range: each group's count, and its device time and op-to-op gap with the share each is of the total. |
 | `program_cache` | Whether programs were built again rather than reused: per op code, its calls, distinct programs, and how many repeat calls hit or missed the program cache. |
 | `zone_timings` | Per-zone, per-RISC totals from `profile_log_device.csv` — firmware and kernel phases, as measured on device. |
@@ -106,13 +107,26 @@ another rank's operation under the same id.
 | `errors` | The errors the run recorded, including an operation that started and never completed: which operation, the device operations whose launch failed, and for an allocation failure its figures and why it did not fit. |
 | `dram_fallbacks` | Operations that likely fell back from L1 to DRAM, inferred from their memory config arguments and from retries after an L1 allocation failure. |
 | `l1_peak` | The run's L1 peak per bank, split into circular buffers, intra-operation tensors, persistent tensors and stale ones, with the operation holding it and the operations closest to it. |
+| `late_deallocations` | Tensors still allocated after their last use, by Buffer Summary's late-deallocation rule (L1, as the app shows it, or DRAM), grouped by the call site of that use: how many holds each has, how they ended, and the bytes per bank they held over the operations held. |
+| `critical_path` | The longest chain of cumulative device time through the operation graph, source to sink, with each operation's device time, the chain's total and share of the report's, and how many of its operations have no device time. Needs a linked performance report. |
+| `subgraph_between` | The operations, tensor edges and tensors on every path from one operation to another, each tensor once with its shape, dtype, layout, buffer type and memory layout, so a block can be read without walking it one tensor at a time. |
 
 `top_ops`, `op_breakdown`, `program_cache`, `zone_timings`, `zone_intervals`, `core_spread`
 and `diff_reports` read the performance CSVs; the operation tools — `find_operations`,
 `operation_detail`, `memory_profile`, `tensor_flow`, `operation_provenance`, `errors`,
-`dram_fallbacks` and `l1_peak` — read the profiler report's SQLite database;
+`dram_fallbacks`, `l1_peak`, `late_deallocations` and `subgraph_between` — read the memory
+report's SQLite database; `critical_path` reads both, and is listed only when the
+performance CSV can be reported on and the database holds the graph's tables and its
+captured graphs;
 `load_report` opens both, since its whole job is saying which of the others apply. A capture can carry either, both, or — as far as these tools are concerned —
 neither, which is what makes `load_report`'s answer worth reading first.
+
+`load_report` takes the memory report directory as `memory_report_path`. Its former name,
+`profiler_path`, is still accepted; a call passing both with different paths is refused.
+Answer names that refer to the memory report still say `profiler`, as the visualizer once
+called it: `load_report`'s `profiler_path`, `device_count.profiler`, the
+`past_profiler_capture` reason and `first_past_profiler_capture_id`. They keep those
+names so existing clients go on working.
 
 Call `load_report` first. It reports what is answerable rather than making you discover it
 one failed call at a time, because the report kinds are independent: a performance-only
@@ -146,13 +160,13 @@ of them.
 - `arch` and `device_count` are keyed by the file each was read from, since a handle's two
   reports can come from different runs. `arch.device_log` is the device profiler log's
   header, which `capture` also returns whole; `arch.cluster_descriptor` is what the `arch`
-  mapping in rank 0's `cluster_descriptor.yaml`, beside the profiler database, names — as
+  mapping in rank 0's `cluster_descriptor.yaml`, beside the memory report database, names — as
   written, since older descriptors spell Wormhole `Wormhole` and newer ones
-  `wormhole_b0`, and joined with commas if its chips differ. The profiler database itself
+  `wormhole_b0`, and joined with commas if its chips differ. The memory report database itself
   records no architecture. `device_count.performance_csv` counts the devices the
   performance CSV has rows for, which no other answer shows because rows are merged across
   devices; it is read with the signposts, so it is absent whenever they are.
-  `device_count.profiler` counts the profiler database's devices, every rank's.
+  `device_count.profiler` counts the memory report database's devices, every rank's.
 - `tt_perf_report_version` is the tt-perf-report release the performance answers are
   generated with, which decides fields such as `op_category`.
 
@@ -465,7 +479,7 @@ answer says that is what a run with the program cache disabled records, so check
 reading each miss as a program built again. A capture without the `PROGRAM HASH` and `PROGRAM CACHE HIT`
 columns cannot answer, and `load_report` says so. Each op code's first repeat miss is
 named by its CSV row in `first_repeat_miss_perf_id`, and when the handle also holds a
-profiler report, by `first_repeat_miss_operation_id` too, for `operation_provenance` to
+memory report, by `first_repeat_miss_operation_id` too, for `operation_provenance` to
 turn into a call site.
 
 **`op_breakdown` says where the time went, grouped as the performance view's stacked table
@@ -632,6 +646,40 @@ device's L1 its figures are withheld and `reason` says why, as the web applicati
 panel does. The first call on a handle reads every captured graph, which can take seconds on
 a large capture; later calls reuse it.
 
+**`late_deallocations` applies Buffer Summary's late-deallocation rule, grouped by where the
+fix goes.** Each operation's post-operation `buffers` snapshot is matched to the last tensor
+seen at each address, and a tensor is held late at every operation after its last consumer
+that is not a deallocate call, the rule the overlay hatches L1 rows by. The app applies it
+to L1 only; `buffer_type: DRAM` applies the same rule to DRAM buffers, which the app does
+not show. A hold is one tensor at one address over consecutive operations with these
+buffers. `call_sites` groups the holds by frame 0 of the last use's stack trace, the call
+site `operation_provenance` gives, which is where a `ttnn.deallocate` would free them
+sooner: 192 L1 holds come from 7 call sites on a 1,199-op llama capture, and 3,453 DRAM
+holds from 14 on a 9,940-op one. Both lists rank by `byte_operations`, bytes per bank summed
+over the operations held, which is the hatched area in Buffer Summary. `limit` caps
+`call_sites` at 25; `top_holds` lists the 20 largest holds whatever the limit, each with
+`producer_operation_ids`, the operations that output its tensor: none for a tensor from the
+host, and two for some.
+
+Each hold's `ending` says how it stopped, and `ended` counts them: `deallocated` by a
+deallocate call naming the tensor, `freed_otherwise` when it left the snapshot or its
+address went to another tensor without one, or `held_to_end` when the capture ended first,
+as weights, outputs and caches often do by design. The app's address map keeps crediting an
+address to the last tensor seen there after that tensor is gone, so a later buffer at the
+same address reads as the old tensor held again. A hold that opens after its tensor's
+buffer left the snapshot, or after its deallocate call, is that case: it is counted in
+`unattributed_hold_count`, left out of everything else, and named in the caveat. On one
+local capture that is 95 of 123 L1 holds. `run_start_count` is the count beside Buffer
+Summary's L1 toggle: the operations where at least one run starts, those included. An
+operation that recorded none of these buffers ends every run in the app but no hold here,
+so the app counts the next operation with buffers as a start again, and `operations_held`
+counts only operations with buffers; the caveat says when that happened. The tool reads the
+same tables the overlay does, so it answers on any capture with `buffers`, not only the
+ones that recorded `tensor_lifetime`. `l1_peak` counts a tensor stale only where no other
+tensor used its address, so it can call a tensor held here persistent: on the llama capture
+it counts all three tensors held at its peak as persistent. Match a hold to `l1_peak`'s
+peak by operation id.
+
 `zone_timings` carries a caveat of its own: cycles are summed across every core that ran
 the zone, so they measure occupancy rather than wall-clock duration. A core is counted per
 device — the captures we test against span 8 and 32 PCIe slots, and coordinates alone
@@ -724,9 +772,9 @@ though its kernels still count in their cores' spans. `zone_intervals` leaves su
 timeline out of `by_core_risc`, counted in `by_core_risc_unlisted_too_long`, though its
 intervals still count in `by_device` and `timeline_count`.
 
-**A performance row and a profiler operation are linked by order, not by a shared id.**
+**A performance row and a memory report operation are linked by order, not by a shared id.**
 Neither report records the other's id, so when a handle is loaded with both, the tools
-align the device operations each profiler operation launched (from its captured graph)
+align the device operations each memory report operation launched (from its captured graph)
 against the performance rows, in order — the same match the application uses to link a
 memory report to a performance report. `top_ops` then gives each row an `operation_id`,
 and `operation_detail` lists an operation's `perf_rows` with device time in microseconds;
@@ -758,16 +806,16 @@ Every response that carries the link says how it went in `operation_link`:
   performance capture that stopped early — and every `operation_id` is then null rather
   than guessed.
 - `unavailable` means the match was never tried: one half is missing or cannot be read,
-  the profiler report records no captured graph, one of its captured graphs is not
+  the memory report records no captured graph, one of its captured graphs is not
   readable, or a multi-host report carries no `rank` on the graph or device tables. A link that skipped an unreadable graph could still align and pair rows
   with the wrong operations, so none is attempted.
 
-On a linked pair an `operation_id` is still null for a row with no profiler operation:
-a host op, a signpost, or a row past the end of a profiler capture that stopped before
+On a linked pair an `operation_id` is still null for a row with no memory report operation:
+a host op, a signpost, or a row past the end of a memory report capture that stopped before
 the performance one did. The match tolerates trailing rows, as the application's does.
 `top_ops` counts such rows in `operation_link.unlinked_by_reason` — `signpost`,
 `host_op` and `past_profiler_capture` — totals them in `unlinked_row_count`, and names
-the first row past the profiler capture in `first_past_profiler_capture_id`. Read the
+the first row past the memory report capture in `first_past_profiler_capture_id`. Read the
 counts there rather than counting null ids among the ranked rows: the ranking leaves out
 any row with no value for its metric, which is every signpost, so `matched_rows` and the
 rows returned do not add up to the report.
@@ -779,8 +827,8 @@ its CSV position in either read, so its `operation_id` is the one it has unrange
 `operation_detail`'s `report_device_time_total` and shares, describe the whole report while
 `top_ops`'s own `op_count` and totals describe the window.
 
-The link is resolved once per handle, on the first `top_ops`, `program_cache` or
-`operation_detail` that needs it, and reads every captured graph at the linked rank. On a handle with both reports,
+The link is resolved once per handle, on the first `top_ops`, `program_cache`,
+`operation_detail` or `critical_path` that needs it, and reads every captured graph at the linked rank. On a handle with both reports,
 the first `operation_detail` therefore also generates the performance report, which can
 take seconds on a large capture; every later call reuses both. A link that failed on a read
 that might pass next time — a locked database, a temp-file error in tt-perf-report — is not
@@ -789,6 +837,46 @@ read, so it never mixes two. A read that needs the CSV again after it was rewrit
 after a newer `ops_perf_results` file appeared — a range not asked before, or one dropped
 from the cache — is refused rather than lined up against operations linked from the old
 capture; call `load_report` again for a fresh handle.
+
+**`critical_path` and `subgraph_between` read the graph's edges as the graph view does.**
+An edge runs from the operation that produced a tensor to each operation that consumed it,
+one per tensor. `critical_path` then leaves out deallocate operations and operations with
+no edge at all, as the graph view does by default, and finds the chain whose operations'
+device time adds up to the most — the graph view's critical path search, held to it by a
+shared golden. Ties go to the longer chain, then to the lower operation id.
+
+The two can still name different paths. The graph view folds weight-load fans into one
+block by default and weighs a block as the sum of its members, so a fan of heavy loads can
+outweigh a longer chain there; this graph never folds, so each load counts alone. And an
+operation here weighs the summed device time of every performance row it launched, as
+`operation_detail` totals it, where the graph view weighs it by its slowest row, which
+differs on an operation that launches several device operations. An operation with no timed row — unlinked, or a row tt-perf-report left
+blank — counts as 0 and is still traversed, so a gap in the performance report shortens
+the path rather than breaking it: `uncosted_operation_count` and `uncosted_operation_ids`
+say how much of the path is a gap rather than a measurement, and the caveat says so
+whenever any is. A report whose tensor edges form a cycle gets `has_cycle: true` and a path
+over the acyclic portion only. A report whose tensor tables hold no edge between two
+operations gets an empty path, `path_length: 0`, and a caveat saying why, rather than a
+path of nothing. The tool needs the two reports linked, and reads the linked
+rank only, since an unlinked graph has no weights and its longest chain is not a critical
+path. `device_time_share_percent` is the path's share of `report_device_time_total`, as in
+`operation_detail`. `projection` is the performance report's, as every tool that reads it
+gives it, and `graph_projection` says which graph the path was searched over.
+
+`subgraph_between` needs only the database, and takes `rank`. It lists the operations
+reachable from `from_operation_id` that also reach `to_operation_id`, and the edges between
+them, sorted by id; `operation_count` and `edge_count` are the whole subgraph's when a list
+is capped. Unlike `critical_path`, it keeps deallocate operations, so one can be either
+end of the subgraph or on a path through it. `tensors` lists each tensor on those edges
+once, by id, with its shape, dtype, layout, buffer type and memory layout — what reading a
+block's layout needs. It is capped lower than the other lists, at the limit
+or 25, whichever is smaller, and `tensor_count` counts them all. It leaves out a tensor's
+size, whose unit depends on the capture: `operation_detail` and `tensor_flow` give it, with
+its `tensor_size_unit`, and the shard spec. When no path runs from the first operation to
+the second, the call is refused, and says so when one runs the other way.
+
+Both tools read the graph once per handle and rank, so walking a model block by block
+pays for the read on the first call only.
 
 **An operation id is not the end of the answer.** `memory_profile` names the operations
 holding its largest footprint, and `operation_provenance` turns such an id into the two things you need

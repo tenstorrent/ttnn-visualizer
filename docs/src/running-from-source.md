@@ -44,7 +44,7 @@ This sets `DEBUG=true`, which runs gunicorn with `--reload` and logs at debug le
 When both the frontend and backend are running you can access the app on [http://localhost:5173](http://localhost:5173), but an alternative local URI may be provided in the terminal when running `pnpm run dev`.
 
 ## CLI arguments
-* `--profiler-path` - specify the local path to the folder containing profiler data
+* `--memory-report-path` - specify the local path to the folder containing the memory report (formerly `--profiler-path`, which still works but is deprecated)
 * `--performance-path` - specify the local path to the folder containing performance data
 * `--tt-metal-home` - specify the path to the TT Metal repo when running directly on the machine where reports are being generated
 * `--host` - set the host to bind the backend server to

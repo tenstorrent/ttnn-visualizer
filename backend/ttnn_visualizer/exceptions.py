@@ -173,9 +173,9 @@ class ReportNotLoadedException(Exception):
 
 
 class ProfilerReportNotLoadedException(ReportNotLoadedException):
-    """Instance has no memory profiler database path configured."""
+    """Instance has no memory report database path configured."""
 
-    DEFAULT_MESSAGE = "No profiler report loaded for this instance"
+    DEFAULT_MESSAGE = "No memory report loaded for this instance"
 
 
 class PerformanceReportNotLoadedException(ReportNotLoadedException):

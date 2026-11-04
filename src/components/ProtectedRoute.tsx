@@ -46,7 +46,7 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
 
     if (instance && !instance?.active_report?.profiler_name && needsProfiler) {
         // eslint-disable-next-line no-console
-        console.info('No profiler report found, redirecting to home.', instance);
+        console.info('No memory report found, redirecting to home.', instance);
 
         return (
             <Navigate

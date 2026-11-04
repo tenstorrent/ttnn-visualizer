@@ -40,7 +40,7 @@ const refuse = (url: URL, reason: string): false => {
 
 /**
  * Opens the report an agent tool's link names by its directories (#2047). The server makes an
- * instance on them, as `ttnn-visualizer --profiler-path` does, and the tab reloads onto it.
+ * instance on them, as `ttnn-visualizer --memory-report-path` does, and the tab reloads onto it.
  * @returns whether the tab is reloading, so nothing should render.
  */
 export const openReportFromLink = async (
