@@ -276,6 +276,16 @@ In component stylesheets, prefer styling classes we own (for example wrapper or 
 
 This keeps styles resilient to Blueprint markup changes and avoids cross-component side effects.
 
+### Blueprint theming layers
+
+Blueprint 6.7+ draws most dark-theme colours from `--bp-*` design tokens and ignores many of the Sass variables we configure, so keeping the app's look on 6.21 takes three layers, emitted in this order:
+
+1. **Configuration** — the `@use '@blueprintjs/core/src/blueprint.scss' with (…)` block in `src/scss/_blueprintjs.scss`. Change a colour here first when Blueprint still reads the variable.
+2. **Parity** — `src/scss/_blueprintjs-parity.scss` restores Blueprint 6.6's dark-theme rules where 6.21 stopped reading the configuration. It copies 6.6's selectors and rule order so specificity is unchanged, and `tests/blueprintParityStyles.spec.ts` pins a sample of its 6.6 values. Keep it a faithful copy: don't put app-specific changes here.
+3. **App deviations** — the rules at the end of `src/scss/_blueprintjs.scss`, after the parity layer, for anything the app deliberately does differently from Blueprint.
+
+The Blueprint packages are pinned to `~` ranges and upgraded together. On a minor bump, re-check the parity layer against the new release (the spec's version check fails until you do), and update the version noted in its header. #2252 tracks replacing the parity layer with theming through the design tokens.
+
 ### Stylesheet imports go through the `styles/` alias
 
 The `styles/` alias is wired up in three places that must stay in sync — `tsconfig.json`, `vite.config.ts`, and `vitest.config.ts`. Relative paths still resolve, but they drift when files move and look noisy in long import blocks.

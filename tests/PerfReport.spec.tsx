@@ -27,6 +27,7 @@ import {
 import { formatDurationBucketRange } from '../src/functions/formatDurationBucketRange';
 import { AtomProviderInitialValues } from './helpers/atomProvider';
 import { TestProviders } from './helpers/TestProviders';
+import openMultiSelect from './helpers/openMultiSelect';
 import { DEFAULT_MAX_CORES } from '../src/functions/getCoreCount';
 
 vi.mock('../src/hooks/useAPI.tsx', () => ({
@@ -394,7 +395,7 @@ describe('PerformanceReport filters resolved on aligned rows', () => {
         // Normalised, the unmatched ReshapeView row becomes a placeholder and is not offered, so
         // switch off first and pick it from the select.
         setNormalisation(false);
-        fireEvent.click(screen.getByPlaceholderText('Select Op Codes...'));
+        await openMultiSelect('Select Op Codes...');
         // Wait for the option itself: the popover's portal can mount before its items do.
         fireEvent.click(await screen.findByRole('checkbox', { name: 'ReshapeView' }, WAIT_FOR_OPTIONS));
 
@@ -691,7 +692,7 @@ describe('PerformanceReport duration bucket options', () => {
 
     /** The options only exist while the MultiSelect popover is open, and render after its portal. */
     const openDeviceTimeSelect = async () => {
-        fireEvent.click(screen.getByPlaceholderText(PERF_DURATION_BUCKET_FILTER_PLACEHOLDER));
+        await openMultiSelect(PERF_DURATION_BUCKET_FILTER_PLACEHOLDER);
         // The page's switches are checkboxes too, so wait for a bucket option specifically.
         await screen.findAllByRole('checkbox', { name: /µs/ }, WAIT_FOR_OPTIONS);
     };

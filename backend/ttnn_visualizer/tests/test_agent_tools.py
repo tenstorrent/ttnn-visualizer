@@ -2265,6 +2265,22 @@ class TestZoneTimingsTool:
         assert result["returned"] == 1
         assert result["zones_unlisted_too_long"] == 2
 
+    def test_a_name_too_long_to_show_past_the_limit_is_still_counted(self, tmp_path):
+        result = _zone_timings(
+            tmp_path,
+            [
+                ("MATMUL", "BRISC", 9000),
+                ("READ", "NCRISC", 500),
+                ("Z" * (tools.MAX_ZONE_NAME_LENGTH + 1), "BRISC", 100),
+            ],
+            limit=1,
+        )
+
+        assert [(zone["zone"], zone["risc"]) for zone in result["zones"]] == [
+            ("MATMUL", "BRISC")
+        ]
+        assert result["zones_unlisted_too_long"] == 1
+
     def test_an_entry_with_both_names_too_long_is_counted_once(self, tmp_path):
         result = _zone_timings(
             tmp_path,
