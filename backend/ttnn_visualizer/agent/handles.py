@@ -79,6 +79,8 @@ class CacheVariant(str, Enum):
     L1_PEAK = "l1_peak"
     # Every device op's per-core spread, from one read of the device log.
     CORE_SPREAD = "core_spread"
+    # Buffer Summary's late deallocations by rank and buffer type.
+    LATE_DEALLOCATIONS = "late_deallocations"
     # The operation graph by rank, which `critical_path` and `subgraph_between` read
     # whole and an agent reading a model block by block asks for again and again.
     OP_GRAPH = "op_graph"
@@ -326,6 +328,10 @@ TOOL_TABLES: Dict[str, frozenset] = {
             "input_tensors",
             "output_tensors",
         }
+    ),
+    # Not `stack_traces`: without it the holds are listed with no call site, and said so.
+    "late_deallocations": frozenset(
+        {"operations", "buffers", "tensors", "input_tensors", "output_tensors"}
     ),
 }
 

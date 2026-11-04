@@ -58,8 +58,8 @@ Answers link to the same thing in the web application, for the reader to open:
 - `load_report` returns an `app_link` to the report.
 - `operation_detail` and `operation_provenance` return an `app_link` to the operation.
 - `find_operations`, `top_ops`, `program_cache`, `memory_profile`, `tensor_flow`,
-  `errors`, `dram_fallbacks`, `l1_peak`, `critical_path` and `subgraph_between` return
-  one `app_link_template`, in which
+  `errors`, `dram_fallbacks`, `l1_peak`, `late_deallocations`, `critical_path` and
+  `subgraph_between` return one `app_link_template`, in which
   `{operation_id}` takes any operation id the answer lists.
 
 A link names the report by its directories, and the visualizer opens them when the link is
@@ -107,15 +107,17 @@ another rank's operation under the same id.
 | `errors` | The errors the run recorded, including an operation that started and never completed: which operation, the device operations whose launch failed, and for an allocation failure its figures and why it did not fit. |
 | `dram_fallbacks` | Operations that likely fell back from L1 to DRAM, inferred from their memory config arguments and from retries after an L1 allocation failure. |
 | `l1_peak` | The run's L1 peak per bank, split into circular buffers, intra-operation tensors, persistent tensors and stale ones, with the operation holding it and the operations closest to it. |
+| `late_deallocations` | Tensors still allocated after their last use, by Buffer Summary's late-deallocation rule (L1, as the app shows it, or DRAM), grouped by the call site of that use: how many holds each has, how they ended, and the bytes per bank they held over the operations held. |
 | `critical_path` | The longest chain of cumulative device time through the operation graph, source to sink, with each operation's device time, the chain's total and share of the report's, and how many of its operations have no device time. Needs a linked performance report. |
 | `subgraph_between` | The operations, tensor edges and tensors on every path from one operation to another, each tensor once with its shape, dtype, layout, buffer type and memory layout, so a block can be read without walking it one tensor at a time. |
 
 `top_ops`, `op_breakdown`, `program_cache`, `zone_timings`, `zone_intervals`, `core_spread`
 and `diff_reports` read the performance CSVs; the operation tools — `find_operations`,
 `operation_detail`, `memory_profile`, `tensor_flow`, `operation_provenance`, `errors`,
-`dram_fallbacks`, `l1_peak` and `subgraph_between` — read the memory report's SQLite database;
-`critical_path` reads both, and is listed only when the performance CSV can be reported on
-and the database holds the graph's tables and its captured graphs;
+`dram_fallbacks`, `l1_peak`, `late_deallocations` and `subgraph_between` — read the memory
+report's SQLite database; `critical_path` reads both, and is listed only when the
+performance CSV can be reported on and the database holds the graph's tables and its
+captured graphs;
 `load_report` opens both, since its whole job is saying which of the others apply. A capture can carry either, both, or — as far as these tools are concerned —
 neither, which is what makes `load_report`'s answer worth reading first.
 
@@ -643,6 +645,40 @@ summed, since a capture does not say which cores each occupies. When the replay 
 device's L1 its figures are withheld and `reason` says why, as the web application's L1 peak
 panel does. The first call on a handle reads every captured graph, which can take seconds on
 a large capture; later calls reuse it.
+
+**`late_deallocations` applies Buffer Summary's late-deallocation rule, grouped by where the
+fix goes.** Each operation's post-operation `buffers` snapshot is matched to the last tensor
+seen at each address, and a tensor is held late at every operation after its last consumer
+that is not a deallocate call, the rule the overlay hatches L1 rows by. The app applies it
+to L1 only; `buffer_type: DRAM` applies the same rule to DRAM buffers, which the app does
+not show. A hold is one tensor at one address over consecutive operations with these
+buffers. `call_sites` groups the holds by frame 0 of the last use's stack trace, the call
+site `operation_provenance` gives, which is where a `ttnn.deallocate` would free them
+sooner: 192 L1 holds come from 7 call sites on a 1,199-op llama capture, and 3,453 DRAM
+holds from 14 on a 9,940-op one. Both lists rank by `byte_operations`, bytes per bank summed
+over the operations held, which is the hatched area in Buffer Summary. `limit` caps
+`call_sites` at 25; `top_holds` lists the 20 largest holds whatever the limit, each with
+`producer_operation_ids`, the operations that output its tensor: none for a tensor from the
+host, and two for some.
+
+Each hold's `ending` says how it stopped, and `ended` counts them: `deallocated` by a
+deallocate call naming the tensor, `freed_otherwise` when it left the snapshot or its
+address went to another tensor without one, or `held_to_end` when the capture ended first,
+as weights, outputs and caches often do by design. The app's address map keeps crediting an
+address to the last tensor seen there after that tensor is gone, so a later buffer at the
+same address reads as the old tensor held again. A hold that opens after its tensor's
+buffer left the snapshot, or after its deallocate call, is that case: it is counted in
+`unattributed_hold_count`, left out of everything else, and named in the caveat. On one
+local capture that is 95 of 123 L1 holds. `run_start_count` is the count beside Buffer
+Summary's L1 toggle: the operations where at least one run starts, those included. An
+operation that recorded none of these buffers ends every run in the app but no hold here,
+so the app counts the next operation with buffers as a start again, and `operations_held`
+counts only operations with buffers; the caveat says when that happened. The tool reads the
+same tables the overlay does, so it answers on any capture with `buffers`, not only the
+ones that recorded `tensor_lifetime`. `l1_peak` counts a tensor stale only where no other
+tensor used its address, so it can call a tensor held here persistent: on the llama capture
+it counts all three tensors held at its peak as persistent. Match a hold to `l1_peak`'s
+peak by operation id.
 
 `zone_timings` carries a caveat of its own: cycles are summed across every core that ran
 the zone, so they measure occupancy rather than wall-clock duration. A core is counted per

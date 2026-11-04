@@ -186,6 +186,7 @@ class TestReportInventory:
             "errors",
             "dram_fallbacks",
             "l1_peak",
+            "late_deallocations",
             "critical_path",
             "subgraph_between",
         }
@@ -238,6 +239,32 @@ class TestReportInventory:
             "dram_fallbacks",
             "l1_peak",
         } <= set(loaded["unanswerable"])
+
+    @pytest.mark.parametrize(
+        ("tables", "answerable"),
+        [
+            (("operations", "tensors", "input_tensors", "output_tensors"), False),
+            (
+                ("operations", "buffers", "tensors", "input_tensors", "output_tensors"),
+                True,
+            ),
+        ],
+    )
+    def test_late_deallocations_needs_buffers_and_not_stack_traces(
+        self, tmp_path, tables, answerable
+    ):
+        profiler = tmp_path / "profiler"
+        profiler.mkdir()
+        connection = sqlite3.connect(profiler / "db.sqlite")
+        for table in tables:
+            connection.execute(f"CREATE TABLE {table} (operation_id int)")
+        connection.commit()
+        connection.close()
+
+        loaded = load_report(ReportRegistry(), profiler_path=str(profiler))
+
+        assert ("late_deallocations" in loaded["answerable"]) is answerable
+        assert ("late_deallocations" in loaded["unanswerable"]) is not answerable
 
     def test_an_empty_database_file_is_not_answerable(self, tmp_path):
         """A zero-byte `db.sqlite` opens as a valid empty database.
@@ -2523,6 +2550,7 @@ class TestTransport:
             "errors",
             "dram_fallbacks",
             "l1_peak",
+            "late_deallocations",
             "critical_path",
             "subgraph_between",
         }

@@ -8,6 +8,7 @@ import {
     MAX_NAMED_TENSORS,
     NO_CONSUMER_OPERATION_ID,
     buildLateDeallocationReports,
+    buildTensorsByOperationByAddress,
     coalesceLateDeallocationRunStarts,
     getHeldTensorCountSummary,
     getLastValidConsumer,
@@ -17,11 +18,14 @@ import {
     getOperationLateDeallocationCount,
     getRunStartCountSummary,
     getRunStartLateDeallocationCount,
+    getUniqueBuffersByOperation,
     selectLateDeallocationRunStarts,
 } from '../src/functions/lateDeallocation';
 import { LATE_DEALLOC_OPPORTUNITY_TEXT, LateDeallocationAvailability } from '../src/definitions/LateDeallocation';
-import { Tensor } from '../src/model/APIData';
+import { Buffer, Tensor } from '../src/model/APIData';
+import { BufferType } from '../src/model/BufferType';
 import { buildTensorDeallocationReport as buildReport } from './helpers/lateDeallocationFixtures';
+import { buildTensor as buildFullTensor } from './helpers/operationDetailsFixtures';
 
 const buildOperation = (id: number) => ({ id });
 
@@ -101,6 +105,86 @@ describe('getLastValidConsumer', () => {
             lastConsumerOperationId: 4,
             lastConsumerName: 'ttnn.add',
         });
+    });
+});
+
+const buildBuffer = (address: number, size: number, bufferType: BufferType = BufferType.L1): Buffer => ({
+    address,
+    size,
+    buffer_type: bufferType,
+    device_id: 0,
+});
+
+describe('getUniqueBuffersByOperation', () => {
+    it('keeps the largest buffer at each address, the first of equal ones', () => {
+        const first = buildBuffer(100, 10);
+        const largest = buildBuffer(200, 8);
+
+        const [operation] = getUniqueBuffersByOperation([
+            {
+                id: 1,
+                name: 'ttnn.add',
+                buffers: [first, buildBuffer(200, 5), buildBuffer(100, 10, BufferType.DRAM), largest],
+            },
+        ]);
+
+        expect(operation.buffers).toEqual([first, largest]);
+        expect(operation.buffers[0]).toBe(first);
+    });
+
+    it('skips a buffer at address 0', () => {
+        const [operation] = getUniqueBuffersByOperation([{ id: 1, name: 'ttnn.add', buffers: [buildBuffer(0, 10)] }]);
+
+        expect(operation.buffers).toEqual([]);
+    });
+
+    it('keeps an operation with no buffers, with none', () => {
+        expect(getUniqueBuffersByOperation([{ id: 1, name: 'ttnn.add', buffers: [] }])).toEqual([
+            { id: 1, name: 'ttnn.add', buffers: [] },
+        ]);
+    });
+});
+
+describe('buildTensorsByOperationByAddress', () => {
+    it("gives each buffer's tensor the buffer's type", () => {
+        const tensor = buildFullTensor({ id: 10, address: 100, buffer_type: BufferType.DRAM });
+
+        const tensorsByOperation = buildTensorsByOperationByAddress(
+            [{ id: 1, inputs: [], outputs: [tensor] }],
+            [{ id: 1, name: 'ttnn.add', buffers: [buildBuffer(100, 10, BufferType.L1)] }],
+        );
+
+        expect(tensorsByOperation.get(1)?.get(100)).toEqual({ ...tensor, buffer_type: BufferType.L1 });
+    });
+
+    it('maps an operation with no buffers to an empty map', () => {
+        const tensor = buildFullTensor({ id: 10, address: 100 });
+
+        const tensorsByOperation = buildTensorsByOperationByAddress(
+            [
+                { id: 1, inputs: [tensor], outputs: [] },
+                { id: 2, inputs: [tensor], outputs: [] },
+            ],
+            [{ id: 1, name: 'ttnn.add', buffers: [buildBuffer(100, 10)] }],
+        );
+
+        expect([...tensorsByOperation.keys()]).toEqual([1, 2]);
+        expect(tensorsByOperation.get(2)).toEqual(new Map());
+    });
+
+    it("credits an address to the last tensor seen there, an operation's outputs after its inputs", () => {
+        const tensorsByOperation = buildTensorsByOperationByAddress(
+            [
+                {
+                    id: 1,
+                    inputs: [buildFullTensor({ id: 10, address: 100 })],
+                    outputs: [buildFullTensor({ id: 11, address: 100 })],
+                },
+            ],
+            [{ id: 1, name: 'ttnn.add', buffers: [buildBuffer(100, 10)] }],
+        );
+
+        expect(tensorsByOperation.get(1)?.get(100)?.id).toBe(11);
     });
 });
 

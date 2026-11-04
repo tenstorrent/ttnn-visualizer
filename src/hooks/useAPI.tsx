@@ -100,7 +100,11 @@ import { ReportFolder, SINGLE_HOST_WORLD_SIZE } from '../definitions/Reports';
 import { RemoteFolder } from '../model/RemoteConnection';
 import createToastNotification from '../functions/createToastNotification';
 import { ToastType } from '../definitions/ToastType';
-import { buildLateDeallocationReports } from '../functions/lateDeallocation';
+import {
+    buildLateDeallocationReports,
+    buildTensorsByOperationByAddress,
+    getUniqueBuffersByOperation,
+} from '../functions/lateDeallocation';
 import { processInputsOutputs } from '../functions/processMemoryAllocations';
 import { SemVer, semverParse } from '../functions/semverParse';
 import { parseNpeAxiosResponseData } from '../functions/parseNpeAxiosResponseData';
@@ -1641,87 +1645,18 @@ export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = Buf
     const { data: operations, status: operationsStatus } = useOperationsList();
     const operationRange = useAtomValue(selectedOperationRangeAtom);
 
-    const uniqueBuffersByOperationList = useMemo(() => {
-        return buffersByOperation?.map((operation) => {
-            const uniqueBuffers: Map<number, Buffer> = new Map<number, Buffer>();
+    const uniqueBuffersByOperationList = useMemo(
+        () => (buffersByOperation ? getUniqueBuffersByOperation(buffersByOperation) : undefined),
+        [buffersByOperation],
+    );
 
-            operation.buffers.forEach((buffer) => {
-                const { address, size } = buffer;
-                if (address) {
-                    const existingBuffer = uniqueBuffers.get(address);
-                    if (!existingBuffer || size > existingBuffer.size) {
-                        uniqueBuffers.set(address, buffer);
-                    }
-                }
-            });
-
-            return {
-                ...operation,
-                buffers: Array.from(uniqueBuffers.values()),
-            };
-        });
-    }, [buffersByOperation]);
-
-    const tensorsByOperationByAddress = useMemo(() => {
-        const result: TensorsByOperationByAddress = new Map();
-
-        if (!operations || !buffersByOperation) {
-            return result;
-        }
-
-        const buffersByOpId = new Map<number, Buffer[]>();
-        uniqueBuffersByOperationList?.forEach((op) => {
-            buffersByOpId.set(op.id, op.buffers);
-        });
-
-        const latestTensorByAddress = new Map<number, Tensor>();
-
-        for (const op of operations) {
-            if (op.inputs) {
-                for (const t of op.inputs) {
-                    if (t && t.address !== null && t.address !== undefined) {
-                        latestTensorByAddress.set(t.address, t);
-                    }
-                }
-            }
-            if (op.outputs) {
-                for (const t of op.outputs) {
-                    if (t && t.address !== null && t.address !== undefined) {
-                        latestTensorByAddress.set(t.address, t);
-                    }
-                }
-            }
-
-            const buffers = buffersByOpId.get(op.id);
-            if (!buffers?.length) {
-                result.set(op.id, new Map());
-                // eslint-disable-next-line no-continue
-                continue;
-            }
-
-            const tensorsByBufferAddress = new Map<number, Tensor>();
-
-            for (const buffer of buffers) {
-                const addr = buffer.address;
-                if (addr === null || addr === undefined) {
-                    // eslint-disable-next-line no-continue
-                    continue;
-                }
-
-                const tensor = latestTensorByAddress.get(addr);
-                if (tensor) {
-                    tensorsByBufferAddress.set(addr, {
-                        ...tensor,
-                        buffer_type: buffer.buffer_type,
-                    });
-                }
-            }
-
-            result.set(op.id, tensorsByBufferAddress);
-        }
-
-        return result;
-    }, [buffersByOperation, operations, uniqueBuffersByOperationList]);
+    const tensorsByOperationByAddress = useMemo(
+        (): TensorsByOperationByAddress =>
+            operations && uniqueBuffersByOperationList
+                ? buildTensorsByOperationByAddress(operations, uniqueBuffersByOperationList)
+                : new Map(),
+        [operations, uniqueBuffersByOperationList],
+    );
 
     // The map is empty until both queries settle, so callers need this to tell
     // "nothing here" from "not known yet".

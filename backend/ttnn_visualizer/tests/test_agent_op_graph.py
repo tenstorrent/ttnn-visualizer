@@ -173,6 +173,11 @@ class TestKeptOperations:
 
         assert op_graph.kept_operation_ids(graph) == {1}
 
+    def test_an_operation_with_a_null_name_is_kept(self):
+        graph = op_graph.build_graph({1: "ttnn.add", 2: None}, [GraphEdge(1, 2, 10)])
+
+        assert op_graph.kept_operation_ids(graph) == {1, 2}
+
     def test_an_edge_to_itself_keeps_an_operation(self):
         """`getKeptOperations` counts every edge, drawn or not."""
         graph = op_graph.build_graph({1: "a", 2: "b"}, [GraphEdge(2, 2, 10)])
