@@ -5,10 +5,11 @@
 import { MemoryConfig, MemoryKeys, ShardSpec, TensorMemoryLayout } from '../model/MemoryConfig';
 import { BufferType, toBufferType } from '../model/BufferType';
 
-// Anchored at both ends, like the backend's `re.match`, so a tensor argument whose repr merely
-// contains a memory config is not read as one. Older reports namespace the type. `\n?` matches
-// Python's `$`, which also allows one trailing newline.
-const memoryConfigPattern = /^(?:tt::tt_metal::)?MemoryConfig\((.*)\)\n?$/;
+// Anchored at both ends, like the backend's `re.match` with its `$`, so a tensor argument whose
+// repr merely contains a memory config is not read as one. Older reports namespace the type.
+// `[^\n]*` is Python's `.`, which unlike JavaScript's also takes `\r`, U+2028 and U+2029, and
+// `\n?` is Python's `$`, which also allows one trailing newline.
+const memoryConfigPattern = /^(?:tt::tt_metal::)?MemoryConfig\(([^\n]*)\)\n?$/;
 const bufferTypePattern = /buffer_type=BufferType::([A-Z0-9_]+)/;
 const memoryLayoutPattern = /memory_layout=([A-Za-z_:]+)/;
 const shardSpecPattern =
