@@ -763,11 +763,11 @@ def test_transfer_count_is_the_row_count_of_the_index_it_describes(tmp_path):
     assert _transfer_count(obj["noc_transfers"]) == _row_count(db_path, "transfer") == 4
 
 
-@pytest.mark.parametrize("spelled", ["3", " 3 ", "+3"])
+@pytest.mark.parametrize("spelled", ["3", " 3 ", "+3", "03", "3.0", "3e0", 3.0])
 def test_transfer_count_reads_a_numeric_string_id_as_the_index_stores_it(
     tmp_path, spelled
 ):
-    # One `_transfer_id` keys both, so however the integer is spelled they agree.
+    # SQLite keys both, so however the integer is spelled they agree.
     obj = _make_npe_object(n_transfers=0)
     obj["noc_transfers"] = [{"id": 3}, {"id": spelled}]
     db_path = ensure_index(_write_npe(tmp_path, obj))
@@ -778,8 +778,8 @@ def test_transfer_count_reads_a_numeric_string_id_as_the_index_stores_it(
 
 @pytest.mark.parametrize(
     "transfers",
-    [[7], [{"id": [1]}], [{"id": "abc"}], [{"id": 1.5}]],
-    ids=["not-an-object", "list-id", "text-id", "fractional-id"],
+    [[7], [{"id": [1]}], [{"id": "abc"}], [{"id": 1.5}], [{"id": "1_000"}]],
+    ids=["not-an-object", "list-id", "text-id", "fractional-id", "underscored-id"],
 )
 def test_a_transfer_the_index_cannot_store_fails_its_build(tmp_path, transfers):
     # Where `_transfer_count` and `_write_index` part ways, no index exists to disagree.

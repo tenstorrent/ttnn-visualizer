@@ -202,6 +202,20 @@ def _never_read(data, compressed):
     raise AssertionError("the trace was parsed, not its index")
 
 
+def _memory_report(directory: Path) -> Path:
+    """A memory report with one operation, enough for `find_operations`."""
+    directory.mkdir(parents=True)
+    connection = sqlite3.connect(directory / "db.sqlite")
+    try:
+        connection.executescript(
+            "CREATE TABLE operations (operation_id int UNIQUE, name text, "
+            "duration float); INSERT INTO operations VALUES (1, 'ttnn.add', 0.1);"
+        )
+    finally:
+        connection.close()
+    return directory
+
+
 def _never_build(npe_path):
     raise AssertionError(f"an index was built for {npe_path}")
 
@@ -719,7 +733,8 @@ class TestMalformedInput:
         assert answer["worst_link"]["demand_percent"] == 30.0
         assert answer["caveat"] == (
             "2 link demand entries were for links past the first 2 read, and were left "
-            "out, so busiest_links and link_count cover those links only."
+            "out, so every figure but run, the trace's own summary, covers those links "
+            "only."
         )
 
 
@@ -1268,16 +1283,7 @@ class TestLoadReport:
         assert _call(registry, handle)["timesteps"] == 8
 
     def test_a_trace_beside_a_memory_report_answers_with_it(self, tmp_path):
-        memory = tmp_path / "memory"
-        memory.mkdir()
-        connection = sqlite3.connect(memory / "db.sqlite")
-        try:
-            connection.executescript(
-                "CREATE TABLE operations (operation_id int UNIQUE, name text, "
-                "duration float); INSERT INTO operations VALUES (1, 'ttnn.add', 0.1);"
-            )
-        finally:
-            connection.close()
+        memory = _memory_report(tmp_path / "memory")
         path = _write(tmp_path, _hand_checked())
         registry = ReportRegistry()
 
@@ -1291,6 +1297,16 @@ class TestLoadReport:
             McpToolOutcome.OK
         )
         assert _call(registry, handle)["timesteps"] == 8
+
+    def test_positional_arguments_keep_what_they_bound(self, tmp_path):
+        """npe_path comes after memory_report_path, which callers could already pass."""
+        memory = _memory_report(tmp_path / "memory")
+        path = _write(tmp_path, _hand_checked())
+
+        loaded = load_report(ReportRegistry(), None, None, str(memory), str(path))
+
+        assert loaded["profiler_path"] == str(memory.resolve())
+        assert loaded["npe_path"] == str(path.resolve())
 
     def test_a_directory_is_refused_as_an_npe_path(self, tmp_path):
         with pytest.raises(ValueError, match="npe_path is not a file"):

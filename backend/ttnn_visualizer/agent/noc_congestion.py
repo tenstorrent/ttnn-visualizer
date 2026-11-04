@@ -474,8 +474,8 @@ def _caveats(read: _NocRead, path: Path, changed: bool) -> List[str]:
     if read.entries_past_link_limit:
         caveats.append(
             f"{read.entries_past_link_limit} link demand entries were for links past "
-            f"the first {MAX_LINKS:,} read, and were left out, so busiest_links and "
-            "link_count cover those links only."
+            f"the first {MAX_LINKS:,} read, and were left out, so every figure but run, "
+            "the trace's own summary, covers those links only."
         )
     if read.unreadable_timesteps:
         caveats.append(

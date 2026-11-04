@@ -798,14 +798,14 @@ def load_report(
     registry: ReportRegistry,
     profiler_path: Optional[str] = None,
     performance_path: Optional[str] = None,
-    npe_path: Optional[str] = None,
     memory_report_path: Optional[str] = None,
+    npe_path: Optional[str] = None,
 ) -> Dict[str, object]:
     """Register a report by path and describe what it holds.
 
     ``memory_report_path`` is the preferred name for the memory report directory;
-    ``profiler_path`` is its former name, still accepted. Last in the signature so
-    positional callers keep binding the former names.
+    ``profiler_path`` is its former name, still accepted. Each new argument goes after
+    the ones before it, so positional callers keep binding what they did.
     """
     memory_label, memory_path = _memory_report_argument(
         memory_report_path, profiler_path

@@ -21,7 +21,16 @@ import sqlite3
 import tempfile
 import threading
 from pathlib import Path
-from typing import Any, BinaryIO, Iterable, Iterator, NamedTuple, Optional, Tuple
+from typing import (
+    Any,
+    BinaryIO,
+    Iterable,
+    Iterator,
+    List,
+    NamedTuple,
+    Optional,
+    Tuple,
+)
 
 import orjson
 import zstd
@@ -326,13 +335,9 @@ def _build_index(npe_path: Path, db_path: Path, source_mtime_ns: int) -> None:
 
 
 def _transfer_id(transfer: dict) -> object:
-    """The id `_write_index` keys a transfer by, None for one without. SQLite keys a
-    numeric string as the integer it spells, so that is converted here first."""
-    tid = transfer.get("id")
-    if isinstance(tid, str):
-        with contextlib.suppress(ValueError):
-            return int(tid)
-    return tid
+    """The id `_write_index` stores a transfer under, None for one without. SQLite
+    turns it into the row's integer key, or refuses it; see `_transfer_count`."""
+    return transfer.get("id")
 
 
 def _step_cells(step: dict) -> Tuple[Any, Any, Any]:
@@ -497,12 +502,32 @@ def _transfer_count(transfers: object) -> int:
     if not isinstance(transfers, list):
         return 0
     ids = set()
+    spelled: List[object] = []
     for transfer in transfers:
         if isinstance(transfer, dict):
             tid = _transfer_id(transfer)
-            if isinstance(tid, (int, float, str)):
+            if isinstance(tid, int):
                 ids.add(tid)
-    return len(ids)
+            elif isinstance(tid, (float, str)):
+                spelled.append(tid)
+    return len(ids.union(_integer_keys(spelled)))
+
+
+def _integer_keys(values: List[object]) -> List[int]:
+    """The integer keys SQLite stores these as in `_write_index`'s transfer table, by
+    asking it: "3.0", "3e0" and " 3" are all 3, and "1_000" and 3.5 are refused."""
+    if not values:
+        return []
+    conn = sqlite3.connect(":memory:")
+    try:
+        conn.execute("CREATE TABLE transfer (id INTEGER PRIMARY KEY)")
+        for value in values:
+            # A value it refuses fails `_write_index`'s build, so no index disagrees.
+            with contextlib.suppress(sqlite3.Error):
+                conn.execute("INSERT OR IGNORE INTO transfer (id) VALUES (?)", (value,))
+        return [key for (key,) in conn.execute("SELECT id FROM transfer")]
+    finally:
+        conn.close()
 
 
 @contextlib.contextmanager
