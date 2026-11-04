@@ -6,11 +6,15 @@ import {
     Button,
     ButtonGroup,
     ButtonVariant,
+    Card,
+    Checkbox,
     Classes,
     FormGroup,
+    HTMLSelect,
     InputGroup,
     Intent,
     PopoverPosition,
+    SegmentedControl,
     Size,
     Switch,
     Tag,
@@ -52,6 +56,37 @@ import type { IncomingEdgeView, OutgoingEdge, SourceNode } from '../components/m
 
 // Ends at 1 so the widest bar is shown against the node it has to stay inside.
 const PERF_BAR_SAMPLE_SCORES = [0.05, 0.35, 0.7, 1] as const;
+
+const INTENTS = [
+    { intent: Intent.NONE, label: 'None', icon: null },
+    { intent: Intent.PRIMARY, label: 'Primary', icon: IconNames.ADD },
+    { intent: Intent.SUCCESS, label: 'Success', icon: IconNames.TICK },
+    { intent: Intent.WARNING, label: 'Warning', icon: IconNames.WARNING_SIGN },
+    { intent: Intent.DANGER, label: 'Danger', icon: IconNames.ISSUE },
+] as const;
+
+// Disabled rows sit under their enabled variant so a theme change to either is easy to compare
+const BUTTON_ROWS = [
+    { label: 'Default', variant: ButtonVariant.SOLID, disabled: false },
+    { label: 'Default disabled', variant: ButtonVariant.SOLID, disabled: true },
+    { label: 'Outlined', variant: ButtonVariant.OUTLINED, disabled: false },
+    { label: 'Outlined disabled', variant: ButtonVariant.OUTLINED, disabled: true },
+    { label: 'Minimal', variant: ButtonVariant.MINIMAL, disabled: false },
+    { label: 'Minimal disabled', variant: ButtonVariant.MINIMAL, disabled: true },
+] as const;
+
+const TAG_ROWS = [
+    { minimal: false, suffix: '' },
+    { minimal: true, suffix: ' minimal' },
+] as const;
+
+const SELECT_OPTIONS = ['First option', 'Second option'];
+
+const SEGMENTED_OPTIONS = [
+    { label: 'First', value: 'first' },
+    { label: 'Second', value: 'second' },
+    { label: 'Third', value: 'third' },
+];
 
 const FORM_GROUP = {
     label: 'Form label',
@@ -241,6 +276,7 @@ const MLIR_TERMINATOR_OUTGOING: OutgoingEdge[] = [
 export default function Styleguide() {
     const fileTransferProgress = useAtomValue(fileTransferProgressAtom);
     const [autoCloseTime, setAutoCloseTime] = useState(1000);
+    const [segmentedValue, setSegmentedValue] = useState<string>(SEGMENTED_OPTIONS[0].value);
     const [timeRemaining, setTimeRemaining] = useState(autoCloseTime);
 
     const runFileTransferDemo = (source: FileTransferSource, initial: FileProgress) => {
@@ -422,128 +458,23 @@ export default function Styleguide() {
                 </thead>
 
                 <tbody>
-                    <tr>
-                        <th>Default</th>
-                        <td>
-                            <Button>Your text here</Button>
-                        </td>
-                        <td>
-                            <Button
-                                icon={IconNames.ADD}
-                                intent={Intent.PRIMARY}
-                            >
-                                Your text here
-                            </Button>
-                        </td>
-                        <td>
-                            <Button
-                                icon={IconNames.TICK}
-                                intent={Intent.SUCCESS}
-                            >
-                                Your text here
-                            </Button>
-                        </td>
-                        <td>
-                            <Button
-                                icon={IconNames.WARNING_SIGN}
-                                intent={Intent.WARNING}
-                            >
-                                Your text here
-                            </Button>
-                        </td>
-                        <td>
-                            <Button
-                                icon={IconNames.ISSUE}
-                                intent={Intent.DANGER}
-                            >
-                                Your text here
-                            </Button>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th>Outlined</th>
-                        <td>
-                            <Button variant={ButtonVariant.OUTLINED}>Your text here</Button>
-                        </td>
-                        <td>
-                            <Button
-                                icon={IconNames.ADD}
-                                intent={Intent.PRIMARY}
-                                variant={ButtonVariant.OUTLINED}
-                            >
-                                Your text here
-                            </Button>
-                        </td>
-                        <td>
-                            <Button
-                                icon={IconNames.TICK}
-                                intent={Intent.SUCCESS}
-                                variant={ButtonVariant.OUTLINED}
-                            >
-                                Your text here
-                            </Button>
-                        </td>
-                        <td>
-                            <Button
-                                icon={IconNames.WARNING_SIGN}
-                                intent={Intent.WARNING}
-                                variant={ButtonVariant.OUTLINED}
-                            >
-                                Your text here
-                            </Button>
-                        </td>
-                        <td>
-                            <Button
-                                icon={IconNames.ISSUE}
-                                intent={Intent.DANGER}
-                                variant={ButtonVariant.OUTLINED}
-                            >
-                                Your text here
-                            </Button>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th>Minimal</th>
-                        <td>
-                            <Button variant={ButtonVariant.MINIMAL}>Your text here</Button>
-                        </td>
-                        <td>
-                            <Button
-                                icon={IconNames.ADD}
-                                intent={Intent.PRIMARY}
-                                variant={ButtonVariant.MINIMAL}
-                            >
-                                Your text here
-                            </Button>
-                        </td>
-                        <td>
-                            <Button
-                                icon={IconNames.TICK}
-                                intent={Intent.SUCCESS}
-                                variant={ButtonVariant.MINIMAL}
-                            >
-                                Your text here
-                            </Button>
-                        </td>
-                        <td>
-                            <Button
-                                icon={IconNames.WARNING_SIGN}
-                                intent={Intent.WARNING}
-                                variant={ButtonVariant.MINIMAL}
-                            >
-                                Your text here
-                            </Button>
-                        </td>
-                        <td>
-                            <Button
-                                icon={IconNames.ISSUE}
-                                intent={Intent.DANGER}
-                                variant={ButtonVariant.MINIMAL}
-                            >
-                                Your text here
-                            </Button>
-                        </td>
-                    </tr>
+                    {BUTTON_ROWS.map(({ label, variant, disabled }) => (
+                        <tr key={label}>
+                            <th>{label}</th>
+                            {INTENTS.map(({ intent, icon }) => (
+                                <td key={intent}>
+                                    <Button
+                                        icon={icon}
+                                        intent={intent}
+                                        variant={variant}
+                                        disabled={disabled}
+                                    >
+                                        Your text here
+                                    </Button>
+                                </td>
+                            ))}
+                        </tr>
+                    ))}
                 </tbody>
             </table>
 
@@ -647,28 +578,48 @@ export default function Styleguide() {
             </FormGroup>
 
             <div className='container flex'>
-                <InputGroup
-                    onChange={() => {}}
-                    intent={Intent.PRIMARY}
-                    leftIcon={IconNames.FOLDER_NEW}
-                />
+                {INTENTS.filter(({ intent }) => intent !== Intent.NONE).map(({ intent }) => (
+                    <InputGroup
+                        key={intent}
+                        onChange={() => {}}
+                        intent={intent}
+                        leftIcon={IconNames.FOLDER_NEW}
+                    />
+                ))}
 
                 <InputGroup
                     onChange={() => {}}
-                    intent={Intent.WARNING}
                     leftIcon={IconNames.FOLDER_NEW}
+                    placeholder='Disabled'
+                    disabled
                 />
+            </div>
 
-                <InputGroup
-                    onChange={() => {}}
-                    intent={Intent.SUCCESS}
-                    leftIcon={IconNames.FOLDER_NEW}
+            <div className='container flex'>
+                {INTENTS.filter(({ intent }) => intent !== Intent.NONE).map(({ intent, label }) => (
+                    <FormGroup
+                        key={intent}
+                        label={label}
+                        intent={intent}
+                        helperText={`${label} helper text`}
+                    >
+                        <InputGroup
+                            onChange={() => {}}
+                            intent={intent}
+                        />
+                    </FormGroup>
+                ))}
+            </div>
+
+            <div className='container flex'>
+                <HTMLSelect options={SELECT_OPTIONS} />
+                <HTMLSelect
+                    options={SELECT_OPTIONS}
+                    minimal
                 />
-
-                <InputGroup
-                    onChange={() => {}}
-                    intent={Intent.DANGER}
-                    leftIcon={IconNames.FOLDER_NEW}
+                <HTMLSelect
+                    options={SELECT_OPTIONS}
+                    disabled
                 />
             </div>
 
@@ -697,6 +648,20 @@ export default function Styleguide() {
             </FormGroup>
 
             <FormGroup>
+                <Checkbox label='Checkbox' />
+                <Checkbox
+                    label='Checkbox'
+                    onChange={() => {}}
+                    checked
+                />
+                <Checkbox
+                    label='Checkbox'
+                    onChange={() => {}}
+                    indeterminate
+                />
+            </FormGroup>
+
+            <FormGroup>
                 <Switch label='Toggle switch' />
                 <Switch
                     label='Toggle switch'
@@ -720,43 +685,64 @@ export default function Styleguide() {
 
             <h3>Tags</h3>
 
-            <div className='container flex'>
-                <Tag
-                    intent={Intent.NONE}
-                    size={Size.LARGE}
+            {TAG_ROWS.map(({ minimal, suffix }) => (
+                <div
+                    key={suffix}
+                    className='container flex'
                 >
-                    None
-                </Tag>
-                <Tag
-                    intent={Intent.PRIMARY}
-                    size={Size.LARGE}
-                >
-                    Primary
-                </Tag>
-                <Tag
-                    intent={Intent.WARNING}
-                    size={Size.LARGE}
-                >
-                    Warning
-                </Tag>
-                <Tag
-                    intent={Intent.SUCCESS}
-                    size={Size.LARGE}
-                >
-                    Success
-                </Tag>
-                <Tag
-                    intent={Intent.DANGER}
-                    size={Size.LARGE}
-                >
-                    Danger
-                </Tag>
+                    {INTENTS.map(({ intent, label }) => (
+                        <Tag
+                            key={intent}
+                            intent={intent}
+                            size={Size.LARGE}
+                            minimal={minimal}
+                        >
+                            {label}
+                            {suffix}
+                        </Tag>
+                    ))}
+                </div>
+            ))}
 
+            <div className='container flex'>
                 <MemoryTag memory={BufferTypeLabel[BufferType.DRAM]} />
                 <MemoryTag memory={BufferTypeLabel[BufferType.L1]} />
                 <MemoryTag memory={BufferTypeLabel[BufferType.L1_SMALL]} />
                 <MemoryTag memory={BufferTypeLabel[BufferType.SYSTEM_MEMORY]} />
                 <MemoryTag memory={BufferTypeLabel[BufferType.TRACE]} />
+            </div>
+
+            <h3>Segmented control</h3>
+
+            <div className='container'>
+                <SegmentedControl
+                    options={SEGMENTED_OPTIONS}
+                    value={segmentedValue}
+                    onValueChange={setSegmentedValue}
+                />
+            </div>
+
+            <h3>Card</h3>
+
+            <div className='container short-width'>
+                <Card>
+                    <p>Minimal buttons drawn on a card rather than the page background</p>
+                    <ButtonGroup>
+                        <Button
+                            icon={IconNames.EDIT}
+                            variant={ButtonVariant.MINIMAL}
+                        >
+                            Minimal
+                        </Button>
+                        <Button
+                            icon={IconNames.TRASH}
+                            variant={ButtonVariant.MINIMAL}
+                            intent={Intent.DANGER}
+                        >
+                            Minimal danger
+                        </Button>
+                    </ButtonGroup>
+                </Card>
             </div>
 
             <h3>Progress bar</h3>
