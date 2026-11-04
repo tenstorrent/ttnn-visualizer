@@ -2,12 +2,13 @@
 #
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-"""`isDemo` and `runFingerprint` on the profiler and performance report listings.
+"""`isDemo`, `runFingerprint` and order on the profiler and performance report listings.
 
 The frontend records a hosted pick of a listed folder as `demo` or `upload` from this
 flag alone, so the listing is the single owner of the demo rule.
 """
 
+import os
 import sqlite3
 from http import HTTPStatus
 from io import BytesIO
@@ -103,6 +104,32 @@ def test_listing_marks_demo_folders_only_under_server_mode(
         assert is_demo_by_path == {demo_name: True}
     else:
         assert is_demo_by_path == {demo_name: False, "my-report": False}
+
+
+@pytest.mark.parametrize("kind", sorted(_LISTINGS))
+@pytest.mark.parametrize("server_mode", [True, False])
+def test_listing_breaks_equal_times_by_name(
+    app, client, make_report, kind, server_mode
+):
+    """Hosted listings start from a set, so without a tie-breaker the order of
+    equal times would follow string hashing and could change between restarts."""
+    app.config["SERVER_MODE"] = server_mode
+    endpoint, root, make_report_dir = _listing(app, kind)
+    # Hosted listings only show demos to a fresh session, so the names must be demos.
+    names = sorted(_LISTINGS[kind][3])
+    newest = names[-1]
+    for name in reversed(names):
+        make_report_dir(root, name)
+        os.utime(root / name, (1_000, 1_000))
+    os.utime(root / newest, (2_000, 2_000))
+
+    response = client.get(endpoint, query_string={"instanceId": make_report()})
+
+    assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+    assert [folder["path"] for folder in response.get_json()] == [
+        newest,
+        *names[:-1],
+    ]
 
 
 @pytest.mark.parametrize(

@@ -42,7 +42,7 @@ from ttnn_visualizer.csv_queries import (
 from ttnn_visualizer.models import Instance
 from ttnn_visualizer.utils import pick_cluster_descriptor_path
 
-# The SQLite database a profiler report carries. Named here rather than imported
+# The SQLite database a memory report carries. Named here rather than imported
 # because the agent surface once read no tables; its presence is what makes the
 # operation, memory and tensor questions answerable, and `agent.operations`
 # opens it read-only by this name. #2012
@@ -79,6 +79,9 @@ class CacheVariant(str, Enum):
     L1_PEAK = "l1_peak"
     # Every device op's per-core spread, from one read of the device log.
     CORE_SPREAD = "core_spread"
+    # The operation graph by rank, which `critical_path` and `subgraph_between` read
+    # whole and an agent reading a model block by block asks for again and again.
+    OP_GRAPH = "op_graph"
 
 
 # Snapshots narrowed by a scope -- a signpost range -- kept at once, across every
@@ -270,6 +273,10 @@ def _resolved_directory(label: str, path: Optional[str]) -> Optional[str]:
     return str(resolved)
 
 
+# What `op_graph.read_graph` reads beside `operations`: one place, so the tools
+# reading the graph are listed by the same tables they refuse on.
+GRAPH_TABLES = ("tensors", "input_tensors", "output_tensors")
+
 # The tables each database tool reads, so answerability is decided per tool
 # rather than from one probe. Kept here, beside the inventory that consumes it,
 # because `agent.operations` imports this module; it has to stay in step with
@@ -287,9 +294,8 @@ TOOL_TABLES: Dict[str, frozenset] = {
     "operation_detail": frozenset(
         {"operations", "buffers", "tensors", "input_tensors", "output_tensors"}
     ),
-    "tensor_flow": frozenset(
-        {"operations", "tensors", "input_tensors", "output_tensors"}
-    ),
+    "tensor_flow": frozenset({"operations", *GRAPH_TABLES}),
+    "subgraph_between": frozenset({"operations", *GRAPH_TABLES}),
     # `stack_traces` is not required, because the tool answers the argument half
     # without it and says in the response that the capture recorded no call site --
     # 8 of 86 local captures hold the table with no rows. That reasoning covers a
@@ -324,6 +330,10 @@ TOOL_TABLES: Dict[str, frozenset] = {
 }
 
 
+# The graph, and the captured graphs the link aligns to weigh it.
+_CRITICAL_PATH_TABLES = TOOL_TABLES["subgraph_between"] | {"captured_graph"}
+
+
 def read_only_connection(db_file: Path) -> sqlite3.Connection:
     """Open a SQLite file read-only.
 
@@ -338,7 +348,7 @@ def _read_profiler_db(
     read: Callable[[sqlite3.Connection], Answer],
     default: Answer,
 ) -> Answer:
-    """`read` on the profiler database, or `default` when there is none to read.
+    """`read` on the memory report database, or `default` when there is none to read.
 
     A truncated or non-SQLite file is a broken capture, and `default` is the honest
     answer for it, as for a missing one.
@@ -361,7 +371,7 @@ def _read_profiler_db(
 
 
 def _readable_tables(profiler_path: Optional[str]) -> frozenset:
-    """The tables a profiler database actually holds, or nothing.
+    """The tables a memory report database actually holds, or nothing.
 
     Presence of the file is not enough, twice over. A zero-byte `db.sqlite`
     opens as a valid empty database, and a truncated capture can hold
@@ -512,7 +522,7 @@ def _distinct_devices(connection: sqlite3.Connection) -> Optional[int]:
 
 
 def _profiler_device_count(profiler_path: Optional[str]) -> Optional[int]:
-    """Devices in the profiler database, each rank's counted, or None without them.
+    """Devices in the memory report database, each rank's counted, or None without them.
 
     Distinct, since some captures write a device's row more than once.
     """
@@ -574,7 +584,7 @@ def _descriptor_arch_names(text: str) -> List[str]:
 def _cluster_descriptor_arch(profiler_path: Optional[str]) -> Optional[str]:
     """The chip architecture rank 0's cluster descriptor names, as it spells it.
 
-    The profiler database records no architecture; tt-metal writes this file beside
+    The memory report database records no architecture; tt-metal writes this file beside
     it. Older descriptors spell Wormhole `Wormhole`, so the name is passed through
     rather than normalised, and chips that differ are joined with commas.
     """
@@ -675,16 +685,15 @@ def _inventory(instance: Instance, perf_csv: Optional[Path]) -> Dict[str, object
     profiler_path = instance.profiler_path
     device_log_columns = _answerable_device_log_columns(instance)
     record("zone_timings", device_log_columns is not None)
-    # Joins a perf row to its zones, so it needs both files, durations to spread
-    # (a phase column `query_core_spans` would pair on) and a clock to read their
-    # cycles as time.
-    record(
-        "core_spread",
-        perf_ready
-        and device_log_columns is not None
+    # Both read zone starts apart from ends (a phase column) as time, against a clock.
+    zones_timed = (
+        device_log_columns is not None
         and bool(DeviceLogProfilerQueries.ZONE_PHASE_TOKENS.keys() & device_log_columns)
-        and DeviceLogProfilerQueries.clock_mhz(instance) is not None,
+        and DeviceLogProfilerQueries.clock_mhz(instance) is not None
     )
+    record("zone_intervals", zones_timed)
+    # Joins a perf row to its zones, so it needs the performance CSV as well.
+    record("core_spread", perf_ready and zones_timed)
 
     # Per tool, against the tables it reads. A partial capture can answer
     # `find_operations` and none of the rest, and saying so is the whole point
@@ -692,6 +701,9 @@ def _inventory(instance: Instance, perf_csv: Optional[Path]) -> Dict[str, object
     tables = _readable_tables(profiler_path)
     for tool_name, required in TOOL_TABLES.items():
         record(tool_name, required <= tables)
+    # Weighs the graph by the linked rows' device time, so it needs the graph's
+    # tables, the captured graphs the link aligns, and a CSV to align them with.
+    record("critical_path", perf_ready and _CRITICAL_PATH_TABLES <= tables)
 
     return {
         # Tool names only. `operations` used to appear here whenever a `db.sqlite`
@@ -710,16 +722,43 @@ def _inventory(instance: Instance, perf_csv: Optional[Path]) -> Dict[str, object
     }
 
 
+def _memory_report_argument(
+    memory_report_path: Optional[str], profiler_path: Optional[str]
+) -> Tuple[str, Optional[str]]:
+    """The memory report path and the argument name it came in under.
+
+    Both names are accepted together only when they agree, so a caller passing both
+    cannot load a different report than the one it meant.
+    """
+    if profiler_path is not None and memory_report_path not in (None, profiler_path):
+        raise ValueError(
+            "memory_report_path and profiler_path name different paths; "
+            "pass only memory_report_path"
+        )
+    if memory_report_path is not None:
+        return "memory_report_path", memory_report_path
+    return "profiler_path", profiler_path
+
+
 def load_report(
     registry: ReportRegistry,
     profiler_path: Optional[str] = None,
     performance_path: Optional[str] = None,
+    memory_report_path: Optional[str] = None,
 ) -> Dict[str, object]:
-    """Register a report by path and describe what it holds."""
-    if profiler_path is None and performance_path is None:
-        raise ValueError("one of profiler_path or performance_path is required")
+    """Register a report by path and describe what it holds.
 
-    profiler = _resolved_directory("profiler_path", profiler_path)
+    ``memory_report_path`` is the preferred name for the memory report directory;
+    ``profiler_path`` is its former name, still accepted. Last in the signature so
+    positional callers keep binding the former names.
+    """
+    memory_label, memory_path = _memory_report_argument(
+        memory_report_path, profiler_path
+    )
+    if memory_path is None and performance_path is None:
+        raise ValueError("one of memory_report_path or performance_path is required")
+
+    profiler = _resolved_directory(memory_label, memory_path)
     performance = _resolved_directory("performance_path", performance_path)
     handle = registry.add(profiler, performance)
     instance = registry.get(handle)

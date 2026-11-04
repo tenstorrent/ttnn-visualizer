@@ -101,7 +101,7 @@ describe('getServerConfig (dev / Vite env)', () => {
 
     it('reads VITE_SSH_* defaults through the same validators', async () => {
         vi.stubEnv('VITE_SSH_DEFAULT_PORT', '45985');
-        vi.stubEnv('VITE_SSH_DEFAULT_PROFILER_PATH', ' /mem/ ');
+        vi.stubEnv('VITE_SSH_DEFAULT_MEMORY_REPORT_PATH', ' /mem/ ');
         vi.stubEnv('VITE_SSH_DEFAULT_PERFORMANCE_PATH', '/perf');
         vi.stubEnv('VITE_USERNAME', 'dev-user');
 
@@ -109,9 +109,34 @@ describe('getServerConfig (dev / Vite env)', () => {
         const config = getServerConfig();
 
         expect(config.SSH_DEFAULT_PORT).toBe(45985);
-        expect(config.SSH_DEFAULT_PROFILER_PATH).toBe('/mem/');
+        expect(config.SSH_DEFAULT_MEMORY_REPORT_PATH).toBe('/mem/');
         expect(config.SSH_DEFAULT_PERFORMANCE_PATH).toBe('/perf');
         expect(config.USERNAME).toBe('dev-user');
+    });
+
+    it('falls back to the former VITE_SSH_DEFAULT_PROFILER_PATH with a warning', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        vi.stubEnv('VITE_SSH_DEFAULT_PROFILER_PATH', '/old/');
+
+        const { default: getServerConfig } = await import('../src/functions/getServerConfig');
+
+        expect(getServerConfig().SSH_DEFAULT_MEMORY_REPORT_PATH).toBe('/old/');
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('VITE_SSH_DEFAULT_MEMORY_REPORT_PATH'));
+
+        warn.mockRestore();
+    });
+
+    it('prefers VITE_SSH_DEFAULT_MEMORY_REPORT_PATH over its former name, without warning', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        vi.stubEnv('VITE_SSH_DEFAULT_MEMORY_REPORT_PATH', '/new/');
+        vi.stubEnv('VITE_SSH_DEFAULT_PROFILER_PATH', '/old/');
+
+        const { default: getServerConfig } = await import('../src/functions/getServerConfig');
+
+        expect(getServerConfig().SSH_DEFAULT_MEMORY_REPORT_PATH).toBe('/new/');
+        expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('VITE_SSH_DEFAULT_PROFILER_PATH'));
+
+        warn.mockRestore();
     });
 
     it.each([
