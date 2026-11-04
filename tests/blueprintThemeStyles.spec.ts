@@ -104,6 +104,7 @@ const stockWinningValue = (selector: string, property: string) =>
 const DARK_BORDER_SHADOW = 'inset 0 0 0 1px rgba(255, 255, 255, 0.2)';
 const DARK_DROP_SHADOW = 'rgba(17, 20, 24, 0.4)';
 const DARK_FOCUS_RING = 'rgba(138, 187, 255, 0.752)';
+const DARK_INPUT_BOX_SHADOW = `${DARK_BORDER_SHADOW}, inset 0 -1px 1px 0 rgba(255, 255, 255, 0.3)`;
 const DARK_INPUT_FOCUS_SHADOW = `inset 0 0 0 1px ${DARK_FOCUS_RING}, 0 0 0 1px ${DARK_FOCUS_RING}`;
 
 /**
@@ -189,7 +190,25 @@ const OVERRIDDEN_VALUES: [string, string, string][] = [
     [
         '.bp6-dark .bp6-file-input input:focus + .bp6-file-upload-input',
         'box-shadow',
-        `${DARK_INPUT_FOCUS_SHADOW}, ${DARK_BORDER_SHADOW}, inset 0 -1px 1px 0 rgba(255, 255, 255, 0.3)`,
+        `${DARK_INPUT_FOCUS_SHADOW}, ${DARK_INPUT_BOX_SHADOW}`,
+    ],
+    ['.bp6-dark .bp6-input-group.bp6-intent-primary > .bp6-icon', 'color', '#bcb3f7'],
+    ['.bp6-dark .bp6-input-group.bp6-intent-primary .bp6-input[readonly]', 'box-shadow', 'inset 0 0 0 1px #bcb3f7'],
+    ['.bp6-dark .bp6-input-group.bp6-intent-success > .bp6-icon', 'color', '#32a467'],
+    ['.bp6-dark .bp6-input-group.bp6-intent-success .bp6-input[readonly]', 'box-shadow', 'inset 0 0 0 1px #32a467'],
+    ['.bp6-dark .bp6-input-group.bp6-intent-warning > .bp6-icon', 'color', '#f6bc42'],
+    ['.bp6-dark .bp6-input-group.bp6-intent-warning .bp6-input[readonly]', 'box-shadow', 'inset 0 0 0 1px #f6bc42'],
+    ['.bp6-dark .bp6-input-group.bp6-intent-danger > .bp6-icon', 'color', '#fa512e'],
+    ['.bp6-dark .bp6-input-group.bp6-intent-danger .bp6-input[readonly]', 'box-shadow', 'inset 0 0 0 1px #fa512e'],
+    [
+        '.bp6-dark .bp6-input.bp6-intent-warning',
+        'box-shadow',
+        `inset 0 0 0 0 rgba(246, 188, 66, 0), 0 0 0 0 rgba(246, 188, 66, 0), inset 0 0 0 1px #f6bc42, ${DARK_INPUT_BOX_SHADOW}`,
+    ],
+    [
+        '.bp6-dark .bp6-input-group.bp6-intent-warning .bp6-input:focus',
+        'box-shadow',
+        `inset 0 0 0 1px rgba(246, 188, 66, 0.752), 0 0 0 calc(var(--bp-surface-spacing) * 0.5) rgba(246, 188, 66, 0.752), ${DARK_INPUT_BOX_SHADOW}`,
     ],
     // Still read from Sass in Blueprint 6.21, so a release that moves them onto tokens would silently drop them
     ['.bp6-dark a', 'color', '#3eb7de'],
