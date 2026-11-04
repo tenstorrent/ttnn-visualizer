@@ -10,6 +10,7 @@ way the reader must: at kernel starts and at changes of run host ID or trace rep
 #2155
 """
 
+import json
 from itertools import zip_longest
 from typing import List
 from unittest.mock import patch
@@ -91,6 +92,7 @@ class TestIntervals:
         assert answer["clock_mhz"] == 1000
         assert answer["arch"] == "wormhole_b0"
         assert "caveat" not in answer
+        assert "by_core_risc_unlisted_too_long" not in answer
 
     def test_each_risc_is_its_own_timeline(self, tmp_path):
         """Their starts alternate in time, but a BRISC start and an NCRISC start are
@@ -233,6 +235,55 @@ class TestIntervals:
         assert [entry["x"] for entry in answer["by_core_risc"]] == [2, 3]
         assert answer["returned"] == 2
         assert answer["timeline_count"] == 3
+
+    def test_a_risc_name_too_long_to_show_is_counted_rather_than_listed(self, tmp_path):
+        """Its intervals still count in its device's figures, which name no RISC."""
+        at_bound = "R" * tools.MAX_RISC_NAME_LENGTH
+        rows = [
+            *_run(0, 1, 1, f"{at_bound}R", 0, [100, 3100]),
+            *_run(0, 2, 1, at_bound, 0, [100, 2100]),
+            *_run(0, 3, 1, "BRISC", 0, [100, 1100]),
+        ]
+
+        answer = _intervals(tmp_path, rows, limit=1)
+
+        assert [(entry["x"], entry["risc"]) for entry in answer["by_core_risc"]] == [
+            (2, at_bound)
+        ]
+        assert answer["by_core_risc_unlisted_too_long"] == 1
+        assert answer["timeline_count"] == 3
+        assert answer["by_device"][0]["max_us"] == 3.0
+        assert f"{at_bound}R" not in json.dumps(answer)
+
+    def test_a_risc_name_too_long_to_show_past_the_limit_is_still_counted(
+        self, tmp_path
+    ):
+        long_risc = "R" * (tools.MAX_RISC_NAME_LENGTH + 1)
+        rows = [
+            *_run(0, 1, 1, "BRISC", 0, [100, 3100]),
+            *_run(0, 2, 1, "NCRISC", 0, [100, 2100]),
+            *_run(0, 3, 1, long_risc, 0, [100, 1100]),
+        ]
+
+        answer = _intervals(tmp_path, rows, limit=1)
+
+        assert [(entry["x"], entry["risc"]) for entry in answer["by_core_risc"]] == [
+            (1, "BRISC")
+        ]
+        assert answer["by_core_risc_unlisted_too_long"] == 1
+
+    def test_a_zone_only_on_risc_names_too_long_to_show_still_has_device_figures(
+        self, tmp_path
+    ):
+        long_risc = "R" * (tools.MAX_RISC_NAME_LENGTH + 1)
+
+        answer = _intervals(tmp_path, _run(0, 1, 1, long_risc, 0, [100, 1100]))
+
+        assert (answer["by_core_risc"], answer["returned"]) == ([], 0)
+        assert answer["by_core_risc_unlisted_too_long"] == 1
+        assert answer["timeline_count"] == 1
+        assert answer["by_device"][0]["cores"] == 1
+        assert answer["by_device"][0]["median_us"] == 1.0
 
     def test_the_zone_name_is_matched_whole(self, tmp_path):
         rows = [
@@ -842,6 +893,27 @@ class TestRefusals:
             pytest.raises(ValueError, match="'LOOP' \\(3\\), and 1 more$"),
         ):
             _intervals(tmp_path, rows, zone="LOPO")
+
+    def test_the_names_too_long_to_list_are_not_counted_among_the_more(self, tmp_path):
+        rows = [
+            *_run(0, 1, 1, "BRISC", 0, [100, 1100, 2100, 3100]),
+            *_run(0, 2, 1, "BRISC", 0, [100], zone="OTHER"),
+            *_run(
+                0, 3, 1, "BRISC", 0, [100], zone="Z" * (tools.MAX_ZONE_NAME_LENGTH + 1)
+            ),
+        ]
+
+        with (
+            patch.object(tools, "MAX_LISTED_ZONES", 1),
+            pytest.raises(ValueError) as refusal,
+        ):
+            _intervals(tmp_path, rows, zone="LOPO")
+
+        assert str(refusal.value) == (
+            "no zone named 'LOPO' starts in profile_log_device.csv. Its zones by "
+            "starts, most first: 'LOOP' (4), and 2 more; 1 more have names longer "
+            "than 256 characters, which are not listed"
+        )
 
     def test_a_blank_zone_is_refused(self, tmp_path):
         with pytest.raises(ValueError, match="zone must name a zone the device log"):

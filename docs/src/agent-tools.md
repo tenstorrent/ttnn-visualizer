@@ -729,6 +729,16 @@ is refused. A zone whose every start was unreadable is refused with how many had
 that is not a finite number and how many lay past the 200,000 core-RISC timelines followed
 at once.
 
+No zone tool shows a zone name longer than 256 characters or a RISC name longer than 32
+characters: such a name is the capture's text, not the tool's, and tt-metal's longest RISC
+name, `QUASAR_NEO3_TRISC3`, is 18. `zone_timings` leaves an entry with one out, counted in
+`zones_unlisted_too_long`, and `limit` counts only the entries listed. Both count
+zone-and-RISC entries, not names, so a long zone name on five RISCs counts five.
+`core_spread` leaves such a RISC out of `by_risc`, counted in `by_risc_unlisted_too_long`,
+though its kernels still count in their cores' spans. `zone_intervals` leaves such a
+timeline out of `by_core_risc`, counted in `by_core_risc_unlisted_too_long`, though its
+intervals still count in `by_device` and `timeline_count`.
+
 **`noc_congestion` reads tt-npe's simulation of the NoC, not a measurement.** Its figures
 are percentages of a link's bandwidth per timestep of `cycles_per_timestep` device cycles.
 Demand is what transfers asked of a link and can pass 100%; utilisation is what the link
@@ -739,31 +749,31 @@ over timesteps of that timestep's average across links, per NoC in `by_noc` too.
 because it is the largest per-timestep average, not one link's demand, so it sits well
 below what the busiest single link reaches. `worst_link` is the highest demand any single
 link reached, with its timestep and cycles: the earliest, where several tie, and
-`worst_link_ties` counts the link-timesteps at that demand, that one included. A burst is a
-run of consecutive timesteps whose busiest link was over 100% demand; `bursts` ranks them
-by peak, each with its cycle span, length and the link that peaked, `burst_count` counts
-them, and `congested_timesteps` and `congested_percent` say how many timesteps they cover
-and what share of the trace that is. `busiest_links` ranks links by their mean demand over
-every timestep of the trace, idle ones included, with each link's peak and the share of
-timesteps it spent over 100%, and `link_count` counts every link with a readable demand
-row. `device`, `y` and `x` are the trace's own chip id and grid coordinates. A link demand
-row whose coordinates or demand cannot be read is left out and counted in a caveat, and a
-timestep that is not an object or holds no list of link demand counts as idle, also in a
-caveat. Links past the first 65,536 distinct ones read are left out and counted in a caveat;
-the most in a local trace is 4,653. The trace is read through the visualizer's index of it when that index is built
-and current, and from the trace itself otherwise; the tool never builds the index, so it
-writes nothing beside the trace. The visualizer builds its index beside the copy it opens,
-which for an upload is its own copy under its report data directory, so an `npe_path`
-naming that copy reuses the index, in a fraction of the time and memory a parse takes.
-Otherwise the first call on a handle parses the whole trace: a trace of tens of thousands
-of timesteps and millions of link rows takes seconds to tens of seconds and several GB at
-its peak, as building the visualizer's index does, and the server process can keep much of
-that memory afterwards. A trace whose JSON passes 1 GiB, summed over every zstd frame, or a `.zst` file itself
-past that size, is refused rather than parsed, and so is a `.zst` with a frame that does not declare its
-size. Later calls answer from the first read, and so does every handle on the same
-unchanged file. A handle stays with the trace it first read: if the file changes or goes
-away afterwards, its answers say so in their caveat, and a fresh `load_report` reads the
-new one.
+`worst_link_ties` counts the link-timesteps at that demand, that one included. A burst is
+a run of consecutive timesteps whose busiest link was over 100% demand; `bursts` ranks
+them by peak, each with its cycle span, length and the link that peaked, `burst_count`
+counts them, and `congested_timesteps` and `congested_percent` say how many timesteps they
+cover and what share of the trace that is. `busiest_links` ranks links by their mean
+demand over every timestep of the trace, idle ones included, with each link's peak and the
+share of timesteps it spent over 100%, and `link_count` counts every link with a readable
+demand row. `device`, `y` and `x` are the trace's own chip id and grid coordinates. A link
+demand row whose coordinates or demand cannot be read is left out and counted in a caveat,
+and a timestep that is not an object or holds no list of link demand counts as idle, also
+in a caveat. Links past the first 65,536 distinct ones read are left out and counted in a
+caveat; the most in a local trace is 4,653. The trace is read through the visualizer's
+index of it when that index is built and current, and from the trace itself otherwise; the
+tool never builds the index, so it writes nothing beside the trace. The visualizer builds
+its index beside the copy it opens, which for an upload is its own copy under its report
+data directory, so an `npe_path` naming that copy reuses the index, in a fraction of the
+time and memory a parse takes. Otherwise the first call on a handle parses the whole
+trace: a trace of tens of thousands of timesteps and millions of link rows takes seconds
+to tens of seconds and several GB at its peak, as building the visualizer's index does,
+and the server process can keep much of that memory afterwards. A trace whose JSON passes
+1 GiB, summed over every zstd frame, or a `.zst` file itself past that size, is refused
+rather than parsed, and so is a `.zst` with a frame that does not declare its size. Later
+calls answer from the first read, and so does every handle on the same unchanged file. A
+handle stays with the trace it first read: if the file changes or goes away afterwards,
+its answers say so in their caveat, and a fresh `load_report` reads the new one.
 
 **A performance row and a memory report operation are linked by order, not by a shared id.**
 Neither report records the other's id, so when a handle is loaded with both, the tools
