@@ -72,6 +72,7 @@ from ttnn_visualizer.tests.test_device_log_columns import (
     modern_row,
     write_device_log,
 )
+from ttnn_visualizer.utils import newest_ops_perf_file
 
 ZONED_ROWS = [
     # Two cores running the same zone, so `cores` counts distinctly from
@@ -151,6 +152,32 @@ def _signposts_in(*handles):
         return ResolvedSignposts(names, True, 1)
 
     return patch.object(tools, "_resolve_signposts", side_effect=resolve)
+
+
+def _touch_after(older, newer, times=None):
+    """Make `newer` the ops_perf CSV `newest_ops_perf_file` picks over `older`,
+    leaving `older` untouched.
+
+    It ranks by ctime, which a test cannot set: every `os.utime` stamps it with
+    the filesystem's clock, so only the order of the calls decides. Back to back,
+    both can land on one tick of a coarse clock and tie, and a tie falls to glob
+    order. Touch `newer` again until its ctime is strictly later, whatever the
+    timestamp resolution. Compare as it does, with the float `os.path.getctime`,
+    which can call two ctimes a few nanoseconds apart equal.
+    """
+    deadline = time.monotonic() + 5
+    while True:
+        os.utime(newer, times)
+        if os.path.getctime(newer) > os.path.getctime(older):
+            return
+        assert time.monotonic() < deadline, "ctimes never separated"
+        time.sleep(0.01)
+
+
+def _touch_in_order(older, newer):
+    """`_touch_after`, with both mtimes aged too, for any reader that uses them."""
+    os.utime(older, (1000, 1000))
+    _touch_after(older, newer, (2000, 2000))
 
 
 class TestReportInventory:
@@ -293,8 +320,7 @@ class TestReportInventory:
         )
         newer = tmp_path / "ops_perf_results_new.csv"
         newer.write_bytes(b"")
-        os.utime(older, (1000, 1000))
-        os.utime(newer, (2000, 2000))
+        _touch_in_order(older, newer)
 
         loaded = load_report(ReportRegistry(), performance_path=str(tmp_path))
 
@@ -750,8 +776,7 @@ class TestReportFacts:
         newer = write_ops_perf(
             tmp_path, [{**row, "DEVICE ID": "0"} for row in smoke_rows()]
         )
-        os.utime(older, (1000, 1000))
-        os.utime(newer, (2000, 2000))
+        _touch_in_order(older, newer)
         registry = ReportRegistry()
 
         loaded = tools.with_signposts(
@@ -1747,9 +1772,13 @@ class TestSignpostRangeEndToEnd:
         handle = self._handle(registry, tmp_path)
         self._ranged(registry, handle)
 
+        original = tmp_path / "signposted" / "ops_perf_results.csv"
         newer = tmp_path / "signposted" / "ops_perf_results_newer.csv"
-        newer.write_text((tmp_path / "signposted" / "ops_perf_results.csv").read_text())
-        os.utime(newer, ns=(time.time_ns() + 10**9, time.time_ns() + 10**9))
+        newer.write_text(original.read_text())
+        # Touching the original would change the source `_require_same_source`
+        # compares and refuse for the wrong reason, so only `newer` moves.
+        _touch_after(original, newer, (time.time() + 1, time.time() + 1))
+        assert newest_ops_perf_file(original.parent) == newer
 
         with pytest.raises(ValueError, match="has changed since it was first read"):
             tools.top_ops(registry, handle)

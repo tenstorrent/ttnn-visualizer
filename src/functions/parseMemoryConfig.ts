@@ -5,23 +5,24 @@
 import { MemoryConfig, MemoryKeys, ShardSpec, TensorMemoryLayout } from '../model/MemoryConfig';
 import { BufferType, toBufferType } from '../model/BufferType';
 
-// Unanchored at the start, so it also matches a value that only ends in a memory config. Kept
-// as it is for the details view; anchoring it would change which arguments that view parses.
-const trailingMemoryConfigPattern = /MemoryConfig\((.*)\)$/;
-// Anchored at both ends, like the backend's `re.match`, so a tensor argument whose repr merely
-// ends in a memory config is not read as a request. Older reports namespace the type.
-const wholeMemoryConfigPattern = /^(?:tt::tt_metal::)?MemoryConfig\((.*)\)$/;
+// Anchored at both ends, like the backend's `re.match` with its `$`, so a tensor argument whose
+// repr merely contains a memory config is not read as one. Older reports namespace the type.
+// `[^\n]*` is Python's `.`, which unlike JavaScript's also takes `\r`, U+2028 and U+2029, and
+// `\n?` is Python's `$`, which also allows one trailing newline.
+const memoryConfigPattern = /^(?:tt::tt_metal::)?MemoryConfig\(([^\n]*)\)\n?$/;
 const bufferTypePattern = /buffer_type=BufferType::([A-Z0-9_]+)/;
 const memoryLayoutPattern = /memory_layout=([A-Za-z_:]+)/;
 const shardSpecPattern =
     /shard_spec=ShardSpec\((?:grid=\{(\[.*?\])\},?)?(?:shape=\{(\d+), (\d+)\},?)?(?:orientation=ShardOrientation::([A-Za-z_]+),?)?(?:halo=(\d+),?)?(?:mode=ShardMode::([A-Z_]+),?)?(?:physical_shard_shape=std::([A-Za-z_]+),?)?/;
 
-const parseMemoryConfig = (string: string): MemoryConfig | null => {
-    const match = string.match(trailingMemoryConfigPattern);
+/** What sits inside a raw `MemoryConfig(...)` string, or null if it isn't one, like the backend's `_memory_config_body`. */
+const getMemoryConfigBody = (value: string | null | undefined): string | null =>
+    value?.match(memoryConfigPattern)?.[1] ?? null;
 
-    if (match) {
-        const capturedString = match[1];
+const parseMemoryConfig = (string: string | null | undefined): MemoryConfig | null => {
+    const capturedString = getMemoryConfigBody(string);
 
+    if (capturedString != null) {
         const memoryLayoutMatch = capturedString.match(memoryLayoutPattern);
         const shardSpecMatch = capturedString.match(shardSpecPattern);
 
@@ -47,26 +48,25 @@ const parseMemoryConfig = (string: string): MemoryConfig | null => {
 };
 
 /**
- * Whether the operation details view parses this argument as a memory config. Looser than
- * `isMemoryConfigValue`, which decides what counts as a request.
+ * An operation argument with its `parsedValue`, which the operations list and operation details
+ * view render key by key: the parsed config when the value is a whole `MemoryConfig(...)`,
+ * otherwise null.
  */
-export const isParsableMemoryConfigArgument = ({ name, value }: { name: string; value: string }): boolean =>
-    name === 'memory_config' || trailingMemoryConfigPattern.test(value);
+export const withParsedMemoryConfig = <Argument extends { value: string }>(
+    argument: Argument,
+): Argument & { parsedValue: MemoryConfig | null } => ({ ...argument, parsedValue: parseMemoryConfig(argument.value) });
 
 /** Whether a raw argument value is a whole `MemoryConfig(...)`, whatever buffer type it declares. */
 export const isMemoryConfigValue = (value: string | null | undefined): value is string =>
-    value != null && wholeMemoryConfigPattern.test(value);
+    getMemoryConfigBody(value) != null;
 
 /**
  * The buffer type a raw `MemoryConfig(...)` string declares, mirroring the backend's
  * `parse_memory_config_buffer_type`. Kept out of `parseMemoryConfig`, whose result the
- * operation details view renders key by key.
+ * operations list and operation details view render key by key.
  */
-export const getMemoryConfigBufferType = (value: string | null | undefined): BufferType | null => {
-    const body = value?.match(wholeMemoryConfigPattern)?.[1];
-
-    return toBufferType(body?.match(bufferTypePattern)?.[1]);
-};
+export const getMemoryConfigBufferType = (value: string | null | undefined): BufferType | null =>
+    toBufferType(getMemoryConfigBody(value)?.match(bufferTypePattern)?.[1]);
 
 export const MEMORY_CONFIG_HEADERS = {
     shard_spec: 'ShardSpec',

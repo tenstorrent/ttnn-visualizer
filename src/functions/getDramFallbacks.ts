@@ -9,7 +9,7 @@ import {
     DramFallbackSignal,
 } from '../definitions/DramFallback';
 import { AllocationFailure } from '../model/AllocationFailure';
-import { Operation, OperationDescription, Tensor } from '../model/APIData';
+import { Operation, OperationArgument, Tensor } from '../model/APIData';
 import { BufferType, BufferTypeLabel, isL1BufferType, isL1StringBufferType } from '../model/BufferType';
 import {
     ArgumentMismatchFallback,
@@ -20,10 +20,10 @@ import {
 import { getMemoryConfigBufferType, isMemoryConfigValue } from './parseMemoryConfig';
 import assertNever from './assertNever';
 
-type OperationArgument = Pick<OperationDescription['arguments'][number], 'name' | 'value'>;
+type DramFallbackArgument = Pick<OperationArgument, 'name' | 'value'>;
 
 export type DramFallbackOperation = Pick<Operation, 'id' | 'name' | 'inputs' | 'outputs'> & {
-    arguments: OperationArgument[];
+    arguments: DramFallbackArgument[];
 };
 
 /**
