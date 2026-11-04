@@ -151,7 +151,7 @@ describe('PerfTable tensor-drawer trigger column', () => {
         expect(within(signpostCell).queryByTestId(TEST_IDS.PERF_TENSOR_DRAWER_OPEN_BUTTON)).toBeNull();
     });
 
-    it('disables the trigger button for rows with no linked profiler op', () => {
+    it('disables the trigger button for rows with no linked memory report operation', () => {
         (useOpToPerfIdFiltered as Mock).mockReturnValue([{ opId: 11, perfId: '1' }]);
         renderTable([unmappedRow]);
 

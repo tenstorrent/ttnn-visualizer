@@ -310,7 +310,7 @@ def _rank_query_param() -> int:
     restarts ``operation_id`` and ``tensor_id`` at 1 for each rank and
     re-normalises ``device_id`` per rank, so an unfiltered read unions the
     ranks and collides on all three. File-backed routes (cluster/mesh
-    descriptor, profiler config) already defaulted to 0; DB-backed routes
+    descriptor, memory report config) already defaulted to 0; DB-backed routes
     passed None and returned the union. #1842
     """
     raw = request.args.get("rank")
@@ -812,7 +812,7 @@ def report_fingerprints(instance: Instance):
 @timer
 def get_config(instance: Instance):
     """
-    Return the profiler ``config.json`` object for this report.
+    Return the memory report's ``config.json`` object for this report.
 
     For multi-host ranked configs (``config_<n>_of_<world>.json``), the response
     is the same shape as a single config file: one JSON object. Default is
@@ -829,7 +829,9 @@ def get_config(instance: Instance):
             "Rank must be within the world size for this report's config files."
         )
     if err == "missing_rank_file":
-        return response_not_found(f"No profiler config file for rank {logical_rank}.")
+        return response_not_found(
+            f"No memory report config file for rank {logical_rank}."
+        )
     if err == "parse_error":
         return {}
     if payload is None:
@@ -1086,7 +1088,7 @@ def get_operation_buffers(operation_id, instance: Instance):
 @api.route("/profiler", methods=["GET"])
 @with_instance
 def get_profiler_data_list(instance: Instance):
-    # Use PathResolver to get the base path for profiler reports
+    # Use PathResolver to get the base path for memory reports
     resolver = create_path_resolver(current_app)
 
     # Note: "profiler" in app terminology maps to tt-metal's ttnn/reports
@@ -1094,7 +1096,7 @@ def get_profiler_data_list(instance: Instance):
 
     if not path.exists():
         if resolver.is_direct_report_mode:
-            logger.warning(f"TT-Metal profiler reports not found: {path}")
+            logger.warning(f"TT-Metal memory reports not found: {path}")
             return []
         else:
             path.mkdir(parents=True, exist_ok=True)
@@ -1709,7 +1711,7 @@ def list_remote_reports_performance():
 @api.route("/remote/local-profiler-reports", methods=["POST"])
 @local_only
 def list_local_remote_reports_profiler():
-    """List profiler reports already synced under REMOTE_DATA_DIRECTORY/<host>/ (no SSH)."""
+    """List memory reports already synced under REMOTE_DATA_DIRECTORY/<host>/ (no SSH)."""
     return _respond_local_synced_folders(
         list_local_synced_profiler_folders,
         "PROFILER_DIRECTORY_NAME",
@@ -2734,7 +2736,7 @@ def update_current_instance(instance: Instance):
 @api.route("/instance/local-paths", methods=["POST"])
 @local_only
 def open_local_report_paths():
-    """A new instance on report directories named by path, as `--profiler-path` makes.
+    """A new instance on report directories named by path, as `--memory-report-path` makes.
 
     How a link from the agent tools opens the report the agent read (#2047). Any page
     can send the reader here with paths of its choosing, so only a directory holding a

@@ -186,6 +186,8 @@ class TestReportInventory:
             "errors",
             "dram_fallbacks",
             "l1_peak",
+            "critical_path",
+            "subgraph_between",
         }
         assert loaded["capture"]["ARCH"] == "wormhole_b0"
         assert loaded["performance_csv"] == "ops_perf_results_x.csv"
@@ -397,7 +399,7 @@ class TestReportInventory:
             load_report(ReportRegistry(), performance_path=str(tmp_path / "absent"))
 
     def test_at_least_one_path_is_required(self):
-        with pytest.raises(ValueError, match="one of profiler_path"):
+        with pytest.raises(ValueError, match="one of memory_report_path"):
             load_report(ReportRegistry())
 
     def test_an_unknown_handle_names_the_handles_that_exist(self, tmp_path):
@@ -450,6 +452,59 @@ def _write_descriptor(directory, arch, name="cluster_descriptor.yaml"):
     directory.mkdir(parents=True, exist_ok=True)
     lines = ["arch:", *(f"  {chip}: {chip_arch}" for chip, chip_arch in arch.items())]
     (directory / name).write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+class TestLoadReportMemoryReportPath:
+    """`memory_report_path` is the preferred name; `profiler_path` still works."""
+
+    @staticmethod
+    def _memory_report(tmp_path):
+        directory = tmp_path / "memory"
+        directory.mkdir()
+        (directory / "db.sqlite").write_text("", encoding="utf-8")
+        return str(directory)
+
+    @staticmethod
+    def _call(arguments):
+        handler = server._tool_table(ReportRegistry())["load_report"]["handler"]
+        return handler(arguments)
+
+    @pytest.mark.parametrize("name", ["memory_report_path", "profiler_path"])
+    def test_either_name_loads_the_memory_report(self, tmp_path, name):
+        path = self._memory_report(tmp_path)
+
+        loaded = self._call({name: path})
+
+        # The answer keeps its former key whichever name the call used.
+        assert loaded["profiler_path"] == str(tmp_path.resolve() / "memory")
+
+    def test_both_names_agreeing_load_the_one_report(self, tmp_path):
+        path = self._memory_report(tmp_path)
+
+        loaded = self._call({"memory_report_path": path, "profiler_path": path})
+
+        assert loaded["profiler_path"] == str(tmp_path.resolve() / "memory")
+
+    def test_both_names_disagreeing_are_refused(self, tmp_path):
+        path = self._memory_report(tmp_path)
+        other = tmp_path / "other"
+        other.mkdir()
+
+        with pytest.raises(ValueError, match="name different paths"):
+            self._call({"memory_report_path": path, "profiler_path": str(other)})
+
+    @pytest.mark.parametrize("name", ["memory_report_path", "profiler_path"])
+    def test_a_missing_directory_is_refused_under_the_name_used(self, tmp_path, name):
+        with pytest.raises(ValueError, match=f"^{name} is not a directory"):
+            self._call({name: str(tmp_path / "absent")})
+
+    def test_the_schema_offers_both_names(self):
+        properties = server._tool_table(ReportRegistry())["load_report"]["schema"][
+            "properties"
+        ]
+
+        assert {"memory_report_path", "profiler_path"} <= set(properties)
+        assert "Deprecated" in properties["profiler_path"]["description"]
 
 
 class TestReportFacts:
@@ -2468,6 +2523,8 @@ class TestTransport:
             "errors",
             "dram_fallbacks",
             "l1_peak",
+            "critical_path",
+            "subgraph_between",
         }
         assert all(
             tool["inputSchema"]["type"] == "object"

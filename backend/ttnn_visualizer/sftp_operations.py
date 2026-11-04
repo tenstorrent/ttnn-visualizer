@@ -832,7 +832,7 @@ def download_single_file_sftp(
 def _profiler_config_paths(
     remote_connection: RemoteConnection, config_path: str
 ) -> List[str]:
-    """The config file(s) that describe a profiler report, the one to read first.
+    """The config file(s) that describe a memory report, the one to read first.
 
     A single-host report has ``config_path`` itself; a multihost one has ranked
     ``config_*_of_*.json`` beside it instead. Empty when the report has neither.
@@ -1006,7 +1006,7 @@ def read_remote_report_last_modified(
 ) -> int:
     """Re-read one report's ``lastModified`` the way its listing does.
 
-    A profiler report is timed by its config file(s), a performance report by its
+    A memory report is timed by its config file(s), a performance report by its
     folder, so a refreshed row sorts exactly where a fresh listing would put it.
     An unreadable time keeps ``folder.lastModified``.
     """
@@ -1213,7 +1213,7 @@ def check_remote_path_for_reports(
             ),
         )
     else:
-        logger.info("No profiler path configured; skipping check")
+        logger.info("No memory report path configured; skipping check")
 
     performance: Optional[RemoteReportPathOutcome] = None
     if remote_connection.performancePath:
@@ -1511,12 +1511,12 @@ def get_remote_profiler_folders(
             remote_connection, remote_connection.profilerPath, [TEST_DB_FILE]
         ).folders
     else:
-        logger.info("No profiler path configured for this connection")
+        logger.info("No memory report path configured for this connection")
         return []
 
     if not profiler_paths:
         logger.info(
-            "No profiler reports found under path: %s",
+            "No memory reports found under path: %s",
             remote_connection.profilerPath,
         )
         return []
