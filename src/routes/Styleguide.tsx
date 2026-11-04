@@ -6,6 +6,7 @@ import {
     Button,
     ButtonGroup,
     ButtonVariant,
+    Card,
     Checkbox,
     Classes,
     FormGroup,
@@ -13,6 +14,7 @@ import {
     InputGroup,
     Intent,
     PopoverPosition,
+    SegmentedControl,
     Size,
     Switch,
     Tag,
@@ -79,6 +81,12 @@ const TAG_ROWS = [
 ] as const;
 
 const SELECT_OPTIONS = ['First option', 'Second option'];
+
+const SEGMENTED_OPTIONS = [
+    { label: 'First', value: 'first' },
+    { label: 'Second', value: 'second' },
+    { label: 'Third', value: 'third' },
+];
 
 const FORM_GROUP = {
     label: 'Form label',
@@ -268,6 +276,7 @@ const MLIR_TERMINATOR_OUTGOING: OutgoingEdge[] = [
 export default function Styleguide() {
     const fileTransferProgress = useAtomValue(fileTransferProgressAtom);
     const [autoCloseTime, setAutoCloseTime] = useState(1000);
+    const [segmentedValue, setSegmentedValue] = useState<string>(SEGMENTED_OPTIONS[0].value);
     const [timeRemaining, setTimeRemaining] = useState(autoCloseTime);
 
     const runFileTransferDemo = (source: FileTransferSource, initial: FileProgress) => {
@@ -587,6 +596,22 @@ export default function Styleguide() {
             </div>
 
             <div className='container flex'>
+                {INTENTS.filter(({ intent }) => intent !== Intent.NONE).map(({ intent, label }) => (
+                    <FormGroup
+                        key={intent}
+                        label={label}
+                        intent={intent}
+                        helperText={`${label} helper text`}
+                    >
+                        <InputGroup
+                            onChange={() => {}}
+                            intent={intent}
+                        />
+                    </FormGroup>
+                ))}
+            </div>
+
+            <div className='container flex'>
                 <HTMLSelect options={SELECT_OPTIONS} />
                 <HTMLSelect
                     options={SELECT_OPTIONS}
@@ -685,6 +710,39 @@ export default function Styleguide() {
                 <MemoryTag memory={BufferTypeLabel[BufferType.L1_SMALL]} />
                 <MemoryTag memory={BufferTypeLabel[BufferType.SYSTEM_MEMORY]} />
                 <MemoryTag memory={BufferTypeLabel[BufferType.TRACE]} />
+            </div>
+
+            <h3>Segmented control</h3>
+
+            <div className='container'>
+                <SegmentedControl
+                    options={SEGMENTED_OPTIONS}
+                    value={segmentedValue}
+                    onValueChange={setSegmentedValue}
+                />
+            </div>
+
+            <h3>Card</h3>
+
+            <div className='container short-width'>
+                <Card>
+                    <p>Minimal buttons drawn on a card rather than the page background</p>
+                    <ButtonGroup>
+                        <Button
+                            icon={IconNames.EDIT}
+                            variant={ButtonVariant.MINIMAL}
+                        >
+                            Minimal
+                        </Button>
+                        <Button
+                            icon={IconNames.TRASH}
+                            variant={ButtonVariant.MINIMAL}
+                            intent={Intent.DANGER}
+                        >
+                            Minimal danger
+                        </Button>
+                    </ButtonGroup>
+                </Card>
             </div>
 
             <h3>Progress bar</h3>

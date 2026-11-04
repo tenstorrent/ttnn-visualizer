@@ -145,11 +145,10 @@ $button-dark-tint-text-colors: (
                 $tt-red-tint-1,
             )
         ),
-    // Still read from Sass: intent colours of spinners, sliders, tree rows and tooltips, body text, the navbar and
-    // the dark elevation shadows
+    // Still read from Sass: intent colours of spinners, sliders, tree rows, tooltips and callouts, the navbar and the
+    // dark elevation shadows
     $pt-intent-colors: $pt-intent-text-colors,
     $pt-dark-intent-text-colors: $pt-intent-text-colors,
-    $pt-text-color: $tt-grey-2,
     $dark-navbar-background-color: transparent,
     $pt-dark-elevation-shadow-0: $bp-legacy-dark-border-shadow,
     // No navbar shadow in dark mode. The level 1 token below stays a real shadow: Blueprint lists it alongside
@@ -189,8 +188,9 @@ $button-dark-tint-text-colors: (
 
 // Blueprint declares its dark surface and typography tokens on .bp6-dark, so overriding them on :root would lose
 .bp6-dark {
-    // Icons in default buttons and the text typed into a tag input. Blueprint's muted grey left button icons
-    // dimmer than the white label beside them.
+    // Default text in white: the labels and icons of default buttons, the text typed into inputs, text areas,
+    // selects and tag inputs, and minimal default tags. Blueprint's muted grey left button icons dimmer than the white
+    // label beside them.
     --bp-typography-color-default-rest: #{$tt-white};
 
     // Disabled text keeps the translucent grey the app has always used, rather than Blueprint's opaque one
@@ -287,7 +287,25 @@ $dark-input-focus-ring: (
         background-color: color.adjust(variables.$dark-button-background-base, $lightness: -5%);
     }
 
-    // Intent inputs and their icons. Blueprint lightens the intent token for these by fixed amounts tuned to its own
+    // Minimal and outlined default buttons and the minimal select hover to the same neutral grey, rather than a tint
+    // of the blue-tinted default token. :where keeps these at Blueprint's specificity, so intent, disabled and pressed
+    // buttons keep their own rules.
+    .bp6-button.bp6-minimal:where(:not(:active, .bp6-active)):hover,
+    .bp6-button.bp6-outlined:where(:not(:active, .bp6-active)):hover,
+    .bp6-button-group.bp6-minimal .bp6-button:where(:not(:active, .bp6-active)):hover,
+    .bp6-button-group.bp6-outlined .bp6-button:where(:not(:active, .bp6-active)):hover,
+    .bp6-html-select.bp6-minimal select:where(:not(:active, .bp6-active)):hover,
+    .bp6-select.bp6-minimal select:where(:not(:active, .bp6-active)):hover {
+        background-color: variables.$tt-dark-minimal-button-background-color-hover;
+    }
+
+    // Default input group icons, such as a search field's, stay white like the text beside them. Blueprint derives
+    // them from the muted typography grey and no longer reads $pt-dark-icon-color for them.
+    .bp6-input-group .bp6-icon {
+        color: $tt-white;
+    }
+
+    // Intent inputs, their icons and form helper text. Blueprint lightens the intent token for these by fixed amounts tuned to its own
     // palette, which turns our yellow almost white and leaves the purple shade dim, so they take the palette colours
     // that intent tags, buttons and icons use. Disabled intent inputs keep Blueprint's more specific rule.
     @each $intent, $color in $pt-intent-text-colors {
@@ -311,7 +329,8 @@ $dark-input-focus-ring: (
             }
         }
 
-        .bp6-input-group.bp6-intent-#{$intent} > .bp6-icon {
+        .bp6-input-group.bp6-intent-#{$intent} > .bp6-icon,
+        .bp6-form-group.bp6-intent-#{$intent} .bp6-form-helper-text {
             color: $color;
         }
     }

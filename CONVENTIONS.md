@@ -286,7 +286,7 @@ Blueprint 6.7+ draws most colours from its `--bp-*` design tokens and derives th
 
 Prefer a token to a map, and a map to a selector. The primary token is `$tt-purple-shade`, which solid buttons and tags need; text and outlines that need the light `$tt-purple` get it from the configured maps.
 
-Inputs, tags and the file input use relative colour syntax with no fallback, so the app needs Firefox 128+, Chrome 119+ or Safari 16.4+. Nothing in the toolchain enforces this: `browserslist` is still `defaults`, so a build for older browsers succeeds and renders those colours wrongly.
+Since the 6.21 upgrade, Blueprint derives many shades with relative colour syntax and no fallback (inputs, tags, cards, sections, form helper text and more), so the app needs Firefox 128+, Chrome 119+ or Safari 16.4+. Nothing in the toolchain enforces this: Vite's CSS target follows `build.target` (`es2022`) rather than `browserslist`, so a build succeeds and older browsers render those colours wrongly.
 
 One override is not a public token: `--bp6-button-warning-rest`, Blueprint's private warning button fill, which it marks as temporary. It is the most likely to break on an upgrade; the spec fails if Blueprint stops reading it.
 

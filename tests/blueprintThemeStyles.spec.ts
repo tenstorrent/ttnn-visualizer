@@ -26,7 +26,24 @@ const normaliseSelector = (selector: string) =>
         .trim();
 
 /** The selectors in a selector list, splitting only on commas outside :where(), :not() and other brackets. */
-const splitSelectorList = (selectorList: string) => selectorList.split(/,(?![^(]*\))/);
+const splitSelectorList = (selectorList: string) => {
+    const selectors: string[] = [];
+    let depth = 0;
+    let start = 0;
+
+    [...selectorList].forEach((character, index) => {
+        if (character === '(') {
+            depth += 1;
+        } else if (character === ')') {
+            depth -= 1;
+        } else if (character === ',' && depth === 0) {
+            selectors.push(selectorList.slice(start, index));
+            start = index + 1;
+        }
+    });
+
+    return [...selectors, selectorList.slice(start)];
+};
 
 // The same options Vite builds with, so these checks see the CSS that ships
 const SASS_OPTIONS = createSassOptions(ROOT);
@@ -80,15 +97,17 @@ const indexDeclarations = (source: string) => {
     return valueBySelectorProperty;
 };
 
-/** Every selector with a rule declaring the custom property, including rules nested in @supports. */
-const selectorsDeclaring = (source: string, token: string) => {
+/** The selector of each rule declaring the custom property, once per rule, including rules nested in @supports. */
+const declarationSelectors = (source: string, token: string) => {
     const declaration = new RegExp(`(?<![\\w-])${token}\\s*:`);
-    const selectors = readRules(source)
+
+    return readRules(source)
         .filter(([, text]) => declaration.test(text))
         .flatMap(([selectorList]) => splitSelectorList(selectorList).map(normaliseSelector));
-
-    return [...new Set(selectors)];
 };
+
+/** Every selector with a rule declaring the custom property, including rules nested in @supports. */
+const selectorsDeclaring = (source: string, token: string) => [...new Set(declarationSelectors(source, token))];
 
 const { css } = compile(join(ROOT, STYLESHEET), SASS_OPTIONS);
 
@@ -103,6 +122,23 @@ const winningValue = (selector: string, property: string) =>
 
 const stockWinningValue = (selector: string, property: string) =>
     stockValueBySelectorProperty.get(`${normaliseSelector(selector)}|${property}`);
+
+/** The selectors our stylesheet declares the custom property on, beyond the declarations Blueprint makes itself. */
+const addedDeclarationSelectors = (token: string) => {
+    const unmatchedStock = declarationSelectors(stockBlueprintCss, token);
+
+    return declarationSelectors(css, token).filter((selector) => {
+        const stockIndex = unmatchedStock.indexOf(selector);
+
+        if (stockIndex === -1) {
+            return true;
+        }
+
+        unmatchedStock.splice(stockIndex, 1);
+
+        return false;
+    });
+};
 
 const DARK_BORDER_SHADOW = 'inset 0 0 0 1px rgba(255, 255, 255, 0.2)';
 const DARK_DROP_SHADOW = 'rgba(17, 20, 24, 0.4)';
@@ -121,6 +157,8 @@ const adjustedShade = (colour: string, lightness: string) =>
     ).css.match(/b:\s*([^;]+);/)![1];
 
 const DEFAULT_BUTTON_HOVER = adjustedShade('$tt-grey-2', '-5%');
+const MINIMAL_BUTTON_HOVER = adjustedShade('$tt-grey-2', '5%');
+const NOT_PRESSED = ':where(:not(:active, .bp6-active))';
 
 // [token, value], set on :root because Blueprint declares the intent tokens there
 const ROOT_TOKENS: [string, string][] = [
@@ -233,12 +271,44 @@ const OVERRIDDEN_VALUES: [string, string, string][] = [
         DEFAULT_BUTTON_HOVER,
     ],
     ['.bp6-dark .bp6-file-upload-input:where(:not(:active)):hover::after', 'background-color', DEFAULT_BUTTON_HOVER],
+    [`.bp6-dark .bp6-button.bp6-minimal${NOT_PRESSED}:hover`, 'background-color', MINIMAL_BUTTON_HOVER],
+    [`.bp6-dark .bp6-button.bp6-outlined${NOT_PRESSED}:hover`, 'background-color', MINIMAL_BUTTON_HOVER],
+    [
+        `.bp6-dark .bp6-button-group.bp6-minimal .bp6-button${NOT_PRESSED}:hover`,
+        'background-color',
+        MINIMAL_BUTTON_HOVER,
+    ],
+    [`.bp6-dark .bp6-html-select.bp6-minimal select${NOT_PRESSED}:hover`, 'background-color', MINIMAL_BUTTON_HOVER],
+    ['.bp6-dark .bp6-input-group .bp6-icon', 'color', '#fff'],
+    ['.bp6-dark .bp6-form-group.bp6-intent-primary .bp6-form-helper-text', 'color', '#bcb3f7'],
+    ['.bp6-dark .bp6-form-group.bp6-intent-warning .bp6-form-helper-text', 'color', '#f6bc42'],
+    ['.bp6-dark .bp6-form-group.bp6-intent-danger .bp6-form-helper-text', 'color', '#fa512e'],
     // Still read from Sass in Blueprint 6.21, so a release that moves them onto tokens would silently drop them
     ['.bp6-dark a', 'color', '#3eb7de'],
     ['.bp6-control input:checked ~ .bp6-control-indicator', 'background-color', '#3eb7de'],
+    [
+        '.bp6-control:hover input:checked ~ .bp6-control-indicator',
+        'background-color',
+        adjustedShade('$tt-teal-accent', '-3%'),
+    ],
     ['.bp6-dark .bp6-control.bp6-switch input:checked ~ .bp6-control-indicator', 'background', '#3eb7de'],
     ['.bp6-dark .bp6-progress-bar', 'background', '#0d4d62'],
     ['.bp6-dark .bp6-progress-bar .bp6-progress-meter', 'background-color', '#3eb7de'],
+    ['.bp6-dark .bp6-html-select .bp6-icon', 'color', '#fff'],
+    ['.bp6-dark .bp6-navbar', 'background-color', 'transparent'],
+    ['.bp6-dark .bp6-navbar', 'box-shadow', 'none'],
+    ['.bp6-tooltip.bp6-intent-danger .bp6-popover-content', 'background', '#fa512e'],
+    ['.bp6-dark .bp6-callout.bp6-intent-danger', 'color', '#fa512e'],
+    [
+        '.bp6-dark .bp6-dialog',
+        'box-shadow',
+        `${DARK_BORDER_SHADOW}, 0 2px 4px ${DARK_DROP_SHADOW}, 0 8px 24px ${DARK_DROP_SHADOW}`,
+    ],
+    [
+        '.bp6-dark .bp6-button.bp6-minimal.bp6-intent-warning:hover',
+        'background-color',
+        'color-mix(in oklch, #f6bc42 20%, transparent)',
+    ],
     // Blueprint 6.7+ only matches an icon that is a direct child, so an icon wrapped in a Tooltip target lost this
     [
         '.bp6-button .bp6-icon:first-child:last-child',
@@ -297,6 +367,15 @@ describe('Blueprint theme', () => {
 
         expect(selectors.length).toBeGreaterThan(0);
         expect(DARK_TOKEN_SELECTORS).toEqual(expect.arrayContaining(selectors));
+    });
+
+    // A duplicate declaration on another selector would change what wins without changing the values read above
+    it.each(ROOT_TOKENS)('our stylesheet declares %s only on :root', (token) => {
+        expect(addedDeclarationSelectors(token)).toEqual([':root']);
+    });
+
+    it.each(DARK_TOKENS)('our stylesheet declares %s only on .bp6-dark', (token) => {
+        expect(addedDeclarationSelectors(token)).toEqual(['.bp6-dark']);
     });
 
     // A token Blueprint stops reading, such as the private --bp6-button-warning-rest, would otherwise pass every
