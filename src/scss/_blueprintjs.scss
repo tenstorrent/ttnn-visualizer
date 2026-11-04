@@ -13,7 +13,8 @@ $dark-warning-background-base: $tt-yellow;
 $dark-danger-background-base: $tt-red-accent;
 $dark-success-intent-color: $green4; // from BlueprintJS
 
-// Blueprint 6.6 dark elevation shadows; 6.7 redesigned them
+// Blueprint 6.6 dark elevation shadows. 6.7 redesigned them with a 10px glow on flat surfaces such as cards and
+// longer, darker drops on raised ones (85% black at level 4), which would restyle every card, popover and dialog.
 $bp-legacy-dark-drop-shadow: rgba($black, 0.4);
 $bp-legacy-dark-border-shadow: inset 0 0 0 1px rgba($white, 0.2);
 
@@ -41,10 +42,19 @@ $pt-intent-text-colors: (
     'danger': $dark-danger-background-base,
 );
 
-// Blueprint derives most intent colours from its --bp-intent-* tokens (set below). These maps are the exceptions:
-// they replace Blueprint's whole map, so every intent and 'default' is restated, and the 'default' entries repeat
-// Blueprint's own token mixes.
+// Brighter minimal and outlined button text on hover and when pressed
+$button-dark-tint-text-colors: (
+    'primary': $tt-purple-tint-2,
+    'success': $green5,
+    'warning': $tt-yellow-tint-1,
+    'danger': $tt-red,
+);
+
+// Blueprint derives most intent colours from its --bp-intent-* tokens (set below). The maps configured here are the
+// exceptions: each replaces Blueprint's whole map, so every key Blueprint's map has is restated, and the 'default'
+// entries repeat Blueprint's own token mixes. The other settings are ones Blueprint 6.21 still reads from Sass.
 @use '@blueprintjs/core/src/blueprint.scss' with (
+    // Still read from Sass: intent text and icons, links, checked controls, progress bars and icons
     $pt-intent-text-colors: $pt-intent-text-colors,
     $pt-dark-link-color: $tt-teal-accent,
     $control-checked-background-color: $tt-teal-accent,
@@ -70,22 +80,14 @@ $pt-intent-text-colors: (
             )
         ),
     $button-dark-minimal-hover-text-colors: map.merge(
-            $pt-intent-text-colors,
+            $button-dark-tint-text-colors,
             (
-                'primary': $tt-purple-tint-2,
-                'success': $green5,
-                'warning': $tt-yellow-tint-1,
-                'danger': $tt-red,
                 'default': color-mix(in srgb, var(--bp-intent-default-hover) 46%, var(--bp-palette-white)),
             )
         ),
     $button-dark-minimal-active-text-colors: map.merge(
-            $pt-intent-text-colors,
+            $button-dark-tint-text-colors,
             (
-                'primary': $tt-purple-tint-2,
-                'success': $green5,
-                'warning': $tt-yellow-tint-1,
-                'danger': $tt-red,
                 'default': color-mix(in srgb, var(--bp-intent-default-active) 46%, var(--bp-palette-white)),
             )
         ),
@@ -116,7 +118,7 @@ $pt-intent-text-colors: (
                 var(--bp-intent-danger-hover),
                 var(--bp-intent-danger-active),
                 var(--bp-intent-danger-foreground),
-            ),
+            )
         ),
     // Minimal tags: (background, text, hover and pressed text). Blueprint draws dark minimal tag text in the bare
     // intent token, which for the purple shade is unreadable on the dark background.
@@ -140,8 +142,10 @@ $pt-intent-text-colors: (
                 $dark-danger-background-base,
                 $tt-red,
                 $tt-red-tint-1,
-            ),
+            )
         ),
+    // Still read from Sass: intent colours of spinners, sliders, tree rows and tooltips, body text, the navbar and
+    // the dark elevation shadows
     $pt-intent-colors: $pt-intent-text-colors,
     $pt-dark-intent-text-colors: $pt-intent-text-colors,
     $pt-text-color: $tt-grey-2,
@@ -199,6 +203,11 @@ $pt-intent-text-colors: (
 
 // Deliberate differences from Blueprint, each with its reason
 
+$dark-input-focus-ring: (
+    inset 0 0 0 1px blueprint.$pt-dark-focus-indicator-color,
+    0 0 0 1px blueprint.$pt-dark-focus-indicator-color
+);
+
 // Blueprint raises an intent-coloured button or input inside a group to z-index 10-16 so
 // its border paints over the neighbour it shares an edge with. Those values only ever need
 // to beat siblings in the same group, but Blueprint sets them without a stacking context,
@@ -242,22 +251,18 @@ $pt-intent-text-colors: (
     }
 
     // Text input focus ring. Blueprint lightens the primary token for it, which drains the purple shade to a grey;
-    // this is the colour tag inputs and focused buttons still take from Sass, so every focus ring matches.
+    // this is the colour tag inputs and focused buttons still take from Sass, so the rings match. Intent inputs keep
+    // their own ring.
     .bp6-input,
     .bp6-file-upload-input {
         &:focus,
         &[readonly]:focus {
-            box-shadow:
-                inset 0 0 0 1px blueprint.$pt-dark-focus-indicator-color,
-                0 0 0 1px blueprint.$pt-dark-focus-indicator-color;
+            box-shadow: $dark-input-focus-ring;
         }
     }
 
     // The file input's focus also keeps Blueprint's dark input border and highlight
     .bp6-file-input input:focus + .bp6-file-upload-input {
-        box-shadow:
-            inset 0 0 0 1px blueprint.$pt-dark-focus-indicator-color,
-            0 0 0 1px blueprint.$pt-dark-focus-indicator-color,
-            blueprint.$pt-dark-input-box-shadow;
+        box-shadow: $dark-input-focus-ring, blueprint.$pt-dark-input-box-shadow;
     }
 }

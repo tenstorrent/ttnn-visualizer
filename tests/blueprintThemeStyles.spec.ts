@@ -4,7 +4,7 @@
 
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { compile } from 'sass';
+import { compile, compileString } from 'sass';
 import { describe, expect, it } from 'vitest';
 // @ts-expect-error don't have types declaration for sassOptions
 import { createSassOptions } from '../src/libs/blueprintjs/sassOptions';
@@ -63,6 +63,10 @@ const indexDeclarations = (css: string) => {
 };
 
 const css = compileBlueprintStyles();
+
+// Blueprint's own CSS, without our configuration or tokens, so a check against it cannot pass on our output alone:
+// our tag maps also read the intent tokens, and our :root block declares them
+const stockBlueprintCss = compileString("@use '@blueprintjs/core/src/blueprint.scss';", createSassOptions(ROOT)).css;
 const valueBySelectorProperty = indexDeclarations(css);
 
 const winningValue = (selector: string, property: string) =>
@@ -72,11 +76,23 @@ const DARK_BORDER_SHADOW = 'inset 0 0 0 1px rgba(255, 255, 255, 0.2)';
 const DARK_DROP_SHADOW = 'rgba(17, 20, 24, 0.4)';
 const DARK_FOCUS_RING = 'rgba(138, 187, 255, 0.752)';
 
+const SASS_OPTIONS = createSassOptions(ROOT);
+
+/**
+ * A palette shade adjusted in Sass, as Sass prints it. Sass prints adjusted colours with fractional channels, so
+ * pinning the printed value would fail on a Sass upgrade that only changes the printing.
+ */
+const adjustedShade = (colour: string, lightness: string) =>
+    compileString(
+        `@use 'sass:color'; @use 'definitions/colours' as *; a { b: color.adjust(${colour}, $lightness: ${lightness}); }`,
+        { ...SASS_OPTIONS, loadPaths: [...SASS_OPTIONS.loadPaths, join(ROOT, 'src/scss')] },
+    ).css.match(/b:\s*([^;]+);/)![1];
+
 // [token, value], set on :root because Blueprint declares the intent tokens there
 const ROOT_TOKENS: [string, string][] = [
     ['--bp-intent-primary-rest', '#4b456e'],
-    ['--bp-intent-primary-hover', 'rgb(25.2218205718%, 23.2040749261%, 36.9920035053%)'],
-    ['--bp-intent-primary-active', 'rgb(21.0318764377%, 19.3493263227%, 30.8467521087%)'],
+    ['--bp-intent-primary-hover', adjustedShade('$tt-purple-shade', '-5%')],
+    ['--bp-intent-primary-active', adjustedShade('$tt-purple-shade', '-10%')],
     ['--bp-intent-primary-foreground', '#ffffff'],
     ['--bp-intent-success-rest', '#32a467'],
     ['--bp-intent-success-hover', '#238551'],
@@ -87,7 +103,7 @@ const ROOT_TOKENS: [string, string][] = [
     ['--bp-intent-warning-active', '#8b7039'],
     ['--bp-intent-warning-foreground', '#343434'],
     ['--bp-intent-danger-rest', '#fa512e'],
-    ['--bp-intent-danger-hover', 'rgb(97.8055708265%, 23.6338647609%, 8.2728605461%)'],
+    ['--bp-intent-danger-hover', adjustedShade('$tt-red-accent', '-5%')],
     ['--bp-intent-danger-active', '#8d2914'],
     ['--bp-intent-danger-foreground', '#ffffff'],
     ['--bp6-button-warning-rest', '#f6bc42'],
@@ -203,7 +219,7 @@ describe('Blueprint theme', () => {
     // A token Blueprint stops reading, such as the private --bp6-button-warning-rest, would otherwise pass every
     // check above while changing nothing
     it.each([...ROOT_TOKENS, ...DARK_TOKENS])('%s is still read by Blueprint', (token) => {
-        expect(css).toMatch(new RegExp(`var\\(${token}[,)]`));
+        expect(stockBlueprintCss).toMatch(new RegExp(`var\\(${token}[,)]`));
     });
 
     it.each(OVERRIDDEN_VALUES)('%s keeps its %s', (selector, property, expected) => {
@@ -220,7 +236,7 @@ describe('Blueprint theme', () => {
         expect(referenced.size).toBeGreaterThan(0);
 
         for (const token of referenced) {
-            expect(css, `${token} is no longer defined`).toMatch(new RegExp(`${token}\\s*:`));
+            expect(stockBlueprintCss, `${token} is no longer defined`).toMatch(new RegExp(`${token}\\s*:`));
         }
     });
 });
