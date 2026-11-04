@@ -57,7 +57,6 @@ describe('TensorArgument', () => {
         const argument = { name: 'memory_config', value: null as unknown as string, parsedValue: null };
         const { container } = render(<TensorArgument argument={argument} />);
 
-        expect(screen.queryByRole('table')).not.toBeInTheDocument();
-        expect(container).toBeInTheDocument();
+        expect(container).toBeEmptyDOMElement();
     });
 });

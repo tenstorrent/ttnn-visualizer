@@ -14,8 +14,8 @@ import { makeMemoryConfigArgument, makeTensorRepr } from './helpers/operationDes
 // The older form, without the nd_shard_spec fields.
 const SHARDED_L1 =
     'MemoryConfig(memory_layout=TensorMemoryLayout::HEIGHT_SHARDED,buffer_type=BufferType::L1,shard_spec=ShardSpec(grid={[(x=0,y=0) - (x=7,y=7)]},shape={32, 64},orientation=ShardOrientation::ROW_MAJOR,halo=0))';
-// Tensor arguments hold a memory config mid-string; printed with their data, on the last line.
-// Only an anchored pattern rejects both.
+// Tensor arguments hold a memory config mid-string. The multi-line form, with data printed first,
+// guards the anchoring; no capture checked so far has one. Only an anchored pattern rejects both.
 const TENSOR_REPR = makeTensorRepr(SHARDED_L1);
 const MULTI_LINE_TENSOR_REPR = makeTensorRepr(SHARDED_L1, '[[1.0, 2.0],\n [3.0, 4.0]]');
 // Values that contain a memory config without being one, labelled so test names stay readable.

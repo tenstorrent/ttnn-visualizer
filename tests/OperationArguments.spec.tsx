@@ -11,7 +11,7 @@ import { makeMemoryConfigArgument, makeOperation, makeTensorRepr } from './helpe
 
 const MEMORY_CONFIG = makeMemoryConfigArgument('L1').value;
 
-// The operation details view's argument rows, with arguments as `fetchOperations` hands them over.
+// The argument rows the operations list and operation details view share, with arguments as `fetchOperations` hands them over.
 const renderArguments = () =>
     render(
         <OperationArguments

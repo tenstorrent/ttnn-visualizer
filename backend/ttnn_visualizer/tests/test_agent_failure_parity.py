@@ -361,7 +361,8 @@ def _curated_fallback_runs() -> List[List[Dict]]:
         )
     ]
     # Requests the memory config pattern must read as the backend's does: Python's `$`
-    # allows one trailing newline, and its `.` takes `\r`, U+2028 and U+2029.
+    # allows one trailing newline, and its `.` takes `\r`, U+2028 and U+2029 but not
+    # `\n`, so a newline inside the parentheses is no request.
     unusual_requests = [
         [
             {
@@ -374,6 +375,7 @@ def _curated_fallback_runs() -> List[List[Dict]]:
             "MemoryConfig(buffer_type=BufferType::L1,\r)",
             "MemoryConfig(buffer_type=BufferType::L1,\u2028)",
             "MemoryConfig(buffer_type=BufferType::L1,\u2029)",
+            "MemoryConfig(buffer_type=BufferType::L1,\n)",
         )
     ]
     return [

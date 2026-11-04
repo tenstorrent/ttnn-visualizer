@@ -3,8 +3,8 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 /**
- * `fetchOperations` decides which arguments the operation details view renders as a memory config
- * table. `TensorArgument.spec.tsx` builds its arguments the same way by hand, so only this spec
+ * `fetchOperations` decides which arguments the operations list and operation details view render
+ * as a memory config table. `TensorArgument.spec.tsx` builds its arguments the same way by hand, so only this spec
  * sees the parsing come from the real query. #2107
  */
 
