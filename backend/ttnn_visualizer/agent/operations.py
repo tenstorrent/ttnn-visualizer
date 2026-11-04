@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import (
     Callable,
     Dict,
+    Hashable,
     Iterator,
     List,
     Mapping,
@@ -41,6 +42,7 @@ from ttnn_visualizer.agent.bounds import (
     MAX_DETAILED_LIMIT,
     MAX_LIMIT,
     bounded,
+    normalised_choice,
     require_choice,
 )
 from ttnn_visualizer.agent.handles import (
@@ -651,7 +653,7 @@ _TRACE_FRAME = re.compile(
 )
 
 
-def _parse_frames(trace: str) -> List[Dict[str, object]]:
+def parse_frames(trace: str, limit: Optional[int] = None) -> List[Dict[str, object]]:
     """The traceback's frames, innermost first, each with the source line under it.
 
     Innermost first is the order the capture writes: frame 0 is the `ttnn.<op>` call
@@ -671,7 +673,9 @@ def _parse_frames(trace: str) -> List[Dict[str, object]]:
         # line, so a frame with no source line borrowed its neighbour's -- and since
         # the call site is frame 0, that pointed at another file's code.
         code = None
-        for candidate in lines[index + 1 :]:
+        # By position: a slice here copied the rest of the trace once per frame.
+        for position in range(index + 1, len(lines)):
+            candidate = lines[position]
             if not candidate.strip():
                 continue
             if _TRACE_FRAME.match(candidate) is None:
@@ -685,6 +689,8 @@ def _parse_frames(trace: str) -> List[Dict[str, object]]:
                 "code": code,
             }
         )
+        if len(frames) == limit:
+            break
     return frames
 
 
@@ -768,7 +774,7 @@ def operation_provenance(
     # `splitlines` and gave the agent an AttributeError. The `called_from` path
     # guarded this and this one did not.
     raw_trace = (traces[0].stack_trace or "") if traces else ""
-    frames = _parse_frames(raw_trace)
+    frames = parse_frames(raw_trace)
     cap = bounded(limit)
     chain = frames[1 : cap + 1]
     result: Dict[str, object] = {
@@ -1092,7 +1098,7 @@ def memory_profile(
     to allocations. The report carries no DRAM bank count at all, so one of the
     two denominators is not even knowable here.
     """
-    wanted = (buffer_type or "").strip().upper() or None
+    wanted = normalised_choice(buffer_type)
     # Refused up front, the way `top_ops` refuses an unknown metric. Matching
     # free text against whatever strings the report happens to hold makes a
     # typo indistinguishable from a report that allocates none of that type.
@@ -1326,15 +1332,17 @@ def cached_per_rank(
     queries: DatabaseQueries,
     scope: RankScope,
     build: Callable[[DatabaseQueries, RankScope], _PerRank],
+    key: Hashable = None,
 ) -> _PerRank:
-    """`build` once per handle and rank. A build that raises is not kept."""
+    """`build` once per handle, rank and `key`. A build that raises is not kept."""
     # One pinned entry holding every rank, so a rank read cannot evict a scoped report.
-    by_rank: Dict[Optional[int], _PerRank] = registry.cached_report(
+    by_rank: Dict[Tuple[Optional[int], Hashable], _PerRank] = registry.cached_report(
         handle, lambda _: {}, variant=variant
     )
-    if scope.rank not in by_rank:
-        by_rank[scope.rank] = build(queries, scope)
-    return by_rank[scope.rank]
+    slot = (scope.rank, key)
+    if slot not in by_rank:
+        by_rank[slot] = build(queries, scope)
+    return by_rank[slot]
 
 
 def _read_graph(queries: DatabaseQueries, scope: RankScope) -> op_graph.OpGraph:
@@ -1511,6 +1519,7 @@ __all__ = [
     "no_such_operation",
     "operation_detail",
     "operation_provenance",
+    "parse_frames",
     "profiler_db",
     "rank_caveat",
     "rank_scope",

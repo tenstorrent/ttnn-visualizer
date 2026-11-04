@@ -28,6 +28,7 @@ from ttnn_visualizer.agent import (
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
 from ttnn_visualizer.queries import DatabaseQueries
 from ttnn_visualizer.tests.captured_graphs import CapturedGraph, circular_buffer
+from ttnn_visualizer.tests.memory_report_db import load_memory_report
 
 _SCHEMA = """
 CREATE TABLE operations (operation_id int UNIQUE, name text, duration float);
@@ -200,8 +201,6 @@ def _ranked_report(
     `rows_by_rank` holds each rank's whole rows per table, without the rank. An
     unranked table holds every rank's rows with nothing to tell them apart.
     """
-    directory = tmp_path / "profiler"
-    directory.mkdir()
     schema = (_SCHEMA + (_ERRORS if errors_table else "") + _ARGUMENTS).replace(
         " UNIQUE", ""
     )
@@ -210,22 +209,16 @@ def _ranked_report(
             schema = schema.replace(
                 f"CREATE TABLE {table} (", f"CREATE TABLE {table} (rank int, "
             )
-    connection = sqlite3.connect(directory / "db.sqlite")
-    try:
-        connection.executescript(schema)
-        for rank, rows_by_table in rows_by_rank.items():
-            for table, rows in rows_by_table.items():
-                for row in rows:
-                    values = tuple(row) if table in unranked else (rank, *row)
-                    placeholders = ", ".join("?" * len(values))
-                    connection.execute(
-                        f"INSERT INTO {table} VALUES ({placeholders})", values
-                    )
-        connection.commit()
-    finally:
-        connection.close()
-    registry = ReportRegistry()
-    return registry, str(load_report(registry, profiler_path=str(directory))["handle"])
+    return load_memory_report(
+        tmp_path,
+        schema,
+        (
+            (table, tuple(row) if table in unranked else (rank, *row))
+            for rank, rows_by_table in rows_by_rank.items()
+            for table, rows in rows_by_table.items()
+            for row in rows
+        ),
+    )
 
 
 def _tensor_row(tensor_id: int, address: int, buffer_type: int) -> Tuple:
@@ -774,7 +767,7 @@ class TestL1Peak:
         failures.l1_peak(registry, handle)
         report = registry.cached_report(
             handle, lambda _: {}, variant=failures.CacheVariant.L1_PEAK
-        )[None]
+        )[(None, None)]
 
         assert report.result.peak.operation_id == 1
         assert [
