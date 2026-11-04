@@ -9,19 +9,21 @@ Read through the app's index when it is built and current, else from the trace i
 never by building an index: the tools write nothing beside a report.
 """
 
-import math
+import io
+import logging
+import os
 import stat
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, NamedTuple, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple
 
 import orjson
 import zstd
 from ttnn_visualizer import npe_index
 from ttnn_visualizer.agent.bounds import MAX_LIMIT, bounded
 from ttnn_visualizer.agent.cells import finite_number, whole_number
-from ttnn_visualizer.agent.handles import CacheVariant, ReportRegistry
+from ttnn_visualizer.agent.handles import CacheVariant, ReportRegistry, read_once
 from ttnn_visualizer.agent.report_diff import as_answered
 from ttnn_visualizer.agent.tools import share_percent
 from ttnn_visualizer.file_source import FileSource
@@ -36,9 +38,14 @@ MAX_LABEL_LENGTH = 64
 MAX_NOCS = 4
 # Past every local trace (904 MB of JSON); parsing one costs about ten times its size.
 MAX_TRACE_JSON_BYTES = 1 << 30
+# Distinct links summed; the most in a local trace is 4,653.
+MAX_LINKS = 1 << 16
 # Past this `truncate` overflows; no link is asked for 10^305 percent of itself.
 _LARGEST_DEMAND = sys.float_info.max / 1000
 _INT64 = 1 << 63
+
+# Not stdout, which carries the server's JSON-RPC.
+logger = logging.getLogger(__name__)
 
 NOC_CONGESTION_NOTE = (
     "Figures are tt-npe's simulation of the NoC, in percent of a link's bandwidth, "
@@ -104,6 +111,8 @@ class _NocRead:
     links: List[_LinkTotals]
     unreadable_entries: int
     unreadable_timesteps: int
+    # Entries for links past the first MAX_LINKS read.
+    entries_past_link_limit: int
 
 
 @dataclass
@@ -165,7 +174,7 @@ def _summed(rows: npe_index.LinkDemand) -> _NocRead:  # noqa: C901
     pass. Rows are read as the index stores them, so both sources answer alike."""
     links: Dict[Link, _LinkTotals] = {}
     timeline = _Timeline()
-    unreadable = unreadable_timesteps = timesteps = 0
+    unreadable = unreadable_timesteps = timesteps = past_link_limit = 0
     first_cycle: Optional[int] = None
     last_cycle: Optional[int] = None
     truncate = None if rows.truncated else npe_index.truncate
@@ -216,6 +225,9 @@ def _summed(rows: npe_index.LinkDemand) -> _NocRead:  # noqa: C901
                 if link is None:
                     unreadable += 1
                     continue
+                if len(links) >= MAX_LINKS:
+                    past_link_limit += 1
+                    continue
                 totals = links[link] = _LinkTotals(link)
             totals.demand += demand
             if demand > totals.peak:
@@ -259,35 +271,72 @@ def _summed(rows: npe_index.LinkDemand) -> _NocRead:  # noqa: C901
         links=ranked[:MAX_LIMIT],
         unreadable_entries=unreadable,
         unreadable_timesteps=unreadable_timesteps + rows.unreadable_timesteps,
+        entries_past_link_limit=past_link_limit,
     )
 
 
-def _from_trace(npe_path: Path) -> _NocRead:
-    try:
-        size = npe_index.trace_size(npe_path)
-        if not npe_index.looks_like_trace(npe_path):
+def _past_limit(npe_path: Path, size: str) -> ValueError:
+    return ValueError(
+        f"{npe_path.name} holds {size} bytes of JSON, past the "
+        f"{MAX_TRACE_JSON_BYTES:,} this tool parses, about ten times that in memory; "
+        "open it in the app, whose index this tool then reads"
+    )
+
+
+def _trace_bytes(npe_path: Path, compressed: bool) -> bytes:
+    """The trace's bytes through one descriptor, so the bytes bounded are those parsed."""
+    with npe_path.open("rb") as source:
+        if not npe_index.starts_as_trace(
+            source.read(npe_index.TRACE_HEAD_BYTES), compressed
+        ):
             raise ValueError(
                 f"{npe_path.name} does not start as a tt-npe trace does: a zstd frame "
                 "for .zst, a JSON object otherwise"
             )
+        stored = os.fstat(source.fileno()).st_size
+        if stored > MAX_TRACE_JSON_BYTES:
+            if compressed:
+                raise ValueError(
+                    f"{npe_path.name} is {stored:,} bytes, past the "
+                    f"{MAX_TRACE_JSON_BYTES:,} this tool reads; open it in the app, "
+                    "whose index this tool then reads"
+                )
+            raise _past_limit(npe_path, f"{stored:,}")
+        source.seek(0)
+        # Exactly its size, which a read past the limit would allocate for and copy.
+        data = source.read(stored)
+        if source.read(1):
+            raise ValueError(
+                f"{npe_path.name} grew while it was read; call load_report again to "
+                "read it as it is now"
+            )
+    if compressed:
+        size = npe_index.declared_content_size(io.BytesIO(data))
         if size is None:
             raise ValueError(
                 f"{npe_path.name} is not zstd frames that each declare their size, so "
                 "what parsing it costs cannot be bounded before reading it"
             )
         if size > MAX_TRACE_JSON_BYTES:
-            raise ValueError(
-                f"{npe_path.name} holds {size:,} bytes of JSON, past the "
-                f"{MAX_TRACE_JSON_BYTES:,} this tool parses, about ten times that in "
-                "memory; open it in the app, whose index this tool then reads"
-            )
-        trace = npe_index.load_npe_object(npe_path)
+            raise _past_limit(npe_path, f"{size:,}")
+    return data
+
+
+def _parsed_trace(npe_path: Path) -> object:
+    # Every refusal `from None`: its message carries the cause, and no frame of the read.
+    compressed = npe_path.suffix == ".zst"
+    try:
+        return npe_index.parse_trace(_trace_bytes(npe_path, compressed), compressed)
     except OSError as error:
         raise ValueError(f"{npe_path.name} cannot be read: {error.strerror}") from None
     except (orjson.JSONDecodeError, zstd.Error) as error:
         raise ValueError(
             f"{npe_path.name} is not a readable tt-npe trace: {error}"
-        ) from error
+        ) from None
+
+
+def _from_trace(npe_path: Path) -> _NocRead:
+    trace = _parsed_trace(npe_path)
     try:
         rows = npe_index.trace_link_demand(trace)
     except ValueError as error:
@@ -301,9 +350,13 @@ def _read(npe_path: Path) -> _NocRead:
         with npe_index.indexed_link_demand(npe_path) as indexed:
             if indexed is not None:
                 return _summed(indexed)
-    except npe_index.INDEX_READ_ERRORS:
-        # Replaced or damaged since it was checked: the trace still answers.
-        pass
+    except npe_index.INDEX_READ_ERRORS as error:
+        # Replaced or damaged since it was checked: the trace still answers, slowly.
+        logger.warning(
+            "NoC congestion: the index of %s could not be read (%s); reading the trace",
+            npe_path.name,
+            error,
+        )
     return _from_trace(npe_path)
 
 
@@ -318,7 +371,11 @@ def _trace_source(path: Path) -> Optional[FileSource]:
 def _pinned_read(
     registry: ReportRegistry, handle: str, path: Path
 ) -> Tuple[_NocRead, bool]:
-    """The handle's read of the trace it first read, and whether that has changed."""
+    """The handle's read of the trace it first read, and whether that has changed.
+
+    Pinned as `tools._per_capture` pins a CSV, except that a hit after the trace has
+    changed says so: this read is the whole answer.
+    """
     now = _trace_source(path)
 
     def pin(_: object) -> FileSource:
@@ -331,23 +388,22 @@ def _pinned_read(
 
     pinned = registry.cached_report(handle, pin, variant=CacheVariant.NOC_SOURCE)
 
-    def build(_: object) -> Union[_NocRead, ValueError]:
+    def unchanged(_: object) -> None:
         if now != pinned:
             raise ValueError(
                 f"{path.name} has changed since {handle!r} first read it; call "
                 "load_report again for a fresh handle"
             )
-        try:
-            return _read(path)
-        except ValueError as error:
-            # The same bytes fail the same way, and a rewritten trace is another source.
-            return error
 
-    read = registry.cached_report(
-        handle, build, variant=CacheVariant.NOC_CONGESTION, share_key=pinned
+    read = read_once(
+        registry,
+        handle,
+        lambda _: _read(path),
+        variant=CacheVariant.NOC_CONGESTION,
+        share_key=pinned,
+        refusals=(ValueError,),
+        check=unchanged,
     )
-    if isinstance(read, ValueError):
-        raise read.with_traceback(None)
     return read, now != pinned
 
 
@@ -412,7 +468,14 @@ def _caveats(read: _NocRead, path: Path, changed: bool) -> List[str]:
     if read.unreadable_entries:
         caveats.append(
             f"{read.unreadable_entries} link demand entries were not a link's "
-            "coordinates and a non-negative number, and were left out."
+            f"coordinates, a name of at most {MAX_LINK_NAME_LENGTH} characters and a "
+            "non-negative number, and were left out."
+        )
+    if read.entries_past_link_limit:
+        caveats.append(
+            f"{read.entries_past_link_limit} link demand entries were for links past "
+            f"the first {MAX_LINKS:,} read, and were left out, so busiest_links and "
+            "link_count cover those links only."
         )
     if read.unreadable_timesteps:
         caveats.append(
@@ -490,4 +553,9 @@ def noc_congestion(
     return result
 
 
-__all__ = ["MAX_TRACE_JSON_BYTES", "NOC_CONGESTION_NOTE", "noc_congestion"]
+__all__ = [
+    "MAX_LINKS",
+    "MAX_TRACE_JSON_BYTES",
+    "NOC_CONGESTION_NOTE",
+    "noc_congestion",
+]

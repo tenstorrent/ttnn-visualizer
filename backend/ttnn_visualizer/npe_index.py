@@ -21,7 +21,7 @@ import sqlite3
 import tempfile
 import threading
 from pathlib import Path
-from typing import BinaryIO, Iterable, Iterator, NamedTuple, Optional, Tuple
+from typing import Any, BinaryIO, Iterable, Iterator, NamedTuple, Optional, Tuple
 
 import orjson
 import zstd
@@ -148,12 +148,18 @@ def _build_guard(db_path: Path) -> Iterator[None]:
 
 
 def load_npe_object(npe_path: Path) -> dict:
-    if npe_path.suffix == ".zst":
-        return orjson.loads(zstd.uncompress(npe_path.read_bytes()))
-    return orjson.loads(npe_path.read_bytes())
+    return parse_trace(npe_path.read_bytes(), npe_path.suffix == ".zst")
 
 
-_ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
+def parse_trace(data: bytes, compressed: bool) -> dict:
+    """A trace's bytes as `load_npe_object` reads them: zstd frames, or JSON."""
+    if compressed:
+        # Rebound, so the compressed bytes are freed before the parse.
+        data = zstd.uncompress(data)
+    return orjson.loads(data)
+
+
+ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
 # Any magic from 0x184D2A50 to 0x184D2A5F; the frame decompresses to nothing.
 _ZSTD_SKIPPABLE_MAGIC = 0x184D2A50
 # Frame_Header_Descriptor's field sizes, by flag (RFC 8878, 3.1.1.1.1).
@@ -164,21 +170,26 @@ _ZSTD_RLE_BLOCK, _ZSTD_RESERVED_BLOCK = 1, 3
 _ZSTD_MAX_PARTS = 1 << 20
 
 
-def _head(npe_path: Path, size: int) -> bytes:
-    with npe_path.open("rb") as source:
-        return source.read(size)
+# Enough of a trace's start to tell it from another file, leading whitespace and all.
+TRACE_HEAD_BYTES = 64
+
+
+def starts_as_trace(head: bytes, compressed: bool) -> bool:
+    """Whether bytes start as `parse_trace` will read them: a zstd frame when
+    compressed, else a JSON object."""
+    if compressed:
+        return head.startswith(ZSTD_MAGIC)
+    return head.lstrip()[:1] == b"{"
 
 
 def looks_like_trace(npe_path: Path) -> bool:
-    """Whether the file starts as `load_npe_object` will read it: a zstd frame for
-    `.zst`, else a JSON object."""
+    """Whether the file starts as `load_npe_object` will read it."""
     try:
-        head = _head(npe_path, 64)
+        with npe_path.open("rb") as source:
+            head = source.read(TRACE_HEAD_BYTES)
     except OSError:
         return False
-    if npe_path.suffix == ".zst":
-        return head.startswith(_ZSTD_MAGIC)
-    return head.lstrip()[:1] == b"{"
+    return starts_as_trace(head, npe_path.suffix == ".zst")
 
 
 def _declared_frame_size(source: BinaryIO) -> Tuple[Optional[int], bool]:
@@ -223,34 +234,37 @@ def trace_size(npe_path: Path) -> Optional[int]:
     """The JSON bytes `load_npe_object` will parse, before reading them: the file's
     size, or the sum of a `.zst`'s declared frame sizes, None where any frame
     declares none or the file is not zstd frames."""
-    if npe_path.suffix != ".zst":
-        with npe_path.open("rb") as source:
+    with npe_path.open("rb") as source:
+        if npe_path.suffix != ".zst":
             return os.fstat(source.fileno()).st_size
+        return declared_content_size(source)
+
+
+def declared_content_size(source: BinaryIO) -> Optional[int]:
+    """The sum of zstd frames' declared content sizes, from the source's position on,
+    None where any frame declares none or the source is not zstd frames."""
     total: Optional[int] = None
     parts = 0
-    with npe_path.open("rb") as source:
-        while magic := source.read(4):
-            parts += 1
-            if len(magic) < 4 or parts > _ZSTD_MAX_PARTS:
+    while magic := source.read(4):
+        parts += 1
+        if len(magic) < 4 or parts > _ZSTD_MAX_PARTS:
+            return None
+        if int.from_bytes(magic, "little") & ~0x0F == _ZSTD_SKIPPABLE_MAGIC:
+            length = source.read(4)
+            if len(length) < 4:
                 return None
-            if int.from_bytes(magic, "little") & ~0x0F == _ZSTD_SKIPPABLE_MAGIC:
-                length = source.read(4)
-                if len(length) < 4:
-                    return None
-                source.seek(int.from_bytes(length, "little"), os.SEEK_CUR)
-                continue
-            if magic != _ZSTD_MAGIC:
-                return None
-            size, checksum = _declared_frame_size(source)
-            blocks = (
-                None if size is None else _skip_blocks(source, _ZSTD_MAX_PARTS - parts)
-            )
-            if size is None or blocks is None:
-                return None
-            parts += blocks
-            total = (total or 0) + size
-            if checksum:
-                source.seek(4, os.SEEK_CUR)
+            source.seek(int.from_bytes(length, "little"), os.SEEK_CUR)
+            continue
+        if magic != ZSTD_MAGIC:
+            return None
+        size, checksum = _declared_frame_size(source)
+        blocks = None if size is None else _skip_blocks(source, _ZSTD_MAX_PARTS - parts)
+        if size is None or blocks is None:
+            return None
+        parts += blocks
+        total = (total or 0) + size
+        if checksum:
+            source.seek(4, os.SEEK_CUR)
     return total
 
 
@@ -311,6 +325,21 @@ def _build_index(npe_path: Path, db_path: Path, source_mtime_ns: int) -> None:
     )
 
 
+def _transfer_id(transfer: dict) -> object:
+    """The id `_write_index` keys a transfer by, None for one without. SQLite keys a
+    numeric string as the integer it spells, so that is converted here first."""
+    tid = transfer.get("id")
+    if isinstance(tid, str):
+        with contextlib.suppress(ValueError):
+            return int(tid)
+    return tid
+
+
+def _step_cells(step: dict) -> Tuple[Any, Any, Any]:
+    """A step's start_cycle, end_cycle and link_demand, as `_write_index` reads them."""
+    return step.get("start_cycle"), step.get("end_cycle"), step.get("link_demand", [])
+
+
 def _write_index(
     conn: sqlite3.Connection,
     obj: dict,
@@ -358,7 +387,7 @@ def _write_index(
         batch = []
         skipped_no_id = 0
         for transfer in transfers:
-            tid = transfer.get("id")
+            tid = _transfer_id(transfer)
             if tid is None:
                 # A transfer with no id can't be resolved (active_transfers are id
                 # lists) and id is the table PK — skip it rather than KeyError the
@@ -381,8 +410,9 @@ def _write_index(
 
         timestep_rows = []
         for t, step in enumerate(timesteps):
+            start_cycle, end_cycle, link_demand = _step_cells(step)
             active_ids = step.get("active_transfers", [])
-            link_demand = _truncate_link_demand(step.get("link_demand", []))
+            link_demand = _truncate_link_demand(link_demand)
             noc = _truncate_noc(step.get("noc", {}))
             max_link_demand = step.get("max_link_demand")
             if max_link_demand is None and link_demand:
@@ -399,8 +429,8 @@ def _write_index(
             timestep_rows.append(
                 (
                     t,
-                    _as_int(step.get("start_cycle")),
-                    _as_int(step.get("end_cycle")),
+                    _as_int(start_cycle),
+                    _as_int(end_cycle),
                     truncate(step.get("avg_link_demand")),
                     truncate(step.get("avg_link_util")),
                     truncate(max_link_demand),
@@ -469,13 +499,7 @@ def _transfer_count(transfers: object) -> int:
     ids = set()
     for transfer in transfers:
         if isinstance(transfer, dict):
-            tid = transfer.get("id")
-            if isinstance(tid, str):
-                # SQLite keys a numeric string as the integer it spells.
-                try:
-                    tid = int(tid)
-                except ValueError:
-                    pass
+            tid = _transfer_id(transfer)
             if isinstance(tid, (int, float, str)):
                 ids.add(tid)
     return len(ids)
@@ -519,15 +543,7 @@ def trace_link_demand(trace: object) -> LinkDemand:
         common_info if isinstance(common_info, dict) else {},
         _transfer_count(trace.get("noc_transfers")),
         (
-            (
-                (
-                    step.get("start_cycle"),
-                    step.get("end_cycle"),
-                    step.get("link_demand", []),
-                )
-                if isinstance(step, dict)
-                else (None, None, [])
-            )
+            _step_cells(step) if isinstance(step, dict) else (None, None, [])
             for step in steps
         ),
         truncated=False,

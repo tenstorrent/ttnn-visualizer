@@ -10,11 +10,16 @@ the app's index of a trace when that is current and the trace itself otherwise, 
 parity tests answer one trace both ways.
 """
 
+import gc
 import json
+import logging
 import math
 import os
+import sqlite3
 import time
+import weakref
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import orjson
@@ -25,15 +30,16 @@ from ttnn_visualizer.agent import noc_congestion, server
 from ttnn_visualizer.agent.app_links import APP_URL_ENV_VAR
 from ttnn_visualizer.agent.bounds import DEFAULT_LIMIT, MAX_LIMIT
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
+from ttnn_visualizer.agent.tool_names import McpToolName
 from ttnn_visualizer.event_logging import McpToolOutcome
 from ttnn_visualizer.tests.mcp_calls import tool_call
+from ttnn_visualizer.tests.npe_fixtures import execute, listing
 from ttnn_visualizer.tests.test_agent_core_spread import THREE_CORES
 from ttnn_visualizer.tests.test_agent_perf_detail import ANSWER_BUDGET_BYTES
 from ttnn_visualizer.tests.test_device_log_columns import (
     MODERN_HEADER,
     write_device_log,
 )
-from ttnn_visualizer.tests.test_npe_index import _execute, _listing
 
 A = (0, 0, 0, "NOC0_EAST")
 B = (0, 0, 1, "NOC0_EAST")
@@ -64,8 +70,8 @@ COMMON_INFO = {
 }
 
 ROWS_CAVEAT = (
-    "{} link demand entries were not a link's coordinates and a non-negative number, "
-    "and were left out."
+    "{} link demand entries were not a link's coordinates, a name of at most 32 "
+    "characters and a non-negative number, and were left out."
 )
 TIMESTEPS_CAVEAT = (
     "{} timesteps were not a timestep's object or held no list of link demand, and "
@@ -77,7 +83,9 @@ CHANGED_CAVEAT = (
 )
 
 # A zstd frame header alone: single segment, a four-byte content size of 3 GiB.
-_THREE_GIB_FRAME_HEADER = b"\x28\xb5\x2f\xfd\xa0" + (3 << 30).to_bytes(4, "little")
+_THREE_GIB_FRAME_HEADER = (
+    npe_index.ZSTD_MAGIC + b"\xa0" + (3 << 30).to_bytes(4, "little")
+)
 
 
 _SKIPPABLE_FRAME = (0x184D2A50).to_bytes(4, "little") + b"\x04\x00\x00\x00skip"
@@ -86,7 +94,7 @@ _SKIPPABLE_FRAME = (0x184D2A50).to_bytes(4, "little") + b"\x04\x00\x00\x00skip"
 def _unsized_frame(content: bytes) -> bytes:
     """One raw block in a frame that declares no content size, as a stream writes."""
     block = (len(content) << 3 | 0x01).to_bytes(3, "little")
-    return b"\x28\xb5\x2f\xfd\x00\x58" + block + content
+    return npe_index.ZSTD_MAGIC + b"\x00\x58" + block + content
 
 
 def _step(t: int, *rows: object) -> dict:
@@ -178,19 +186,20 @@ def _without(answer: dict, *keys: str) -> dict:
 
 
 def _counted_reads(monkeypatch) -> list:
+    """The bytes of each trace parsed."""
     reads: list = []
-    real_load = npe_index.load_npe_object
+    real_parse = npe_index.parse_trace
 
-    def counting_load(npe_path):
-        reads.append(npe_path)
-        return real_load(npe_path)
+    def counting_parse(data, compressed):
+        reads.append(data)
+        return real_parse(data, compressed)
 
-    monkeypatch.setattr(npe_index, "load_npe_object", counting_load)
+    monkeypatch.setattr(npe_index, "parse_trace", counting_parse)
     return reads
 
 
-def _never_read(npe_path):
-    raise AssertionError(f"{npe_path} was read, not its index")
+def _never_read(data, compressed):
+    raise AssertionError("the trace was parsed, not its index")
 
 
 def _never_build(npe_path):
@@ -575,7 +584,7 @@ class TestMalformedInput:
         # orjson refuses NaN and infinities, so the parsed trace is handed over as is.
         trace = _trace(_step(0, _GOOD, [*B, demand]))
         path = _write(tmp_path, _trace(_step(0)))
-        monkeypatch.setattr(npe_index, "load_npe_object", lambda npe_path: trace)
+        monkeypatch.setattr(npe_index, "parse_trace", lambda data, compressed: trace)
 
         answer = _answer(path)
 
@@ -696,6 +705,23 @@ class TestMalformedInput:
         assert answer["bursts"][0]["end_cycle"] == read
         assert answer["worst_link"]["start_cycle"] == read
 
+    def test_links_past_the_limit_are_left_out_and_counted(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(noc_congestion, "MAX_LINKS", 2)
+        trace = _trace(
+            _step(0, [*A, 10.0], [*B, 20.0], [*C, 300.0]),
+            _step(1, [*C, 5.0], [*A, 30.0]),
+        )
+
+        answer = _answered(tmp_path, trace)
+
+        assert answer["link_count"] == 2
+        assert [_link_of(row) for row in answer["busiest_links"]] == [A, B]
+        assert answer["worst_link"]["demand_percent"] == 30.0
+        assert answer["caveat"] == (
+            "2 link demand entries were for links past the first 2 read, and were left "
+            "out, so busiest_links and link_count cover those links only."
+        )
+
 
 def _parity_trace() -> dict:
     """Every way the index stores a row or a timestep differently from the trace."""
@@ -730,7 +756,7 @@ class TestIndexParity:
         path = _write(tmp_path, _parity_trace(), name)
         from_trace = _answer(path)
         npe_index.ensure_index(str(path))
-        monkeypatch.setattr(npe_index, "load_npe_object", _never_read)
+        monkeypatch.setattr(npe_index, "parse_trace", _never_read)
 
         assert _answer(path) == from_trace
         assert from_trace["transfers"] == 3
@@ -747,7 +773,7 @@ class TestIndexParity:
 
         answer = _answer(path)
 
-        assert reads == [path]
+        assert reads == [path.read_bytes()]
         assert answer == _answered(tmp_path / "fresh", _hand_checked())
 
     def test_an_index_reads_a_boolean_cycle_as_the_trace_does(self, tmp_path):
@@ -779,11 +805,31 @@ class TestIndexParity:
     ):
         path = _write(tmp_path, _parity_trace())
         from_trace = _answer(path)
-        _execute(npe_index.ensure_index(str(path)), statement)
+        execute(npe_index.ensure_index(str(path)), statement)
         reads = _counted_reads(monkeypatch)
 
         assert _answer(path) == from_trace
         assert len(reads) == 1
+
+    def test_a_fallback_from_a_damaged_index_is_logged(self, tmp_path, caplog):
+        path = _write(tmp_path, _parity_trace())
+        from_trace = _answer(path)
+        execute(
+            npe_index.ensure_index(str(path)),
+            "UPDATE meta SET value = 'not json' WHERE key = 'common_info'",
+        )
+
+        with caplog.at_level(logging.WARNING, logger=noc_congestion.__name__):
+            assert _answer(path) == from_trace
+
+        (record,) = [
+            record
+            for record in caplog.records
+            if record.name == noc_congestion.__name__
+        ]
+        assert record.getMessage().startswith(
+            "NoC congestion: the index of trace.json could not be read ("
+        )
 
     def test_an_index_removed_after_its_check_falls_back_and_stays_gone(
         self, tmp_path, monkeypatch
@@ -815,13 +861,13 @@ class TestNeverWrites:
             os.utime(path, (later, later))
         assert (npe_index.fresh_index(str(path)) is not None) is (sidecar == "current")
         monkeypatch.setattr(npe_index, "ensure_index", _never_build)
-        before = _listing(tmp_path)
+        before = listing(tmp_path)
         registry = ReportRegistry()
 
         _call(registry, _load(registry, path))
         _call(registry, _load(registry, path), limit=1)
 
-        assert _listing(tmp_path) == before
+        assert listing(tmp_path) == before
 
 
 class TestRefusals:
@@ -844,7 +890,7 @@ class TestRefusals:
             ("trace.json", b'{"timestep_data": []}', "records no timesteps"),
             (
                 "trace.npeviz.zst",
-                b"\x28\xb5\x2f\xfd" + b"not a frame" * 4,
+                npe_index.ZSTD_MAGIC + b"not a frame" * 4,
                 "is not a readable tt-npe trace",
             ),
             (
@@ -1001,6 +1047,18 @@ class TestRefusals:
             _answer(path)
         assert reads == []
 
+    def test_a_trace_that_grows_after_its_size_was_read_is_refused(
+        self, tmp_path, monkeypatch
+    ):
+        path = _write(tmp_path, _hand_checked())
+        # As if the first 16 bytes were all of it when its size was read.
+        monkeypatch.setattr(os, "fstat", lambda fd: SimpleNamespace(st_size=16))
+        reads = _counted_reads(monkeypatch)
+
+        with pytest.raises(ValueError, match="trace.json grew while it was read"):
+            _answer(path)
+        assert reads == []
+
     def test_json_past_the_limit_is_refused_unread(self, tmp_path, monkeypatch):
         path = _write(tmp_path, _hand_checked())
         size = path.stat().st_size
@@ -1050,15 +1108,15 @@ class TestPinning:
         path = _write(tmp_path, _hand_checked())
         registry = ReportRegistry()
         handle = _load(registry, path)
-        real_load = npe_index.load_npe_object
+        real_parse = npe_index.parse_trace
 
-        def exhausted(npe_path):
+        def exhausted(data, compressed):
             raise MemoryError
 
-        monkeypatch.setattr(npe_index, "load_npe_object", exhausted)
+        monkeypatch.setattr(npe_index, "parse_trace", exhausted)
         with pytest.raises(MemoryError):
             _call(registry, handle)
-        monkeypatch.setattr(npe_index, "load_npe_object", real_load)
+        monkeypatch.setattr(npe_index, "parse_trace", real_parse)
         _rewrite(path, _trace(_step(0, [*A, 10.0])))
 
         with pytest.raises(ValueError, match="has changed since 'report-1' first read"):
@@ -1124,6 +1182,34 @@ class TestPinning:
 
         assert _call(registry, _load(registry, path))["timesteps"] == 8
 
+    def test_a_cached_refusal_keeps_nothing_of_the_parsed_trace(
+        self, tmp_path, monkeypatch
+    ):
+        """The refusal is kept for the registry's lifetime, so it must not hold the
+        parse its frames saw."""
+
+        class _Parsed(dict):
+            pass
+
+        parsed: list = []
+
+        def parse(data, compressed):
+            trace = _Parsed(common_info={})
+            parsed.append(weakref.ref(trace))
+            return trace
+
+        monkeypatch.setattr(npe_index, "parse_trace", parse)
+        registry = ReportRegistry()
+        handle = _load(registry, _write(tmp_path, _hand_checked()))
+
+        for _ in range(2):
+            with pytest.raises(ValueError, match="no timestep_data list"):
+                _call(registry, handle)
+        gc.collect()
+
+        assert len(parsed) == 1
+        assert parsed[0]() is None
+
 
 class TestLoadReport:
     @pytest.mark.parametrize("name", ["trace.json", "trace.npeviz", "trace.npeviz.zst"])
@@ -1142,7 +1228,7 @@ class TestLoadReport:
     @pytest.mark.parametrize(
         "name, write",
         [
-            ("trace.json", lambda path: _execute(path, "CREATE TABLE t (x INTEGER)")),
+            ("trace.json", lambda path: execute(path, "CREATE TABLE t (x INTEGER)")),
             ("trace.json", lambda path: path.write_bytes(b'[{"timestep_data": []}]')),
             ("trace.json", lambda path: path.write_bytes(b"")),
             ("trace.zst", lambda path: path.write_bytes(b'{"timestep_data": []}')),
@@ -1177,6 +1263,31 @@ class TestLoadReport:
             "noc_congestion",
         ]
         assert tool_call(registry, "zone_timings", {"handle": handle})[1] is (
+            McpToolOutcome.OK
+        )
+        assert _call(registry, handle)["timesteps"] == 8
+
+    def test_a_trace_beside_a_memory_report_answers_with_it(self, tmp_path):
+        memory = tmp_path / "memory"
+        memory.mkdir()
+        connection = sqlite3.connect(memory / "db.sqlite")
+        try:
+            connection.executescript(
+                "CREATE TABLE operations (operation_id int UNIQUE, name text, "
+                "duration float); INSERT INTO operations VALUES (1, 'ttnn.add', 0.1);"
+            )
+        finally:
+            connection.close()
+        path = _write(tmp_path, _hand_checked())
+        registry = ReportRegistry()
+
+        loaded = load_report(
+            registry, memory_report_path=str(memory), npe_path=str(path)
+        )
+        handle = str(loaded["handle"])
+
+        assert {"find_operations", "noc_congestion"} <= set(loaded["answerable"])
+        assert tool_call(registry, "find_operations", {"handle": handle})[1] is (
             McpToolOutcome.OK
         )
         assert _call(registry, handle)["timesteps"] == 8
@@ -1295,7 +1406,7 @@ class TestThroughTheServer:
         "name, content",
         [
             ("trace.json", b"{not json"),
-            ("trace.npeviz.zst", b"\x28\xb5\x2f\xfd" + b"not a frame" * 4),
+            ("trace.npeviz.zst", npe_index.ZSTD_MAGIC + b"not a frame" * 4),
             ("trace.npeviz.zst", _THREE_GIB_FRAME_HEADER),
         ],
         ids=["garbage-json", "garbage-zst", "past-the-limit"],
@@ -1330,3 +1441,64 @@ class TestThroughTheServer:
         assert answer["link_count"] > MAX_LIMIT
         assert len(answer["bursts"]) == len(answer["busiest_links"]) == MAX_LIMIT
         assert len(text.encode()) < ANSWER_BUDGET_BYTES
+
+
+_TRACE_TOOLS = {McpToolName.LOAD_REPORT, McpToolName.NOC_CONGESTION}
+
+
+def _required_arguments(name: McpToolName, handle: str) -> dict:
+    """The arguments a call must name, the handle in each handle slot."""
+    schema = server._tool_table(ReportRegistry())[name]["schema"]
+    arguments: dict = {}
+    for key in schema.get("required", []):
+        kind = schema["properties"][key]["type"]
+        if kind == "integer":
+            arguments[key] = 1
+        else:
+            arguments[key] = handle if key.startswith("handle") else "LOOP"
+    return arguments
+
+
+class TestOtherToolsOnATrace:
+    @pytest.fixture(autouse=True)
+    def _never_touch_the_real_event_log(self, event_log_directory):
+        """Every tools/call reaches the recorder; none may write outside tmp_path."""
+
+    @pytest.mark.parametrize(
+        "name", [name for name in McpToolName if name not in _TRACE_TOOLS]
+    )
+    def test_every_other_tool_refuses_a_trace_only_handle(self, tmp_path, name):
+        registry = ReportRegistry()
+        handle = _load(registry, _write(tmp_path, _hand_checked()))
+
+        result, outcome = tool_call(
+            registry, name.value, _required_arguments(name, handle)
+        )
+
+        assert result["isError"] is True
+        assert outcome is McpToolOutcome.REFUSED
+        text = result["content"][0]["text"]
+        assert "performance" in text or "memory" in text
+
+    def test_a_limit_that_is_not_a_number_is_refused_by_name(self, tmp_path):
+        registry = ReportRegistry()
+        handle = _load(registry, _write(tmp_path, _hand_checked()))
+
+        result, outcome = tool_call(
+            registry, "noc_congestion", {"handle": handle, "limit": "abc"}
+        )
+
+        assert outcome is McpToolOutcome.REFUSED
+        assert "limit" in result["content"][0]["text"]
+
+    def test_a_limit_of_zero_answers_one(self, tmp_path):
+        registry = ReportRegistry()
+        handle = _load(registry, _write(tmp_path, _hand_checked()))
+
+        result, outcome = tool_call(
+            registry, "noc_congestion", {"handle": handle, "limit": 0}
+        )
+
+        answer = json.loads(result["content"][0]["text"])
+        assert outcome is McpToolOutcome.OK
+        assert (len(answer["bursts"]), len(answer["busiest_links"])) == (1, 1)

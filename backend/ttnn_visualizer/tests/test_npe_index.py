@@ -23,6 +23,7 @@ from ttnn_visualizer import npe_index
 from ttnn_visualizer.npe_index import (
     INDEX_READ_ERRORS,
     INDEX_VERSION,
+    ZSTD_MAGIC,
     _as_int,
     _transfer_count,
     ensure_index,
@@ -36,6 +37,7 @@ from ttnn_visualizer.npe_index import (
     trace_size,
     truncate,
 )
+from ttnn_visualizer.tests.npe_fixtures import execute, listing
 
 
 def _make_npe_object(n_transfers: int = 3, n_timesteps: int = 4) -> dict:
@@ -361,23 +363,6 @@ def test_concurrent_ensure_index_builds_once(tmp_path, monkeypatch):
     assert summary["n_timesteps"] == 6
 
 
-def _listing(directory: Path) -> dict:
-    """Each file's size and modification time, to show a reader wrote nothing."""
-    return {
-        path.name: (path.stat().st_size, path.stat().st_mtime_ns)
-        for path in directory.iterdir()
-    }
-
-
-def _execute(db_path: Path, statement: str, *parameters) -> None:
-    conn = sqlite3.connect(db_path)
-    try:
-        conn.execute(statement, parameters)
-        conn.commit()
-    finally:
-        conn.close()
-
-
 def _row_count(db_path: Path, table: str) -> int:
     conn = sqlite3.connect(db_path)
     try:
@@ -387,7 +372,7 @@ def _row_count(db_path: Path, table: str) -> int:
 
 
 def _set_meta(db_path: Path, key: str, value) -> None:
-    _execute(db_path, "UPDATE meta SET value = ? WHERE key = ?", value, key)
+    execute(db_path, "UPDATE meta SET value = ? WHERE key = ?", value, key)
 
 
 def _counted_builds(monkeypatch) -> list:
@@ -421,44 +406,59 @@ _NOT_CURRENT = {
     "null-source-mtime": lambda npe_path, db_path: _set_meta(
         db_path, "source_mtime_ns", None
     ),
-    "no-source-mtime-row": lambda npe_path, db_path: _execute(
+    "no-source-mtime-row": lambda npe_path, db_path: execute(
         db_path, "DELETE FROM meta WHERE key = 'source_mtime_ns'"
     ),
-    "no-meta-table": lambda npe_path, db_path: _execute(db_path, "DROP TABLE meta"),
+    "no-meta-table": lambda npe_path, db_path: execute(db_path, "DROP TABLE meta"),
     "trace-gone": lambda npe_path, db_path: Path(npe_path).unlink(),
 }
 
 
+def test_an_index_under_a_path_with_uri_characters_is_found_and_reused(
+    tmp_path, monkeypatch
+):
+    """The read-only check opens the index by URI, so these must not make it stale."""
+    directory = tmp_path / "a b#c?d%e"
+    directory.mkdir()
+    npe_path = _write_npe(directory, _make_npe_object())
+    built = ensure_index(npe_path)
+    builds = _counted_builds(monkeypatch)
+
+    assert fresh_index(npe_path) == built
+    assert ensure_index(npe_path) == built
+    assert builds == []
+
+
 def test_fresh_index_is_none_without_a_sidecar(tmp_path):
     npe_path = _write_npe(tmp_path, _make_npe_object())
-    before = _listing(tmp_path)
+    before = listing(tmp_path)
 
     assert fresh_index(npe_path) is None
-    assert _listing(tmp_path) == before
+    assert listing(tmp_path) == before
 
 
 def test_fresh_index_is_none_for_a_missing_trace(tmp_path):
     assert fresh_index(str(tmp_path / "absent.json")) is None
-    assert _listing(tmp_path) == {}
+    assert listing(tmp_path) == {}
 
 
 @pytest.mark.parametrize("damage", list(_NOT_CURRENT.values()), ids=list(_NOT_CURRENT))
 def test_fresh_index_is_none_for_an_index_that_is_not_current(tmp_path, damage):
     npe_path = _write_npe(tmp_path, _make_npe_object())
     damage(npe_path, ensure_index(npe_path))
-    before = _listing(tmp_path)
+    before = listing(tmp_path)
 
     assert fresh_index(npe_path) is None
-    assert _listing(tmp_path) == before
+    assert listing(tmp_path) == before
 
 
 def test_fresh_index_names_a_current_index_without_touching_it(tmp_path):
     npe_path = _write_npe(tmp_path, _make_npe_object())
     db_path = ensure_index(npe_path)
-    before = _listing(tmp_path)
+    before = listing(tmp_path)
 
     assert fresh_index(npe_path) == db_path == get_index_path(npe_path)
-    assert _listing(tmp_path) == before
+    assert listing(tmp_path) == before
 
 
 @pytest.mark.parametrize("value", ["abc", None], ids=["text", "null"])
@@ -499,7 +499,7 @@ def test_a_trace_starts_as_a_json_object_or_a_zstd_frame(tmp_path, name, content
         ("trace.json", b" \n "),
         ("trace.json", zstd.compress(b"{}")),
         ("trace.zst", b'{"timestep_data": []}'),
-        ("trace.zst", b"\x28\xb5\x2f"),
+        ("trace.zst", ZSTD_MAGIC[:3]),
     ],
     ids=[
         "json-list",
@@ -520,7 +520,7 @@ def test_a_file_that_does_not_start_as_a_trace_is_not_one(tmp_path, name, conten
 @pytest.mark.parametrize("name", ["trace.json", "trace.zst"])
 def test_a_sqlite_file_is_not_a_trace(tmp_path, name):
     path = tmp_path / name
-    _execute(path, "CREATE TABLE timestep_data (t INTEGER)")
+    execute(path, "CREATE TABLE timestep_data (t INTEGER)")
 
     assert looks_like_trace(path) is False
 
@@ -578,7 +578,7 @@ def _frame_header(size_flag: int, single_segment: bool, dictionary_flag: int) ->
     size = _DECLARED_BY_WIDTH[width]
     descriptor = size_flag << 6 | (0x20 if single_segment else 0) | dictionary_flag
     return (
-        b"\x28\xb5\x2f\xfd"
+        ZSTD_MAGIC
         + bytes([descriptor])
         + (b"" if single_segment else b"\x58")
         + b"\xab" * _DICTIONARY_ID_BYTES[dictionary_flag]
@@ -611,7 +611,7 @@ def test_trace_size_reads_every_frame_header_layout(
     [
         *(_frame_header(0, False, dictionary_flag) for dictionary_flag in range(4)),
         _frame_header(3, False, 3)[:-1],
-        b"\x28\xb5\x2f\xfd\x20",
+        ZSTD_MAGIC + b"\x20",
         b"\x50\x2a\x4d\x18" + b"\x08" * 14,
         b'{"timestep_data": []}',
     ],
@@ -650,7 +650,7 @@ def _hand_frame(blocks: list, checksum: bool) -> bytes:
         for index, (content, rle) in enumerate(blocks)
     )
     return (
-        b"\x28\xb5\x2f\xfd"
+        ZSTD_MAGIC
         + bytes([descriptor])
         + size.to_bytes(4, "little")
         + body
@@ -763,12 +763,17 @@ def test_transfer_count_is_the_row_count_of_the_index_it_describes(tmp_path):
     assert _transfer_count(obj["noc_transfers"]) == _row_count(db_path, "transfer") == 4
 
 
-def test_transfer_count_reads_a_numeric_string_id_as_the_index_stores_it(tmp_path):
+@pytest.mark.parametrize("spelled", ["3", " 3 ", "+3"])
+def test_transfer_count_reads_a_numeric_string_id_as_the_index_stores_it(
+    tmp_path, spelled
+):
+    # One `_transfer_id` keys both, so however the integer is spelled they agree.
     obj = _make_npe_object(n_transfers=0)
-    obj["noc_transfers"] = [{"id": 3}, {"id": "3"}]
+    obj["noc_transfers"] = [{"id": 3}, {"id": spelled}]
     db_path = ensure_index(_write_npe(tmp_path, obj))
 
-    assert _transfer_count(obj["noc_transfers"]) == _row_count(db_path, "transfer")
+    assert _transfer_count(obj["noc_transfers"]) == 1
+    assert _row_count(db_path, "transfer") == 1
 
 
 @pytest.mark.parametrize(
@@ -837,11 +842,11 @@ def test_trace_link_demand_reads_a_common_info_that_is_not_an_object_as_empty(
 
 def test_indexed_link_demand_is_none_without_a_current_index(tmp_path):
     npe_path = _write_npe(tmp_path, _make_npe_object())
-    before = _listing(tmp_path)
+    before = listing(tmp_path)
 
     with indexed_link_demand(Path(npe_path)) as indexed:
         assert indexed is None
-    assert _listing(tmp_path) == before
+    assert listing(tmp_path) == before
 
 
 def test_indexed_link_demand_gives_the_traces_rows_truncated(tmp_path):
@@ -884,7 +889,7 @@ def test_indexed_link_demand_gives_the_traces_rows_truncated(tmp_path):
 )
 def test_a_damaged_index_raises_an_index_read_error_while_read(tmp_path, statement):
     npe_path = _write_npe(tmp_path, _make_npe_object())
-    _execute(ensure_index(npe_path), statement)
+    execute(ensure_index(npe_path), statement)
 
     with pytest.raises(INDEX_READ_ERRORS):
         with indexed_link_demand(Path(npe_path)) as indexed:

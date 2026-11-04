@@ -458,8 +458,9 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "pass 100% and utilisation cannot, so demand over 100% is congestion. "
                 "These are tt-npe's simulation, in device cycles, not a measurement. "
                 "The first call reads the whole trace, which takes seconds on a large "
-                "one and refuses one past 1 GiB of JSON; later calls answer from that "
-                "read, with a caveat if the trace has changed since."
+                "one and refuses one past "
+                f"{noc_congestion.MAX_TRACE_JSON_BYTES:,} bytes of JSON; later calls "
+                "answer from that read, with a caveat if the trace has changed since."
             ),
             "schema": {
                 "type": "object",

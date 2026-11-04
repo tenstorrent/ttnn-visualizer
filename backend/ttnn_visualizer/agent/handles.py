@@ -29,7 +29,9 @@ from typing import (
     List,
     Optional,
     Tuple,
+    Type,
     TypeVar,
+    Union,
     cast,
 )
 
@@ -275,21 +277,46 @@ class ReportRegistry:
         self._next_id = 1
 
 
-def _resolved_directory(label: str, path: Optional[str]) -> Optional[str]:
+def read_once(
+    registry: ReportRegistry,
+    handle: str,
+    read: Callable[[Instance], Cached],
+    *,
+    variant: CacheVariant,
+    share_key: Hashable,
+    refusals: Tuple[Type[Exception], ...],
+    check: Callable[[Instance], None] = lambda _: None,
+) -> Cached:
+    """`read` of a handle's source once per `share_key`, a `refusals` raise cached too,
+    since the same bytes fail the same way. On a miss `check` may refuse, uncached.
+
+    The cached error drops its traceback, context and cause, whose frames would keep
+    the failed read's data alive for the registry's lifetime.
+    """
+
+    def build(instance: Instance) -> Union[Cached, Exception]:
+        check(instance)
+        try:
+            return read(instance)
+        except refusals as error:
+            error.__traceback__ = error.__context__ = error.__cause__ = None
+            return error
+
+    outcome = registry.cached_report(
+        handle, build, variant=variant, share_key=share_key
+    )
+    if isinstance(outcome, Exception):
+        raise outcome.with_traceback(None)
+    return outcome
+
+
+def _resolved(label: str, path: Optional[str], directory: bool) -> Optional[str]:
     if path is None:
         return None
     resolved = Path(path).expanduser().resolve()
-    if not resolved.is_dir():
-        raise ValueError(f"{label} is not a directory: {resolved}")
-    return str(resolved)
-
-
-def _resolved_file(label: str, path: Optional[str]) -> Optional[str]:
-    if path is None:
-        return None
-    resolved = Path(path).expanduser().resolve()
-    if not resolved.is_file():
-        raise ValueError(f"{label} is not a file: {resolved}")
+    if not (resolved.is_dir() if directory else resolved.is_file()):
+        kind = "directory" if directory else "file"
+        raise ValueError(f"{label} is not a {kind}: {resolved}")
     return str(resolved)
 
 
@@ -788,9 +815,9 @@ def load_report(
             "one of memory_report_path, performance_path or npe_path is required"
         )
 
-    profiler = _resolved_directory(memory_label, memory_path)
-    performance = _resolved_directory("performance_path", performance_path)
-    npe = _resolved_file("npe_path", npe_path)
+    profiler = _resolved(memory_label, memory_path, directory=True)
+    performance = _resolved("performance_path", performance_path, directory=True)
+    npe = _resolved("npe_path", npe_path, directory=False)
     handle = registry.add(profiler, performance, npe)
     instance = registry.get(handle)
 
@@ -817,4 +844,5 @@ __all__ = [
     "UnknownHandleError",
     "load_report",
     "perf_csv_columns",
+    "read_once",
 ]

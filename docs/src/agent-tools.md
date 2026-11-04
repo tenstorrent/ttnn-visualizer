@@ -749,7 +749,8 @@ timesteps it spent over 100%, and `link_count` counts every link with a readable
 row. `device`, `y` and `x` are the trace's own chip id and grid coordinates. A link demand
 row whose coordinates or demand cannot be read is left out and counted in a caveat, and a
 timestep that is not an object or holds no list of link demand counts as idle, also in a
-caveat. The trace is read through the visualizer's index of it when that index is built
+caveat. Links past the first 65,536 distinct ones read are left out and counted in a caveat;
+the most in a local trace is 4,653. The trace is read through the visualizer's index of it when that index is built
 and current, and from the trace itself otherwise; the tool never builds the index, so it
 writes nothing beside the trace. The visualizer builds its index beside the copy it opens,
 which for an upload is its own copy under its report data directory, so an `npe_path`
@@ -757,8 +758,8 @@ naming that copy reuses the index, in a fraction of the time and memory a parse 
 Otherwise the first call on a handle parses the whole trace: a trace of tens of thousands
 of timesteps and millions of link rows takes seconds to tens of seconds and several GB at
 its peak, as building the visualizer's index does, and the server process can keep much of
-that memory afterwards. A trace whose JSON passes 1 GiB, summed over every zstd frame, is
-refused rather than parsed, and so is a `.zst` with a frame that does not declare its
+that memory afterwards. A trace whose JSON passes 1 GiB, summed over every zstd frame, or a `.zst` file itself
+past that size, is refused rather than parsed, and so is a `.zst` with a frame that does not declare its
 size. Later calls answer from the first read, and so does every handle on the same
 unchanged file. A handle stays with the trace it first read: if the file changes or goes
 away afterwards, its answers say so in their caveat, and a fresh `load_report` reads the
