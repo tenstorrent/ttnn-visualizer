@@ -1727,16 +1727,21 @@ def test_push_holds_the_export_lock_across_the_post(
 
 @_requires_flock
 def test_a_push_skips_rather_than_queues_behind_another_processs_push(
-    event_log_directory, usage_collection_config_path, curl_calls
+    event_log_directory, usage_collection_config_path, curl_calls, monkeypatch
 ):
     """Waiters would only queue behind a slow endpoint; the holder carries the counts."""
     _opt_in(usage_collection_config_path, remote_write_endpoint=_ENDPOINT)
 
+    def _no_polling(_seconds):
+        raise AssertionError("a push that does not wait must not poll the lock")
+
+    # Asserts one non-blocking attempt rather than a wall-clock bound, which a loaded
+    # runner could miss.
+    monkeypatch.setattr(usage_collection.time, "sleep", _no_polling)
+
     with usage_collection.usage_file_lock(usage_metrics.EXPORT_LOCK_NAME) as held:
         assert held
-        started = time.monotonic()
         assert push_usage_metrics() is False
-        assert time.monotonic() - started < usage_collection.LOCK_POLL_SECONDS
 
     assert curl_calls == []
 
@@ -1849,6 +1854,28 @@ def test_preparation_does_not_hang_behind_a_stopped_lock_holder(
     assert config.enabled
     assert config.machine_id is None
     assert "machine_id" not in json.loads(usage_collection_config_path.read_text())
+
+
+@_requires_flock
+def test_preparation_behind_a_held_lock_still_restricts_the_config(
+    usage_collection_config_path, monkeypatch
+):
+    """A hand-written config can hold a token; timing out on the lock must not leave
+    it readable by other users."""
+    _write_config(
+        usage_collection_config_path,
+        enabled=True,
+        remote_write_endpoint=_ENDPOINT,
+        remote_write_auth_token="secret-token",
+    )
+    usage_collection_config_path.chmod(0o644)
+    monkeypatch.setattr(usage_collection, "COLLECTION_LOCK_TIMEOUT_SECONDS", 0.1)
+
+    with usage_collection.usage_file_lock(usage_collection.COLLECTION_LOCK_NAME):
+        usage_collection.prepare_usage_collection_config()
+
+    mode = stat.S_IMODE(usage_collection_config_path.stat().st_mode)
+    assert mode == usage_collection.PRIVATE_FILE_MODE
 
 
 @_requires_flock

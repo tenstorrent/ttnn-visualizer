@@ -1182,6 +1182,10 @@ def main() -> None:
         serve(sys.stdin, sys.stdout)
     finally:
         if exporter is not None:
+            # A repeated SIGTERM would otherwise raise inside ``stop()`` and drop the
+            # final push the first one started. The push is bounded, and a host that
+            # will not wait can still SIGKILL.
+            signal.signal(signal.SIGTERM, signal.SIG_IGN)
             exporter.stop()
 
 

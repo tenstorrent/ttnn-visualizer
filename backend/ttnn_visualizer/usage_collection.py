@@ -243,6 +243,9 @@ def _load_config(persist: bool) -> UsageCollectionConfig:
         if not persist:
             return _read_config(path, persist=False)
 
+        # Outside the lock: it is idempotent, and a start that times out on the lock
+        # must still not leave a token readable by other users.
+        _secure_config_permissions(path)
         # The read is inside the lock with the write: an MCP server per agent session
         # plus the app can prepare together, and two that both read no ID would each
         # generate one, leaving the loser's whole session under an orphan identity.
@@ -250,7 +253,6 @@ def _load_config(persist: bool) -> UsageCollectionConfig:
             COLLECTION_LOCK_NAME, timeout_seconds=COLLECTION_LOCK_TIMEOUT_SECONDS
         ) as locked:
             if locked:
-                _secure_config_permissions(path)
                 return _read_config(path, persist=True)
         # Read without writing rather than block startup: an already prepared ID
         # still exports, and an unprepared one waits for the next start.
