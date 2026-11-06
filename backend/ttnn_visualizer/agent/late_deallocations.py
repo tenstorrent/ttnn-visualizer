@@ -9,7 +9,6 @@ A port of `src/functions/lateDeallocation.ts`, with `getUniqueBuffersByOperation
 the app's run starts, each followed to where it ends.
 """
 
-from bisect import bisect_right
 from dataclasses import dataclass
 from enum import Enum
 from itertools import groupby
@@ -61,9 +60,6 @@ class Hold:
     last_use_operation_id: int
     first_operation_id: int
     last_operation_id: int
-    # False once the tensor's buffer had left or been deallocated: the buffer there is
-    # a later, unnamed tensor's, which the app's address map still credits to this one.
-    attributed: bool = True
     operations_held: int = 0
     bytes_per_bank: int = 0
     byte_operations: int = 0
@@ -158,20 +154,23 @@ def held_tensors_by_operation(
     """`buildLateDeallocationReports`' `reportsByOpId`, over
     `buildTensorsByOperationByAddress`, with the operations that recorded any of these
     buffers."""
-    latest_tensor_by_address: Dict[int, Tensor] = {}
+    holder_by_address: Dict[int, Tensor] = {}
     last_use_by_tensor_id: Dict[int, int] = {}
     held_by_operation: Dict[int, List[HeldTensor]] = {}
     buffered: Set[int] = set()
     for operation_id, sizes in zip(operation_ids, sizes_by_operation):
+        deallocated = (
+            inputs_by_operation_id.get(operation_id, ())
+            if is_deallocate(operation_names_by_id.get(operation_id))
+            else ()
+        )
         for side in (inputs_by_operation_id, outputs_by_operation_id):
             for tensor in side.get(operation_id, ()):
-                if tensor.address is not None:
-                    latest_tensor_by_address[tensor.address] = tensor
-        if sizes:
-            buffered.add(operation_id)
+                if tensor.address is not None and tensor not in deallocated:
+                    holder_by_address[tensor.address] = tensor
         held: List[HeldTensor] = []
         for address, size in sizes.items():
-            holder = latest_tensor_by_address.get(address)
+            holder = holder_by_address.get(address)
             if holder is None:
                 continue
             report = late_deallocation_report(
@@ -187,7 +186,30 @@ def held_tensors_by_operation(
                 held.append(report)
         if held:
             held_by_operation[operation_id] = held
+        if sizes:
+            buffered.add(operation_id)
+        _forget_gone_holders(holder_by_address, sizes, deallocated)
     return HeldTensors(held_by_operation, buffered)
+
+
+def _forget_gone_holders(
+    holder_by_address: Dict[int, Tensor],
+    sizes: Mapping[int, int],
+    deallocated: Sequence[Tensor],
+) -> None:
+    """A later buffer at a gone tensor's address is another tensor's: drop a holder
+    whose buffer left a recorded snapshot, or that a deallocate call freed."""
+    if sizes:
+        for address in [
+            address for address in holder_by_address if address not in sizes
+        ]:
+            del holder_by_address[address]
+    for tensor in deallocated:
+        if tensor.address is None:
+            continue
+        holder = holder_by_address.get(tensor.address)
+        if holder is not None and holder.tensor_id == tensor.tensor_id:
+            del holder_by_address[tensor.address]
 
 
 def run_start_count(
@@ -225,22 +247,6 @@ def deallocations_by_tensor_id(
     return deallocations
 
 
-def _attributed(
-    entry: HeldTensor,
-    operation_id: int,
-    buffered_so_far: Sequence[int],
-    deallocations: Sequence[int],
-) -> bool:
-    """Whether a hold opening here is the tensor's own buffer: it opens at the first
-    buffered operation after the last use, and no deallocate call came before."""
-    first_after_use = buffered_so_far[
-        bisect_right(buffered_so_far, entry.last_use_operation_id)
-    ]
-    return first_after_use == operation_id and not any(
-        call < operation_id for call in deallocations
-    )
-
-
 def _end(hold: Hold, next_operation_id: Optional[int], calls: Sequence[int]) -> None:
     """How a hold ended before `next_operation_id`, or with the capture when None."""
     for call in calls:
@@ -264,13 +270,11 @@ def holds(
     none of these buffers, where the app starts each one again."""
     open_holds: Dict[Tuple[int, int], Hold] = {}
     ended: List[Hold] = []
-    buffered_so_far: List[int] = []
     skipped = False
     for operation_id in operation_ids:
         if operation_id not in buffered_operation_ids:
             skipped = skipped or bool(open_holds)
             continue
-        buffered_so_far.append(operation_id)
         current: Dict[Tuple[int, int], Hold] = {}
         for entry in held_by_operation.get(operation_id, ()):
             key = (entry.tensor_id, entry.address)
@@ -282,12 +286,6 @@ def holds(
                     entry.last_use_operation_id,
                     first_operation_id=operation_id,
                     last_operation_id=operation_id,
-                    attributed=_attributed(
-                        entry,
-                        operation_id,
-                        buffered_so_far,
-                        deallocate_calls_by_tensor_id.get(entry.tensor_id, ()),
-                    ),
                 )
             elif skipped:
                 hold.bridged = True

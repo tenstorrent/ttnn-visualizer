@@ -166,15 +166,15 @@ L1_PEAK_NOTE = (
 )
 LATE_DEALLOCATIONS_NOTE = (
     "Buffer Summary's late-deallocation rule: a buffer in an operation's post-op "
-    "snapshot belongs to the last tensor seen at its address, and that tensor is held "
+    "snapshot belongs to the last tensor seen at its address, until a later snapshot "
+    "of these buffers lacks the address or a deallocate call frees the tensor, and "
+    "that tensor is held "
     "late when its last consumer other than a deallocate call came earlier. The app "
     "applies it to L1 only; DRAM is the same rule, which the app does not show. "
     "run_start_count is the count beside the app's L1 toggle. A hold is one tensor at "
     "one address over consecutive operations with these buffers: operations that "
-    "recorded none do not end it, and operations_held counts only the others. A hold "
-    "that opens after its tensor's buffer left the snapshot or was deallocated is a "
-    "later tensor's buffer, so it is counted in unattributed_hold_count and left out "
-    "of everything else. ending: deallocated by a deallocate call naming the tensor, "
+    "recorded none do not end it, and operations_held counts only the others. "
+    "ending: deallocated by a deallocate call naming the tensor, "
     "freed_otherwise when it left the snapshot or its address went to another tensor "
     "without one, held_to_end when the capture ends first, which weights, outputs and "
     "caches often are by design; ended counts them. producer_operation_ids are the "
@@ -808,12 +808,11 @@ def report_late_deallocations(
         call_sites=_call_sites(
             queries,
             scope,
-            {hold.last_use_operation_id for hold in holds if hold.attributed},
+            {hold.last_use_operation_id for hold in holds},
         ),
         producers={
             hold.tensor_id: report.producers_by_tensor_id.get(hold.tensor_id, [])
             for hold in holds
-            if hold.attributed
         },
         device_count=len(scoped_devices(queries, scope)),
     )
@@ -970,22 +969,12 @@ def _late_deallocation_caveats(
     report: LateDeallocationReport,
     buffer_type: str,
     holds: Sequence[late.Hold],
-    unattributed: Sequence[late.Hold],
 ) -> List[str]:
     caveats: List[str] = []
     if report.buffered_operation_count == 0:
         caveats.append(
             f"This report records no {buffer_type} buffers under the type's number. "
             "One that stores buffer types by name reads none here or in the app (#2196)."
-        )
-    if unattributed:
-        caveats.append(
-            f"{len(unattributed)} more holds, "
-            f"{sum(hold.byte_operations for hold in unattributed)} byte_operations, "
-            "are left out: each opened after its tensor's buffer had left the snapshot "
-            "or been deallocated, so the buffer at that address is a later tensor's "
-            "that the capture does not name. Buffer Summary hatches those rows under "
-            "the old tensor."
         )
     unplaced = sum(
         1 for hold in holds if report.call_sites.get(hold.last_use_operation_id) is None
@@ -1039,8 +1028,7 @@ def late_deallocations(
             key=resolved,
         )
 
-    holds = [hold for hold in report.holds if hold.attributed]
-    unattributed = [hold for hold in report.holds if not hold.attributed]
+    holds = report.holds
     call_sites = _call_site_groups(report, holds)
     response: Dict[str, object] = {
         "handle": handle,
@@ -1049,7 +1037,6 @@ def late_deallocations(
         "operation_count": report.operation_count,
         "run_start_count": report.run_start_count,
         **_hold_totals(holds),
-        "unattributed_hold_count": len(unattributed),
         "call_site_count": len(call_sites),
         "returned": min(count, len(call_sites)),
         "call_sites": call_sites[:count],
@@ -1069,9 +1056,7 @@ def late_deallocations(
         **scope.as_response(),
     }
     response.update(
-        caveat_field(
-            scope, *_late_deallocation_caveats(report, wanted, holds, unattributed)
-        )
+        caveat_field(scope, *_late_deallocation_caveats(report, wanted, holds))
     )
     return response
 

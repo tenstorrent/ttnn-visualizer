@@ -1633,22 +1633,45 @@ export const usePerfFolderList = () => {
 };
 
 export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = BufferType.L1) => {
-    const { data: buffersByOperation, status: buffersStatus } = useBuffers(bufferType, true);
+    // Every operation's buffers, so a buffer that left before the range still clears its address.
+    const { data: buffersByOperation, status: buffersStatus } = useBuffers(bufferType, false);
     const { data: operations, status: operationsStatus } = useOperationsList();
     const operationRange = useAtomValue(selectedOperationRangeAtom);
 
-    const uniqueBuffersByOperationList = useMemo(
+    const allUniqueBuffersByOperation = useMemo(
         () => (buffersByOperation ? getUniqueBuffersByOperation(buffersByOperation) : undefined),
         [buffersByOperation],
     );
 
-    const tensorsByOperationByAddress = useMemo(
+    const allTensorsByOperationByAddress = useMemo(
         (): TensorsByOperationByAddress =>
-            operations && uniqueBuffersByOperationList
-                ? buildTensorsByOperationByAddress(operations, uniqueBuffersByOperationList)
+            operations && allUniqueBuffersByOperation
+                ? buildTensorsByOperationByAddress(operations, allUniqueBuffersByOperation)
                 : new Map(),
-        [operations, uniqueBuffersByOperationList],
+        [operations, allUniqueBuffersByOperation],
     );
+
+    const uniqueBuffersByOperationList = useMemo(
+        () =>
+            allUniqueBuffersByOperation && operationRange
+                ? filterByOperationRange(allUniqueBuffersByOperation, operationRange)
+                : allUniqueBuffersByOperation,
+        [allUniqueBuffersByOperation, operationRange],
+    );
+
+    const tensorsByOperationByAddress = useMemo((): TensorsByOperationByAddress => {
+        if (!operationRange) {
+            return allTensorsByOperationByAddress;
+        }
+        const [first, last] = operationRange;
+
+        return new Map(
+            Array.from(allTensorsByOperationByAddress, ([operationId, tensorsByAddress]) => [
+                operationId,
+                operationId >= first && operationId <= last ? tensorsByAddress : new Map(),
+            ]),
+        );
+    }, [allTensorsByOperationByAddress, operationRange]);
 
     // The map is empty until both queries settle, so callers need this to tell
     // "nothing here" from "not known yet".
