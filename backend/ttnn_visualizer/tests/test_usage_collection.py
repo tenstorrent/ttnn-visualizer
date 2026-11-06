@@ -1739,7 +1739,9 @@ def test_a_push_skips_rather_than_queues_behind_another_processs_push(
     # runner could miss.
     monkeypatch.setattr(usage_collection.time, "sleep", _no_polling)
 
-    with usage_collection.usage_file_lock(usage_metrics.EXPORT_LOCK_NAME) as held:
+    with usage_collection.usage_file_lock(
+        usage_metrics.EXPORT_LOCK_NAME, timeout_seconds=5
+    ) as held:
         assert held
         assert push_usage_metrics() is False
 
@@ -1752,7 +1754,9 @@ def test_a_waiting_push_gives_up_within_its_timeout(
 ):
     _opt_in(usage_collection_config_path, remote_write_endpoint=_ENDPOINT)
 
-    with usage_collection.usage_file_lock(usage_metrics.EXPORT_LOCK_NAME) as held:
+    with usage_collection.usage_file_lock(
+        usage_metrics.EXPORT_LOCK_NAME, timeout_seconds=5
+    ) as held:
         assert held
         assert push_usage_metrics(timeout_seconds=0.2, wait_for_lock=True) is False
 
@@ -1769,7 +1773,9 @@ def test_a_waiting_push_gives_curl_only_the_time_left(
     release_holder = threading.Event()
 
     def _hold():
-        with usage_collection.usage_file_lock(usage_metrics.EXPORT_LOCK_NAME):
+        with usage_collection.usage_file_lock(
+            usage_metrics.EXPORT_LOCK_NAME, timeout_seconds=5
+        ):
             holder_ready.set()
             release_holder.wait(timeout=5)
 
@@ -1845,9 +1851,11 @@ def test_preparation_does_not_hang_behind_a_stopped_lock_holder(
     _write_config(
         usage_collection_config_path, enabled=True, remote_write_endpoint=_ENDPOINT
     )
-    monkeypatch.setattr(usage_collection, "COLLECTION_LOCK_TIMEOUT_SECONDS", 0.1)
+    monkeypatch.setattr(usage_collection, "_COLLECTION_LOCK_TIMEOUT_SECONDS", 0.1)
 
-    with usage_collection.usage_file_lock(usage_collection.COLLECTION_LOCK_NAME):
+    with usage_collection.usage_file_lock(
+        usage_collection.COLLECTION_LOCK_NAME, timeout_seconds=5
+    ):
         config = usage_collection.prepare_usage_collection_config()
 
     # Read without writing: unprepared, so nothing exports until a later start.
@@ -1869,9 +1877,11 @@ def test_preparation_behind_a_held_lock_still_restricts_the_config(
         remote_write_auth_token="secret-token",
     )
     usage_collection_config_path.chmod(0o644)
-    monkeypatch.setattr(usage_collection, "COLLECTION_LOCK_TIMEOUT_SECONDS", 0.1)
+    monkeypatch.setattr(usage_collection, "_COLLECTION_LOCK_TIMEOUT_SECONDS", 0.1)
 
-    with usage_collection.usage_file_lock(usage_collection.COLLECTION_LOCK_NAME):
+    with usage_collection.usage_file_lock(
+        usage_collection.COLLECTION_LOCK_NAME, timeout_seconds=5
+    ):
         usage_collection.prepare_usage_collection_config()
 
     mode = stat.S_IMODE(usage_collection_config_path.stat().st_mode)
@@ -1883,9 +1893,11 @@ def test_preparation_behind_a_held_lock_keeps_an_existing_identity(
     usage_collection_config_path, monkeypatch
 ):
     prepared = _opt_in(usage_collection_config_path, remote_write_endpoint=_ENDPOINT)
-    monkeypatch.setattr(usage_collection, "COLLECTION_LOCK_TIMEOUT_SECONDS", 0.1)
+    monkeypatch.setattr(usage_collection, "_COLLECTION_LOCK_TIMEOUT_SECONDS", 0.1)
 
-    with usage_collection.usage_file_lock(usage_collection.COLLECTION_LOCK_NAME):
+    with usage_collection.usage_file_lock(
+        usage_collection.COLLECTION_LOCK_NAME, timeout_seconds=5
+    ):
         config = usage_collection.prepare_usage_collection_config()
 
     assert config.can_export
@@ -2010,7 +2022,7 @@ def test_launch_starts_the_exporter_only_for_an_opted_in_endpoint(
 ):
     from ttnn_visualizer import app as app_module
 
-    monkeypatch.setattr(app_module, "UsageMetricsExporter", _FakeExporter)
+    monkeypatch.setattr(usage_metrics, "UsageMetricsExporter", _FakeExporter)
     monkeypatch.setenv(RUN_ID_ENV_VAR, "")
     if values is not None:
         _write_config(usage_collection_config_path, **values)
@@ -2025,7 +2037,7 @@ def test_launch_starts_the_exporter_only_for_an_opted_in_endpoint(
     collection_config = app_module._record_launch(
         SimpleNamespace(SERVER_MODE=server_mode, TT_METAL_HOME=None)
     )
-    exporter = app_module._start_usage_export(collection_config)
+    exporter = usage_metrics.start_usage_exporter(collection_config)
 
     assert (exporter is not None) is starts
     if starts:

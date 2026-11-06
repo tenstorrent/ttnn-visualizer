@@ -3243,7 +3243,12 @@ def _patch_main_for_export(monkeypatch, order, *, can_export=True, recording=Tru
 
     monkeypatch.setattr(server, "prepare_usage_collection_config", _prepare)
     monkeypatch.setattr(server, "describe_usage_collection", lambda *args, **kw: "")
-    monkeypatch.setattr(server, "UsageMetricsExporter", lambda: _OrderedExporter(order))
+    monkeypatch.setattr(
+        server,
+        "start_usage_exporter",
+        lambda config: _OrderedExporter(order).start() if config.can_export else None,
+    )
+    monkeypatch.delenv("SERVER_MODE", raising=False)
     # Never replace pytest's own SIGTERM handler.
     monkeypatch.setattr(
         server.signal,
@@ -3304,6 +3309,30 @@ def test_main_stops_the_exporter_when_serving_raises(monkeypatch):
         server.main()
 
     assert order[-2:] == ["serve", "export-stop"]
+
+
+@pytest.mark.parametrize("value", ["true", "1", "Ture"])
+def test_main_exports_nothing_under_server_mode(monkeypatch, value):
+    """Aggregate collection is local-only; an unreadable value counts as hosted."""
+    order = []
+    handlers = _patch_main_for_export(monkeypatch, order)
+    monkeypatch.setenv("SERVER_MODE", value)
+
+    server.main()
+
+    assert order == ["compact", "serve"]
+    assert handlers == []
+
+
+@pytest.mark.parametrize("value", ["false", "0", ""])
+def test_main_exports_when_server_mode_reads_as_local(monkeypatch, value):
+    order = []
+    _patch_main_for_export(monkeypatch, order)
+    monkeypatch.setenv("SERVER_MODE", value)
+
+    server.main()
+
+    assert "export-start" in order
 
 
 def test_main_serves_when_preparing_collection_raises(monkeypatch):

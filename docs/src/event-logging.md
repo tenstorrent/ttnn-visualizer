@@ -152,7 +152,7 @@ TT-NN Visualizer does not record:
 
 ## Aggregate collection
 
-The TT-NN Visualizer backend never forwards raw events. When a local install opts in, the launcher and `ttnn-visualizer-mcp` project the local log into cumulative counters and push them to a configured endpoint as OTLP/HTTP JSON: once at start, then every minute, then once when the server stops. Collection is disabled by default and is unavailable under `SERVER_MODE`. Either recording opt-out stops the next push without a restart; a launch or MCP server started under an opt-out starts no exporter at all, so lifting the opt-out mid-session takes effect at the next start.
+The TT-NN Visualizer backend never forwards raw events. When a local install opts in, the launcher and `ttnn-visualizer-mcp` project the local log into cumulative counters and push them to a configured endpoint as OTLP/HTTP JSON: once at start, then every minute, then once when the server stops. Collection is disabled by default and is unavailable under `SERVER_MODE`; `ttnn-visualizer-mcp` reads the same variable from its environment and exports nothing when it is set or unreadable. Either recording opt-out stops the next push without a restart; a launch or MCP server started under an opt-out starts no exporter at all, so lifting the opt-out mid-session takes effect at the next start.
 
 The opt-in file is:
 

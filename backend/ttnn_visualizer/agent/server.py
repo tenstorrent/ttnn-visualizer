@@ -17,6 +17,7 @@ curl's.
 import json
 import logging
 import math
+import os
 import signal
 import sys
 from types import FrameType
@@ -56,7 +57,8 @@ from ttnn_visualizer.usage_collection import (
     describe_usage_collection,
     prepare_usage_collection_config,
 )
-from ttnn_visualizer.usage_metrics import UsageMetricsExporter
+from ttnn_visualizer.usage_metrics import UsageMetricsExporter, start_usage_exporter
+from ttnn_visualizer.utils import parse_bool
 
 logger = logging.getLogger(__name__)
 
@@ -1133,16 +1135,19 @@ def serve(
 
 
 def _start_usage_export() -> Optional[UsageMetricsExporter]:
-    """Prepare the opt-in identity and push as the app launcher does. #2282
+    """Prepare the opt-in identity and push, as the app launcher does for a local launch.
 
-    Without this, someone who only uses the visualizer through an agent never has their
-    usage exported: only a launch prepared the identity and ran the exporter.
+    The server is an entry point of its own, so an agent-only user is exported without
+    ever launching the app. #2282
     """
+    # Anything but a readable false counts as hosted, failing closed: aggregate
+    # collection is local-only, and the app refuses to start on an unreadable value.
+    if parse_bool(os.environ.get("SERVER_MODE") or "false") is not False:
+        logger.info("Aggregate usage collection is unavailable under SERVER_MODE.")
+        return None
     collection_config = prepare_usage_collection_config()
     logger.info(describe_usage_collection(collection_config, recording_disabled=False))
-    if not collection_config.can_export:
-        return None
-    return UsageMetricsExporter().start()
+    return start_usage_exporter(collection_config)
 
 
 def _exit_on_sigterm(signum: int, frame: Optional[FrameType]) -> None:

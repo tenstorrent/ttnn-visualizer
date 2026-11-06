@@ -60,7 +60,10 @@ from ttnn_visualizer.usage_collection import (
     describe_usage_collection,
     prepare_usage_collection_config,
 )
-from ttnn_visualizer.usage_metrics import UsageMetricsExporter
+from ttnn_visualizer.usage_metrics import (
+    UsageMetricsExporter,
+    start_usage_exporter,
+)
 from ttnn_visualizer.utils import (
     find_gunicorn_path,
     is_flag_enabled,
@@ -586,20 +589,6 @@ def display_mode_info_without_db(config):
         print(f"   Remote directory: {config.REMOTE_DATA_DIRECTORY}")
 
 
-def _start_usage_export(
-    collection_config: Optional[UsageCollectionConfig],
-) -> Optional[UsageMetricsExporter]:
-    """Start pushing usage counters when a local install has opted in with an endpoint.
-
-    Takes the config ``_record_launch`` prepared, so the exporter starts exactly when
-    the launch banner says collection is enabled. ``None`` means a hosted launch or a
-    recording opt-out.
-    """
-    if collection_config is None or not collection_config.can_export:
-        return None
-    return UsageMetricsExporter().start()
-
-
 def _serve(gunicorn_args: list[str], exporter: Optional[UsageMetricsExporter]) -> None:
     """Run gunicorn to completion, stopping the exporter however it ends.
 
@@ -862,7 +851,7 @@ def main():
     # Deliberately last: every exit above (an invalid report path, a port already in
     # use) ends a launch that never served a request, and counting those would
     # inflate the figure with exactly the sessions where nobody used the tool.
-    exporter = _start_usage_export(_record_launch(config))
+    exporter = start_usage_exporter(_record_launch(config))
     _serve(gunicorn_args, exporter)
 
 

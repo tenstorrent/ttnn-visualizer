@@ -114,7 +114,9 @@ def _update_metrics(
     # The first call reads the whole log while holding this lock; every later call
     # reads only what was appended. That cold read is bounded by the log's size cap
     # (`MAX_LOG_BYTES`) and took about 0.3 s at the cap against 0.1 ms warm. It runs on
-    # the exporter's own thread in the launcher process, so it never pauses a request.
+    # the exporter's own thread, in the launcher or an MCP server, so it never pauses a
+    # request. Pushes call this under the cross-process export lock, so other
+    # processes' periodic pushes skip while a cold read runs.
     with _metrics_lock:
         state = _metrics_state
         if state.path != path or state.machine_id != machine_id:
@@ -487,3 +489,17 @@ class UsageMetricsExporter:
             self._failing = True
         else:
             self._failing = False
+
+
+def start_usage_exporter(
+    collection_config: Optional[UsageCollectionConfig],
+) -> Optional[UsageMetricsExporter]:
+    """Start pushing when a prepared config has an endpoint and an identity.
+
+    The one place both the launcher and the MCP server decide to start, so the exporter
+    runs exactly when their banner says collection is enabled. ``None`` means nothing
+    may be exported: a hosted launch, or a recording opt-out.
+    """
+    if collection_config is None or not collection_config.can_export:
+        return None
+    return UsageMetricsExporter().start()

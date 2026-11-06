@@ -24,13 +24,14 @@ logger = logging.getLogger(__name__)
 COLLECTION_CONFIG_FILENAME = "collection.json"
 MACHINE_ID_LABEL = "machine_id"
 PRIVATE_FILE_MODE = 0o600
+PRIVATE_DIRECTORY_MODE = 0o700
 METRIC_PREFIX = "ttnn_visualizer_"
 # Serialises generating the machine ID, so processes preparing at once settle on one.
 COLLECTION_LOCK_NAME = ".collection.lock"
 # Holders only read and write a small file, so a longer wait means one is stopped, and
 # startup must not hang behind it.
-COLLECTION_LOCK_TIMEOUT_SECONDS = 3.0
-LOCK_POLL_SECONDS = 0.05
+_COLLECTION_LOCK_TIMEOUT_SECONDS = 3.0
+_LOCK_POLL_SECONDS = 0.05
 _RENAMED_TOKEN_FIELD = "remote_write_bearer_token"
 # Prometheus and Mimir remote-write receivers.
 _REMOTE_WRITE_PATHS = ("/api/v1/write", "/api/v1/push")
@@ -184,7 +185,7 @@ def _write_text_atomically(path: Path, content: str) -> None:
 
 
 def _write_config(path: Path, data: Dict[str, Any]) -> None:
-    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    path.parent.mkdir(mode=PRIVATE_DIRECTORY_MODE, parents=True, exist_ok=True)
     content = json.dumps(data, indent=2, sort_keys=True) + "\n"
     _write_text_atomically(path, content)
 
@@ -250,7 +251,7 @@ def _load_config(persist: bool) -> UsageCollectionConfig:
         # plus the app can prepare together, and two that both read no ID would each
         # generate one, leaving the loser's whole session under an orphan identity.
         with usage_file_lock(
-            COLLECTION_LOCK_NAME, timeout_seconds=COLLECTION_LOCK_TIMEOUT_SECONDS
+            COLLECTION_LOCK_NAME, timeout_seconds=_COLLECTION_LOCK_TIMEOUT_SECONDS
         ) as locked:
             if locked:
                 return _read_config(path, persist=True)
@@ -313,15 +314,14 @@ def describe_usage_collection(
 
 
 @contextmanager
-def usage_file_lock(
-    name: str, *, timeout_seconds: Optional[float] = None
-) -> Iterator[bool]:
+def usage_file_lock(name: str, *, timeout_seconds: float) -> Iterator[bool]:
     """Hold an exclusive lock on ``name`` beside the collection config across processes.
 
     Yields whether the lock is held: ``False`` once ``timeout_seconds`` passes without
     it, so a caller can skip its work rather than wait on a holder that is stopped but
-    not dead. ``None`` waits indefinitely. Beside the config rather than under
-    ``get_event_log_root()`` because tests redirect only the config path.
+    not dead. ``0`` makes a single attempt. Required, with no wait-forever option, so a
+    caller on a startup path cannot hang behind such a holder. Beside the config rather
+    than under ``get_event_log_root()`` because tests redirect only the config path.
     """
     try:
         import fcntl
@@ -333,7 +333,7 @@ def usage_file_lock(
         return
 
     directory = get_collection_config_path().parent
-    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    directory.mkdir(mode=PRIVATE_DIRECTORY_MODE, parents=True, exist_ok=True)
     # Append mode, so opening never truncates a file another process holds.
     with open(directory / name, "a", encoding="utf-8") as lock_file:
         if not _acquire_lock(fcntl, lock_file, timeout_seconds):
@@ -345,12 +345,7 @@ def usage_file_lock(
             fcntl.flock(lock_file, fcntl.LOCK_UN)
 
 
-def _acquire_lock(
-    fcntl: Any, lock_file: IO[str], timeout_seconds: Optional[float]
-) -> bool:
-    if timeout_seconds is None:
-        fcntl.flock(lock_file, fcntl.LOCK_EX)
-        return True
+def _acquire_lock(fcntl: Any, lock_file: IO[str], timeout_seconds: float) -> bool:
     # Polled because flock has no timeout of its own.
     deadline = time.monotonic() + timeout_seconds
     while True:
@@ -360,4 +355,4 @@ def _acquire_lock(
         except BlockingIOError:
             if time.monotonic() >= deadline:
                 return False
-            time.sleep(LOCK_POLL_SECONDS)
+            time.sleep(_LOCK_POLL_SECONDS)
