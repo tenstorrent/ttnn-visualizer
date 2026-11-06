@@ -27,6 +27,9 @@ PRIVATE_FILE_MODE = 0o600
 METRIC_PREFIX = "ttnn_visualizer_"
 # Serialises generating the machine ID, so processes preparing at once settle on one.
 COLLECTION_LOCK_NAME = ".collection.lock"
+# Holders only read and write a small file, so a longer wait means one is stopped, and
+# startup must not hang behind it.
+COLLECTION_LOCK_TIMEOUT_SECONDS = 3.0
 LOCK_POLL_SECONDS = 0.05
 _RENAMED_TOKEN_FIELD = "remote_write_bearer_token"
 # Prometheus and Mimir remote-write receivers.
@@ -243,9 +246,19 @@ def _load_config(persist: bool) -> UsageCollectionConfig:
         # The read is inside the lock with the write: an MCP server per agent session
         # plus the app can prepare together, and two that both read no ID would each
         # generate one, leaving the loser's whole session under an orphan identity.
-        with usage_file_lock(COLLECTION_LOCK_NAME):
-            _secure_config_permissions(path)
-            return _read_config(path, persist=True)
+        with usage_file_lock(
+            COLLECTION_LOCK_NAME, timeout_seconds=COLLECTION_LOCK_TIMEOUT_SECONDS
+        ) as locked:
+            if locked:
+                _secure_config_permissions(path)
+                return _read_config(path, persist=True)
+        # Read without writing rather than block startup: an already prepared ID
+        # still exports, and an unprepared one waits for the next start.
+        logger.warning(
+            "Usage collection config is locked by another process; "
+            "starting without preparing it"
+        )
+        return _read_config(path, persist=False)
     except (OSError, RuntimeError, ValueError, json.JSONDecodeError) as error:
         logger.warning("Usage collection is disabled: %s", error)
         return UsageCollectionConfig(error=str(error))
@@ -311,7 +324,8 @@ def usage_file_lock(
     try:
         import fcntl
     except ImportError:
-        # Windows: no flock, so callers run unserialised, as compaction does there.
+        # Windows: no flock, so callers run unserialised. Unlike compaction, which
+        # skips there, a push or an ID write is still worth making without the lock.
         logger.debug("Usage lock %s unavailable: file locking is unsupported", name)
         yield True
         return

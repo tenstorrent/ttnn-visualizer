@@ -3359,17 +3359,31 @@ def test_mcp_stdout_is_only_protocol_while_exporting(tmp_path):
         },
     }
 
-    result = subprocess.run(
+    process = subprocess.Popen(
         [sys.executable, "-m", "ttnn_visualizer.agent.server"],
-        input=json.dumps(request) + "\n",
-        capture_output=True,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
         env=environment,
-        timeout=60,
-        check=True,
     )
+    try:
+        # Stdin stays open until the start push lands. Closed at once, a start push
+        # still running when ``stop()`` gives up joining would skip the exit push, and
+        # how fast it runs depends on the machine.
+        deadline = time.monotonic() + 30
+        while not calls_path.exists():
+            assert process.poll() is None, process.stderr.read()
+            assert time.monotonic() < deadline, "the start push never ran"
+            time.sleep(0.05)
+        stdout, stderr = process.communicate(json.dumps(request) + "\n", timeout=60)
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.communicate()
+    assert process.returncode == 0, stderr
 
-    responses = [json.loads(line) for line in result.stdout.splitlines()]
+    responses = [json.loads(line) for line in stdout.splitlines()]
     assert [response["id"] for response in responses] == [1]
     assert all(response["jsonrpc"] == "2.0" for response in responses)
     # One push at start and one on exit.

@@ -1726,16 +1726,63 @@ def test_push_holds_the_export_lock_across_the_post(
 
 
 @_requires_flock
-def test_push_sends_nothing_when_the_export_lock_times_out(
+def test_a_push_skips_rather_than_queues_behind_another_processs_push(
+    event_log_directory, usage_collection_config_path, curl_calls
+):
+    """Waiters would only queue behind a slow endpoint; the holder carries the counts."""
+    _opt_in(usage_collection_config_path, remote_write_endpoint=_ENDPOINT)
+
+    with usage_collection.usage_file_lock(usage_metrics.EXPORT_LOCK_NAME) as held:
+        assert held
+        started = time.monotonic()
+        assert push_usage_metrics() is False
+        assert time.monotonic() - started < usage_collection.LOCK_POLL_SECONDS
+
+    assert curl_calls == []
+
+
+@_requires_flock
+def test_a_waiting_push_gives_up_within_its_timeout(
     event_log_directory, usage_collection_config_path, curl_calls
 ):
     _opt_in(usage_collection_config_path, remote_write_endpoint=_ENDPOINT)
 
     with usage_collection.usage_file_lock(usage_metrics.EXPORT_LOCK_NAME) as held:
         assert held
-        assert push_usage_metrics(lock_timeout_seconds=0.1) is False
+        assert push_usage_metrics(timeout_seconds=0.2, wait_for_lock=True) is False
 
     assert curl_calls == []
+
+
+@_requires_flock
+def test_a_waiting_push_gives_curl_only_the_time_left(
+    event_log_directory, usage_collection_config_path, curl_calls
+):
+    """The final push's lock wait and request share one budget, so exit stays bounded."""
+    _opt_in(usage_collection_config_path, remote_write_endpoint=_ENDPOINT)
+    holder_ready = threading.Event()
+    release_holder = threading.Event()
+
+    def _hold():
+        with usage_collection.usage_file_lock(usage_metrics.EXPORT_LOCK_NAME):
+            holder_ready.set()
+            release_holder.wait(timeout=5)
+
+    holder = threading.Thread(target=_hold)
+    holder.start()
+    assert holder_ready.wait(timeout=5)
+    threading.Timer(0.5, release_holder.set).start()
+
+    assert push_usage_metrics(timeout_seconds=3.0, wait_for_lock=True) is True
+    holder.join(timeout=5)
+
+    ((_command, kwargs),) = curl_calls
+    (max_time,) = [
+        float(value)
+        for name, value in _curl_options(kwargs["input"])
+        if name == "max-time"
+    ]
+    assert 2.0 < max_time < 2.6
 
 
 def test_push_under_an_opt_out_never_creates_the_export_lock(
@@ -1785,13 +1832,46 @@ def test_concurrent_preparation_settles_on_one_machine_id(
     assert results == [persisted] * preparers
 
 
+@_requires_flock
+def test_preparation_does_not_hang_behind_a_stopped_lock_holder(
+    usage_collection_config_path, monkeypatch
+):
+    """A holder stopped mid-prepare (Ctrl-Z on a launch) must not block startup."""
+    _write_config(
+        usage_collection_config_path, enabled=True, remote_write_endpoint=_ENDPOINT
+    )
+    monkeypatch.setattr(usage_collection, "COLLECTION_LOCK_TIMEOUT_SECONDS", 0.1)
+
+    with usage_collection.usage_file_lock(usage_collection.COLLECTION_LOCK_NAME):
+        config = usage_collection.prepare_usage_collection_config()
+
+    # Read without writing: unprepared, so nothing exports until a later start.
+    assert config.enabled
+    assert config.machine_id is None
+    assert "machine_id" not in json.loads(usage_collection_config_path.read_text())
+
+
+@_requires_flock
+def test_preparation_behind_a_held_lock_keeps_an_existing_identity(
+    usage_collection_config_path, monkeypatch
+):
+    prepared = _opt_in(usage_collection_config_path, remote_write_endpoint=_ENDPOINT)
+    monkeypatch.setattr(usage_collection, "COLLECTION_LOCK_TIMEOUT_SECONDS", 0.1)
+
+    with usage_collection.usage_file_lock(usage_collection.COLLECTION_LOCK_NAME):
+        config = usage_collection.prepare_usage_collection_config()
+
+    assert config.can_export
+    assert config.machine_id == prepared.machine_id
+
+
 def test_exporter_pushes_at_start_and_stop(monkeypatch):
     pushes = []
     monkeypatch.setattr(
         usage_metrics,
         "push_usage_metrics",
-        lambda *, timeout_seconds, lock_timeout_seconds: pushes.append(
-            (timeout_seconds, lock_timeout_seconds)
+        lambda *, timeout_seconds, wait_for_lock: pushes.append(
+            (timeout_seconds, wait_for_lock)
         )
         or True,
     )
@@ -1799,17 +1879,10 @@ def test_exporter_pushes_at_start_and_stop(monkeypatch):
     exporter = UsageMetricsExporter(interval_seconds=3600).start()
     exporter.stop()
 
-    # The final push bounds its wait on another process's push as well as its own, so
-    # shutdown stays bounded however many exporters share the lock.
+    # Only the final push waits for another process's push, since none may follow it.
     assert pushes == [
-        (
-            usage_metrics.EXPORT_TIMEOUT_SECONDS,
-            usage_metrics.PERIODIC_LOCK_TIMEOUT_SECONDS,
-        ),
-        (
-            usage_metrics.FINAL_PUSH_TIMEOUT_SECONDS,
-            usage_metrics.FINAL_PUSH_TIMEOUT_SECONDS,
-        ),
+        (usage_metrics.EXPORT_TIMEOUT_SECONDS, False),
+        (usage_metrics.FINAL_PUSH_TIMEOUT_SECONDS, True),
     ]
 
 
@@ -1817,7 +1890,7 @@ def test_exporter_pushes_every_interval(monkeypatch):
     pushes = []
     third_push = threading.Event()
 
-    def _push(*, timeout_seconds, lock_timeout_seconds):
+    def _push(*, timeout_seconds, wait_for_lock):
         pushes.append(timeout_seconds)
         if len(pushes) == 3:
             third_push.set()
@@ -1837,7 +1910,7 @@ def test_exporter_stop_skips_the_final_push_while_one_is_in_flight(monkeypatch):
     in_flight = threading.Event()
     pushes = []
 
-    def _push(*, timeout_seconds, lock_timeout_seconds):
+    def _push(*, timeout_seconds, wait_for_lock):
         pushes.append(timeout_seconds)
         in_flight.set()
         release.wait(timeout=10)
@@ -1857,7 +1930,7 @@ def test_exporter_stop_skips_the_final_push_while_one_is_in_flight(monkeypatch):
 def test_exporter_logs_a_run_of_failures_once(monkeypatch, caplog):
     outcomes = [OSError("down"), OSError("still down"), True, OSError("down again")]
 
-    def _push(*, timeout_seconds, lock_timeout_seconds):
+    def _push(*, timeout_seconds, wait_for_lock):
         outcome = outcomes.pop(0)
         if isinstance(outcome, Exception):
             raise outcome

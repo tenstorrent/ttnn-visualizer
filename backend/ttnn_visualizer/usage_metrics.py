@@ -48,9 +48,8 @@ FINAL_PUSH_TIMEOUT_SECONDS = 3.0
 # MCP server per agent session all push the same cumulative series, and one stamped
 # later with a value read earlier reads as a counter reset.
 EXPORT_LOCK_NAME = ".export.lock"
-# Past a holder's worst case, curl's ``max-time`` plus the subprocess margin in
-# ``_post_with_curl``, so only a holder that is stopped rather than slow is skipped.
-PERIODIC_LOCK_TIMEOUT_SECONDS = EXPORT_TIMEOUT_SECONDS + 10
+# Beyond curl's own ``max-time``, so curl reports the timeout itself.
+CURL_SUBPROCESS_MARGIN_SECONDS = 5.0
 CURL_COMMAND = "curl"
 # ``AGGREGATION_TEMPORALITY_CUMULATIVE`` in the OTLP metrics protocol.
 _CUMULATIVE_TEMPORALITY = 2
@@ -355,8 +354,7 @@ def _post_with_curl(
             input="\n".join(lines) + "\n",
             capture_output=True,
             text=True,
-            # Beyond curl's own ``max-time``, so curl reports the timeout itself.
-            timeout=timeout_seconds + 5,
+            timeout=timeout_seconds + CURL_SUBPROCESS_MARGIN_SECONDS,
             check=False,
         )
     except subprocess.TimeoutExpired as error:
@@ -381,7 +379,7 @@ def push_usage_metrics(
     *,
     log_path: Optional[Path] = None,
     timeout_seconds: float = EXPORT_TIMEOUT_SECONDS,
-    lock_timeout_seconds: Optional[float] = None,
+    wait_for_lock: bool = False,
 ) -> bool:
     """Send the current counters to the configured endpoint.
 
@@ -391,8 +389,11 @@ def push_usage_metrics(
     ``curl`` is not installed.
 
     Reading the log, stamping the payload and posting it happen under one lock shared
-    by every process, so samples reach the receiver in the order they were read. Sends
-    nothing when ``lock_timeout_seconds`` passes first; the next push carries it.
+    by every process, so samples reach the receiver in the order they were read. By
+    default a push that finds the lock held sends nothing: every process reads the same
+    log, so the holder or the next push carries these counts, and waiters would only
+    queue behind a slow endpoint. ``wait_for_lock`` waits instead, within
+    ``timeout_seconds``, which then bounds the whole push rather than curl alone.
     """
     if not is_recording_enabled():
         return False
@@ -402,11 +403,16 @@ def push_usage_metrics(
     if not config.can_export or endpoint is None or machine_id is None:
         return False
 
+    lock_started = time.monotonic()
     with usage_file_lock(
-        EXPORT_LOCK_NAME, timeout_seconds=lock_timeout_seconds
+        EXPORT_LOCK_NAME, timeout_seconds=timeout_seconds if wait_for_lock else 0
     ) as locked:
         if not locked:
             return False
+        if wait_for_lock:
+            timeout_seconds -= time.monotonic() - lock_started
+            if timeout_seconds <= 0:
+                return False
         snapshot = collect_usage_metrics(config, log_path=log_path)
         if snapshot is None:
             return False
@@ -455,13 +461,10 @@ class UsageMetricsExporter:
         # it would only race it, so the final push is skipped rather than overlapped.
         if self._thread.is_alive():
             return
-        # Final push, so a session shorter than one interval is still counted. Waiting
-        # on another process's push is bounded too; that push, or a later one, carries
-        # these counters.
-        self._push(
-            timeout_seconds=FINAL_PUSH_TIMEOUT_SECONDS,
-            lock_timeout_seconds=FINAL_PUSH_TIMEOUT_SECONDS,
-        )
+        # Final push, so a session shorter than one interval is still counted. It waits
+        # for another process's push, since none may follow it, but within the same
+        # budget as the request, so the lock does not lengthen exit.
+        self._push(timeout_seconds=FINAL_PUSH_TIMEOUT_SECONDS, wait_for_lock=True)
 
     def _run(self) -> None:
         self._push()
@@ -471,12 +474,11 @@ class UsageMetricsExporter:
     def _push(
         self,
         timeout_seconds: float = EXPORT_TIMEOUT_SECONDS,
-        lock_timeout_seconds: float = PERIODIC_LOCK_TIMEOUT_SECONDS,
+        wait_for_lock: bool = False,
     ) -> None:
         try:
             push_usage_metrics(
-                timeout_seconds=timeout_seconds,
-                lock_timeout_seconds=lock_timeout_seconds,
+                timeout_seconds=timeout_seconds, wait_for_lock=wait_for_lock
             )
         except (OSError, ValueError) as error:
             # Logged once per run of failures rather than every interval.
