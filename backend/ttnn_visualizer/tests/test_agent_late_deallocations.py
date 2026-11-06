@@ -228,6 +228,56 @@ class TestHeldTensorsByOperation:
         assert sorted(held.held_by_operation) == [3, 4, 5]
         resolve.assert_called_once()
 
+    def test_a_buffer_back_after_leaving_a_snapshot_is_not_its_tensors(self):
+        held = _held_tensors(
+            [1, 2, 3, 4],
+            {2: {100: 64}, 3: {200: 8}, 4: {100: 64}},
+            outputs={1: [(10, 100)]},
+            consumers={10: [1]},
+        )
+
+        assert held.held_by_operation == {2: [late.HeldTensor(10, 100, 64, 1)]}
+
+    def test_an_operation_without_buffers_keeps_the_tensor_at_its_address(self):
+        held = _held_tensors(
+            [1, 2, 3, 4],
+            {2: {100: 64}, 4: {100: 64}},
+            outputs={1: [(10, 100)]},
+            consumers={10: [1]},
+        )
+
+        assert sorted(held.held_by_operation) == [2, 4]
+
+    def test_a_buffer_after_its_tensors_deallocate_is_not_its_tensors(self):
+        """The deallocate's own snapshot can still show the buffer it frees."""
+        held = _held_tensors(
+            [1, 2, 3, 4],
+            {operation_id: {100: 64} for operation_id in (2, 3, 4)},
+            inputs={3: [(10, 100)]},
+            outputs={1: [(10, 100)]},
+            consumers={10: [1, 3]},
+            names={3: "ttnn.deallocate"},
+        )
+
+        assert sorted(held.held_by_operation) == [2, 3]
+
+    def test_a_deallocate_of_a_tensor_no_longer_at_its_address_leaves_the_holder(
+        self,
+    ):
+        held = _held_tensors(
+            [1, 2, 3, 4, 5],
+            {operation_id: {100: 64} for operation_id in (2, 3, 4, 5)},
+            inputs={4: [(10, 100)]},
+            outputs={1: [(10, 100)], 2: [(11, 100)]},
+            consumers={10: [1, 4], 11: [3]},
+            names={4: "ttnn.deallocate"},
+        )
+
+        assert held.held_by_operation == {
+            4: [late.HeldTensor(11, 100, 64, 3)],
+            5: [late.HeldTensor(11, 100, 64, 3)],
+        }
+
 
 class TestRunStartCount:
     def test_an_operation_holding_nothing_ends_every_run(self):

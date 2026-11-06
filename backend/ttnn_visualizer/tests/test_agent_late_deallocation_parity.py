@@ -315,6 +315,19 @@ def _curated_cases() -> List[Dict]:
                 4: [_buffer(100, 64), _buffer(200, 32), _buffer(300, 16)],
             },
         ),
+        # A deallocate call naming a tensor no longer at its address credits nothing
+        # and leaves the tensor that is there.
+        _case(
+            [
+                _operation(1, outputs=[_tensor(10, 100, [2, 5])]),
+                _operation(2, inputs=[_tensor(10, 100, [2, 5])]),
+                _operation(3, outputs=[_tensor(11, 100, [4])]),
+                _operation(4, inputs=[_tensor(11, 100, [4])]),
+                _operation(5, "ttnn.deallocate", inputs=[_tensor(10, 100, [2, 5])]),
+                _operation(6),
+            ],
+            _snapshots(1, 6),
+        ),
     ]
 
 
