@@ -10,13 +10,17 @@ licence scan on a spike. Swapping this file for the SDK is contained -- nothing
 above it imports anything from here. #1995
 
 Every byte on stdout is protocol. Logs go to stderr, and `tools` captures
-tt-perf-report's own printing for the same reason.
+tt-perf-report's own printing for the same reason, as the usage exporter captures
+curl's.
 """
 
 import json
 import logging
 import math
+import os
+import signal
 import sys
+from types import FrameType
 from typing import Callable, Dict, List, Optional, TextIO
 
 from ttnn_visualizer.agent import (
@@ -49,6 +53,12 @@ from ttnn_visualizer.event_logging import (
     record_event,
     start_run,
 )
+from ttnn_visualizer.usage_collection import (
+    describe_usage_collection,
+    prepare_usage_collection_config,
+)
+from ttnn_visualizer.usage_metrics import UsageMetricsExporter, start_usage_exporter
+from ttnn_visualizer.utils import parse_bool
 
 logger = logging.getLogger(__name__)
 
@@ -1124,12 +1134,36 @@ def serve(
             stdout.flush()
 
 
+def _start_usage_export() -> Optional[UsageMetricsExporter]:
+    """Prepare the opt-in identity and push, as the app launcher does for a local launch.
+
+    The server is an entry point of its own, so an agent-only user is exported without
+    ever launching the app. #2282
+    """
+    # Anything but a readable false counts as hosted, failing closed: aggregate
+    # collection is local-only, and the app refuses to start on an unreadable value.
+    if parse_bool(os.environ.get("SERVER_MODE") or "false") is not False:
+        logger.info("Aggregate usage collection is unavailable under SERVER_MODE.")
+        return None
+    collection_config = prepare_usage_collection_config()
+    logger.info(describe_usage_collection(collection_config, recording_disabled=False))
+    return start_usage_exporter(collection_config)
+
+
+def _exit_on_sigterm(signum: int, frame: Optional[FrameType]) -> None:
+    # Raised in the main thread, so ``main()``'s ``finally`` still makes the final push
+    # when a host terminates the server rather than closing its stdin.
+    raise SystemExit(0)
+
+
 def main() -> None:
     logging.basicConfig(stream=sys.stderr, level=logging.INFO)
     start_run()
+    exporter: Optional[UsageMetricsExporter] = None
     # Path.home() raises RuntimeError when HOME is unset and the uid is absent from
-    # passwd. Compaction and the disclosure banner both resolve that path, and must
-    # not keep serve() from starting — including when the operator already opted out.
+    # passwd. Compaction, the disclosure banner and the collection config all resolve
+    # that path, and must not keep serve() from starting — including when the operator
+    # already opted out.
     try:
         if is_recording_enabled():
             compact_if_needed()
@@ -1138,6 +1172,7 @@ def main() -> None:
                 get_event_log_path(),
                 describe_opt_out(),
             )
+            exporter = _start_usage_export()
         else:
             logger.info(
                 "Event logging is DISABLED: %s.",
@@ -1145,7 +1180,18 @@ def main() -> None:
             )
     except Exception:
         logger.exception("Event-log startup failed; serving without recording")
-    serve(sys.stdin, sys.stdout)
+
+    if exporter is not None:
+        signal.signal(signal.SIGTERM, _exit_on_sigterm)
+    try:
+        serve(sys.stdin, sys.stdout)
+    finally:
+        if exporter is not None:
+            # A repeated SIGTERM would otherwise raise inside ``stop()`` and drop the
+            # final push the first one started. The push is bounded, and a host that
+            # will not wait can still SIGKILL.
+            signal.signal(signal.SIGTERM, signal.SIG_IGN)
+            exporter.stop()
 
 
 if __name__ == "__main__":

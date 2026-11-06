@@ -57,10 +57,13 @@ from ttnn_visualizer.startup_requirements import enforce
 from ttnn_visualizer.startup_requirements import report as report_startup_requirements
 from ttnn_visualizer.usage_collection import (
     UsageCollectionConfig,
-    get_collection_config_path,
+    describe_usage_collection,
     prepare_usage_collection_config,
 )
-from ttnn_visualizer.usage_metrics import UsageMetricsExporter
+from ttnn_visualizer.usage_metrics import (
+    UsageMetricsExporter,
+    start_usage_exporter,
+)
 from ttnn_visualizer.utils import (
     find_gunicorn_path,
     is_flag_enabled,
@@ -586,20 +589,6 @@ def display_mode_info_without_db(config):
         print(f"   Remote directory: {config.REMOTE_DATA_DIRECTORY}")
 
 
-def _start_usage_export(
-    collection_config: Optional[UsageCollectionConfig],
-) -> Optional[UsageMetricsExporter]:
-    """Start pushing usage counters when a local install has opted in with an endpoint.
-
-    Takes the config ``_record_launch`` prepared, so the exporter starts exactly when
-    the launch banner says collection is enabled. ``None`` means a hosted launch or a
-    recording opt-out.
-    """
-    if collection_config is None or not collection_config.can_export:
-        return None
-    return UsageMetricsExporter().start()
-
-
 def _serve(gunicorn_args: list[str], exporter: Optional[UsageMetricsExporter]) -> None:
     """Run gunicorn to completion, stopping the exporter however it ends.
 
@@ -637,30 +626,11 @@ def _record_launch(config) -> Optional[UsageCollectionConfig]:
     collection_config: Optional[UsageCollectionConfig] = None
     if not server_mode:
         collection_config = prepare_usage_collection_config()
-        if collection_config.enabled and disabled_reason is not None:
-            print(
-                "📈 Aggregate usage collection is DISABLED: event logging is disabled."
+        print(
+            describe_usage_collection(
+                collection_config, recording_disabled=disabled_reason is not None
             )
-        elif collection_config.enabled and not collection_config.can_export:
-            print(
-                "📈 Aggregate usage collection is DISABLED: no remote_write_endpoint "
-                f"is set in {get_collection_config_path()}."
-            )
-        elif collection_config.enabled:
-            print(
-                "📈 Aggregate usage collection is ENABLED.\n"
-                f"   Configuration: {get_collection_config_path()}"
-            )
-        elif collection_config.error:
-            print(
-                "📈 Aggregate usage collection is DISABLED: "
-                "the collection config is invalid."
-            )
-        else:
-            print(
-                "📈 Aggregate usage collection is DISABLED.\n"
-                f"   Opt in through {get_collection_config_path()}."
-            )
+        )
 
     if disabled_reason is not None:
         unrecognised_value = get_unrecognised_recording_disabled_value()
@@ -881,7 +851,7 @@ def main():
     # Deliberately last: every exit above (an invalid report path, a port already in
     # use) ends a launch that never served a request, and counting those would
     # inflate the figure with exactly the sessions where nobody used the tool.
-    exporter = _start_usage_export(_record_launch(config))
+    exporter = start_usage_exporter(_record_launch(config))
     _serve(gunicorn_args, exporter)
 
 
