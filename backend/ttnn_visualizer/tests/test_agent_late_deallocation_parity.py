@@ -242,7 +242,8 @@ def _curated_cases() -> List[Dict]:
             ],
             _snapshots(1, 6),
         ),
-        # A run that breaks at an operation holding other buffers, and resumes.
+        # A run that breaks where its buffer leaves the snapshot; one back at its
+        # address later is not its tensor's.
         _case(
             [_operation(1, outputs=[produced]), used]
             + [_operation(operation_id) for operation_id in range(3, 7)],
@@ -310,7 +311,7 @@ def _curated_cases() -> List[Dict]:
                 _operation(4),
             ],
             {
-                3: [_buffer(100, 64), _buffer(200, 32)],
+                3: [_buffer(100, 64), _buffer(200, 32), _buffer(300, 16)],
                 4: [_buffer(100, 64), _buffer(200, 32), _buffer(300, 16)],
             },
         ),

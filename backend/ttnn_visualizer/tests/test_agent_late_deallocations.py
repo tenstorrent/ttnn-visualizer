@@ -271,7 +271,7 @@ class TestHolds:
             30,
             40,
         )
-        assert (hold.bridged, hold.attributed) == (True, True)
+        assert hold.bridged
 
     def test_only_a_hold_that_was_open_across_the_gap_is_bridged(self):
         first, second = _holds(
@@ -348,30 +348,6 @@ class TestHolds:
         )
 
         assert _span(hold) == (10, 2, 3, late.Ending.DEALLOCATED, 4)
-
-    def test_the_first_hold_after_the_last_use_is_attributed(self):
-        """Even past an operation that recorded no buffers."""
-        (hold,) = _holds([1, 2, 3], {3: [_entry(10, 1)]}, buffered=[1, 3])
-
-        assert hold.attributed
-
-    def test_a_hold_opening_after_its_buffer_left_a_snapshot_is_unattributed(self):
-        first, second = _holds([1, 2, 3, 4], {2: [_entry(10, 1)], 4: [_entry(10, 1)]})
-        (late_start,) = _holds([1, 2, 3], {3: [_entry(10, 1)]})
-
-        assert (first.attributed, second.attributed) == (True, False)
-        assert not late_start.attributed
-
-    def test_a_hold_opening_after_its_deallocate_is_unattributed(self):
-        (hold,) = _holds(
-            [1, 2, 3, 4],
-            {3: [_entry(10, 1)], 4: [_entry(10, 1)]},
-            buffered=[1, 3, 4],
-            deallocations={10: [2]},
-        )
-
-        assert not hold.attributed
-        assert _span(hold) == (10, 3, 4, late.Ending.HELD_TO_END, None)
 
 
 class TestDeallocateNames:
@@ -601,7 +577,6 @@ class TestTheAnswer:
             "run_start_count": 2,
             "hold_count": 3,
             "held_tensor_count": 3,
-            "unattributed_hold_count": 0,
             "ended": {"deallocated": 1, "freed_otherwise": 1, "held_to_end": 1},
             "byte_operations": 1000,
             "call_site_count": 2,
@@ -990,7 +965,7 @@ class TestCaveats:
         assert result["hold_count"] == 0
         assert "records no L1 buffers under the type's number" in result["caveat"]
 
-    def test_a_hold_on_a_later_tensors_buffer_is_left_out_and_counted(self, tmp_path):
+    def test_a_later_buffer_at_a_gone_tensors_address_is_not_its_hold(self, tmp_path):
         """The buffer leaves operation 4's snapshot and a buffer at its address is back
         at 5, with nothing naming the tensor it belongs to."""
         registry, handle = _report(
@@ -1011,11 +986,10 @@ class TestCaveats:
 
         result = failures.late_deallocations(registry, handle)
 
-        assert (result["hold_count"], result["unattributed_hold_count"]) == (1, 1)
-        assert (result["byte_operations"], result["run_start_count"]) == (100, 2)
+        assert result["hold_count"] == 1
+        assert (result["byte_operations"], result["run_start_count"]) == (100, 1)
         assert result["ended"]["freed_otherwise"] == 1
         assert [hold["held_from_operation_id"] for hold in result["top_holds"]] == [3]
-        assert "1 more holds, 70 byte_operations, are left out" in result["caveat"]
 
     def test_a_hold_across_an_operation_without_buffers_says_so(self, tmp_path):
         registry, handle = _report(
@@ -1039,8 +1013,9 @@ class TestCaveats:
             "3 of the 5." in result["caveat"]
         )
 
-    def test_only_a_listed_hold_is_counted_as_carried_on(self, tmp_path):
-        """The one hold listed spans one operation; the unattributed one is bridged."""
+    def test_a_later_tensors_buffer_is_not_carried_on(self, tmp_path):
+        """The hold spans one operation; the later buffers at its address are another
+        tensor's, across an operation that recorded none."""
         registry, handle = _report(
             tmp_path,
             _rows(
@@ -1060,8 +1035,8 @@ class TestCaveats:
 
         result = failures.late_deallocations(registry, handle)
 
-        assert (result["hold_count"], result["unattributed_hold_count"]) == (1, 1)
-        assert "carry on past operations" not in result["caveat"]
+        assert result["hold_count"] == 1
+        assert "carry on past operations" not in result.get("caveat", "")
 
     def test_a_multi_device_report_reads_each_address_at_its_largest(self, tmp_path):
         registry, handle = _report(

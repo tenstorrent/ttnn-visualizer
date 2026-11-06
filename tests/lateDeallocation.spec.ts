@@ -150,7 +150,7 @@ describe('buildTensorsByOperationByAddress', () => {
         const tensor = buildFullTensor({ id: 10, address: 100, buffer_type: BufferType.DRAM });
 
         const tensorsByOperation = buildTensorsByOperationByAddress(
-            [{ id: 1, inputs: [], outputs: [tensor] }],
+            [{ id: 1, name: 'ttnn.add', inputs: [], outputs: [tensor] }],
             [{ id: 1, name: 'ttnn.add', buffers: [buildBuffer(100, 10, BufferType.L1)] }],
         );
 
@@ -162,8 +162,8 @@ describe('buildTensorsByOperationByAddress', () => {
 
         const tensorsByOperation = buildTensorsByOperationByAddress(
             [
-                { id: 1, inputs: [tensor], outputs: [] },
-                { id: 2, inputs: [tensor], outputs: [] },
+                { id: 1, name: 'ttnn.add', inputs: [tensor], outputs: [] },
+                { id: 2, name: 'ttnn.add', inputs: [tensor], outputs: [] },
             ],
             [{ id: 1, name: 'ttnn.add', buffers: [buildBuffer(100, 10)] }],
         );
@@ -177,6 +177,7 @@ describe('buildTensorsByOperationByAddress', () => {
             [
                 {
                     id: 1,
+                    name: 'ttnn.add',
                     inputs: [buildFullTensor({ id: 10, address: 100 })],
                     outputs: [buildFullTensor({ id: 11, address: 100 })],
                 },

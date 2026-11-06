@@ -19,6 +19,9 @@ export const NO_CONSUMER_OPERATION_ID = -1;
 
 const DEALLOCATE_OP_NAMES = new Set(DEALLOCATE_OP_NAME_LIST);
 
+/** Mirrored as `is_deallocate` in `backend/ttnn_visualizer/agent/late_deallocations.py`. */
+const isDeallocate = (name: string | null | undefined) => DEALLOCATE_OP_NAMES.has((name ?? '').toLowerCase());
+
 export interface LastValidConsumer {
     lastConsumerOperationId: number;
     lastConsumerName: string;
@@ -49,7 +52,7 @@ export const getLastValidConsumer = (
 
         const consumerName = operationNamesById.get(consumerOperationId) ?? '';
 
-        if (DEALLOCATE_OP_NAMES.has(consumerName.toLowerCase())) {
+        if (isDeallocate(consumerName)) {
             return;
         }
 
@@ -138,11 +141,12 @@ export const getUniqueBuffersByOperation = (buffersByOperation: readonly Buffers
     });
 
 /**
- * The tensor each operation's buffers belong to, by address: the last one seen at that address.
+ * The tensor each operation's buffers belong to, by address: the last one seen at that address, until
+ * its buffer leaves an operation's snapshot or a deallocate call frees it.
  * Mirrored as `held_tensors_by_operation` in `backend/ttnn_visualizer/agent/late_deallocations.py`.
  */
 export const buildTensorsByOperationByAddress = (
-    operations: readonly Pick<Operation, 'id' | 'inputs' | 'outputs'>[],
+    operations: readonly Pick<Operation, 'id' | 'name' | 'inputs' | 'outputs'>[],
     uniqueBuffersByOperation: readonly BuffersByOperation[],
 ): TensorsByOperationByAddress => {
     const tensorsByOperationByAddress: TensorsByOperationByAddress = new Map();
@@ -152,20 +156,23 @@ export const buildTensorsByOperationByAddress = (
         buffersByOpId.set(op.id, op.buffers);
     });
 
-    const latestTensorByAddress = new Map<number, Tensor>();
+    const holderByAddress = new Map<number, Tensor>();
 
     for (const op of operations) {
+        const deallocated = isDeallocate(op.name) ? (op.inputs ?? []) : [];
+
         for (const tensor of [...(op.inputs ?? []), ...(op.outputs ?? [])]) {
-            if (tensor && tensor.address !== null && tensor.address !== undefined) {
-                latestTensorByAddress.set(tensor.address, tensor);
+            if (tensor && tensor.address !== null && tensor.address !== undefined && !deallocated.includes(tensor)) {
+                holderByAddress.set(tensor.address, tensor);
             }
         }
 
+        const buffers = buffersByOpId.get(op.id) ?? [];
         const tensorsByBufferAddress = new Map<number, Tensor>();
 
-        for (const buffer of buffersByOpId.get(op.id) ?? []) {
+        for (const buffer of buffers) {
             const addr = buffer.address;
-            const tensor = addr === null || addr === undefined ? undefined : latestTensorByAddress.get(addr);
+            const tensor = addr === null || addr === undefined ? undefined : holderByAddress.get(addr);
             if (tensor) {
                 tensorsByBufferAddress.set(addr, {
                     ...tensor,
@@ -175,6 +182,23 @@ export const buildTensorsByOperationByAddress = (
         }
 
         tensorsByOperationByAddress.set(op.id, tensorsByBufferAddress);
+
+        // A later buffer at a gone tensor's address is another tensor's.
+        if (buffers.length > 0) {
+            const bufferAddresses = new Set(buffers.map(({ address }) => address));
+
+            holderByAddress.forEach((_, address) => {
+                if (!bufferAddresses.has(address)) {
+                    holderByAddress.delete(address);
+                }
+            });
+        }
+
+        deallocated.forEach((tensor) => {
+            if (tensor && tensor.address !== null && holderByAddress.get(tensor.address)?.id === tensor.id) {
+                holderByAddress.delete(tensor.address);
+            }
+        });
     }
 
     return tensorsByOperationByAddress;
