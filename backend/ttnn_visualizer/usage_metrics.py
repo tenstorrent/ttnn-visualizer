@@ -30,6 +30,7 @@ from ttnn_visualizer.usage_collection import (
     UsageCollectionConfig,
     is_loopback_host,
     load_usage_collection_config,
+    usage_file_lock,
 )
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,13 @@ CONNECT_TIMEOUT_SECONDS = 3.0
 # Short, because the launcher waits on these before it exits.
 STOP_JOIN_TIMEOUT_SECONDS = 2.0
 FINAL_PUSH_TIMEOUT_SECONDS = 3.0
+# Serialises pushes from every process sharing a home directory: the launcher and one
+# MCP server per agent session all push the same cumulative series, and one stamped
+# later with a value read earlier reads as a counter reset.
+EXPORT_LOCK_NAME = ".export.lock"
+# Past a holder's worst case, curl's ``max-time`` plus the subprocess margin in
+# ``_post_with_curl``, so only a holder that is stopped rather than slow is skipped.
+PERIODIC_LOCK_TIMEOUT_SECONDS = EXPORT_TIMEOUT_SECONDS + 10
 CURL_COMMAND = "curl"
 # ``AGGREGATION_TEMPORALITY_CUMULATIVE`` in the OTLP metrics protocol.
 _CUMULATIVE_TEMPORALITY = 2
@@ -373,6 +381,7 @@ def push_usage_metrics(
     *,
     log_path: Optional[Path] = None,
     timeout_seconds: float = EXPORT_TIMEOUT_SECONDS,
+    lock_timeout_seconds: Optional[float] = None,
 ) -> bool:
     """Send the current counters to the configured endpoint.
 
@@ -380,6 +389,10 @@ def push_usage_metrics(
     call, so switching either off stops the next push without a restart. Raises
     ``OSError`` when the request fails, including on a non-2xx response or when
     ``curl`` is not installed.
+
+    Reading the log, stamping the payload and posting it happen under one lock shared
+    by every process, so samples reach the receiver in the order they were read. Sends
+    nothing when ``lock_timeout_seconds`` passes first; the next push carries it.
     """
     if not is_recording_enabled():
         return False
@@ -388,21 +401,27 @@ def push_usage_metrics(
     endpoint, machine_id = config.remote_write_endpoint, config.machine_id
     if not config.can_export or endpoint is None or machine_id is None:
         return False
-    snapshot = collect_usage_metrics(config, log_path=log_path)
-    if snapshot is None:
-        return False
 
-    payload = build_otlp_payload(
-        snapshot,
-        machine_id,
-        time_ns=time.time_ns(),
-    )
-    _post_with_curl(
-        endpoint,
-        json.dumps(payload),
-        config.remote_write_auth_token,
-        timeout_seconds,
-    )
+    with usage_file_lock(
+        EXPORT_LOCK_NAME, timeout_seconds=lock_timeout_seconds
+    ) as locked:
+        if not locked:
+            return False
+        snapshot = collect_usage_metrics(config, log_path=log_path)
+        if snapshot is None:
+            return False
+
+        payload = build_otlp_payload(
+            snapshot,
+            machine_id,
+            time_ns=time.time_ns(),
+        )
+        _post_with_curl(
+            endpoint,
+            json.dumps(payload),
+            config.remote_write_auth_token,
+            timeout_seconds,
+        )
     return True
 
 
@@ -410,9 +429,10 @@ class UsageMetricsExporter:
     """Pushes the counters once at start, then every interval, then once on stop.
 
     Runs in the launcher process rather than in gunicorn, so one exporter serves
-    however many workers there are. The launcher stops it when gunicorn returns, so
-    under ``--daemon``, where gunicorn detaches at once, both pushes happen at launch
-    and a daemon session's usage is only sent by the next launch.
+    however many workers there are, and in each MCP server process. The launcher stops
+    it when gunicorn returns, so under ``--daemon``, where gunicorn detaches at once,
+    both pushes happen at launch and a daemon session's usage is only sent by the next
+    launch. Exporters in several processes take turns through ``EXPORT_LOCK_NAME``.
     """
 
     def __init__(self, interval_seconds: float = EXPORT_INTERVAL_SECONDS) -> None:
@@ -435,17 +455,29 @@ class UsageMetricsExporter:
         # it would only race it, so the final push is skipped rather than overlapped.
         if self._thread.is_alive():
             return
-        # Final push, so a session shorter than one interval is still counted.
-        self._push(timeout_seconds=FINAL_PUSH_TIMEOUT_SECONDS)
+        # Final push, so a session shorter than one interval is still counted. Waiting
+        # on another process's push is bounded too; that push, or a later one, carries
+        # these counters.
+        self._push(
+            timeout_seconds=FINAL_PUSH_TIMEOUT_SECONDS,
+            lock_timeout_seconds=FINAL_PUSH_TIMEOUT_SECONDS,
+        )
 
     def _run(self) -> None:
         self._push()
         while not self._stopping.wait(self._interval_seconds):
             self._push()
 
-    def _push(self, timeout_seconds: float = EXPORT_TIMEOUT_SECONDS) -> None:
+    def _push(
+        self,
+        timeout_seconds: float = EXPORT_TIMEOUT_SECONDS,
+        lock_timeout_seconds: float = PERIODIC_LOCK_TIMEOUT_SECONDS,
+    ) -> None:
         try:
-            push_usage_metrics(timeout_seconds=timeout_seconds)
+            push_usage_metrics(
+                timeout_seconds=timeout_seconds,
+                lock_timeout_seconds=lock_timeout_seconds,
+            )
         except (OSError, ValueError) as error:
             # Logged once per run of failures rather than every interval.
             if not self._failing:

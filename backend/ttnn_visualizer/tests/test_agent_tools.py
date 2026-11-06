@@ -17,8 +17,12 @@ import io
 import json
 import os
 import re
+import signal
 import sqlite3
+import subprocess
+import sys
 import time
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -3209,6 +3213,168 @@ def test_main_serves_when_event_log_startup_raises(monkeypatch):
     server.main()
 
     assert order == ["serve"]
+
+
+class _OrderedExporter:
+    def __init__(self, order):
+        self._order = order
+
+    def start(self):
+        self._order.append("export-start")
+        return self
+
+    def stop(self):
+        self._order.append("export-stop")
+
+
+def _patch_main_for_export(monkeypatch, order, *, can_export=True, recording=True):
+    """Stub ``main()``'s collaborators so only its ordering and decisions run."""
+    handlers = []
+    monkeypatch.setattr(server, "compact_if_needed", lambda: order.append("compact"))
+    monkeypatch.setattr(server, "serve", lambda *args, **kwargs: order.append("serve"))
+    monkeypatch.setattr(server, "is_recording_enabled", lambda: recording)
+    monkeypatch.setattr(server, "get_event_log_path", lambda: "/tmp/events.log")
+    monkeypatch.setattr(server, "describe_opt_out", lambda: "opt-out")
+    monkeypatch.setattr(server, "get_recording_disabled_reason", lambda: "opt-out")
+
+    def _prepare():
+        order.append("prepare")
+        return SimpleNamespace(can_export=can_export)
+
+    monkeypatch.setattr(server, "prepare_usage_collection_config", _prepare)
+    monkeypatch.setattr(server, "describe_usage_collection", lambda *args, **kw: "")
+    monkeypatch.setattr(server, "UsageMetricsExporter", lambda: _OrderedExporter(order))
+    # Never replace pytest's own SIGTERM handler.
+    monkeypatch.setattr(
+        server.signal, "signal", lambda signum, handler: handlers.append(signum)
+    )
+    return handlers
+
+
+def test_main_exports_around_serving_when_collection_can_export(monkeypatch):
+    """#2282: an agent-only user's usage is pushed without the app ever launching."""
+    order = []
+    handlers = _patch_main_for_export(monkeypatch, order)
+
+    server.main()
+
+    assert order == ["compact", "prepare", "export-start", "serve", "export-stop"]
+    assert handlers == [signal.SIGTERM]
+
+
+def test_main_starts_no_exporter_without_an_endpoint(monkeypatch):
+    order = []
+    handlers = _patch_main_for_export(monkeypatch, order, can_export=False)
+
+    server.main()
+
+    assert order == ["compact", "prepare", "serve"]
+    # Behaviour without collection is unchanged: the default SIGTERM stays.
+    assert handlers == []
+
+
+def test_main_prepares_no_collection_under_the_recording_opt_out(monkeypatch):
+    order = []
+    handlers = _patch_main_for_export(monkeypatch, order, recording=False)
+
+    server.main()
+
+    assert order == ["serve"]
+    assert handlers == []
+
+
+def test_main_stops_the_exporter_when_serving_raises(monkeypatch):
+    order = []
+    _patch_main_for_export(monkeypatch, order)
+
+    def _broken_serve(*args, **kwargs):
+        order.append("serve")
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(server, "serve", _broken_serve)
+
+    with pytest.raises(KeyboardInterrupt):
+        server.main()
+
+    assert order[-2:] == ["serve", "export-stop"]
+
+
+def test_main_serves_when_preparing_collection_raises(monkeypatch):
+    order = []
+    _patch_main_for_export(monkeypatch, order)
+
+    def _no_home():
+        raise RuntimeError("Could not determine home directory.")
+
+    monkeypatch.setattr(server, "prepare_usage_collection_config", _no_home)
+
+    server.main()
+
+    assert order == ["compact", "serve"]
+
+
+def test_sigterm_exits_through_mains_finally():
+    with pytest.raises(SystemExit) as exit_info:
+        server._exit_on_sigterm(signal.SIGTERM, None)
+
+    assert exit_info.value.code == 0
+
+
+@pytest.mark.skipif(os.name == "nt", reason="the fake curl is a shell script")
+def test_mcp_stdout_is_only_protocol_while_exporting(tmp_path):
+    """curl runs beside the protocol stream, so none of its output may reach stdout."""
+    home = tmp_path / "home"
+    usage_directory = home / ".ttnn-visualizer" / "usage"
+    usage_directory.mkdir(parents=True)
+    config_path = usage_directory / "collection.json"
+    config_path.write_text(
+        json.dumps(
+            {"enabled": True, "remote_write_endpoint": "http://127.0.0.1:9/v1/metrics"}
+        )
+    )
+    bin_directory = tmp_path / "bin"
+    bin_directory.mkdir()
+    calls_path = tmp_path / "curl-calls"
+    fake_curl = bin_directory / "curl"
+    # Answers on stdout as real curl does with ``write-out``: were curl's stdout
+    # inherited rather than captured, this would land in the protocol stream.
+    fake_curl.write_text(
+        f"#!/bin/sh\ncat > /dev/null\necho called >> '{calls_path}'\nprintf 200\n"
+    )
+    fake_curl.chmod(0o755)
+    # Built from scratch, so a developer's own opt-out or config cannot leak in.
+    environment = {
+        "HOME": str(home),
+        "PATH": f"{bin_directory}{os.pathsep}{os.environ.get('PATH', '')}",
+        "PYTHONIOENCODING": "utf-8",
+    }
+    request = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": server.PROTOCOL_VERSION,
+            "capabilities": {},
+            "clientInfo": {"name": "test", "version": "0"},
+        },
+    }
+
+    result = subprocess.run(
+        [sys.executable, "-m", "ttnn_visualizer.agent.server"],
+        input=json.dumps(request) + "\n",
+        capture_output=True,
+        text=True,
+        env=environment,
+        timeout=60,
+        check=True,
+    )
+
+    responses = [json.loads(line) for line in result.stdout.splitlines()]
+    assert [response["id"] for response in responses] == [1]
+    assert all(response["jsonrpc"] == "2.0" for response in responses)
+    # One push at start and one on exit.
+    assert calls_path.read_text().splitlines() == ["called", "called"]
+    assert "machine_id" in json.loads(config_path.read_text())
 
 
 class TestProjectRow:

@@ -14,7 +14,9 @@ It is a read-only surface over the same report readers the web application uses.
 no web server, opens no port, and writes nothing to a report. By default it appends usage
 events to `~/.ttnn-visualizer/usage/events.log` (tool name and outcome only). Set
 `USAGE_RECORDING_DISABLED=true` or create the marker file under that directory to opt out;
-see the [event logging](./event-logging.md) reference.
+see the [event logging](./event-logging.md) reference. When [aggregate
+collection](./event-logging.md#aggregate-collection) is opted in, the server pushes the same
+aggregate counters the app does, without the app being launched.
 
 ## Running it
 

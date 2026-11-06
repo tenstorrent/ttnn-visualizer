@@ -10,6 +10,7 @@ import shutil
 import stat
 import subprocess
 import threading
+import time
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -1686,20 +1687,129 @@ def test_push_raises_when_curl_is_missing(
         push_usage_metrics()
 
 
+_requires_flock = pytest.mark.skipif(
+    os.name == "nt", reason="the usage locks need fcntl.flock"
+)
+
+
+def _try_lock(path: Path) -> bool:
+    """Whether a separate open file description can take ``path``'s lock now."""
+    import fcntl
+
+    with open(path, "a", encoding="utf-8") as lock_file:
+        try:
+            fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return False
+        fcntl.flock(lock_file, fcntl.LOCK_UN)
+        return True
+
+
+@_requires_flock
+def test_push_holds_the_export_lock_across_the_post(
+    event_log_directory, usage_collection_config_path, monkeypatch
+):
+    """Reading, stamping and posting under one lock is what keeps samples in order."""
+    _opt_in(usage_collection_config_path, remote_write_endpoint=_ENDPOINT)
+    lock_path = usage_collection_config_path.parent / usage_metrics.EXPORT_LOCK_NAME
+    lockable_during_post = []
+    monkeypatch.setattr(
+        usage_metrics,
+        "_post_with_curl",
+        lambda *_args: lockable_during_post.append(_try_lock(lock_path)),
+    )
+
+    assert push_usage_metrics() is True
+
+    assert lockable_during_post == [False]
+    assert _try_lock(lock_path)
+
+
+@_requires_flock
+def test_push_sends_nothing_when_the_export_lock_times_out(
+    event_log_directory, usage_collection_config_path, curl_calls
+):
+    _opt_in(usage_collection_config_path, remote_write_endpoint=_ENDPOINT)
+
+    with usage_collection.usage_file_lock(usage_metrics.EXPORT_LOCK_NAME) as held:
+        assert held
+        assert push_usage_metrics(lock_timeout_seconds=0.1) is False
+
+    assert curl_calls == []
+
+
+def test_push_under_an_opt_out_never_creates_the_export_lock(
+    event_log_directory, usage_collection_config_path, curl_calls, monkeypatch
+):
+    _opt_in(usage_collection_config_path, remote_write_endpoint=_ENDPOINT)
+    _enable_recording_opt_out("environment", monkeypatch)
+
+    assert push_usage_metrics() is False
+
+    lock_path = usage_collection_config_path.parent / usage_metrics.EXPORT_LOCK_NAME
+    assert not lock_path.exists()
+
+
+@_requires_flock
+def test_concurrent_preparation_settles_on_one_machine_id(
+    usage_collection_config_path, monkeypatch
+):
+    """An MCP server per agent session plus the app can all prepare at once."""
+    _write_config(
+        usage_collection_config_path, enabled=True, remote_write_endpoint=_ENDPOINT
+    )
+    preparers = 4
+    # Every preparer reaches the read before any writes, which is the race: without
+    # the lock each reads no ID and generates its own.
+    barrier = threading.Barrier(preparers)
+    real_uuid4 = uuid.uuid4
+
+    def _slow_uuid4():
+        time.sleep(0.05)
+        return real_uuid4()
+
+    monkeypatch.setattr(usage_collection.uuid, "uuid4", _slow_uuid4)
+    results = []
+
+    def _prepare():
+        barrier.wait(timeout=5)
+        results.append(usage_collection.prepare_usage_collection_config().machine_id)
+
+    threads = [threading.Thread(target=_prepare) for _ in range(preparers)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+
+    persisted = json.loads(usage_collection_config_path.read_text())["machine_id"]
+    assert results == [persisted] * preparers
+
+
 def test_exporter_pushes_at_start_and_stop(monkeypatch):
     pushes = []
     monkeypatch.setattr(
         usage_metrics,
         "push_usage_metrics",
-        lambda *, timeout_seconds: pushes.append(timeout_seconds) or True,
+        lambda *, timeout_seconds, lock_timeout_seconds: pushes.append(
+            (timeout_seconds, lock_timeout_seconds)
+        )
+        or True,
     )
 
     exporter = UsageMetricsExporter(interval_seconds=3600).start()
     exporter.stop()
 
+    # The final push bounds its wait on another process's push as well as its own, so
+    # shutdown stays bounded however many exporters share the lock.
     assert pushes == [
-        usage_metrics.EXPORT_TIMEOUT_SECONDS,
-        usage_metrics.FINAL_PUSH_TIMEOUT_SECONDS,
+        (
+            usage_metrics.EXPORT_TIMEOUT_SECONDS,
+            usage_metrics.PERIODIC_LOCK_TIMEOUT_SECONDS,
+        ),
+        (
+            usage_metrics.FINAL_PUSH_TIMEOUT_SECONDS,
+            usage_metrics.FINAL_PUSH_TIMEOUT_SECONDS,
+        ),
     ]
 
 
@@ -1707,7 +1817,7 @@ def test_exporter_pushes_every_interval(monkeypatch):
     pushes = []
     third_push = threading.Event()
 
-    def _push(*, timeout_seconds):
+    def _push(*, timeout_seconds, lock_timeout_seconds):
         pushes.append(timeout_seconds)
         if len(pushes) == 3:
             third_push.set()
@@ -1727,7 +1837,7 @@ def test_exporter_stop_skips_the_final_push_while_one_is_in_flight(monkeypatch):
     in_flight = threading.Event()
     pushes = []
 
-    def _push(*, timeout_seconds):
+    def _push(*, timeout_seconds, lock_timeout_seconds):
         pushes.append(timeout_seconds)
         in_flight.set()
         release.wait(timeout=10)
@@ -1747,7 +1857,7 @@ def test_exporter_stop_skips_the_final_push_while_one_is_in_flight(monkeypatch):
 def test_exporter_logs_a_run_of_failures_once(monkeypatch, caplog):
     outcomes = [OSError("down"), OSError("still down"), True, OSError("down again")]
 
-    def _push(*, timeout_seconds):
+    def _push(*, timeout_seconds, lock_timeout_seconds):
         outcome = outcomes.pop(0)
         if isinstance(outcome, Exception):
             raise outcome

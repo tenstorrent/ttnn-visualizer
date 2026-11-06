@@ -57,7 +57,7 @@ from ttnn_visualizer.startup_requirements import enforce
 from ttnn_visualizer.startup_requirements import report as report_startup_requirements
 from ttnn_visualizer.usage_collection import (
     UsageCollectionConfig,
-    get_collection_config_path,
+    describe_usage_collection,
     prepare_usage_collection_config,
 )
 from ttnn_visualizer.usage_metrics import UsageMetricsExporter
@@ -637,30 +637,11 @@ def _record_launch(config) -> Optional[UsageCollectionConfig]:
     collection_config: Optional[UsageCollectionConfig] = None
     if not server_mode:
         collection_config = prepare_usage_collection_config()
-        if collection_config.enabled and disabled_reason is not None:
-            print(
-                "📈 Aggregate usage collection is DISABLED: event logging is disabled."
+        print(
+            describe_usage_collection(
+                collection_config, recording_disabled=disabled_reason is not None
             )
-        elif collection_config.enabled and not collection_config.can_export:
-            print(
-                "📈 Aggregate usage collection is DISABLED: no remote_write_endpoint "
-                f"is set in {get_collection_config_path()}."
-            )
-        elif collection_config.enabled:
-            print(
-                "📈 Aggregate usage collection is ENABLED.\n"
-                f"   Configuration: {get_collection_config_path()}"
-            )
-        elif collection_config.error:
-            print(
-                "📈 Aggregate usage collection is DISABLED: "
-                "the collection config is invalid."
-            )
-        else:
-            print(
-                "📈 Aggregate usage collection is DISABLED.\n"
-                f"   Opt in through {get_collection_config_path()}."
-            )
+        )
 
     if disabled_reason is not None:
         unrecognised_value = get_unrecognised_recording_disabled_value()

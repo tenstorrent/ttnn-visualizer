@@ -9,10 +9,12 @@ import json
 import logging
 import os
 import tempfile
+import time
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import IO, Any, Dict, Iterator, Optional
 from urllib.parse import urlsplit
 
 from ttnn_visualizer.event_logging import get_event_log_root
@@ -23,6 +25,9 @@ COLLECTION_CONFIG_FILENAME = "collection.json"
 MACHINE_ID_LABEL = "machine_id"
 PRIVATE_FILE_MODE = 0o600
 METRIC_PREFIX = "ttnn_visualizer_"
+# Serialises generating the machine ID, so processes preparing at once settle on one.
+COLLECTION_LOCK_NAME = ".collection.lock"
+LOCK_POLL_SECONDS = 0.05
 _RENAMED_TOKEN_FIELD = "remote_write_bearer_token"
 # Prometheus and Mimir remote-write receivers.
 _REMOTE_WRITE_PATHS = ("/api/v1/write", "/api/v1/push")
@@ -186,54 +191,61 @@ def _secure_config_permissions(path: Path) -> None:
     os.chmod(path, PRIVATE_FILE_MODE)
 
 
+def _read_config(path: Path, persist: bool) -> UsageCollectionConfig:
+    data = _read_object(path)
+    enabled = data.get("enabled", False)
+    if not isinstance(enabled, bool):
+        raise ValueError("enabled must be a JSON boolean")
+    if not enabled:
+        return UsageCollectionConfig()
+
+    endpoint_value = data.get("remote_write_endpoint")
+    endpoint = (
+        _validate_remote_write_endpoint(endpoint_value)
+        if endpoint_value is not None
+        else None
+    )
+    token_value = data.get("remote_write_auth_token")
+    token = (
+        _validate_remote_write_auth_token(token_value)
+        if token_value is not None
+        else None
+    )
+    if token is not None and endpoint is None:
+        raise ValueError("remote_write_auth_token needs a remote_write_endpoint")
+    machine_id_value = data.get("machine_id")
+    machine_id = (
+        _validate_machine_id(machine_id_value) if machine_id_value is not None else None
+    )
+    if persist:
+        if machine_id is None:
+            machine_id = uuid.uuid4().hex
+        if machine_id != machine_id_value:
+            data["machine_id"] = machine_id
+            _write_config(path, data)
+
+    return UsageCollectionConfig(
+        enabled=True,
+        remote_write_endpoint=endpoint,
+        remote_write_auth_token=token,
+        machine_id=machine_id,
+    )
+
+
 def _load_config(persist: bool) -> UsageCollectionConfig:
     try:
         path = get_collection_config_path()
         if not path.exists():
             return UsageCollectionConfig()
+        if not persist:
+            return _read_config(path, persist=False)
 
-        if persist:
+        # The read is inside the lock with the write: an MCP server per agent session
+        # plus the app can prepare together, and two that both read no ID would each
+        # generate one, leaving the loser's whole session under an orphan identity.
+        with usage_file_lock(COLLECTION_LOCK_NAME):
             _secure_config_permissions(path)
-        data = _read_object(path)
-        enabled = data.get("enabled", False)
-        if not isinstance(enabled, bool):
-            raise ValueError("enabled must be a JSON boolean")
-        if not enabled:
-            return UsageCollectionConfig()
-
-        endpoint_value = data.get("remote_write_endpoint")
-        endpoint = (
-            _validate_remote_write_endpoint(endpoint_value)
-            if endpoint_value is not None
-            else None
-        )
-        token_value = data.get("remote_write_auth_token")
-        token = (
-            _validate_remote_write_auth_token(token_value)
-            if token_value is not None
-            else None
-        )
-        if token is not None and endpoint is None:
-            raise ValueError("remote_write_auth_token needs a remote_write_endpoint")
-        machine_id_value = data.get("machine_id")
-        machine_id = (
-            _validate_machine_id(machine_id_value)
-            if machine_id_value is not None
-            else None
-        )
-        if persist:
-            if machine_id is None:
-                machine_id = uuid.uuid4().hex
-            if machine_id != machine_id_value:
-                data["machine_id"] = machine_id
-                _write_config(path, data)
-
-        return UsageCollectionConfig(
-            enabled=True,
-            remote_write_endpoint=endpoint,
-            remote_write_auth_token=token,
-            machine_id=machine_id,
-        )
+            return _read_config(path, persist=True)
     except (OSError, RuntimeError, ValueError, json.JSONDecodeError) as error:
         logger.warning("Usage collection is disabled: %s", error)
         return UsageCollectionConfig(error=str(error))
@@ -252,6 +264,84 @@ def load_usage_collection_config() -> UsageCollectionConfig:
 def prepare_usage_collection_config() -> UsageCollectionConfig:
     """Load the opt-in file, restricting its permissions and persisting a machine ID.
 
-    Called once at launch, the place a user acts on collection.
+    Called once at each app launch and MCP server start, the places a user acts on
+    collection.
     """
     return _load_config(persist=True)
+
+
+def describe_usage_collection(
+    collection_config: UsageCollectionConfig, recording_disabled: bool
+) -> str:
+    """The collection status line a launch reports, shared by the app and MCP server."""
+    if collection_config.enabled and recording_disabled:
+        return "📈 Aggregate usage collection is DISABLED: event logging is disabled."
+    if collection_config.enabled and not collection_config.can_export:
+        return (
+            "📈 Aggregate usage collection is DISABLED: no remote_write_endpoint "
+            f"is set in {get_collection_config_path()}."
+        )
+    if collection_config.enabled:
+        return (
+            "📈 Aggregate usage collection is ENABLED.\n"
+            f"   Configuration: {get_collection_config_path()}"
+        )
+    if collection_config.error:
+        return (
+            "📈 Aggregate usage collection is DISABLED: "
+            "the collection config is invalid."
+        )
+    return (
+        "📈 Aggregate usage collection is DISABLED.\n"
+        f"   Opt in through {get_collection_config_path()}."
+    )
+
+
+@contextmanager
+def usage_file_lock(
+    name: str, *, timeout_seconds: Optional[float] = None
+) -> Iterator[bool]:
+    """Hold an exclusive lock on ``name`` beside the collection config across processes.
+
+    Yields whether the lock is held: ``False`` once ``timeout_seconds`` passes without
+    it, so a caller can skip its work rather than wait on a holder that is stopped but
+    not dead. ``None`` waits indefinitely. Beside the config rather than under
+    ``get_event_log_root()`` because tests redirect only the config path.
+    """
+    try:
+        import fcntl
+    except ImportError:
+        # Windows: no flock, so callers run unserialised, as compaction does there.
+        logger.debug("Usage lock %s unavailable: file locking is unsupported", name)
+        yield True
+        return
+
+    directory = get_collection_config_path().parent
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    # Append mode, so opening never truncates a file another process holds.
+    with open(directory / name, "a", encoding="utf-8") as lock_file:
+        if not _acquire_lock(fcntl, lock_file, timeout_seconds):
+            yield False
+            return
+        try:
+            yield True
+        finally:
+            fcntl.flock(lock_file, fcntl.LOCK_UN)
+
+
+def _acquire_lock(
+    fcntl: Any, lock_file: IO[str], timeout_seconds: Optional[float]
+) -> bool:
+    if timeout_seconds is None:
+        fcntl.flock(lock_file, fcntl.LOCK_EX)
+        return True
+    # Polled because flock has no timeout of its own.
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        try:
+            fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return True
+        except BlockingIOError:
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(LOCK_POLL_SECONDS)
