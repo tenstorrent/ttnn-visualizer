@@ -1796,6 +1796,50 @@ def test_a_waiting_push_gives_curl_only_the_time_left(
     assert 2.0 < max_time < 2.6
 
 
+@_requires_flock
+@pytest.mark.parametrize("change", ["environment", "marker", "config-disabled"])
+def test_a_waiting_push_honours_an_opt_out_that_arrived_while_it_waited(
+    event_log_directory, usage_collection_config_path, curl_calls, monkeypatch, change
+):
+    """Consent read before waiting on another process's push may be stale by the
+    time the lock is free."""
+    _opt_in(usage_collection_config_path, remote_write_endpoint=_ENDPOINT)
+    holder_ready = threading.Event()
+    release_holder = threading.Event()
+
+    def _hold():
+        with usage_collection.usage_file_lock(
+            usage_metrics.EXPORT_LOCK_NAME, timeout_seconds=5
+        ):
+            holder_ready.set()
+            release_holder.wait(timeout=5)
+
+    def _opt_out_then_release():
+        if change == "config-disabled":
+            _write_config(
+                usage_collection_config_path,
+                enabled=False,
+                remote_write_endpoint=_ENDPOINT,
+            )
+        else:
+            _enable_recording_opt_out(change, monkeypatch)
+        release_holder.set()
+
+    holder = threading.Thread(target=_hold)
+    holder.start()
+    assert holder_ready.wait(timeout=5)
+    opt_out = threading.Timer(0.2, _opt_out_then_release)
+    opt_out.start()
+    try:
+        assert push_usage_metrics(timeout_seconds=3.0, wait_for_lock=True) is False
+    finally:
+        opt_out.cancel()
+        release_holder.set()
+        holder.join(timeout=5)
+
+    assert curl_calls == []
+
+
 def test_push_under_an_opt_out_never_creates_the_export_lock(
     event_log_directory, usage_collection_config_path, curl_calls, monkeypatch
 ):

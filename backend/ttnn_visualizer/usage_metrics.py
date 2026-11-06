@@ -377,6 +377,18 @@ def _post_with_curl(
         raise OSError(f"endpoint answered HTTP {status}{hint}")
 
 
+def _exportable_config() -> Optional[Tuple[UsageCollectionConfig, str, str]]:
+    """The config with its endpoint and identity when a push may send, else ``None``."""
+    if not is_recording_enabled():
+        return None
+    config = load_usage_collection_config()
+    # ``can_export`` decides; the locals only narrow the types for mypy.
+    endpoint, machine_id = config.remote_write_endpoint, config.machine_id
+    if not config.can_export or endpoint is None or machine_id is None:
+        return None
+    return config, endpoint, machine_id
+
+
 def push_usage_metrics(
     *,
     log_path: Optional[Path] = None,
@@ -397,12 +409,8 @@ def push_usage_metrics(
     queue behind a slow endpoint. ``wait_for_lock`` waits instead, within
     ``timeout_seconds``, which then bounds the whole push rather than curl alone.
     """
-    if not is_recording_enabled():
-        return False
-    config = load_usage_collection_config()
-    # ``can_export`` decides; the locals only narrow the types for mypy.
-    endpoint, machine_id = config.remote_write_endpoint, config.machine_id
-    if not config.can_export or endpoint is None or machine_id is None:
+    # Checked before the lock too, so an opted-out process never creates it.
+    if _exportable_config() is None:
         return False
 
     lock_started = time.monotonic()
@@ -415,6 +423,12 @@ def push_usage_metrics(
             timeout_seconds -= time.monotonic() - lock_started
             if timeout_seconds <= 0:
                 return False
+        # Again after waiting: an opt-out or a disabled config that arrived while this
+        # push waited for another process's must still stop it.
+        exportable = _exportable_config()
+        if exportable is None:
+            return False
+        config, endpoint, machine_id = exportable
         snapshot = collect_usage_metrics(config, log_path=log_path)
         if snapshot is None:
             return False
