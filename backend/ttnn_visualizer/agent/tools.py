@@ -1099,7 +1099,8 @@ CORE_SPREAD_NOTE = (
 
 # Enough to say where the stragglers sit without listing a 130-core grid.
 SLOWEST_CORES = 5
-# tt-metal has 32 RISC types, a Quasar Tensix core runs 24, so more are the log's text.
+# tt-metal's `RiscType` has 32 members and a Quasar Tensix core runs 24 of them;
+# more names than that are the capture's text.
 MAX_LISTED_RISCS = 32
 
 _PERF_PER_CORE_FIELDS = ("per_core_min_us", "per_core_max_us", "per_core_avg_us")
@@ -1209,7 +1210,8 @@ def _span_request(row: Dict) -> SpanRequest:
 class _CoreSpreadIndex:
     """Every device op's spread, kept per handle so drilling in costs one log read.
 
-    A few hundred bytes an op, where the spans they come from are a core's each.
+    About 4 KB an op of five RISCs and 14 KB at the RISC cap, where the spans they
+    come from are a core's each.
     """
 
     figures: Dict[SpanRequest, Dict[str, object]]
