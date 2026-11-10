@@ -2457,6 +2457,70 @@ class TestZoneTimingsTool:
         assert "occupancy" in result["note"]
 
 
+class TestZoneTimingsUnreadableCells:
+    """Left out and counted, as `zone_intervals` and `core_spread` count them. #2258"""
+
+    @staticmethod
+    def _answer(tmp_path, rows):
+        paired = [
+            modern_row(0, 1, 1, "BRISC", 100, "MATMUL", "ZONE_START"),
+            modern_row(0, 1, 1, "BRISC", 400, "MATMUL", "ZONE_END"),
+        ]
+        write_device_log(tmp_path, MODERN_HEADER, [*paired, *rows])
+        registry = ReportRegistry()
+        load_report(registry, performance_path=str(tmp_path))
+        return tools.zone_timings(registry, "report-1")
+
+    @pytest.mark.parametrize(
+        "bad",
+        [
+            pytest.param(
+                modern_row(0, 1, 1, "BRISC", "x", "MATMUL", "ZONE_START"),
+                id="cycles-not-a-number",
+            ),
+            pytest.param(
+                modern_row(0, 1, 1, "BRISC", "", "MATMUL", "ZONE_START"),
+                id="blank-cycles",
+            ),
+            pytest.param(
+                modern_row(0, 1, 1, "BRISC", "inf", "MATMUL", "ZONE_START"),
+                id="inf-cycles",
+            ),
+            pytest.param(
+                modern_row(0, 1, 1, "BRISC", "1e300", "MATMUL", "ZONE_END"),
+                id="cycles-past-int64",
+            ),
+            pytest.param(
+                modern_row(0, 1, 1, "BRISC", -5, "MATMUL", "ZONE_END"),
+                id="negative-end",
+            ),
+            pytest.param(
+                modern_row("x", 1, 1, "BRISC", 500, "MATMUL", "ZONE_START"),
+                id="slot-not-a-number",
+            ),
+            pytest.param(
+                modern_row("0.5", 1, 1, "BRISC", 500, "MATMUL", "ZONE_START"),
+                id="slot-not-whole",
+            ),
+        ],
+    )
+    def test_a_row_with_a_cell_that_cannot_be_read_is_left_out(self, tmp_path, bad):
+        result = self._answer(tmp_path, [bad])
+
+        (zone,) = result["zones"]
+        assert (zone["occurrences"], zone["total_cycles"], zone["cores"]) == (1, 300, 1)
+        assert result["caveat"] == (
+            "1 rows have a slot, core, run or cycle count that is not a whole number "
+            "or does not fit a 64-bit integer, or a negative cycle count, and were "
+            "left out."
+        )
+
+    def test_a_log_pandas_cannot_parse_is_refused(self, tmp_path):
+        """Refused, so the server counts it as one, not as a failure of the tool."""
+        with pytest.raises(ValueError, match=DeviceLogProfilerQueries.DEVICE_LOG_FILE):
+            self._answer(tmp_path, ['"unclosed,row'])
+
+
 class TestZoneTimingsRead:
     """`zone_timings` reads the log once per handle. #2248"""
 
