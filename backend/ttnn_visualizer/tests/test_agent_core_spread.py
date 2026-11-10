@@ -61,6 +61,15 @@ THREE_CORES = [
 ]
 
 
+# The RISCs THREE_CORES names, which share the RISC cap with a test's own names.
+THREE_CORES_RISCS = sorted({row.split(",")[3] for row in THREE_CORES})
+
+
+def _one_core_risc_rows(names, start=0, end=4000, run=RUN):
+    """A kernel on core (1, 1) for each RISC name."""
+    return [row for name in names for row in _zone(0, 1, 1, name, start, end, run=run)]
+
+
 def _op(perf_id="1", call_count=RUN, device=0, **overrides):
     fields = {
         "id": perf_id,
@@ -114,48 +123,87 @@ class TestStatistics:
         assert op["by_risc"]["TRISC_0"]["max_us"] == 1.1
 
     def test_risc_names_past_the_cap_are_counted_rather_than_listed(self, tmp_path):
-        """tt-metal has 32 RISC types, so a log naming more is its own text. #2254"""
+        """The first names in sort order are listed, each with its own figures. #2254"""
         names = [f"RISC_{index:02}" for index in range(tools.MAX_LISTED_RISCS + 8)]
         rows = [
             *THREE_CORES,
-            *[row for name in names for row in _zone(0, 1, 1, name, 0, 4000)],
+            *_one_core_risc_rows(names[:1], end=2500),
+            *_one_core_risc_rows(names[1:]),
         ]
 
         op = _spread(tmp_path, rows, [_op()], perf_id="1")["ops"][0]
 
         assert len(op["by_risc"]) == tools.MAX_LISTED_RISCS
-        listed = sorted([*names, "BRISC", "TRISC_0"])
+        listed = sorted([*names, *THREE_CORES_RISCS])
         assert list(op["by_risc"]) == listed[: tools.MAX_LISTED_RISCS]
         assert op["by_risc_unlisted_past_cap"] == len(listed) - tools.MAX_LISTED_RISCS
+        assert op["by_risc"]["RISC_00"]["max_us"] == 2.5
+        assert op["by_risc"]["RISC_01"]["max_us"] == 4.0
 
     def test_as_many_risc_names_as_the_cap_are_all_listed(self, tmp_path):
-        names = [f"RISC_{index:02}" for index in range(tools.MAX_LISTED_RISCS - 2)]
-        rows = [
-            *THREE_CORES,
-            *[row for name in names for row in _zone(0, 1, 1, name, 0, 4000)],
-        ]
+        count = tools.MAX_LISTED_RISCS - len(THREE_CORES_RISCS)
+        names = [f"RISC_{index:02}" for index in range(count)]
+        rows = [*THREE_CORES, *_one_core_risc_rows(names)]
 
         op = _spread(tmp_path, rows, [_op()], perf_id="1")["ops"][0]
 
         assert len(op["by_risc"]) == tools.MAX_LISTED_RISCS
         assert "by_risc_unlisted_past_cap" not in op
 
-    def test_a_name_too_long_to_show_takes_no_place_under_the_cap(self, tmp_path):
-        """Counted once, as too long, though it sorts before every name listed."""
-        too_long = "A" * (tools.MAX_RISC_NAME_LENGTH + 1)
-        names = [f"RISC_{index:02}" for index in range(tools.MAX_LISTED_RISCS + 8)]
+    def test_one_risc_past_the_cap_is_counted(self, tmp_path):
+        count = tools.MAX_LISTED_RISCS - len(THREE_CORES_RISCS) + 1
+        names = [f"RISC_{index:02}" for index in range(count)]
+        rows = [*THREE_CORES, *_one_core_risc_rows(names)]
+
+        op = _spread(tmp_path, rows, [_op()], perf_id="1")["ops"][0]
+
+        assert len(op["by_risc"]) == tools.MAX_LISTED_RISCS
+        assert op["by_risc_unlisted_past_cap"] == 1
+
+    def test_a_risc_past_the_cap_still_counts_in_its_cores_span(self, tmp_path):
+        """Left out of by_risc, its kernel still sets its own core's span."""
+        names = [f"RISC_{index:02}" for index in range(tools.MAX_LISTED_RISCS)]
         rows = [
             *THREE_CORES,
-            *[
-                row
-                for name in [too_long, *names]
-                for row in _zone(0, 1, 1, name, 0, 4000)
-            ],
+            *_one_core_risc_rows(names),
+            *_zone(0, 4, 1, "ZZ_RISC", 0, 9000),
         ]
 
         op = _spread(tmp_path, rows, [_op()], perf_id="1")["ops"][0]
 
-        short = sorted([*names, "BRISC", "TRISC_0"])
+        assert "ZZ_RISC" not in op["by_risc"]
+        assert op["by_risc_unlisted_past_cap"] == len(THREE_CORES_RISCS) + 1
+        assert op["cores_in_log"] == 4
+        assert op["slowest_cores"][0] == {"x": 4, "y": 1, "span_us": 9.0}
+        assert op["core_span"]["max_us"] == 9.0
+
+    def test_the_cap_counts_only_on_the_op_past_it(self, tmp_path):
+        names = [f"RISC_{index:02}" for index in range(tools.MAX_LISTED_RISCS)]
+        rows = [
+            *THREE_CORES,
+            *_one_core_risc_rows(names),
+            *_zone(0, 1, 1, "BRISC", 0, 9000, run=RUN + 1),
+        ]
+        perf_rows = [
+            _op(device_time="5"),
+            _op(perf_id="2", call_count=RUN + 1, cores="1", device_time="9"),
+        ]
+
+        ops = {op["id"]: op for op in _spread(tmp_path, rows, perf_rows)["ops"]}
+
+        assert ops["1"]["by_risc_unlisted_past_cap"] == len(THREE_CORES_RISCS)
+        assert list(ops["2"]["by_risc"]) == ["BRISC"]
+        assert "by_risc_unlisted_past_cap" not in ops["2"]
+
+    def test_a_name_too_long_to_show_takes_no_place_under_the_cap(self, tmp_path):
+        """Counted once, as too long, though it sorts before every name listed."""
+        too_long = "A" * (tools.MAX_RISC_NAME_LENGTH + 1)
+        names = [f"RISC_{index:02}" for index in range(tools.MAX_LISTED_RISCS + 8)]
+        rows = [*THREE_CORES, *_one_core_risc_rows([too_long, *names])]
+
+        op = _spread(tmp_path, rows, [_op()], perf_id="1")["ops"][0]
+
+        short = sorted([*names, *THREE_CORES_RISCS])
         assert list(op["by_risc"]) == short[: tools.MAX_LISTED_RISCS]
         assert op["by_risc_unlisted_too_long"] == 1
         assert op["by_risc_unlisted_past_cap"] == len(short) - tools.MAX_LISTED_RISCS
