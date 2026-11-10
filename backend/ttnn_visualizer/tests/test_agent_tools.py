@@ -591,15 +591,17 @@ class TestReportFacts:
                 modern_row(1, 1, 1, "BRISC", 10, "MATMUL", "ZONE_END"),
             ],
         )
-        log.write_text(log.read_text().replace("wormhole_b0", "a" * 60_000))
+        log.write_text(log.read_text().replace("wormhole_b0", "a" * 60_000, 1))
         registry = ReportRegistry()
 
         loaded = load_report(registry, performance_path=str(tmp_path))
         timings = tools.zone_timings(registry, loaded["handle"])
+        intervals = tools.zone_intervals(registry, loaded["handle"], "MATMUL")
 
         assert "ARCH" not in loaded["capture"]
         assert "device_log" not in loaded["arch"]
         assert timings["arch"] is None
+        assert intervals["arch"] is None
         assert len(json.dumps(loaded)) < 10_000
         assert len(json.dumps(timings)) < 2_000
 

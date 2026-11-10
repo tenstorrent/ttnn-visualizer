@@ -215,6 +215,11 @@ def test_the_signpost_name_limit_the_page_states_is_the_enforced_one():
     page = " ".join(_read(_AGENT_DOCS).split())
 
     assert f"a name longer than {tools.MAX_SIGNPOST_NAME_LENGTH} characters" in page
+
+
+def test_the_capture_field_bounds_the_page_states_are_the_enforced_ones():
+    page = " ".join(_read(_AGENT_DOCS).split())
+
     assert f"value runs past {MAX_CAPTURE_FIELD_CHARS} characters" in page
     assert f"after the first {MAX_CAPTURE_FIELDS} it keeps" in page
     assert (

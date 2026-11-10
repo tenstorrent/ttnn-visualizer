@@ -18,7 +18,11 @@ import pytest
 from ttnn_visualizer import csv_queries
 from ttnn_visualizer.agent import server, tools
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
-from ttnn_visualizer.csv_queries import DeviceLogProfilerQueries, SpanRequest
+from ttnn_visualizer.csv_queries import (
+    DeviceLogProfilerQueries,
+    SpanRequest,
+    parse_device_meta,
+)
 from ttnn_visualizer.event_logging import McpToolOutcome
 from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.models import Instance
@@ -880,26 +884,24 @@ class TestCaptureMetadata:
         path.write_bytes(first_line + b"\n" + MODERN_HEADER.encode() + b"\n")
         return Instance(instance_id="pytest", performance_path=str(tmp_path))
 
+    def _read(self, tmp_path, first_line: str | bytes):
+        if isinstance(first_line, str):
+            first_line = first_line.encode()
+        return DeviceLogProfilerQueries.read_capture_metadata(
+            self._instance(tmp_path, first_line)
+        )
+
     def test_a_first_line_past_the_limit_is_read_up_to_it(self, tmp_path):
         line = PREAMBLE.encode() + b"," + b"x" * (2 * csv_queries._META_LINE_LIMIT)
 
-        metadata = DeviceLogProfilerQueries.read_capture_metadata(
-            self._instance(tmp_path, line)
-        )
-
-        assert metadata["CHIP_FREQ[MHz]"] == "1000"
+        assert self._read(tmp_path, line)["CHIP_FREQ[MHz]"] == "1000"
 
     def test_a_cut_through_a_multibyte_character_reads_as_no_metadata(self, tmp_path):
         # One ASCII byte then two-byte characters: the limit, an even byte count,
         # falls in the middle of one.
         line = b"A" + "\u00e9".encode() * csv_queries._META_LINE_LIMIT
 
-        assert (
-            DeviceLogProfilerQueries.read_capture_metadata(
-                self._instance(tmp_path, line)
-            )
-            == {}
-        )
+        assert self._read(tmp_path, line) == {}
 
     @pytest.mark.parametrize("extra, kept", [(0, True), (1, False)])
     @pytest.mark.parametrize("side", ["name", "value"])
@@ -909,54 +911,115 @@ class TestCaptureMetadata:
         """Measured stripped, as the field is kept, against the ARCH pattern's bound."""
         text = "a" * (csv_queries.MAX_CAPTURE_FIELD_CHARS + extra)
         name, value = (text, "v") if side == "name" else ("K", text)
-        line = f"CHIP_FREQ[MHz]: 1000,  {name} :  {value} ".encode()
 
-        metadata = DeviceLogProfilerQueries.read_capture_metadata(
-            self._instance(tmp_path, line)
-        )
+        metadata = self._read(tmp_path, f"CHIP_FREQ[MHz]: 1000,  {name} :  {value} ")
 
         assert (metadata.get(name) == value) is kept
 
     def test_the_longest_real_first_line_reads_whole(self, tmp_path):
         """A 2026 capture's four fields, its RUN_ID the longest value seen."""
         line = (
-            b"ARCH: wormhole_b0, CHIP_FREQ[MHz]: 1000, Max Compute Cores: 64, "
-            b"RUN_ID: e4f3b5ca429bbb18e8fb771ad33e8ee2"
+            "ARCH: wormhole_b0, CHIP_FREQ[MHz]: 1000, Max Compute Cores: 64, "
+            "RUN_ID: e4f3b5ca429bbb18e8fb771ad33e8ee2"
         )
 
-        metadata = DeviceLogProfilerQueries.read_capture_metadata(
-            self._instance(tmp_path, line)
-        )
-
-        assert metadata == {
+        assert self._read(tmp_path, line) == {
             "ARCH": "wormhole_b0",
             "CHIP_FREQ[MHz]": "1000",
             "Max Compute Cores": "64",
             "RUN_ID": "e4f3b5ca429bbb18e8fb771ad33e8ee2",
         }
 
-    def test_a_field_longer_than_tt_metal_writes_is_left_out(self, tmp_path):
-        """A crafted first line must not fill load_report's answer. #2256"""
+    def test_a_dropped_field_leaves_its_neighbours_intact(self, tmp_path):
+        """A crafted first line must not fill load_report's answer, nor cost it the
+        fields around the one left out. #2256"""
         too_long = csv_queries.MAX_CAPTURE_FIELD_CHARS + 1
         line = (
-            f"ARCH: {'a' * too_long}, CHIP_FREQ[MHz]: 1000, {'k' * too_long}: v"
-        ).encode()
-
-        metadata = DeviceLogProfilerQueries.read_capture_metadata(
-            self._instance(tmp_path, line)
+            f"F0: 0, ARCH: {'a' * too_long}, CHIP_FREQ[MHz]: 1000, "
+            f"{'k' * too_long}: v, Max Compute Cores: 64"
         )
 
-        assert metadata == {"CHIP_FREQ[MHz]": "1000"}
+        assert self._read(tmp_path, line) == {
+            "F0": "0",
+            "CHIP_FREQ[MHz]": "1000",
+            "Max Compute Cores": "64",
+        }
 
     def test_fields_past_the_cap_are_left_out(self, tmp_path):
         count = csv_queries.MAX_CAPTURE_FIELDS
-        line = ", ".join(f"F{index}: {index}" for index in range(count + 5)).encode()
+        line = ", ".join(f"F{index}: {index}" for index in range(count + 5))
 
-        metadata = DeviceLogProfilerQueries.read_capture_metadata(
-            self._instance(tmp_path, line)
-        )
+        assert list(self._read(tmp_path, line)) == [
+            f"F{index}" for index in range(count)
+        ]
 
-        assert list(metadata) == [f"F{index}" for index in range(count)]
+    def test_skipped_fields_do_not_count_towards_the_cap(self, tmp_path):
+        """Counting raw fields instead would push the clock out."""
+        too_long = "k" * (csv_queries.MAX_CAPTURE_FIELD_CHARS + 1)
+        skipped = [
+            f"{too_long}{index}: v"
+            for index in range(csv_queries.MAX_CAPTURE_FIELDS + 4)
+        ]
+
+        metadata = self._read(tmp_path, ", ".join([*skipped, "CHIP_FREQ[MHz]: 1000"]))
+
+        assert metadata == {"CHIP_FREQ[MHz]": "1000"}
+
+    def test_a_repeated_name_does_not_count_twice(self, tmp_path):
+        line = ", ".join(["F0: 0"] * 20 + ["CHIP_FREQ[MHz]: 1000"])
+
+        assert self._read(tmp_path, line) == {"F0": "0", "CHIP_FREQ[MHz]": "1000"}
+
+    @pytest.mark.parametrize(
+        "line, architecture",
+        [
+            pytest.param(f"ARCH: {'a' * 64}-x", None, id="bounded-prefix"),
+            pytest.param(f"ARCH: {'a' * 65}, MY_ARCH: evil", None, id="later-field"),
+            pytest.param(
+                f"ARCH: {'a' * 65}, ARCH: wormhole_b0", "wormhole_b0", id="later-arch"
+            ),
+            pytest.param("MY_ARCH: evil", None, id="name-ending-in-arch"),
+            pytest.param("ARCH: wormhole_b0", "wormhole_b0", id="real"),
+        ],
+    )
+    def test_the_split_and_the_pattern_read_one_architecture(
+        self, tmp_path, line, architecture
+    ):
+        """`load_report` and `zone_timings` read the split, every other tool and the
+        route the pattern."""
+        assert self._read(tmp_path, line).get("ARCH") == architecture
+        assert parse_device_meta(line).architecture == architecture
+
+
+@pytest.mark.parametrize(
+    "first_line",
+    [
+        pytest.param(f"ARCH: {'a' * 64}-x, CHIP_FREQ[MHz]: 1000", id="bounded-prefix"),
+        pytest.param(
+            f"ARCH: {'a' * 65}, MY_ARCH: evil, CHIP_FREQ[MHz]: 1000", id="later-field"
+        ),
+    ],
+)
+def test_a_crafted_architecture_reads_as_none_in_every_tool(tmp_path, first_line):
+    """Each once read a name `capture` left out, so the tools named two architectures."""
+    path = write_device_log(tmp_path, MODERN_HEADER, THREE_CORES)
+    path.write_text("\n".join([first_line, *path.read_text().splitlines()[1:]]) + "\n")
+    registry = ReportRegistry()
+    loaded = load_report(registry, performance_path=str(tmp_path))
+    handle = loaded["handle"]
+    with patch.object(
+        tools, "_generate_canonical_report", return_value=_perf_report([_op()])
+    ):
+        spread = tools.core_spread(registry, handle, perf_id="1")
+    meta = DeviceLogProfilerQueries.read_device_meta(registry.get(handle))
+
+    assert "device_log" not in loaded["arch"]
+    assert tools.zone_timings(registry, handle)["arch"] is None
+    assert tools.zone_intervals(registry, handle, "BRISC-KERNEL")["arch"] is None
+    assert spread["arch"] is None
+    assert spread["clock_mhz"] == 1000
+    # What the app's device-log meta route serves.
+    assert meta is not None and meta.architecture is None
 
 
 class TestInventory:
