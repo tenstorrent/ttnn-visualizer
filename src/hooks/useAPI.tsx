@@ -49,7 +49,7 @@ import { StackedPerfRow } from '../definitions/StackedPerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
 import { getLinkableDeviceOperations } from '../functions/linkableDeviceOperations';
 import { normalizeBufferPagesResponse } from '../functions/normalizeBufferPagesResponse';
-import { filterByOperationRange } from '../functions/filterByOperationRange';
+import { filterByOperationRange, isInOperationRange } from '../functions/filterByOperationRange';
 import {
     activeMlirJsonAtom,
     activeNpeOpTraceAtom,
@@ -1632,6 +1632,9 @@ export const usePerfFolderList = () => {
     });
 };
 
+// Shared by every operation outside the selected range; callers only read it.
+const NO_TENSORS_BY_ADDRESS: Map<number, Tensor> = new Map<number, Tensor>();
+
 export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = BufferType.L1) => {
     // Every operation's buffers, so a buffer that left before the range still clears its address.
     const { data: buffersByOperation, status: buffersStatus } = useBuffers(bufferType, false);
@@ -1663,12 +1666,11 @@ export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = Buf
         if (!operationRange) {
             return allTensorsByOperationByAddress;
         }
-        const [first, last] = operationRange;
 
         return new Map(
             Array.from(allTensorsByOperationByAddress, ([operationId, tensorsByAddress]) => [
                 operationId,
-                operationId >= first && operationId <= last ? tensorsByAddress : new Map(),
+                isInOperationRange(operationId, operationRange) ? tensorsByAddress : NO_TENSORS_BY_ADDRESS,
             ]),
         );
     }, [allTensorsByOperationByAddress, operationRange]);
@@ -1686,8 +1688,8 @@ export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = Buf
         tensorListByOperation: tensorsByOperationByAddress,
         uniqueBuffersByOperationList,
         status,
-        // `useBuffers(…, true)` drops operations outside this range, which then
-        // read as empty rather than as unchecked.
+        // Operations outside this range map to an empty `Map`, which reads as empty
+        // rather than as unchecked.
         operationRange,
     };
 };

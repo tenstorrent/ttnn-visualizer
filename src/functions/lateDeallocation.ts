@@ -4,7 +4,7 @@
 
 import { QueryStatus } from '@tanstack/react-query';
 import { NumberRange } from '@blueprintjs/core';
-import { DEALLOCATE_OP_NAME_LIST } from '../definitions/Deallocate';
+import { isDeallocate } from '../definitions/Deallocate';
 import {
     LATE_DEALLOC_OPPORTUNITY_TEXT,
     LateDeallocationAvailability,
@@ -13,14 +13,10 @@ import {
 } from '../definitions/LateDeallocation';
 import { Buffer, BuffersByOperation, Operation, Tensor } from '../model/APIData';
 import { TensorDeallocationReport, TensorsByOperationByAddress } from '../model/BufferSummary';
+import { isInOperationRange } from './filterByOperationRange';
 
 /** Sentinel for "this tensor has no consumer we can attribute a last use to". */
 export const NO_CONSUMER_OPERATION_ID = -1;
-
-const DEALLOCATE_OP_NAMES = new Set(DEALLOCATE_OP_NAME_LIST);
-
-/** Mirrored as `is_deallocate` in `backend/ttnn_visualizer/agent/late_deallocations.py`. */
-const isDeallocate = (name: string | null | undefined) => DEALLOCATE_OP_NAMES.has((name ?? '').toLowerCase());
 
 export interface LastValidConsumer {
     lastConsumerOperationId: number;
@@ -140,6 +136,34 @@ export const getUniqueBuffersByOperation = (buffersByOperation: readonly Buffers
         };
     });
 
+const hasAddress = <T extends { address?: number | null }>(item: T): item is T & { address: number } =>
+    item.address !== null && item.address !== undefined;
+
+/**
+ * A later buffer at a gone tensor's address is another tensor's: drop a holder whose buffer left a
+ * recorded snapshot, or that a deallocate call freed.
+ * Mirrored as `_forget_gone_holders` in `backend/ttnn_visualizer/agent/late_deallocations.py`.
+ */
+const forgetGoneHolders = (
+    holderByAddress: Map<number, Tensor>,
+    snapshotAddresses: ReadonlySet<number> | null,
+    deallocated: readonly Tensor[],
+) => {
+    if (snapshotAddresses) {
+        holderByAddress.forEach((_, address) => {
+            if (!snapshotAddresses.has(address)) {
+                holderByAddress.delete(address);
+            }
+        });
+    }
+
+    deallocated.forEach((tensor) => {
+        if (tensor && hasAddress(tensor) && holderByAddress.get(tensor.address)?.id === tensor.id) {
+            holderByAddress.delete(tensor.address);
+        }
+    });
+};
+
 /**
  * The tensor each operation's buffers belong to, by address: the last one seen at that address, until
  * its buffer leaves an operation's snapshot or a deallocate call frees it.
@@ -160,21 +184,23 @@ export const buildTensorsByOperationByAddress = (
 
     for (const op of operations) {
         const deallocated = isDeallocate(op.name) ? (op.inputs ?? []) : [];
+        const deallocatedIds = new Set(deallocated.map((tensor) => tensor?.id));
 
         for (const tensor of [...(op.inputs ?? []), ...(op.outputs ?? [])]) {
-            if (tensor && tensor.address !== null && tensor.address !== undefined && !deallocated.includes(tensor)) {
+            if (tensor && hasAddress(tensor) && !deallocatedIds.has(tensor.id)) {
                 holderByAddress.set(tensor.address, tensor);
             }
         }
 
         const buffers = buffersByOpId.get(op.id) ?? [];
         const tensorsByBufferAddress = new Map<number, Tensor>();
+        const snapshotAddresses = new Set<number>();
 
         for (const buffer of buffers) {
-            const addr = buffer.address;
-            const tensor = addr === null || addr === undefined ? undefined : holderByAddress.get(addr);
+            const tensor = hasAddress(buffer) ? holderByAddress.get(buffer.address) : undefined;
+            snapshotAddresses.add(buffer.address);
             if (tensor) {
-                tensorsByBufferAddress.set(addr, {
+                tensorsByBufferAddress.set(buffer.address, {
                     ...tensor,
                     buffer_type: buffer.buffer_type,
                 });
@@ -182,23 +208,7 @@ export const buildTensorsByOperationByAddress = (
         }
 
         tensorsByOperationByAddress.set(op.id, tensorsByBufferAddress);
-
-        // A later buffer at a gone tensor's address is another tensor's.
-        if (buffers.length > 0) {
-            const bufferAddresses = new Set(buffers.map(({ address }) => address));
-
-            holderByAddress.forEach((_, address) => {
-                if (!bufferAddresses.has(address)) {
-                    holderByAddress.delete(address);
-                }
-            });
-        }
-
-        deallocated.forEach((tensor) => {
-            if (tensor && tensor.address !== null && holderByAddress.get(tensor.address)?.id === tensor.id) {
-                holderByAddress.delete(tensor.address);
-            }
-        });
+        forgetGoneHolders(holderByAddress, buffers.length > 0 ? snapshotAddresses : null, deallocated);
     }
 
     return tensorsByOperationByAddress;
@@ -450,7 +460,7 @@ export const getOperationLateDeallocationAvailability = ({
         return LateDeallocationAvailability.LOADING;
     }
 
-    if (operationRange && (operationId < operationRange[0] || operationId > operationRange[1])) {
+    if (operationRange && !isInOperationRange(operationId, operationRange)) {
         return LateDeallocationAvailability.OUT_OF_RANGE;
     }
 

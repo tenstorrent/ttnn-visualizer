@@ -164,9 +164,13 @@ def held_tensors_by_operation(
             if is_deallocate(operation_names_by_id.get(operation_id))
             else ()
         )
+        deallocated_ids = {tensor.tensor_id for tensor in deallocated}
         for side in (inputs_by_operation_id, outputs_by_operation_id):
             for tensor in side.get(operation_id, ()):
-                if tensor.address is not None and tensor not in deallocated:
+                if (
+                    tensor.address is not None
+                    and tensor.tensor_id not in deallocated_ids
+                ):
                     holder_by_address[tensor.address] = tensor
         held: List[HeldTensor] = []
         for address, size in sizes.items():
@@ -197,8 +201,9 @@ def _forget_gone_holders(
     sizes: Mapping[int, int],
     deallocated: Sequence[Tensor],
 ) -> None:
-    """A later buffer at a gone tensor's address is another tensor's: drop a holder
-    whose buffer left a recorded snapshot, or that a deallocate call freed."""
+    """`forgetGoneHolders`. A later buffer at a gone tensor's address is another
+    tensor's: drop a holder whose buffer left a recorded snapshot, or that a deallocate
+    call freed."""
     if sizes:
         for address in [
             address for address in holder_by_address if address not in sizes
