@@ -2714,6 +2714,48 @@ class TestReplacedZoneStarts:
         assert (zone, occurrences, total) == ("LOOP", 1, 100)
         assert result["caveat"].startswith("1 zone starts and 0 ends did not pair")
 
+    def test_zone_timings_counts_one_across_traced_replays(self, tmp_path):
+        """Its key spans a run host ID's replays, so a replay that lost its end leaves a
+        start the next replay replaces."""
+        rows = []
+        for replay, lost_end in ((0, False), (1, True), (2, False)):
+            base = replay * 1000
+            rows += [
+                modern_row(0, 1, 1, "BRISC", base, "BRISC-KERNEL", "ZONE_START"),
+                modern_row(0, 1, 1, "BRISC", base + 100, "LOOP", "ZONE_START"),
+                *(
+                    []
+                    if lost_end
+                    else [modern_row(0, 1, 1, "BRISC", base + 200, "LOOP", "ZONE_END")]
+                ),
+                modern_row(0, 1, 1, "BRISC", base + 300, "BRISC-KERNEL", "ZONE_END"),
+            ]
+        write_device_log(tmp_path, MODERN_HEADER, rows)
+        registry = ReportRegistry()
+        load_report(registry, performance_path=str(tmp_path))
+
+        result = tools.zone_timings(registry, "report-1")
+
+        loop = next(entry for entry in result["zones"] if entry["zone"] == "LOOP")
+        assert (loop["occurrences"], loop["total_cycles"]) == (2, 200)
+        assert result["caveat"].startswith("1 zone starts and 0 ends did not pair")
+
+    def test_nested_zones_of_one_name_count_both_ways(self, tmp_path):
+        """The inner start replaces the outer, and the outer end then closes nothing."""
+        rows = [
+            modern_row(0, 1, 1, "BRISC", 100, "LOOP", "ZONE_START"),
+            modern_row(0, 1, 1, "BRISC", 200, "LOOP", "ZONE_START"),
+            modern_row(0, 1, 1, "BRISC", 300, "LOOP", "ZONE_END"),
+            modern_row(0, 1, 1, "BRISC", 400, "LOOP", "ZONE_END"),
+        ]
+        write_device_log(tmp_path, MODERN_HEADER, rows)
+        registry = ReportRegistry()
+        load_report(registry, performance_path=str(tmp_path))
+
+        result = tools.zone_timings(registry, "report-1")
+
+        assert result["caveat"].startswith("1 zone starts and 1 ends did not pair")
+
     def test_the_pairer_counts_it_for_its_group_too(self):
         pairer = csv_queries._ZonePairer(
             "ZONE_START", "ZONE_END", group=lambda key: key[0]

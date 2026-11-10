@@ -325,6 +325,19 @@ class TestCaveats:
         result = _spread(tmp_path, THREE_CORES + replaced, [_op()], perf_id="1")
 
         assert "1 zone starts and 0 ends did not pair" in result["caveat"]
+        # From the second start, at 100, not the first.
+        assert result["ops"][0]["slowest_cores"][0] == {"x": 4, "y": 1, "span_us": 4.0}
+
+    def test_a_start_replaced_in_another_run_is_not_this_ops_concern(self, tmp_path):
+        replaced = [
+            modern_row(0, 4, 1, "BRISC", 0, "BRISC-KERNEL", "ZONE_START", run=9999),
+            modern_row(0, 4, 1, "BRISC", 100, "BRISC-KERNEL", "ZONE_START", run=9999),
+            modern_row(0, 4, 1, "BRISC", 4100, "BRISC-KERNEL", "ZONE_END", run=9999),
+        ]
+
+        result = _spread(tmp_path, THREE_CORES + replaced, [_op()], perf_id="1")
+
+        assert "caveat" not in result
 
     def test_an_unpaired_start_in_another_run_is_not_this_ops_concern(self, tmp_path):
         open_start = "0,4,1,BRISC,1,0,0,9999,,,BRISC-KERNEL,ZONE_START,1,k.cc,"
