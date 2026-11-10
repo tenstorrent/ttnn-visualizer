@@ -129,6 +129,9 @@ def _row(**overrides):
     return row
 
 
+# Claude Code cuts a tool description past this many characters.
+_CLIENT_TOOL_DESCRIPTION_LIMIT = 2048
+
 # The signposts a patched handle "holds", in file order. Every name the mocked
 # tests range over is here, since a name a report lacks is now refused against this
 # list before a report is generated.
@@ -2777,14 +2780,13 @@ class TestTransport:
         assert len(instructions) <= 2000
 
     def test_every_tool_description_fits_what_a_client_reads_of_it(self):
-        """Claude Code cuts a tool description past 2,048 characters, so a sentence past
-        that never reaches the agent. #2232"""
+        """A sentence past the client's cut never reaches the agent. #2232"""
         table = server._tool_table(ReportRegistry())
 
         assert {
             name: len(spec["description"])
             for name, spec in table.items()
-            if len(spec["description"]) > 2048
+            if len(spec["description"]) > _CLIENT_TOOL_DESCRIPTION_LIMIT
         } == {}
 
     def test_the_instructions_name_only_registered_tools(self):

@@ -10,6 +10,7 @@ neither an app nor a database session -- reaching for the fixture would test a
 coupling the tools deliberately do not have.
 """
 
+import json
 import re
 import sqlite3
 from pathlib import Path
@@ -115,6 +116,22 @@ INSERT INTO devices (
 
 # `SCHEMA_V2` stores `buffer_type` as an integer, so the name lookup is a real
 # schema rather than defensive coding: `BufferType.L1` is 1.
+# 20 and 21 share the smallest largest free block, the higher id 21 the fuller of them;
+# 22 has more room, and 2 and 3 more still.
+_L1_TIES_SQL = _REPORT_SQL + """
+INSERT INTO operations VALUES
+    (20, 'ttnn.emptier', 1.0),
+    (21, 'ttnn.fuller', 1.0),
+    (22, 'ttnn.roomier', 1.0);
+INSERT INTO buffers VALUES
+    (20, 0, 300000, 10000, 'L1', 0),
+    (20, 0, 700000, 10000, 'L1', 0),
+    (21, 0, 300000, 10000, 'L1', 0),
+    (21, 0, 400000, 100000, 'L1', 0),
+    (21, 0, 700000, 10000, 'L1', 0),
+    (22, 0, 300000, 10000, 'L1', 0);
+"""
+
 _INTEGER_BUFFER_TYPE_SQL = """
 CREATE TABLE operations (operation_id int UNIQUE, name text, duration float);
 CREATE TABLE buffers (
@@ -701,12 +718,39 @@ class TestMemoryProfile:
         assert "floor, not the peak" in description
         assert "circular buffers" in description
         assert "out-of-memory" in description
-        # What l1_pressure counts and when it is null, before the call. #2232
+        # What l1_pressure counts, before the call. #2232
         assert "operations_at_top" in description
-        assert "no L1 buffers" in description
-        detail = table["operation_detail"]["description"]
-        assert "no buffers rows" in detail
-        assert "no device records L1 geometry" in detail
+
+    def test_every_text_naming_when_l1_pressure_is_null_names_each_condition(self):
+        """The docstring and both tool descriptions each list the conditions, so one
+        dropped or reworded in one of them must fail here. #2232"""
+        table = server._tool_table(ReportRegistry())
+        texts = {
+            "memory_profile docstring": agent_operations.memory_profile.__doc__ or "",
+            "memory_profile": table["memory_profile"]["description"],
+            "operation_detail": table["operation_detail"]["description"],
+        }
+        flat = {
+            where: " ".join(text.replace("`", "").split())
+            for where, text in texts.items()
+        }
+        everywhere = tuple(texts)
+        profile = ("memory_profile docstring", "memory_profile")
+        conditions = {
+            "with a caveat": everywhere,
+            "no device records": everywhere,
+            "cannot be attributed to the rank": everywhere,
+            "no buffers rows": ("operation_detail",),
+            "any buffer_type but L1": profile,
+            "holding no L1 buffers": profile,
+        }
+
+        assert [
+            (phrase, where)
+            for phrase, wheres in conditions.items()
+            for where in wheres
+            if phrase not in flat[where]
+        ] == []
 
     def test_no_figure_adds_one_memory_type_to_another(self, loaded):
         """`max_size_per_bank` is divided by the bank count of its own memory
@@ -1322,37 +1366,95 @@ class TestOperationDetail:
         assert "`high_water_bytes` a floor" in note
         assert "`free_segments` neither" in note
         assert "not a peak" in note
-        assert "`high_water_bytes`" in note
+        assert "often equals `usable_bytes`" in note
 
     def test_memory_profile_counts_the_operations_sharing_the_top(self, loaded):
-        """As `operations_at_peak`: a limit that shows one of them is not all of them."""
-        sql = _REPORT_SQL + """
-        INSERT INTO operations VALUES
-            (20, 'ttnn.first', 1.0),
-            (21, 'ttnn.second', 1.0),
-            (22, 'ttnn.roomier', 1.0);
-        INSERT INTO buffers VALUES
-            (20, 0, 300000, 10000, 'L1', 0),
-            (20, 0, 700000, 10000, 'L1', 0),
-            (20, 0, 200000, 1000, 'L1', 0),
-            (21, 0, 300000, 10000, 'L1', 0),
-            (21, 0, 700000, 10000, 'L1', 0),
-            (22, 0, 300000, 10000, 'L1', 0);
-        """
-        registry, handle = loaded(sql, name="l1-ties")
+        """As `operations_at_peak`: a limit showing one of them is not all of them."""
+        registry, handle = loaded(_L1_TIES_SQL, name="l1-ties")
 
-        ranked = agent_operations.memory_profile(registry, handle, limit=1)[
+        limited = agent_operations.memory_profile(registry, handle, limit=1)[
             "l1_pressure"
         ]
 
-        # Fuller, 20 ranks first, but 21 shares its largest free block.
-        assert [row["operation_id"] for row in ranked["operations"]] == [20]
-        assert ranked["operations_at_top"] == 2
+        # 21 and 20 share the smallest largest free block; the fuller 21 ranks first
+        # though its id is the higher.
+        assert [row["operation_id"] for row in limited["operations"]] == [21]
+        assert limited["operations_at_top"] == 2
+        assert limited["operation_count"] == 5
         full = agent_operations.memory_profile(registry, handle)["l1_pressure"]
-        first, second = full["operations"][:2]
+        first, second, third = full["operations"][:3]
+        assert second["operation_id"] == 20
         assert first["largest_free_block"] == second["largest_free_block"]
-        assert first["allocated_bytes"] != second["allocated_bytes"]
-        assert ranked["operation_count"] > ranked["operations_at_top"]
+        assert first["fullness_pct"] > second["fullness_pct"]
+        assert third["largest_free_block"] > first["largest_free_block"]
+        assert (
+            agent_operations.memory_profile(registry, handle, buffer_type="L1")[
+                "l1_pressure"
+            ]["operations_at_top"]
+            == 2
+        )
+
+    def test_memory_profile_counts_every_operation_when_all_are_empty(self, loaded):
+        """L1 rows with no address occupy nothing, so every operation is measured as
+        empty and all of them share the top."""
+        sql = _REPORT_SQL + """
+        DELETE FROM buffers WHERE buffer_type = 'L1';
+        INSERT INTO operations VALUES (20, 'ttnn.unaddressed', 1.0);
+        INSERT INTO buffers VALUES
+            (2, 0, NULL, 8192, 'L1', 0),
+            (3, 0, NULL, 4096, 'L1', 0),
+            (20, 0, NULL, 2048, 'L1', 0);
+        """
+        registry, handle = loaded(sql, name="l1-all-empty")
+
+        ranked = agent_operations.memory_profile(registry, handle)["l1_pressure"]
+
+        assert ranked["operation_count"] == 3
+        assert ranked["operations_at_top"] == ranked["operation_count"]
+        assert [row["allocated_bytes"] for row in ranked["operations"]] == [0, 0, 0]
+
+    def test_memory_profile_counts_the_top_within_the_rank_asked_for(self, loaded):
+        """Rank 1's tie is not rank 0's: each rank is measured and counted alone."""
+        sql = _RANKED_REPORT_SQL + """
+        INSERT INTO operations VALUES (2, 'op_two_on_rank_one', 1.0, 1);
+        INSERT INTO buffers VALUES (2, 0, 100, 8192, 'L1', 0, 1);
+        """
+        registry, handle = loaded(sql, name="l1-ranked-ties")
+
+        counts = {
+            rank: (
+                ranked["operations_at_top"],
+                ranked["operation_count"],
+            )
+            for rank in (0, 1)
+            for ranked in [
+                agent_operations.memory_profile(registry, handle, rank=rank)[
+                    "l1_pressure"
+                ]
+            ]
+        }
+
+        assert counts == {0: (1, 1), 1: (2, 2)}
+
+    def test_operations_at_top_reaches_the_agent_through_the_tool(self, loaded):
+        registry, handle = loaded(_L1_TIES_SQL, name="l1-ties-dispatch")
+
+        response = server.handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": "memory_profile",
+                    "arguments": {"handle": handle, "limit": 1},
+                },
+            },
+            server._tool_table(registry),
+        )
+
+        answer = json.loads(response["result"]["content"][0]["text"])
+        assert answer["l1_pressure"]["operations_at_top"] == 2
+        assert answer["l1_pressure"]["returned"] == 1
 
     def test_memory_profile_l1_pressure_is_none_for_a_report_without_l1(self, loaded):
         """Nothing to rank, which is no fault of the report, so no caveat says so; asked
@@ -1364,7 +1466,7 @@ class TestOperationDetail:
 
         profile = agent_operations.memory_profile(registry, handle)
         assert profile["l1_pressure"] is None
-        assert "l1_pressure" not in profile.get("caveat", "")
+        assert "caveat" not in profile or "l1_pressure" not in profile["caveat"]
         with pytest.raises(ValueError, match="no L1 buffers in this report"):
             agent_operations.memory_profile(registry, handle, buffer_type="L1")
 
