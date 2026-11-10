@@ -161,6 +161,7 @@ first call, which refuses one that is not a readable tt-npe trace.
   can be reported on but its signposts cannot be read, `signposts_problem` says why. Loading reads the signposts, so a handle answers from the
   CSV it was loaded on: one rewritten or superseded after that is refused, and
   `load_report` again gives a fresh handle.
+  A handle loaded before its CSV was written answers from the first one a read finds.
 - `arch` and `device_count` are keyed by the file each was read from, since a handle's two
   reports can come from different runs. `arch.device_log` is the device profiler log's
   header, which `capture` also returns whole; `arch.cluster_descriptor` is what the `arch`
@@ -876,7 +877,8 @@ kept, so the next call tries again. A handle keeps answering from the capture it
 read, so it never mixes two. A read that needs the CSV again after it was rewritten, or
 after a newer `ops_perf_results` file appeared — a range not asked before, or one dropped
 from the cache — is refused rather than lined up against operations linked from the old
-capture; call `load_report` again for a fresh handle.
+capture; call `load_report` again for a fresh handle. A handle loaded before its CSV was
+written stays with the first CSV a read of it finds.
 
 **`critical_path` and `subgraph_between` read the graph's edges as the graph view does.**
 An edge runs from the operation that produced a tensor to each operation that consumed it,

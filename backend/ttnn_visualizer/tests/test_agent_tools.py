@@ -174,6 +174,19 @@ def _touch_after(older, newer, times=None):
         time.sleep(0.01)
 
 
+def _rewrite_capture(directory):
+    write_ops_perf(directory, signposted_rows()[:-1])
+
+
+def _supersede_capture(directory):
+    """Add a newer ops_perf CSV beside the first, leaving the first untouched."""
+    original = directory / "ops_perf_results.csv"
+    newer = directory / "ops_perf_results_newer.csv"
+    newer.write_text(original.read_text())
+    _touch_after(original, newer, (time.time() + 1, time.time() + 1))
+    assert newest_ops_perf_file(directory) == newer
+
+
 def _touch_in_order(older, newer):
     """`_touch_after`, with both mtimes aged too, for any reader that uses them."""
     os.utime(older, (1000, 1000))
@@ -1765,6 +1778,30 @@ class TestSignpostRangeEndToEnd:
         with pytest.raises(ValueError, match="has changed since it was first read"):
             self._ranged(registry, handle)
         # What the handle already holds still answers, from the first capture.
+        assert tools.top_ops(registry, handle) == whole
+
+    @pytest.mark.parametrize(
+        "change", [_rewrite_capture, _supersede_capture], ids=["rewritten", "newer"]
+    )
+    def test_a_handle_loaded_before_its_csv_pins_the_first_one_read(
+        self, tmp_path, change
+    ):
+        """With no CSV to pin at first, the first read that finds one pins it. #2227"""
+        registry = ReportRegistry()
+        directory = tmp_path / "signposted"
+        directory.mkdir()
+        handle = load_report(registry, performance_path=str(directory))["handle"]
+        # A miss keeps nothing, so a second one finds no error or empty pin held.
+        for _ in range(2):
+            with pytest.raises(FileNotFoundError):
+                tools.top_ops(registry, handle)
+
+        write_ops_perf(directory, signposted_rows())
+        whole = tools.top_ops(registry, handle)
+        change(directory)
+
+        with pytest.raises(ValueError, match="has changed since it was first read"):
+            self._ranged(registry, handle)
         assert tools.top_ops(registry, handle) == whole
 
     def test_a_newer_capture_beside_the_first_is_refused_too(self, tmp_path):

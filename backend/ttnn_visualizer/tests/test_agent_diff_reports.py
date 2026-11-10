@@ -880,6 +880,24 @@ class TestRepeats:
                 _registry(tmp_path), "report-1", "report-2", repeats_a=repeats
             )
 
+    def test_a_handle_loaded_before_its_csv_is_the_capture_it_then_reads(
+        self, tmp_path
+    ):
+        """Pinned to no capture, it would diff against its own capture as no change.
+        #2227"""
+        registry = ReportRegistry()
+        (tmp_path / "a").mkdir()
+        early = load_report(registry, performance_path=str(tmp_path / "a"))["handle"]
+        with pytest.raises(FileNotFoundError):
+            tools.top_ops(registry, early)
+        write_ops_perf(tmp_path / "a", smoke_rows())
+        later = load_report(registry, performance_path=str(tmp_path / "a"))["handle"]
+
+        with pytest.raises(
+            ValueError, match=f"{early!r} and {later!r} are the same capture"
+        ):
+            tools.diff_reports(registry, early, later)
+
     def test_a_capture_given_twice_is_refused_before_generating(self, tmp_path):
         """Counted twice it would sway a median; on both sides it diffs to nothing."""
         registry = ReportRegistry()

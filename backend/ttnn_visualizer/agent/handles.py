@@ -62,8 +62,8 @@ class CacheVariant(str, Enum):
     OPERATION_LINK = "operation_link"
     # Which signposts the performance CSV holds, read without generating a report.
     SIGNPOSTS = "signposts"
-    # The performance CSV the handle's first read came from, so a later read can
-    # tell whether it is still reading the same capture.
+    # The performance CSV the handle first found, so a later read can tell whether it
+    # is still reading the same capture.
     SOURCE = "source"
     # Each CSV row's tensor signature, which `diff_reports` matches on when asked.
     OP_SIGNATURES = "op_signatures"
@@ -129,7 +129,8 @@ class UnkeptSnapshot(Exception):
     """Raised by a builder that learns only as it builds that no handle may keep it.
 
     Totals read from a report generated with swallowed errors are one: the handle may
-    drop or evict that report, and its next read would then disagree with them.
+    drop or evict that report, and its next read would then disagree with them. A
+    source pin that found no CSV yet is another: kept, it would pin the handle to none.
     """
 
     def __init__(self, snapshot: object):
