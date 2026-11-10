@@ -1095,7 +1095,7 @@ class TestCaveats:
 
 class TestAnswerSize:
     def _answer(self, registry: ReportRegistry, handle: str) -> str:
-        result, _outcome = tool_call(
+        result, _ = tool_call(
             registry, "late_deallocations", {"handle": handle, "limit": 100}
         )
         assert not result.get("isError")
