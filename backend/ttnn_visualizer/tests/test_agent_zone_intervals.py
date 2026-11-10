@@ -819,6 +819,11 @@ class TestGaps:
                 id="core-not-whole",
             ),
             pytest.param(
+                modern_row(0, 1, "1.5", "BRISC", 1500, LOOP, "ZONE_START"),
+                True,
+                id="core-y-not-whole",
+            ),
+            pytest.param(
                 modern_row(0, 1, 1, "BRISC", "1500.5", LOOP, "ZONE_START"),
                 True,
                 id="cycles-not-whole",
