@@ -2502,6 +2502,22 @@ class TestZoneTimingsUnreadableCells:
                 modern_row("0.5", 1, 1, "BRISC", 500, "MATMUL", "ZONE_START"),
                 id="slot-not-whole",
             ),
+            pytest.param(
+                modern_row(0, "1.5", 1, "BRISC", 500, "MATMUL", "ZONE_START"),
+                id="core-x-not-whole",
+            ),
+            pytest.param(
+                modern_row(0, 1, "x", "BRISC", 500, "MATMUL", "ZONE_START"),
+                id="core-y-not-a-number",
+            ),
+            pytest.param(
+                modern_row(0, 1, 1, "BRISC", 500, "MATMUL", "ZONE_START", run="x"),
+                id="run-not-a-number",
+            ),
+            pytest.param(
+                modern_row(0, 1, 1, "BRISC", "2150.5", "MATMUL", "ZONE_END"),
+                id="cycles-not-whole",
+            ),
         ],
     )
     def test_a_row_with_a_cell_that_cannot_be_read_is_left_out(self, tmp_path, bad):
@@ -2515,10 +2531,86 @@ class TestZoneTimingsUnreadableCells:
             "left out."
         )
 
+    @pytest.mark.parametrize("cycles, total", [("1e300", 300), (-5, 300)])
+    def test_an_end_that_cannot_be_read_leaves_its_start_open(
+        self, tmp_path, cycles, total
+    ):
+        """Read, it would close the start: a total 301 digits long, or negative."""
+        result = self._answer(
+            tmp_path,
+            [
+                modern_row(0, 1, 1, "BRISC", 500, "MATMUL", "ZONE_START"),
+                modern_row(0, 1, 1, "BRISC", cycles, "MATMUL", "ZONE_END"),
+            ],
+        )
+
+        (zone,) = result["zones"]
+        assert (zone["occurrences"], zone["total_cycles"]) == (1, total)
+        assert result["caveat"].startswith("1 zone starts and 0 ends did not pair")
+        assert "1 rows have a slot, core, run or cycle count" in result["caveat"]
+
+    def test_a_row_with_no_zone_name_is_neither_a_zone_nor_unreadable(self, tmp_path):
+        """tt-metal writes timestamped data under no zone name, millions of rows."""
+        result = self._answer(
+            tmp_path, [modern_row(0, 1, 1, "BRISC", "x", "", "TS_DATA")]
+        )
+
+        assert [zone["zone"] for zone in result["zones"]] == ["MATMUL"]
+        assert "caveat" not in result
+
+    def test_a_log_without_phases_leaves_out_what_it_cannot_read_too(self, tmp_path):
+        """It counts occurrences only, but reads each row as the other zone tools do."""
+        rows = [
+            modern_row(0, 1, 1, "BRISC", 100, "MATMUL", "ZONE_START"),
+            modern_row(0, 1, 1, "BRISC", "x", "MATMUL", "ZONE_START"),
+        ]
+        write_device_log(tmp_path, *_drop_column(MODERN_HEADER, rows, "type"))
+        registry = ReportRegistry()
+        load_report(registry, performance_path=str(tmp_path))
+
+        result = tools.zone_timings(registry, "report-1")
+
+        (zone,) = result["zones"]
+        assert zone["occurrences"] == 1
+        assert "1 rows have a slot, core, run or cycle count" in result["caveat"]
+
     def test_a_log_pandas_cannot_parse_is_refused(self, tmp_path):
         """Refused, so the server counts it as one, not as a failure of the tool."""
         with pytest.raises(ValueError, match=DeviceLogProfilerQueries.DEVICE_LOG_FILE):
             self._answer(tmp_path, ['"unclosed,row'])
+
+    def test_the_refusal_is_kept_and_recorded_as_one(self, tmp_path):
+        """The same bytes fail the same way, so the log is read once."""
+        write_device_log(tmp_path, MODERN_HEADER, ['"unclosed,row'])
+        registry = ReportRegistry()
+        load_report(registry, performance_path=str(tmp_path))
+        with (
+            patch.object(
+                DeviceLogProfilerQueries,
+                "read_capture_metadata",
+                wraps=DeviceLogProfilerQueries.read_capture_metadata,
+            ) as read,
+            patch.object(server, "record_event") as record,
+        ):
+            responses = [
+                server.handle_message(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": index,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "zone_timings",
+                            "arguments": {"handle": "report-1"},
+                        },
+                    },
+                    server._tool_table(registry),
+                )
+                for index in range(2)
+            ]
+
+        assert all(response["result"]["isError"] for response in responses)
+        assert read.call_count == 1
+        assert record.call_args.kwargs["outcome"] is McpToolOutcome.REFUSED
 
 
 class TestZoneTimingsRead:

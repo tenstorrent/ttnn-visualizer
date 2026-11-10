@@ -511,8 +511,8 @@ def _inexact_as_floats(chunk: pd.DataFrame, columns: Sequence[str]) -> bool:
 
 
 def _fits_int64(numbers: pd.Series) -> np.ndarray:
-    """Whether each cell holds an int64, checked in the column's own dtype: read as
-    floats, an int64 column's top 512 values would round up to 2**63."""
+    """Whether each cell lies in int64's range, checked in the column's own dtype: read
+    as floats, an int64 column's top 512 values would round up to 2**63."""
     if pd.api.types.is_signed_integer_dtype(numbers):
         return np.ones(len(numbers), dtype=bool)
     if pd.api.types.is_unsigned_integer_dtype(numbers):
@@ -524,13 +524,12 @@ def _fits_int64(numbers: pd.Series) -> np.ndarray:
 
 
 def _is_whole(numbers: pd.Series) -> np.ndarray:
-    """Whether each cell is a whole number, which a cast to int64 would not truncate:
-    tt-metal writes slots, cores, runs and cycle counts as integers. #2259"""
+    """Whether each cell is whole, which a cast to int64 would not truncate; inf is, so
+    it pairs with `_fits_int64`. tt-metal writes all four columns as integers. #2259"""
     if pd.api.types.is_integer_dtype(numbers):
         return np.ones(len(numbers), dtype=bool)
     values = numbers.to_numpy(dtype=float)
-    with np.errstate(invalid="ignore"):
-        return np.floor(values) == values
+    return np.floor(values) == values
 
 
 def _whole_number_rows(
@@ -1466,8 +1465,8 @@ class DeviceLogProfilerQueries:
         for chunk in self._zone_chunks(columns):
             names = chunk["zone name"].astype(str).str.strip()
             named = (names != "") & (names != "nan")
-            # Read as the other zone queries read it, so a cell none of them reads is
-            # left out and counted here too, rather than failing or mis-totalling. #2258
+            # Shared with the other zone queries, so all three leave out and count the
+            # same unreadable rows. #2258
             chunk, readable = _whole_number_rows(
                 chunk[named].assign(**{"zone name": names[named]}),
                 self._WHOLE_NUMBER_COLUMNS,

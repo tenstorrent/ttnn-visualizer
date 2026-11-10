@@ -387,6 +387,23 @@ def test_int64_range_is_checked_in_the_columns_own_dtype(numbers, fits):
     assert csv_queries._fits_int64(numbers).tolist() == fits
 
 
+@pytest.mark.parametrize(
+    "numbers, whole",
+    [
+        pytest.param(pd.Series([0, 1, -5]), [True, True, True], id="int64"),
+        pytest.param(pd.Series([2**63], dtype="uint64"), [True], id="uint64"),
+        pytest.param(
+            pd.Series([1.0, -0.0, 0.5, float("nan"), float("inf")]),
+            [True, True, False, False, True],
+            id="float64",
+        ),
+    ],
+)
+def test_wholeness_is_its_own_check_beside_the_range(numbers, whole):
+    """inf is whole, which only `_fits_int64` leaves out. #2259"""
+    assert csv_queries._is_whole(numbers).tolist() == whole
+
+
 def test_only_the_non_negative_columns_refuse_a_negative():
     chunk = pd.DataFrame({"cycles": [-1.0, 5.0, 7.0], "core": [-1.0, -2.0, 3.0]})
 
