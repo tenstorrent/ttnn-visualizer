@@ -11,6 +11,7 @@ limit schema, so a second copy would eventually promise one cap and enforce anot
 column.
 """
 
+import hashlib
 from typing import TYPE_CHECKING, Any, Dict, Iterable, Optional
 
 if TYPE_CHECKING:
@@ -21,6 +22,12 @@ MAX_LIMIT = 100
 # Rows with every `include` group run to about 3 KB each, so 100 of them would pass
 # a client's MCP output cap; 25 stay under Claude Code's 25k tokens.
 MAX_DETAILED_LIMIT = 25
+
+# An op code past this is the capture's text, not tt-perf-report's: the longest across
+# 60 local captures is 80 characters. #2208
+MAX_OP_CODE_CHARS = 256
+# 64 bits: two of a report's texts cut alike sharing a digest is vanishingly unlikely.
+CUT_DIGEST_CHARS = 16
 
 
 # The captured graph a tool will read in one go. The largest real total across 85 local
@@ -65,6 +72,36 @@ def bounded(limit: Optional[int], maximum: int = MAX_LIMIT) -> int:
     return max(1, min(requested, maximum))
 
 
+def cut_text(
+    field: str, text: object, limit: int, digest: bool = False
+) -> Dict[str, object]:
+    """`text` under `field`, cut at `limit` characters with its full length, and with
+    `digest` a digest of the whole, since two texts can share a cut and a length."""
+    if not isinstance(text, str) or len(text) <= limit:
+        return {field: text}
+    fields: Dict[str, object] = {
+        field: text[:limit],
+        f"{field}_full_length": len(text),
+    }
+    if digest:
+        whole = hashlib.sha256(text.encode("utf-8", "surrogatepass")).hexdigest()
+        fields[f"{field}_digest"] = whole[:CUT_DIGEST_CHARS]
+    return fields
+
+
+def cut_op_code(field: str, op_code: object) -> Dict[str, object]:
+    """An op code as every tool shows one: past `MAX_OP_CODE_CHARS`, cut and told apart
+    by its digest from another cut alike."""
+    return cut_text(field, op_code, MAX_OP_CODE_CHARS, digest=True)
+
+
+def shown_in_text(text: str, limit: int = MAX_OP_CODE_CHARS) -> str:
+    """`text` for a sentence: past `limit` characters, cut and said to be."""
+    if len(text) <= limit:
+        return text
+    return f"{text[:limit]}… ({len(text):,} characters)"
+
+
 def normalised_choice(value: Optional[str]) -> Optional[str]:
     """A choice as `require_choice` compares it: trimmed and upper-cased, None if blank."""
     return (value.strip().upper() or None) if isinstance(value, str) else value
@@ -79,13 +116,18 @@ def require_choice(kind: str, value: str, allowed: Iterable[str]) -> None:
 
 
 __all__ = [
+    "CUT_DIGEST_CHARS",
     "DEFAULT_LIMIT",
     "GraphTooLargeError",
     "MAX_CAPTURED_GRAPH_CHARS",
     "MAX_DETAILED_LIMIT",
     "MAX_LIMIT",
+    "MAX_OP_CODE_CHARS",
     "bounded",
+    "cut_op_code",
+    "cut_text",
     "ensure_graph_readable",
     "normalised_choice",
     "require_choice",
+    "shown_in_text",
 ]

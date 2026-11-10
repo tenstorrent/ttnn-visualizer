@@ -580,8 +580,8 @@ two-call shapes of one op code moved by 9–18% while the op code as a whole mov
 the answer's caveat quotes that before a signature's move is read as a change. A signature
 past 300 characters is cut, `signature_full_length` gives its length, and `signature_digest`
 a digest of the whole signature, so two signatures cut alike are told apart. An op code past
-it is cut the same way, with `op_code_full_length` and `op_code_digest`
-(`raw_op_code_full_length` and `raw_op_code_digest` with signatures). With signatures
+256 characters is cut the same way, as every tool cuts one, with `op_code_full_length` and
+`op_code_digest` (`raw_op_code_full_length` and `raw_op_code_digest` with signatures). With signatures
 `changes` is capped at 25 rather than 100. A capture whose CSV has no tensor columns, or
 cannot be read, is refused. Older captures record a tile-padded size alone, where newer
 ones record `padded[logical]`, so an operation on a padded tensor has a different signature
@@ -765,6 +765,15 @@ is refused. A row whose slot, core, run or cycle count is not a number or does n
 64-bit integer, or whose cycle count is negative, is left out and counted in a caveat, and
 a zone whose every start was left out is refused with how many were unreadable that way
 and how many lay past the 200,000 core-RISC timelines followed at once.
+
+An op code longer than 256 characters is the capture's text, not tt-perf-report's; the
+longest across 60 local captures is 80. Every tool that shows one cuts it there: `top_ops`,
+`operation_detail` and `core_spread` rows, and `program_cache` and `diff_reports` entries. A
+cut one carries `op_code_full_length`, its length, and `op_code_digest`, a digest of the
+whole code, so two codes cut alike are told apart; groups are still kept by the whole code.
+`op_breakdown` cuts its group key, `op` or `op_category`, the same way, with `op_full_length`
+and `op_digest` or their `op_category_` twins, and a refusal that names an op code cuts it
+too.
 
 No zone tool shows a zone name longer than 256 characters or a RISC name longer than 32
 characters: such a name is the capture's text, not the tool's, and tt-metal's longest RISC

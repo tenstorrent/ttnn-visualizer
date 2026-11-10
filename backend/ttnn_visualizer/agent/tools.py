@@ -36,7 +36,9 @@ from ttnn_visualizer.agent.bounds import (
     MAX_DETAILED_LIMIT,
     MAX_LIMIT,
     bounded,
+    cut_op_code,
     require_choice,
+    shown_in_text,
 )
 from ttnn_visualizer.agent.cells import finite_number, whole_number
 from ttnn_visualizer.agent.handles import (
@@ -528,7 +530,7 @@ def project_row(row: Dict, metric: str = DEFAULT_METRIC) -> Dict[str, object]:
     """
     return {
         "id": row.get("id"),
-        "op_code": _display_op_code(row),
+        **cut_op_code("op_code", _display_op_code(row)),
         metric: _rounded(finite_number(row.get(SORTABLE_METRICS[metric]))),
         "cores": finite_number(row.get("cores")),
         "bound": row.get("bound") or None,
@@ -745,7 +747,10 @@ def program_cache(
         "op_code_count": len(entries),
         "returned": len(ranked),
         "grouped_by": "raw_op_code",
-        "op_codes": [asdict(entry) for entry in ranked],
+        "op_codes": [
+            {**asdict(entry), **cut_op_code("op_code", entry.op_code)}
+            for entry in ranked
+        ],
         "projection": projection(None),
         "note": PROGRAM_CACHE_NOTE,
     }
@@ -1173,7 +1178,7 @@ def _spread_rows(
             f"no performance row has id {perf_id!r}; pass a top_ops row's id, "
             "not an operation_id"
         )
-    op_code = _display_op_code(row)
+    op_code = shown_in_text(str(_display_op_code(row)))
     if is_signpost_row(row):
         raise ValueError(
             f"row {perf_id} is the signpost {op_code!r}, which runs on no core"
@@ -2085,7 +2090,10 @@ def op_breakdown(
         "returned": len(shown),
         "device_time_total": _rounded(device_time_total),
         "op_to_op_gap_total": _rounded(gap_total),
-        "groups": [{grouping.value: share.key, **entry(share)} for share in shown],
+        "groups": [
+            {**cut_op_code(grouping.value, share.key), **entry(share)}
+            for share in shown
+        ],
         "projection": projection(signposts, bool(report.get("signpost_range_ignored"))),
         "note": OP_BREAKDOWN_NOTE,
     }
