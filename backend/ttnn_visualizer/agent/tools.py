@@ -392,7 +392,8 @@ def _short_names(
 def with_signposts(
     registry: ReportRegistry, loaded: Dict[str, object]
 ) -> Dict[str, object]:
-    """`load_report`'s answer with the signposts a range can name.
+    """`load_report`'s answer with the signposts a range can name, or, for a CSV the
+    read cannot parse, with the tools that need it moved to unanswerable.
 
     Read once per capture, through the cache a range is later checked against, and
     only for a CSV `top_ops` can read. Listed as a refusal lists them, in the order
@@ -404,7 +405,8 @@ def with_signposts(
     try:
         resolved = _signposts(registry, str(loaded["handle"]))
     except DataFormatError as error:
-        # It does not parse past the lines the inventory checks, so no tool reads it.
+        # It passes the inventory's line scan but does not parse, so no tool needing it
+        # can answer.
         return without_performance_csv(loaded, str(error))
     except (OSError, TypeError, ValueError) as error:
         return {**loaded, "signposts_problem": str(error)}

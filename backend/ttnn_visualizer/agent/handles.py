@@ -782,8 +782,8 @@ def _inventory(instance: Instance, perf_csv: Optional[Path]) -> Dict[str, object
     }
 
 
-# The tools that read the performance CSV, which `_inventory` lists only for a CSV
-# tt-perf-report can read.
+# The tools that cannot answer without the performance CSV, which `_inventory` lists
+# only for a CSV tt-perf-report can read; `operation_detail` answers without its rows.
 PERF_CSV_TOOLS = frozenset(
     {"top_ops", "op_breakdown", "program_cache", "core_spread", "critical_path"}
 )
@@ -792,8 +792,8 @@ PERF_CSV_TOOLS = frozenset(
 def without_performance_csv(
     loaded: Dict[str, object], problem: str
 ) -> Dict[str, object]:
-    """`load_report`'s answer for a CSV found not to parse past the lines `_inventory`
-    checks: why, and the tools that read it unanswerable. #2198"""
+    """`load_report`'s answer for a CSV that passes `_inventory`'s line scan but does
+    not parse: why, and the tools that need it unanswerable. #2198"""
     answerable = cast(List[str], loaded["answerable"])
     return {
         **loaded,
@@ -869,8 +869,8 @@ def load_report(
 
 
 __all__ = [
-    "PERF_CSV_TOOLS",
     "OpsPerformanceQueries",
+    "PERF_CSV_TOOLS",
     "ReportRegistry",
     "UnknownHandleError",
     "load_report",

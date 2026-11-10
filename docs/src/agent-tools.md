@@ -142,7 +142,8 @@ when `zone_timings` is, the device log marks zone starts and ends in a `type` or
 is listed only when `zone_intervals` is and the performance CSV can be reported on.
 `top_ops`, `op_breakdown` and `program_cache` are listed only when the performance CSV can
 be reported on, and when it cannot, `performance_csv_problem` says why (`empty`,
-`no data rows`, `missing columns: …`, or that it cannot be read or decoded).
+`no data rows`, `missing columns: …`, that it cannot be read or decoded, or the parse
+error reading its signposts gave).
 Each database tool is checked against the tables it actually reads, so a truncated
 capture that holds `operations` but not `buffers` is reported as answering
 `find_operations` and nothing else, rather than advertising every tool and failing most
@@ -158,11 +159,11 @@ first call, which refuses one that is not a readable tt-npe trace.
   are absent when the performance CSV cannot be reported on, and empty when it holds no
   signposts. A name longer than 256 characters, which a range cannot take, is counted but
   left out of the list, and `signposts_unlisted_too_long` says how many were. A CSV whose
-  header and rows look sound but that pandas cannot parse, such as one with a quote left
-  open, has its parse error in `performance_csv_problem`, with the tools that read it
-  listed as unanswerable; when it parses but its signposts cannot be read,
-  `signposts_problem` says why. Loading reads the signposts, so a handle answers from the
-  CSV it was loaded on: one rewritten or superseded after that is refused, and
+  lines look sound but that pandas cannot tokenise when it reads the signposts, such as
+  one with a quote left open, has its parse error in `performance_csv_problem`, with the
+  tools that need it listed as unanswerable; when it parses but its signposts cannot be
+  read, `signposts_problem` says why. Loading reads the signposts, so a handle answers
+  from the CSV it was loaded on: one rewritten or superseded after that is refused, and
   `load_report` again gives a fresh handle.
 - `arch` and `device_count` are keyed by the file each was read from, since a handle's two
   reports can come from different runs. `arch.device_log` is the device profiler log's
