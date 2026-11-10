@@ -35,11 +35,10 @@ from ttnn_visualizer.agent import op_signatures, perf_detail, perf_flags, report
 from ttnn_visualizer.agent.bounds import (
     MAX_DETAILED_LIMIT,
     MAX_LIMIT,
-    MAX_OP_CODE_CHARS,
     bounded,
     cut_op_code,
     require_choice,
-    shown_in_text,
+    shown_op_code,
 )
 from ttnn_visualizer.agent.cells import finite_number, whole_number
 from ttnn_visualizer.agent.handles import (
@@ -1183,15 +1182,14 @@ def _spread_rows(
         )
     op_code = _display_op_code(row)
     if is_signpost_row(row):
-        signpost = shown_in_text(repr(op_code), MAX_OP_CODE_CHARS)
         raise ValueError(
-            f"row {perf_id} is the signpost {signpost}, which runs on no core"
+            f"row {perf_id} is the signpost {shown_op_code(op_code)}, which runs on no "
+            "core"
         )
     if not _spannable(row):
         raise ValueError(
-            f"row {perf_id} ({shown_in_text(str(op_code), MAX_OP_CODE_CHARS)}) has no "
-            "global call count or device, so it is a host op with no zones in the "
-            "device log"
+            f"row {perf_id} ({shown_op_code(op_code)}) has no global call count or "
+            "device, so it is a host op with no zones in the device log"
         )
     return [row]
 
@@ -2033,6 +2031,15 @@ def _breakdown_key(row: Dict, grouping: BreakdownGrouping) -> Optional[str]:
     return words[0] if words else None
 
 
+def _breakdown_group(
+    grouping: BreakdownGrouping, key: Optional[str]
+) -> Dict[str, object]:
+    # A category is one of tt-perf-report's own names, never the capture's text.
+    if grouping is BreakdownGrouping.OP_CATEGORY:
+        return {grouping.value: key}
+    return cut_op_code(grouping.value, key)
+
+
 def op_breakdown(
     registry: ReportRegistry,
     handle: str,
@@ -2096,8 +2103,7 @@ def op_breakdown(
         "device_time_total": _rounded(device_time_total),
         "op_to_op_gap_total": _rounded(gap_total),
         "groups": [
-            {**cut_op_code(grouping.value, share.key), **entry(share)}
-            for share in shown
+            {**_breakdown_group(grouping, share.key), **entry(share)} for share in shown
         ],
         "projection": projection(signposts, bool(report.get("signpost_range_ignored"))),
         "note": OP_BREAKDOWN_NOTE,

@@ -8,8 +8,8 @@ and how much captured graph a tool reads at once.
 Shared rather than declared per module: `server` quotes the caps to an agent in every
 limit schema, so a second copy would eventually promise one cap and enforce another.
 #2012 The graph guard is shared because the link and the failure tools read the same
-column. The text cuts are shared so that every tool cuts a capture's text, and an op
-code above all, the same way. #2208
+column. The text cuts are shared so that an op code is cut the same way wherever a tool
+shows one, as are the other texts that go through them; #2290 tracks the rest. #2208
 """
 
 import hashlib
@@ -27,7 +27,8 @@ MAX_DETAILED_LIMIT = 25
 # An op code past this is the capture's text, not tt-perf-report's: the longest a tool
 # shows across 67 local captures is a signpost's 91 characters. #2208
 MAX_OP_CODE_CHARS = 256
-# 64 bits: two of a report's texts cut alike sharing a digest is vanishingly unlikely.
+# 64 bits: a chance match between two texts cut alike is vanishingly unlikely, and a crafted
+# one fools only the display, since groups are kept by the whole text.
 CUT_DIGEST_CHARS = 16
 
 
@@ -101,6 +102,14 @@ def cut_op_code(field: str, op_code: object) -> Dict[str, object]:
     return cut_text(field, op_code, MAX_OP_CODE_CHARS, digest=True)
 
 
+def shown_op_code(op_code: object) -> str:
+    """An op code as a refusal quotes it: cut before it is quoted, so the cut and the
+    length it gives are the code's own."""
+    if isinstance(op_code, str) and len(op_code) > MAX_OP_CODE_CHARS:
+        return f"{op_code[:MAX_OP_CODE_CHARS]!r}... ({len(op_code)} characters)"
+    return repr(op_code)
+
+
 def shown_in_text(text: str, limit: int) -> str:
     """`text` for a sentence: past `limit` characters, cut and said to be."""
     if len(text) <= limit:
@@ -136,4 +145,5 @@ __all__ = [
     "normalised_choice",
     "require_choice",
     "shown_in_text",
+    "shown_op_code",
 ]

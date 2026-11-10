@@ -403,7 +403,8 @@ def classify(before: Side, after: Side, thresholds: Thresholds) -> Comparison:
 
 def group_fields(key: Hashable, match: DiffMatch) -> Dict[str, object]:
     """A group as an answer names it. A signature's code is the raw one, which
-    tt-perf-report has not suffixed with a matmul's shapes or a conv's config."""
+    tt-perf-report has not suffixed with a matmul's shapes or a conv's config. An empty
+    code or signature is answered as None, which each field here asks for itself."""
     if match is DiffMatch.OP_CODE:
         return cut_op_code("op_code", cast(str, key) or None)
     raw_op_code, signature = cast(Tuple[str, str], key)

@@ -131,10 +131,9 @@ class TestOpCodes:
         with pytest.raises(ValueError) as refusal:
             tools.core_spread(registry, "report-1", perf_id="1")
 
-        quoted = repr(f"{LONG} (signpost)")
-        assert f"is the signpost {quoted[:MAX_OP_CODE_CHARS]}... (" in str(
-            refusal.value
-        )
+        signpost = f"{LONG} (signpost)"
+        shown = f"{signpost[:MAX_OP_CODE_CHARS]!r}... ({len(signpost)} characters)"
+        assert f"is the signpost {shown}, which" in str(refusal.value)
         assert len(str(refusal.value)) < MAX_OP_CODE_CHARS + 100
 
     def test_a_host_op_refusal_cuts_its_op_code(self, report):
@@ -143,4 +142,5 @@ class TestOpCodes:
         with pytest.raises(ValueError) as refusal:
             tools.core_spread(registry, "report-1", perf_id="1")
 
-        assert f"row 1 ({LONG[:MAX_OP_CODE_CHARS]}... (" in str(refusal.value)
+        shown = f"{LONG[:MAX_OP_CODE_CHARS]!r}... ({len(LONG)} characters)"
+        assert f"row 1 ({shown}) has no" in str(refusal.value)
