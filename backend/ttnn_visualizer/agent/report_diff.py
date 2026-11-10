@@ -14,7 +14,7 @@ from fractions import Fraction
 from statistics import median
 from typing import Callable, Dict, FrozenSet, Hashable, List, Optional, Tuple, cast
 
-from ttnn_visualizer.agent.bounds import cut_op_code, cut_text
+from ttnn_visualizer.agent.bounds import cut_op_code, cut_text, shown_in_text
 from ttnn_visualizer.agent.cells import finite_number
 
 
@@ -110,10 +110,7 @@ def as_answered(figure: float) -> float:
 
 def _echoed(value: object) -> str:
     """`value` as a refusal names it, cut so an argument cannot fill the answer."""
-    shown = repr(value)
-    if len(shown) <= _MAX_ECHOED_CHARS:
-        return shown
-    return f"{shown[:_MAX_ECHOED_CHARS]}... ({len(shown)} characters)"
+    return shown_in_text(repr(value), _MAX_ECHOED_CHARS)
 
 
 @dataclass(frozen=True)

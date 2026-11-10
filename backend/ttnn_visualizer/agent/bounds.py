@@ -8,7 +8,8 @@ and how much captured graph a tool reads at once.
 Shared rather than declared per module: `server` quotes the caps to an agent in every
 limit schema, so a second copy would eventually promise one cap and enforce another.
 #2012 The graph guard is shared because the link and the failure tools read the same
-column.
+column. The text cuts are shared so that every tool cuts a capture's text, and an op
+code above all, the same way. #2208
 """
 
 import hashlib
@@ -23,8 +24,8 @@ MAX_LIMIT = 100
 # a client's MCP output cap; 25 stay under Claude Code's 25k tokens.
 MAX_DETAILED_LIMIT = 25
 
-# An op code past this is the capture's text, not tt-perf-report's: the longest across
-# 60 local captures is 80 characters. #2208
+# An op code past this is the capture's text, not tt-perf-report's: the longest a tool
+# shows across 67 local captures is a signpost's 91 characters. #2208
 MAX_OP_CODE_CHARS = 256
 # 64 bits: two of a report's texts cut alike sharing a digest is vanishingly unlikely.
 CUT_DIGEST_CHARS = 16
@@ -76,15 +77,20 @@ def cut_text(
     field: str, text: object, limit: int, digest: bool = False
 ) -> Dict[str, object]:
     """`text` under `field`, cut at `limit` characters with its full length, and with
-    `digest` a digest of the whole, since two texts can share a cut and a length."""
-    if not isinstance(text, str) or len(text) <= limit:
+    `digest` a digest of the whole, since two texts can share a cut and a length. A
+    BLOB a report keeps where text belongs is cut by its bytes."""
+    if not isinstance(text, (str, bytes)) or len(text) <= limit:
         return {field: text}
     fields: Dict[str, object] = {
         field: text[:limit],
         f"{field}_full_length": len(text),
     }
     if digest:
-        whole = hashlib.sha256(text.encode("utf-8", "surrogatepass")).hexdigest()
+        # A lone surrogate is hashed as written rather than failing the answer.
+        encoded = (
+            text.encode("utf-8", "surrogatepass") if isinstance(text, str) else text
+        )
+        whole = hashlib.sha256(encoded).hexdigest()
         fields[f"{field}_digest"] = whole[:CUT_DIGEST_CHARS]
     return fields
 
@@ -95,11 +101,11 @@ def cut_op_code(field: str, op_code: object) -> Dict[str, object]:
     return cut_text(field, op_code, MAX_OP_CODE_CHARS, digest=True)
 
 
-def shown_in_text(text: str, limit: int = MAX_OP_CODE_CHARS) -> str:
+def shown_in_text(text: str, limit: int) -> str:
     """`text` for a sentence: past `limit` characters, cut and said to be."""
     if len(text) <= limit:
         return text
-    return f"{text[:limit]}… ({len(text):,} characters)"
+    return f"{text[:limit]}... ({len(text)} characters)"
 
 
 def normalised_choice(value: Optional[str]) -> Optional[str]:

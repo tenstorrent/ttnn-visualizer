@@ -35,6 +35,7 @@ from ttnn_visualizer.agent import op_signatures, perf_detail, perf_flags, report
 from ttnn_visualizer.agent.bounds import (
     MAX_DETAILED_LIMIT,
     MAX_LIMIT,
+    MAX_OP_CODE_CHARS,
     bounded,
     cut_op_code,
     require_choice,
@@ -687,6 +688,11 @@ class _ProgramCalls:
     first_repeat_miss_perf_id: Optional[str] = None
 
 
+def _program_calls_entry(entry: _ProgramCalls) -> Dict[str, object]:
+    fields = asdict(entry)
+    return {**cut_op_code("op_code", fields.pop("op_code")), **fields}
+
+
 def program_cache(
     registry: ReportRegistry, handle: str, limit: Optional[int] = None
 ) -> Dict[str, object]:
@@ -747,10 +753,7 @@ def program_cache(
         "op_code_count": len(entries),
         "returned": len(ranked),
         "grouped_by": "raw_op_code",
-        "op_codes": [
-            {**asdict(entry), **cut_op_code("op_code", entry.op_code)}
-            for entry in ranked
-        ],
+        "op_codes": [_program_calls_entry(entry) for entry in ranked],
         "projection": projection(None),
         "note": PROGRAM_CACHE_NOTE,
     }
@@ -1178,15 +1181,17 @@ def _spread_rows(
             f"no performance row has id {perf_id!r}; pass a top_ops row's id, "
             "not an operation_id"
         )
-    op_code = shown_in_text(str(_display_op_code(row)))
+    op_code = _display_op_code(row)
     if is_signpost_row(row):
+        signpost = shown_in_text(repr(op_code), MAX_OP_CODE_CHARS)
         raise ValueError(
-            f"row {perf_id} is the signpost {op_code!r}, which runs on no core"
+            f"row {perf_id} is the signpost {signpost}, which runs on no core"
         )
     if not _spannable(row):
         raise ValueError(
-            f"row {perf_id} ({op_code}) has no global call count or device, so it is "
-            "a host op with no zones in the device log"
+            f"row {perf_id} ({shown_in_text(str(op_code), MAX_OP_CODE_CHARS)}) has no "
+            "global call count or device, so it is a host op with no zones in the "
+            "device log"
         )
     return [row]
 

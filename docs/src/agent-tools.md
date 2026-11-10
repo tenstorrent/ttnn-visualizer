@@ -182,6 +182,15 @@ Five properties are deliberate, and worth knowing before you act on a number.
 report runs to tens of thousands of rows of about thirty-five fields. Limits are capped
 server-side, so asking for more returns the cap rather than the report.
 
+An op code longer than 256 characters is the capture's text, not tt-perf-report's; the
+longest a tool shows across 67 local captures is a signpost's, at 91. Every tool that
+shows one cuts it there: `top_ops`, `operation_detail` and `core_spread` rows, and
+`program_cache` and `diff_reports` entries. A cut one carries `op_code_full_length`, its
+length, and `op_code_digest`, a digest of the whole code, so two codes cut alike are told
+apart; groups are still kept by the whole code. `op_breakdown` cuts its `op` key the same
+way, with `op_full_length` and `op_digest`, and a refusal that names an op code cuts it
+too.
+
 **No rows are hidden from you.** The web application's performance view hides host
 operations by default and can narrow to a signpost range. Those are display choices, and an
 agent handed them unannounced would reason confidently about a partial set. The tools read
@@ -581,7 +590,8 @@ the answer's caveat quotes that before a signature's move is read as a change. A
 past 300 characters is cut, `signature_full_length` gives its length, and `signature_digest`
 a digest of the whole signature, so two signatures cut alike are told apart. An op code past
 256 characters is cut the same way, as every tool cuts one, with `op_code_full_length` and
-`op_code_digest` (`raw_op_code_full_length` and `raw_op_code_digest` with signatures). With signatures
+`op_code_digest` (`raw_op_code_full_length` and `raw_op_code_digest` with signatures).
+With signatures
 `changes` is capped at 25 rather than 100. A capture whose CSV has no tensor columns, or
 cannot be read, is refused. Older captures record a tile-padded size alone, where newer
 ones record `padded[logical]`, so an operation on a padded tensor has a different signature
@@ -765,15 +775,6 @@ is refused. A row whose slot, core, run or cycle count is not a number or does n
 64-bit integer, or whose cycle count is negative, is left out and counted in a caveat, and
 a zone whose every start was left out is refused with how many were unreadable that way
 and how many lay past the 200,000 core-RISC timelines followed at once.
-
-An op code longer than 256 characters is the capture's text, not tt-perf-report's; the
-longest across 60 local captures is 80. Every tool that shows one cuts it there: `top_ops`,
-`operation_detail` and `core_spread` rows, and `program_cache` and `diff_reports` entries. A
-cut one carries `op_code_full_length`, its length, and `op_code_digest`, a digest of the
-whole code, so two codes cut alike are told apart; groups are still kept by the whole code.
-`op_breakdown` cuts its group key, `op` or `op_category`, the same way, with `op_full_length`
-and `op_digest` or their `op_category_` twins, and a refusal that names an op code cuts it
-too.
 
 No zone tool shows a zone name longer than 256 characters or a RISC name longer than 32
 characters: such a name is the capture's text, not the tool's, and tt-metal's longest RISC
