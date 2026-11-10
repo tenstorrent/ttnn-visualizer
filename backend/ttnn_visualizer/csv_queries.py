@@ -346,6 +346,9 @@ ACCUMULATE_FLUSH_ZONES = frozenset({"PROFILER-DRAM-PUSH", "PROFILER-NOC-FLUSH"})
 MAX_ZONE_TIMELINES = 200_000
 # Distinct zone names counted for a refusal to list; a malformed log can name every row.
 MAX_COUNTED_ZONE_NAMES = 1_000
+# Intervals a pass of every zone keeps for its handle, 32 MB as int64: past it each zone
+# is read alone. The largest local log, 184 MiB, holds 251k.
+MAX_KEPT_ZONE_INTERVALS = 4_000_000
 
 # Serialised reports kept per process. The cache is shared by every user, instance
 # and comparison report the worker serves, so four entries only cover one session's
@@ -620,6 +623,19 @@ class ZoneIntervals:
     untracked_starts: int
 
 
+def _pairing_counts(
+    unmatched_starts: int = 0, unmatched_ends: int = 0, dropped_starts: int = 0
+) -> Dict[str, int]:
+    """What did not pair, in the shape every zone query answers it."""
+    return {
+        "unmatched_starts": unmatched_starts,
+        "unmatched_ends": unmatched_ends,
+        # Non-zero only past `MAX_OPEN_ZONE_STARTS`, which a well-formed capture cannot
+        # reach. Reported so a bounded read is never mistaken for a complete one.
+        "dropped_starts": dropped_starts,
+    }
+
+
 class _ZonePairer:
     """Pairs each zone start with the end that closes it, under the open-start ceiling.
 
@@ -675,11 +691,11 @@ class _ZonePairer:
             set(open_starts) | set(self.unpaired_ends_by) | set(self.dropped_starts_by)
         )
         return {
-            group: {
-                "unmatched_starts": open_starts[group],
-                "unmatched_ends": self.unpaired_ends_by[group],
-                "dropped_starts": self.dropped_starts_by[group],
-            }
+            group: _pairing_counts(
+                open_starts[group],
+                self.unpaired_ends_by[group],
+                self.dropped_starts_by[group],
+            )
             for group in groups
         }
 
@@ -691,14 +707,9 @@ class _ZonePairer:
         starts. Either way the figures describe only what paired, and a caller
         cannot see that from the figures themselves.
         """
-        pairing = {
-            "unmatched_starts": len(self.open_starts),
-            "unmatched_ends": self.unpaired_ends,
-            # Non-zero only past `MAX_OPEN_ZONE_STARTS`, which a well-formed
-            # capture cannot reach. Reported so a bounded read is never mistaken
-            # for a complete one.
-            "dropped_starts": self.dropped_starts,
-        }
+        pairing = _pairing_counts(
+            len(self.open_starts), self.unpaired_ends, self.dropped_starts
+        )
         if any(pairing.values()):
             logger.info(
                 "%s: %d zone starts and %d ends did not pair; %d starts dropped "
@@ -726,6 +737,7 @@ class _ZoneReader:
         self.across_flush = 0
         self.out_of_order = 0
         self.displaced = 0
+        self.kept_intervals = 0
 
     def take(
         self, timeline: RiscTimeline, run: _OpenRun, phase: str, cycles: int
@@ -761,6 +773,7 @@ class _ZoneReader:
                 self.across_flush += 1
             else:
                 state.repeats.intervals.append(cycles - state.last_start)
+                self.kept_intervals += 1
         state.flushes_then = flushes
         state.last_start = cycles
 
@@ -800,7 +813,7 @@ class ZoneIntervalPass:
         reserved = zone.endswith(RESERVED_ZONE_SUFFIXES)
         if reader is None:
             timelines: Dict[RiscTimeline, ZoneRepeats] = {}
-            pairing = {"unmatched_starts": 0, "unmatched_ends": 0, "dropped_starts": 0}
+            pairing = _pairing_counts()
             across_flush = out_of_order = 0
         else:
             timelines = {
@@ -827,7 +840,7 @@ class ZoneIntervalPass:
             untracked_starts=self.untracked_starts,
         )
 
-    def follow(self, readers: Dict[str, _ZoneReader]) -> "ZoneIntervalPass":
+    def _follow(self, readers: Dict[str, _ZoneReader]) -> "ZoneIntervalPass":
         """Read each zone the pass followed, so none of its readers is kept."""
         self.followed = {
             name: self._read(name, reader) for name, reader in readers.items()
@@ -835,8 +848,41 @@ class ZoneIntervalPass:
         return self
 
 
+def _past_what_a_pass_holds(
+    readers: Dict[str, "_ZoneReader"], read_alone: Set[str]
+) -> Optional[str]:
+    """Why a pass of every zone holds more than it may, or None: in all its zones, no
+    more than one zone's read holds at most, and no more intervals than a handle keeps.
+    """
+    if len(readers) > MAX_COUNTED_ZONE_NAMES:
+        return f"the log names more than {MAX_COUNTED_ZONE_NAMES} zones"
+    if len(read_alone) > MAX_COUNTED_ZONE_NAMES:
+        return (
+            f"more than {MAX_COUNTED_ZONE_NAMES} names are on rows that neither start "
+            "nor end a zone"
+        )
+    if sum(len(reader.timelines) for reader in readers.values()) > MAX_ZONE_TIMELINES:
+        return f"its zones' timelines total more than {MAX_ZONE_TIMELINES}"
+    if (
+        sum(len(reader.pairer.open_starts) for reader in readers.values())
+        > MAX_OPEN_ZONE_STARTS
+    ):
+        return f"its zones hold more than {MAX_OPEN_ZONE_STARTS} open starts"
+    if (
+        sum(reader.kept_intervals for reader in readers.values())
+        > MAX_KEPT_ZONE_INTERVALS
+    ):
+        return f"its zones hold more than {MAX_KEPT_ZONE_INTERVALS} intervals"
+    return None
+
+
 class _Unheld(Exception):
     """A log that one pass of every zone cannot read as each zone's own read would."""
+
+    def __init__(self, reason: str, rows_read: int) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.rows_read = rows_read
 
 
 @dataclass(frozen=True)
@@ -1647,7 +1693,14 @@ class DeviceLogProfilerQueries:
         """
         try:
             return self._zone_interval_pass(None)
-        except _Unheld:
+        except _Unheld as unheld:
+            logger.info(
+                "%s: one pass of every zone gave up in its first %d rows, as %s; "
+                "each zone is read alone",
+                self.DEVICE_LOG_FILE,
+                unheld.rows_read,
+                unheld.reason,
+            )
             return None
 
     def _zone_interval_pass(self, only: Optional[str]) -> ZoneIntervalPass:
@@ -1673,8 +1726,13 @@ class DeviceLogProfilerQueries:
         unreadable_starts: Counter = Counter()
         unreadable_kernel_starts = unreadable_markers = untracked = untracked_starts = 0
         accumulated = timestamped = zone_names_capped = False
+        rows_read = 0
+
+        def unheld(reason: str) -> _Unheld:
+            return _Unheld(reason, rows_read)
 
         for chunk in self._zone_chunks(columns):
+            rows_read += len(chunk)
             names = chunk["zone name"].astype(str).str.strip()
             phases = chunk[phase_column].astype(str).str.strip()
             starts = phases == start_token
@@ -1690,7 +1748,9 @@ class DeviceLogProfilerQueries:
                 ):
                     zone_starts[name] += count
                 elif every:
-                    raise _Unheld
+                    raise unheld(
+                        f"the log starts more than {MAX_COUNTED_ZONE_NAMES} zones"
+                    )
                 else:
                     zone_names_capped = True
             # Firmware and kernel zones have slots of their own, outside the L1 cap.
@@ -1722,7 +1782,7 @@ class DeviceLogProfilerQueries:
             )
 
             if every and _inexact_as_floats(chunk, self._WHOLE_NUMBER_COLUMNS):
-                raise _Unheld
+                raise unheld("a chunk reads as floats past what they hold exactly")
             whole, readable = _whole_number_rows(
                 chunk,
                 self._WHOLE_NUMBER_COLUMNS,
@@ -1763,7 +1823,10 @@ class DeviceLogProfilerQueries:
                 if run is None:
                     if len(open_runs) >= MAX_ZONE_TIMELINES:
                         if every:
-                            raise _Unheld
+                            raise unheld(
+                                f"the log has more than {MAX_ZONE_TIMELINES} core-RISC "
+                                "timelines"
+                            )
                         untracked += 1
                         untracked_starts += name == only and phase == start_token
                         continue
@@ -1776,7 +1839,10 @@ class DeviceLogProfilerQueries:
                         if kernel_start:
                             seen = set()
                         elif run_id in seen:
-                            raise _Unheld
+                            raise unheld(
+                                "a run host ID comes back on a timeline before its "
+                                "next kernel start"
+                            )
                         seen.add(run_id)
                     run.close()
                     run = open_runs[timeline] = _OpenRun(run_id, next(seqs), seen=seen)
@@ -1795,16 +1861,10 @@ class DeviceLogProfilerQueries:
                     reader = readers[name] = _ZoneReader(name, start_token, end_token)
                 reader.take(timeline, run, phase, cycles)
 
-            # What one zone's read holds at most, the pass of every zone holds in all.
-            if every and (
-                len(readers) > MAX_COUNTED_ZONE_NAMES
-                or len(read_alone) > MAX_COUNTED_ZONE_NAMES
-                or sum(len(reader.timelines) for reader in readers.values())
-                > MAX_ZONE_TIMELINES
-                or sum(len(reader.pairer.open_starts) for reader in readers.values())
-                > MAX_OPEN_ZONE_STARTS
-            ):
-                raise _Unheld
+            if every:
+                past = _past_what_a_pass_holds(readers, read_alone)
+                if past is not None:
+                    raise unheld(past)
 
         for run in open_runs.values():
             run.close()
@@ -1820,7 +1880,7 @@ class DeviceLogProfilerQueries:
             unreadable_starts=unreadable_starts,
             untracked=untracked,
             untracked_starts=untracked_starts,
-        ).follow(readers)
+        )._follow(readers)
 
     @staticmethod
     def get_raw_csv(instance: Instance):
