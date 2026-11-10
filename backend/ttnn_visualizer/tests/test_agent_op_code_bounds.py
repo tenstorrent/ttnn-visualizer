@@ -24,8 +24,8 @@ from ttnn_visualizer.tests.test_device_log_columns import (
 )
 
 LONG = "Matmul" + "x" * MAX_OP_CODE_CHARS
-# Its first `MAX_OP_CODE_CHARS` are LONG's, so only the digest tells them apart.
-TWIN = LONG + "y"
+# Cut alike and as long as LONG, so only the digest tells them apart.
+TWIN = LONG[:-1] + "y"
 
 
 class TestCutText:
@@ -52,7 +52,7 @@ class TestCutText:
 
     def test_a_text_for_a_sentence_says_it_was_cut(self):
         assert shown_in_text("abc", 3) == "abc"
-        assert shown_in_text("abcdefg", 3) == "abc… (7 characters)"
+        assert shown_in_text("abcdefg", 3) == "abc... (7 characters)"
 
 
 @pytest.fixture
@@ -103,11 +103,15 @@ class TestOpCodes:
 
         entries = tools.program_cache(registry, "report-1")["op_codes"]
 
-        by_length = {entry["op_code_full_length"]: entry for entry in entries}
-        assert sorted(by_length) == [len(LONG), len(TWIN)]
-        _assert_cut(by_length[len(LONG)], "op_code", LONG)
-        _assert_cut(by_length[len(TWIN)], "op_code", TWIN)
+        assert len(entries) == 2
+        for entry in entries:
+            _assert_cut(entry, "op_code", LONG)
         assert entries[0]["op_code_digest"] != entries[1]["op_code_digest"]
+        assert list(entries[0])[:3] == [
+            "op_code",
+            "op_code_full_length",
+            "op_code_digest",
+        ]
 
     def test_op_breakdown_cuts_its_group_key_and_keeps_groups_apart(self, report):
         registry = report([_row(id="1", op_code=LONG), _row(id="2", op_code=TWIN)])
@@ -115,7 +119,7 @@ class TestOpCodes:
         groups = tools.op_breakdown(registry, "report-1")["groups"]
 
         assert len(groups) == 2
-        assert {group["op_full_length"] for group in groups} == {len(LONG), len(TWIN)}
+        assert {group["op_full_length"] for group in groups} == {len(LONG)}
         assert len({group["op_digest"] for group in groups}) == 2
         assert {group["op"] for group in groups} == {LONG[:MAX_OP_CODE_CHARS]}
 
@@ -127,5 +131,16 @@ class TestOpCodes:
         with pytest.raises(ValueError) as refusal:
             tools.core_spread(registry, "report-1", perf_id="1")
 
-        assert f"is the signpost '{LONG[:MAX_OP_CODE_CHARS]}…" in str(refusal.value)
+        quoted = repr(f"{LONG} (signpost)")
+        assert f"is the signpost {quoted[:MAX_OP_CODE_CHARS]}... (" in str(
+            refusal.value
+        )
         assert len(str(refusal.value)) < MAX_OP_CODE_CHARS + 100
+
+    def test_a_host_op_refusal_cuts_its_op_code(self, report):
+        registry = report([_row(op_code=LONG, global_call_count="", device="")])
+
+        with pytest.raises(ValueError) as refusal:
+            tools.core_spread(registry, "report-1", perf_id="1")
+
+        assert f"row 1 ({LONG[:MAX_OP_CODE_CHARS]}... (" in str(refusal.value)

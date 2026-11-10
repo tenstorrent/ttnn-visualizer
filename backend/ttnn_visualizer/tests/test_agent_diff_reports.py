@@ -1699,6 +1699,19 @@ class TestSignatureKeys:
         assert change["op_code_full_length"] == len(long_code)
         assert len(change["op_code_digest"]) == CUT_DIGEST_CHARS
 
+    def test_a_raw_op_code_past_the_cut_is_cut_in_a_signatures_group(self, tmp_path):
+        long_code = "Matmul" + "x" * MAX_OP_CODE_CHARS
+        rows = {
+            "report-1": [_row(raw_op_code=long_code, device_time="10.0")],
+            "report-2": [_row(raw_op_code=long_code, device_time="20.0")],
+        }
+
+        (change,) = self._diff(tmp_path, rows)["changes"]
+
+        assert change["raw_op_code"] == long_code[:MAX_OP_CODE_CHARS]
+        assert change["raw_op_code_full_length"] == len(long_code)
+        assert len(change["raw_op_code_digest"]) == CUT_DIGEST_CHARS
+
 
 class TestAnswerBudget:
     @pytest.fixture(autouse=True)
