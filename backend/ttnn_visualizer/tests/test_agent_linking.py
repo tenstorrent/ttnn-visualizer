@@ -1386,10 +1386,6 @@ class TestOperationDetailLink:
 class TestServerRouting:
     """Reverting either handler to its unlinked tool must fail something."""
 
-    @pytest.fixture(autouse=True)
-    def _never_touch_the_real_event_log(self, event_log_directory):
-        """Any tools/call reaches the recorder; none may write outside tmp_path."""
-
     def _call(self, registry, name, arguments):
         response = server.handle_message(
             {

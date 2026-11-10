@@ -351,7 +351,7 @@ class TestToolsCarryLinks:
             "late_deallocations",
         ],
     )
-    def test_a_call_without_a_handle_is_still_refused(self, event_log_directory, tool):
+    def test_a_call_without_a_handle_is_still_refused(self, tool):
         """The wrapper must not read the handle before the tool reports it missing."""
         response = server.handle_message(
             {
