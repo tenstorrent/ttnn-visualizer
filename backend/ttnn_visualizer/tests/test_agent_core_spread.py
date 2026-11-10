@@ -100,6 +100,7 @@ class TestStatistics:
             {"x": 1, "y": 1, "span_us": 1.2},
         ]
         assert "by_risc_unlisted_too_long" not in op
+        assert "by_risc_unlisted_past_cap" not in op
 
     def test_each_risc_is_spread_on_its_own(self, tmp_path):
         op = _spread(tmp_path, THREE_CORES, [_op()], perf_id="1")["ops"][0]
@@ -126,6 +127,38 @@ class TestStatistics:
         listed = sorted([*names, "BRISC", "TRISC_0"])
         assert list(op["by_risc"]) == listed[: tools.MAX_LISTED_RISCS]
         assert op["by_risc_unlisted_past_cap"] == len(listed) - tools.MAX_LISTED_RISCS
+
+    def test_as_many_risc_names_as_the_cap_are_all_listed(self, tmp_path):
+        names = [f"RISC_{index:02}" for index in range(tools.MAX_LISTED_RISCS - 2)]
+        rows = [
+            *THREE_CORES,
+            *[row for name in names for row in _zone(0, 1, 1, name, 0, 4000)],
+        ]
+
+        op = _spread(tmp_path, rows, [_op()], perf_id="1")["ops"][0]
+
+        assert len(op["by_risc"]) == tools.MAX_LISTED_RISCS
+        assert "by_risc_unlisted_past_cap" not in op
+
+    def test_a_name_too_long_to_show_takes_no_place_under_the_cap(self, tmp_path):
+        """Counted once, as too long, though it sorts before every name listed."""
+        too_long = "A" * (tools.MAX_RISC_NAME_LENGTH + 1)
+        names = [f"RISC_{index:02}" for index in range(tools.MAX_LISTED_RISCS + 8)]
+        rows = [
+            *THREE_CORES,
+            *[
+                row
+                for name in [too_long, *names]
+                for row in _zone(0, 1, 1, name, 0, 4000)
+            ],
+        ]
+
+        op = _spread(tmp_path, rows, [_op()], perf_id="1")["ops"][0]
+
+        short = sorted([*names, "BRISC", "TRISC_0"])
+        assert list(op["by_risc"]) == short[: tools.MAX_LISTED_RISCS]
+        assert op["by_risc_unlisted_too_long"] == 1
+        assert op["by_risc_unlisted_past_cap"] == len(short) - tools.MAX_LISTED_RISCS
 
     def test_a_risc_name_too_long_to_show_is_counted_rather_than_listed(self, tmp_path):
         """Its kernel still sets its core's span, which names no RISC."""
