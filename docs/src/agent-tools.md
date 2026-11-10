@@ -182,6 +182,18 @@ Five properties are deliberate, and worth knowing before you act on a number.
 report runs to tens of thousands of rows of about thirty-five fields. Limits are capped
 server-side, so asking for more returns the cap rather than the report.
 
+An op code longer than 256 characters is the capture's text, not tt-perf-report's; the
+longest a tool shows across 67 local captures is a signpost's, at 91. Every tool that
+shows one cuts it there: `top_ops`, `operation_detail` and `core_spread` rows, and
+`program_cache` and `diff_reports` entries. A cut one carries `op_code_full_length`, its
+length, and `op_code_digest`, a digest of the whole code, so two codes cut alike are told
+apart; groups are still kept by the whole code. `op_breakdown` cuts its `op` key the same
+way, with `op_full_length` and `op_digest`; an `op_category` is one of tt-perf-report's own
+names, so it is never cut. A refusal that quotes an op code cuts it too. A signpost name is
+the exception: past 256 characters it is counted rather than shown, both in `load_report`'s
+list and in the names a refusal of an unknown signpost lists, since a cut name could not be
+passed back as a range's bound.
+
 **No rows are hidden from you.** The web application's performance view hides host
 operations by default and can narrow to a signpost range. Those are display choices, and an
 agent handed them unannounced would reason confidently about a partial set. The tools read
@@ -580,13 +592,13 @@ two-call shapes of one op code moved by 9–18% while the op code as a whole mov
 the answer's caveat quotes that before a signature's move is read as a change. A signature
 past 300 characters is cut, `signature_full_length` gives its length, and `signature_digest`
 a digest of the whole signature, so two signatures cut alike are told apart. An op code past
-it is cut the same way, with `op_code_full_length` and `op_code_digest`
-(`raw_op_code_full_length` and `raw_op_code_digest` with signatures). With signatures
-`changes` is capped at 25 rather than 100. A capture whose CSV has no tensor columns, or
-cannot be read, is refused. Older captures record a tile-padded size alone, where newer
-ones record `padded[logical]`, so an operation on a padded tensor has a different signature
-in each; `mismatched` names `tensor_sizes` when the captures differ in it, as `padded` or
-`padded[logical]` by handle.
+256 characters is cut the same way, as every tool cuts one, with `op_code_full_length` and
+`op_code_digest` (`raw_op_code_full_length` and `raw_op_code_digest` with signatures).
+With signatures `changes` is capped at 25 rather than 100. A capture whose CSV has no
+tensor columns, or cannot be read, is refused. Older captures record a tile-padded size
+alone, where newer ones record `padded[logical]`, so an operation on a padded tensor has a
+different signature in each; `mismatched` names `tensor_sizes` when the captures differ in
+it, as `padded` or `padded[logical]` by handle.
 
 When the captures' device logs name different architectures, clocks or compute core
 counts, or their CSVs hold rows for different numbers of devices, `mismatched` lists the

@@ -36,7 +36,9 @@ from ttnn_visualizer.agent.bounds import (
     MAX_DETAILED_LIMIT,
     MAX_LIMIT,
     bounded,
+    cut_op_code,
     require_choice,
+    shown_op_code,
 )
 from ttnn_visualizer.agent.cells import finite_number, whole_number
 from ttnn_visualizer.agent.handles import (
@@ -528,7 +530,7 @@ def project_row(row: Dict, metric: str = DEFAULT_METRIC) -> Dict[str, object]:
     """
     return {
         "id": row.get("id"),
-        "op_code": _display_op_code(row),
+        **cut_op_code("op_code", _display_op_code(row)),
         metric: _rounded(finite_number(row.get(SORTABLE_METRICS[metric]))),
         "cores": finite_number(row.get("cores")),
         "bound": row.get("bound") or None,
@@ -685,6 +687,11 @@ class _ProgramCalls:
     first_repeat_miss_perf_id: Optional[str] = None
 
 
+def _program_calls_entry(entry: _ProgramCalls) -> Dict[str, object]:
+    fields = asdict(entry)
+    return {**cut_op_code("op_code", fields.pop("op_code")), **fields}
+
+
 def program_cache(
     registry: ReportRegistry, handle: str, limit: Optional[int] = None
 ) -> Dict[str, object]:
@@ -745,7 +752,7 @@ def program_cache(
         "op_code_count": len(entries),
         "returned": len(ranked),
         "grouped_by": "raw_op_code",
-        "op_codes": [asdict(entry) for entry in ranked],
+        "op_codes": [_program_calls_entry(entry) for entry in ranked],
         "projection": projection(None),
         "note": PROGRAM_CACHE_NOTE,
     }
@@ -1176,12 +1183,13 @@ def _spread_rows(
     op_code = _display_op_code(row)
     if is_signpost_row(row):
         raise ValueError(
-            f"row {perf_id} is the signpost {op_code!r}, which runs on no core"
+            f"row {perf_id} is the signpost {shown_op_code(op_code)}, which runs on no "
+            "core"
         )
     if not _spannable(row):
         raise ValueError(
-            f"row {perf_id} ({op_code}) has no global call count or device, so it is "
-            "a host op with no zones in the device log"
+            f"row {perf_id} ({shown_op_code(op_code)}) has no global call count or "
+            "device, so it is a host op with no zones in the device log"
         )
     return [row]
 
@@ -2023,6 +2031,15 @@ def _breakdown_key(row: Dict, grouping: BreakdownGrouping) -> Optional[str]:
     return words[0] if words else None
 
 
+def _breakdown_group(
+    grouping: BreakdownGrouping, key: Optional[str]
+) -> Dict[str, object]:
+    # A category is one of tt-perf-report's own names, never the capture's text.
+    if grouping is BreakdownGrouping.OP_CATEGORY:
+        return {grouping.value: key}
+    return cut_op_code(grouping.value, key)
+
+
 def op_breakdown(
     registry: ReportRegistry,
     handle: str,
@@ -2085,7 +2102,9 @@ def op_breakdown(
         "returned": len(shown),
         "device_time_total": _rounded(device_time_total),
         "op_to_op_gap_total": _rounded(gap_total),
-        "groups": [{grouping.value: share.key, **entry(share)} for share in shown],
+        "groups": [
+            {**_breakdown_group(grouping, share.key), **entry(share)} for share in shown
+        ],
         "projection": projection(signposts, bool(report.get("signpost_range_ignored"))),
         "note": OP_BREAKDOWN_NOTE,
     }
