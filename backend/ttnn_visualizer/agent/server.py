@@ -389,7 +389,9 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 f"buffer, which holds {L1_ZONE_MARKER_CAPACITY // 2} zones between "
                 "flushes. The first call on a handle reads the whole device log for "
                 "every zone; later calls, for any zone and refusals included, answer "
-                "from that read."
+                "from that read, except on a log one pass cannot hold or for a zone "
+                "also named on rows that neither start nor end one, which each call "
+                "reads alone."
             ),
             "schema": {
                 "type": "object",
