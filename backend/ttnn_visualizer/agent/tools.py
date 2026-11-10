@@ -22,6 +22,7 @@ from typing import (
     Dict,
     Hashable,
     Iterable,
+    Iterator,
     List,
     Optional,
     Sequence,
@@ -343,6 +344,33 @@ def _per_capture(
         refusals=(DataFormatError,),
         check=lambda instance: _require_same_source(registry, handle, instance),
     )
+
+
+def _per_handle(
+    registry: ReportRegistry,
+    handle: str,
+    variant: CacheVariant,
+    read: Callable[[Instance], _Read],
+) -> _Read:
+    """`read` of the handle's device log, once per handle -- or why it cannot be read."""
+    return read_once(
+        registry,
+        handle,
+        read,
+        variant=variant,
+        share_key=None,
+        refusals=(DataFormatError,),
+    )
+
+
+@contextlib.contextmanager
+def _as_refusal() -> Iterator[None]:
+    """A `DataFormatError` raised as the ValueError the server records as a refusal: a log
+    of the wrong shape is a deliberate refusal, not an unexpected failure."""
+    try:
+        yield
+    except DataFormatError as error:
+        raise ValueError(str(error)) from error
 
 
 def _signposts(registry: ReportRegistry, handle: str) -> ResolvedSignposts:
@@ -802,18 +830,12 @@ def _zone_timings_read(registry: ReportRegistry, handle: str) -> _ZoneTimingsRea
             summary,
             pairing,
             malformed,
-            metadata.get("ARCH"),
+            # As `zone_intervals` and `core_spread` read it, so the tools cannot differ.
+            _log_architecture(instance),
             finite_number(metadata.get("CHIP_FREQ[MHz]")),
         )
 
-    return read_once(
-        registry,
-        handle,
-        read,
-        variant=CacheVariant.ZONE_TIMINGS,
-        share_key=None,
-        refusals=(DataFormatError,),
-    )
+    return _per_handle(registry, handle, CacheVariant.ZONE_TIMINGS, read)
 
 
 def zone_timings(
@@ -822,11 +844,8 @@ def zone_timings(
     """Per-zone, per-RISC totals from the device profiler log."""
     _require_performance_report(registry, handle)
     count = bounded(limit)
-    try:
+    with _as_refusal():
         read = _zone_timings_read(registry, handle)
-    except DataFormatError as error:
-        # The server records only a ValueError as a refusal.
-        raise ValueError(str(error)) from error
     summary, pairing, clock_mhz = read.summary, read.pairing, read.clock_mhz
     # Filtered whole, so the limit counts only entries whose names can be shown.
     listed, too_long = _shown_and_dropped(
@@ -1277,13 +1296,8 @@ def _core_spread_index(
 ) -> _CoreSpreadIndex:
     def build(instance: Instance) -> _CoreSpreadIndex:
         requests = [_span_request(row) for row in rows if _spannable(row)]
-        try:
-            with DeviceLogProfilerQueries(instance, stream=True) as queries:
-                read: CoreSpans = queries.query_core_spans(set(requests))
-        except DataFormatError as error:
-            # A log without phases is a deliberate refusal, not an unexpected
-            # failure, and the server records only a ValueError as one.
-            raise ValueError(str(error)) from error
+        with _as_refusal(), DeviceLogProfilerQueries(instance, stream=True) as queries:
+            read: CoreSpans = queries.query_core_spans(set(requests))
         held = [request for request, cores in read.spans.items() if cores]
         return _CoreSpreadIndex(
             figures={
@@ -1529,50 +1543,39 @@ def _repeats_figures(
 @dataclass(frozen=True)
 class _ZoneIntervalsRead:
     """Every zone's intervals from one read of the device log, kept per handle with the
-    clock and architecture the log named then, so a zone asked after the first costs no
-    read. #2248"""
+    clock and architecture the log named then, so a later call reads nothing more --
+    except where the pass cannot hold the log, or leaves the zone asked for to be read
+    alone, when each call reads that zone alone. #2248"""
 
-    # None where one pass cannot read the log as each zone's own read would, so each
-    # call reads its zone alone.
+    # None where one pass cannot read the log as each zone's own read would.
     zones: Optional[ZoneIntervalPass]
     clock_mhz: int
     arch: Optional[str]
 
 
-def _zone_intervals_read(
-    registry: ReportRegistry, handle: str, clock_mhz: int
-) -> _ZoneIntervalsRead:
+def _zone_intervals_read(registry: ReportRegistry, handle: str) -> _ZoneIntervalsRead:
     def read(instance: Instance) -> _ZoneIntervalsRead:
+        clock_mhz = _require_timed_device_log(handle, instance, "zones to time")
         with DeviceLogProfilerQueries(instance, stream=True) as queries:
             zones = queries.query_every_zone_intervals()
         return _ZoneIntervalsRead(zones, clock_mhz, _log_architecture(instance))
 
-    return read_once(
-        registry,
-        handle,
-        read,
-        variant=CacheVariant.ZONE_INTERVALS,
-        share_key=None,
-        refusals=(DataFormatError,),
-    )
+    return _per_handle(registry, handle, CacheVariant.ZONE_INTERVALS, read)
 
 
 def _zone_read(
     registry: ReportRegistry, handle: str, zone: str, clock_mhz: int
 ) -> Tuple[ZoneIntervals, int, Optional[str]]:
     """``zone``'s read, with the clock and architecture it was read at: from the
-    handle's read of every zone, or alone where that cannot hold it."""
+    handle's read of every zone, or alone at ``clock_mhz`` where that cannot hold it."""
     instance = registry.get(handle)
-    try:
-        kept = _zone_intervals_read(registry, handle, clock_mhz)
+    with _as_refusal():
+        kept = _zone_intervals_read(registry, handle)
         found = kept.zones.intervals(zone) if kept.zones is not None else None
         if found is not None:
             return found, kept.clock_mhz, kept.arch
         with DeviceLogProfilerQueries(instance, stream=True) as queries:
             read = queries.query_zone_intervals(zone)
-    except DataFormatError as error:
-        # The server records only a ValueError as a refusal.
-        raise ValueError(str(error)) from error
     return read, clock_mhz, _log_architecture(instance)
 
 
