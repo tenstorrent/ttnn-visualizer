@@ -157,8 +157,14 @@ def share_percent(part: Optional[float], whole: float) -> Optional[float]:
 
 
 # Longer than any signpost a model emits, and short enough that a refusal or a
-# projection echoing the name stays small.
+# projection echoing the name stays small. Every name bound counts `utf8_size`.
 MAX_SIGNPOST_NAME_LENGTH = 256
+
+
+def utf8_size(name: str) -> int:
+    """A name's size as an answer's budget counts it: a bound in characters would let a
+    name of four-byte characters take four times its share. #2255"""
+    return len(name.encode("utf-8", "surrogatepass"))
 
 
 @dataclass(frozen=True)
@@ -186,10 +192,10 @@ class SignpostRange:
         not key a second snapshot of the same whole report.
         """
         for label, name in (("start_signpost", start), ("end_signpost", end)):
-            if name and len(name) > MAX_SIGNPOST_NAME_LENGTH:
+            if name and utf8_size(name) > MAX_SIGNPOST_NAME_LENGTH:
                 raise ValueError(
-                    f"{label} is {len(name)} characters; a signpost name is at most "
-                    f"{MAX_SIGNPOST_NAME_LENGTH}"
+                    f"{label} is {utf8_size(name)} bytes in UTF-8; a signpost name is "
+                    f"at most {MAX_SIGNPOST_NAME_LENGTH}"
                 )
         start, end = start or None, end or None
         if start is None and end is None:
@@ -359,7 +365,7 @@ def _resolve_signposts(instance: Instance) -> ResolvedSignposts:
 
 def _name_shown(name: str, max_length: int) -> bool:
     """Whether a name the capture supplied is short enough to show an agent."""
-    return len(name) <= max_length
+    return utf8_size(name) <= max_length
 
 
 def _shown_and_dropped(
@@ -1410,7 +1416,7 @@ MAX_LISTED_ZONES = MAX_LISTED_SIGNPOSTS
 # a zone asked for by such a name is refused, as a signpost's is.
 MAX_ZONE_NAME_LENGTH = MAX_SIGNPOST_NAME_LENGTH
 # A RISC name longer than this is the capture's text too; tt-metal's longest,
-# QUASAR_NEO3_TRISC3, is 18 characters.
+# QUASAR_NEO3_TRISC3, is 18 bytes.
 MAX_RISC_NAME_LENGTH = 32
 
 
@@ -1506,8 +1512,8 @@ def _unknown_zone(zone: str, read: ZoneIntervals) -> str:
         refusal += f", and {unlisted} more"
     if too_long:
         refusal += (
-            f"; {too_long} more have names longer than {MAX_ZONE_NAME_LENGTH} "
-            "characters, which are not listed"
+            f"; {too_long} more have names past {MAX_ZONE_NAME_LENGTH} bytes in "
+            "UTF-8, which are not listed"
         )
     if read.zone_names_capped:
         refusal += (
@@ -1528,9 +1534,9 @@ def zone_intervals(
     if not isinstance(zone, str) or not zone.strip():
         raise ValueError("zone must name a zone the device log records")
     name = zone.strip()
-    if len(name) > MAX_ZONE_NAME_LENGTH:
+    if utf8_size(name) > MAX_ZONE_NAME_LENGTH:
         raise ValueError(
-            f"zone is {len(name)} characters; a zone name is at most "
+            f"zone is {utf8_size(name)} bytes in UTF-8; a zone name is at most "
             f"{MAX_ZONE_NAME_LENGTH}"
         )
     count = bounded(limit)

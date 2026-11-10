@@ -156,8 +156,9 @@ first call, which refuses one that is not a readable tt-npe trace.
   resolves them, with how often each occurs — one name bounds both ends of a range only if
   it occurs twice — and `signpost_count` counts them all, since the list stops at 20. Both
   are absent when the performance CSV cannot be reported on, and empty when it holds no
-  signposts. A name longer than 256 characters, which a range cannot take, is counted but
-  left out of the list, and `signposts_unlisted_too_long` says how many were. When the CSV
+  signposts. A name longer than 256 bytes in UTF-8, 256 characters of ASCII, which a range
+  cannot take, is counted but left out of the list, and `signposts_unlisted_too_long` says
+  how many were. When the CSV
   can be reported on but its signposts cannot be read, `signposts_problem` says why. Loading reads the signposts, so a handle answers from the
   CSV it was loaded on: one rewritten or superseded after that is refused, and
   `load_report` again gives a fresh handle.
@@ -205,7 +206,7 @@ answer cut down — it is what the signposted run reports.
 A range the report cannot honour is refused rather than answered from other rows: a name
 the report does not hold (the refusal lists the names it does), one name for both bounds
 when it occurs only once, an end that falls before the start, or a name longer than 256
-characters. A report with no signposts at all is read whole, because tt-perf-report then
+bytes in UTF-8. A report with no signposts at all is read whole, because tt-perf-report then
 uses the whole file rather than some other window, and the response's `projection` says so
 with `signpost_range_ignored`. Every ranged response's `projection` names the range, so a
 windowed answer cannot be taken for a whole-report one. `diff_reports` applies one range to
@@ -759,16 +760,17 @@ says so. Starts and ends of the zone that did not pair are counted in a caveat, 
 interval across a dropped start spans two occurrences. A zone pairs only within its run,
 except a firmware zone, which starts before the kernel start that opens its run, and a
 start replaced before its end counts as unpaired. A zone the log does not start is refused
-with the zones it does, most started first, leaving out any name longer than 256
-characters, which is the capture's text, not the tool's; a zone asked for by a longer name
-is refused. A row whose slot, core, run or cycle count is not a number or does not fit a
+with the zones it does, most started first, leaving out any name longer than 256 bytes,
+which is the capture's text, not the tool's; a zone asked for by a longer name is
+refused. A row whose slot, core, run or cycle count is not a number or does not fit a
 64-bit integer, or whose cycle count is negative, is left out and counted in a caveat, and
 a zone whose every start was left out is refused with how many were unreadable that way
 and how many lay past the 200,000 core-RISC timelines followed at once.
 
-No zone tool shows a zone name longer than 256 characters or a RISC name longer than 32
-characters: such a name is the capture's text, not the tool's, and tt-metal's longest RISC
-name, `QUASAR_NEO3_TRISC3`, is 18. `zone_timings` leaves an entry with one out, counted in
+No zone tool shows a zone name longer than 256 bytes or a RISC name longer than 32 bytes:
+such a name is the capture's text, not the tool's, and tt-metal's longest RISC name,
+`QUASAR_NEO3_TRISC3`, is 18. Every name bound counts a name's bytes in UTF-8, as an
+answer's size does, so a name of four-byte characters is held to a quarter as many. `zone_timings` leaves an entry with one out, counted in
 `zones_unlisted_too_long`, and `limit` counts only the entries listed. Both count
 zone-and-RISC entries, not names, so a long zone name on five RISCs counts five.
 `core_spread` leaves such a RISC out of `by_risc`, counted in `by_risc_unlisted_too_long`,

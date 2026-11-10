@@ -194,7 +194,7 @@ def test_the_page_carries_the_zone_intervals_caveats():
     assert f"at most {L1_ZONE_MARKER_CAPACITY // 2} zones" in page
     assert f"zones, named `{PROFILER_ZONE_PREFIX}…`" in page
     assert all(f"`{name}`" in page for name in ACCUMULATE_FLUSH_ZONES)
-    assert f"longer than {tools.MAX_ZONE_NAME_LENGTH} characters" in page
+    assert f"longer than {tools.MAX_ZONE_NAME_LENGTH} bytes" in page
     assert f"past the {MAX_ZONE_TIMELINES:,} core-RISC timelines" in page
     assert "never pooled, since each runs its own clock" in page
 
@@ -212,7 +212,7 @@ def test_the_signpost_name_limit_the_page_states_is_the_enforced_one():
     """The page states the limit as a number, so nothing else ties it to the code."""
     page = " ".join(_read(_AGENT_DOCS).split())
 
-    assert f"a name longer than {tools.MAX_SIGNPOST_NAME_LENGTH} characters" in page
+    assert f"a name longer than {tools.MAX_SIGNPOST_NAME_LENGTH} bytes" in page
 
 
 def test_the_zone_tools_name_bounds_the_page_states_are_the_enforced_ones():
@@ -220,8 +220,8 @@ def test_the_zone_tools_name_bounds_the_page_states_are_the_enforced_ones():
     page = " ".join(_read(_AGENT_DOCS).split())
 
     assert (
-        f"a zone name longer than {tools.MAX_ZONE_NAME_LENGTH} characters or a RISC "
-        f"name longer than {tools.MAX_RISC_NAME_LENGTH} characters"
+        f"a zone name longer than {tools.MAX_ZONE_NAME_LENGTH} bytes or a RISC "
+        f"name longer than {tools.MAX_RISC_NAME_LENGTH} bytes"
     ) in page
 
 
