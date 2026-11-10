@@ -2599,6 +2599,55 @@ class TestPreRenameCaptures:
         }
 
 
+class TestReplacedZoneStarts:
+    """A second start under one key before the first's end leaves the first unpaired,
+    which every zone tool counts. #2249"""
+
+    def test_zone_timings_counts_it_in_its_caveat(self, tmp_path):
+        rows = [
+            modern_row(0, 1, 1, "BRISC", 100, "LOOP", "ZONE_START"),
+            modern_row(0, 1, 1, "BRISC", 200, "LOOP", "ZONE_START"),
+            modern_row(0, 1, 1, "BRISC", 300, "LOOP", "ZONE_END"),
+        ]
+        write_device_log(tmp_path, MODERN_HEADER, rows)
+        registry = ReportRegistry()
+        load_report(registry, performance_path=str(tmp_path))
+
+        result = tools.zone_timings(registry, "report-1")
+
+        ((zone, occurrences, total),) = [
+            (entry["zone"], entry["occurrences"], entry["total_cycles"])
+            for entry in result["zones"]
+        ]
+        assert (zone, occurrences, total) == ("LOOP", 1, 100)
+        assert result["caveat"].startswith("1 zone starts and 0 ends did not pair")
+
+    def test_the_pairer_counts_it_for_its_group_too(self):
+        pairer = csv_queries._ZonePairer(
+            "ZONE_START", "ZONE_END", group=lambda key: key[0]
+        )
+        pairer.offer(("run", "core"), "ZONE_START", 100)
+        pairer.offer(("run", "core"), "ZONE_START", 200)
+
+        assert pairer.offer(("run", "core"), "ZONE_END", 300) == 200
+        assert pairer.pairing("log")["unmatched_starts"] == 1
+        assert pairer.pairing_by_group() == {
+            "run": {"unmatched_starts": 1, "unmatched_ends": 0, "dropped_starts": 0}
+        }
+
+    def test_one_at_the_open_start_ceiling_is_replaced_not_dropped(self, monkeypatch):
+        monkeypatch.setattr(csv_queries, "MAX_OPEN_ZONE_STARTS", 1)
+        pairer = csv_queries._ZonePairer("ZONE_START", "ZONE_END")
+        pairer.offer(("a",), "ZONE_START", 100)
+        pairer.offer(("a",), "ZONE_START", 200)
+
+        assert pairer.pairing("log") == {
+            "unmatched_starts": 2,
+            "unmatched_ends": 0,
+            "dropped_starts": 0,
+        }
+
+
 class TestOpenZoneCeiling:
     def test_starts_past_the_ceiling_are_counted_rather_than_held(
         self, tmp_path, monkeypatch

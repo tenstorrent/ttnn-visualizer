@@ -314,6 +314,18 @@ class TestCaveats:
 
         assert "1 zone starts and 0 ends did not pair" in result["caveat"]
 
+    def test_a_start_another_start_replaced_is_caveated(self, tmp_path):
+        """The second start pairs with the end; the first never ended. #2249"""
+        replaced = [
+            modern_row(0, 4, 1, "BRISC", 0, "BRISC-KERNEL", "ZONE_START", run=RUN),
+            modern_row(0, 4, 1, "BRISC", 100, "BRISC-KERNEL", "ZONE_START", run=RUN),
+            modern_row(0, 4, 1, "BRISC", 4100, "BRISC-KERNEL", "ZONE_END", run=RUN),
+        ]
+
+        result = _spread(tmp_path, THREE_CORES + replaced, [_op()], perf_id="1")
+
+        assert "1 zone starts and 0 ends did not pair" in result["caveat"]
+
     def test_an_unpaired_start_in_another_run_is_not_this_ops_concern(self, tmp_path):
         open_start = "0,4,1,BRISC,1,0,0,9999,,,BRISC-KERNEL,ZONE_START,1,k.cc,"
 
