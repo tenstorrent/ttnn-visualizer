@@ -368,14 +368,27 @@ def _shown_and_dropped(
     limit: Optional[int] = None,
 ) -> Tuple[List[_Item], int]:
     """Up to `limit` of the items `shown` keeps, in order, and how many it left out."""
+    kept, dropped, _ = _listing(items, shown, limit)
+    return kept, dropped
+
+
+def _listing(
+    items: Iterable[_Item],
+    shown: Callable[[_Item], bool],
+    limit: Optional[int] = None,
+) -> Tuple[List[_Item], int, int]:
+    """Up to `limit` of the items `shown` keeps, in order, how many it left out, and
+    how many it would keep but left out past `limit`."""
     kept: List[_Item] = []
-    dropped = 0
+    dropped = past_limit = 0
     for item in items:
         if not shown(item):
             dropped += 1
         elif limit is None or len(kept) < limit:
             kept.append(item)
-    return kept, dropped
+        else:
+            past_limit += 1
+    return kept, dropped, past_limit
 
 
 def _short_names(
@@ -1130,10 +1143,9 @@ def _core_figures(cores: Dict[tuple, CoreSpan], clock_mhz: float) -> Dict[str, o
         for risc, cycles in span.risc_cycles.items():
             risc_us[risc].append(cycles / clock_mhz)
     slowest = sorted(core_us.items(), key=lambda item: item[1], reverse=True)
-    listed, too_long = _shown_and_dropped(
+    listed, too_long, past_cap = _listing(
         sorted(risc_us), _risc_shown, MAX_LISTED_RISCS
     )
-    past_cap = len(risc_us) - too_long - len(listed)
     figures: Dict[str, object] = {
         "cores_in_log": len(cores),
         "core_span": _spread(list(core_us.values())),
@@ -1212,8 +1224,8 @@ def _span_request(row: Dict) -> SpanRequest:
 class _CoreSpreadIndex:
     """Every device op's spread, kept per handle so drilling in costs one log read.
 
-    About 5 KB an op of five RISCs and 16 KB at the RISC cap on 130 cores, where the
-    spans they come from are a core's each.
+    An op's figures grow with the RISCs it lists, to about 16 KB at
+    `MAX_LISTED_RISCS`.
     """
 
     figures: Dict[SpanRequest, Dict[str, object]]
