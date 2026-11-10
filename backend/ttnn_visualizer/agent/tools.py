@@ -890,12 +890,10 @@ def zone_timings(
     }
     if too_long:
         result["zones_unlisted_too_long"] = too_long
-    caveats = [_pairing_caveat(pairing, "these totals")]
-    if read.malformed:
-        caveats.append(
-            f"{read.malformed} rows have a slot, core, run or cycle count "
-            f"{UNREADABLE_NUMBER_REASON}, and were left out."
-        )
+    caveats = [
+        _pairing_caveat(pairing, "these totals"),
+        _unreadable_rows_caveat(read.malformed),
+    ]
     caveat = " ".join(filter(None, caveats))
     if caveat:
         result["caveat"] = caveat
@@ -1149,6 +1147,17 @@ def _pairing_caveat(pairing: Dict[str, int], figures: str) -> Optional[str]:
             "reach — treat this log as malformed."
         )
     return caveat
+
+
+def _unreadable_rows_caveat(malformed: int) -> Optional[str]:
+    """Say how many rows a zone read left out as unreadable, in the one wording every
+    zone tool gives it."""
+    if not malformed:
+        return None
+    return (
+        f"{malformed} rows have a slot, core, run or cycle count "
+        f"{UNREADABLE_NUMBER_REASON}, and were left out."
+    )
 
 
 CORE_SPREAD_NOTE = (
@@ -1794,11 +1803,9 @@ def _zone_interval_caveats(zone: str, read: ZoneIntervals, recurring: int) -> Li
             "them in their run. tt-metal writes each RISC's markers in time order, so "
             "this log was written some other way, and those intervals are left out."
         )
-    if read.malformed:
-        caveats.append(
-            f"{read.malformed} rows have a slot, core, run or cycle count "
-            f"{UNREADABLE_NUMBER_REASON}, and were left out."
-        )
+    unreadable = _unreadable_rows_caveat(read.malformed)
+    if unreadable:
+        caveats.append(unreadable)
     if read.untracked:
         caveats.append(
             f"{read.untracked} rows belong to core-RISC timelines past the "

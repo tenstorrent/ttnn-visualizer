@@ -1164,7 +1164,7 @@ class DeviceLogProfilerQueries:
     # REQUIRED_DEVICE_LOG_COLUMNS because only the zone queries need them; see the
     # comment in `_zone_phase` before folding the two together.
     ZONE_SUMMARY_COLUMNS = frozenset(_ZONE_COLUMNS)
-    # The `_ZONE_COLUMNS` the span and interval readers hold as whole numbers.
+    # The `_ZONE_COLUMNS` the zone readers hold as whole numbers.
     _WHOLE_NUMBER_COLUMNS = (
         "PCIe slot",
         "core_x",
@@ -1506,11 +1506,13 @@ class DeviceLogProfilerQueries:
         columns = list(self._ZONE_COLUMNS) + ([phase_column] if phase_column else [])
         malformed = 0
 
+        # No `_inexact_as_floats` guard, which keeps the all-zones interval pass equal to
+        # its one-zone reads: no other read has to agree with this one.
         for chunk in self._zone_chunks(columns):
             names = chunk["zone name"].astype(str).str.strip()
             named = (names != "") & (names != "nan")
-            # Shared with the other zone queries, so all three leave out and count the
-            # same unreadable rows. #2258
+            # Read as the other zone queries read them, so all three apply the same rule;
+            # each counts the rows it would have used. #2258
             chunk, readable = _whole_number_rows(
                 chunk[named].assign(**{"zone name": names[named]}),
                 self._WHOLE_NUMBER_COLUMNS,
