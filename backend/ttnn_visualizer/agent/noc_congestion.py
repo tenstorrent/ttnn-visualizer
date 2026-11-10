@@ -22,7 +22,7 @@ from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import zstd
 from ttnn_visualizer import npe_index
@@ -293,8 +293,12 @@ def _past_limit(npe_path: Path, size: str) -> ValueError:
     )
 
 
-def _trace_bytes(npe_path: Path, compressed: bool) -> bytes:
-    """The trace's bytes through one descriptor, so the bytes bounded are those parsed."""
+def _unreadable(npe_path: Path, reason: object) -> ValueError:
+    return ValueError(f"{npe_path.name} is not a readable tt-npe trace: {reason}")
+
+
+def _trace_json(npe_path: Path, compressed: bool) -> bytes:
+    """The trace's JSON, read through one descriptor so the bytes bounded are those read."""
     with npe_path.open("rb") as source:
         if not npe_index.starts_as_trace(
             source.read(npe_index.TRACE_HEAD_BYTES), compressed
@@ -325,10 +329,12 @@ def _trace_bytes(npe_path: Path, compressed: bool) -> bytes:
         if size is None:
             raise ValueError(
                 f"{npe_path.name} is not zstd frames that each declare their size, so "
-                "what parsing it costs cannot be bounded before reading it"
+                "the memory its read takes cannot be bounded beforehand"
             )
         if size > MAX_TRACE_JSON_BYTES:
             raise _past_limit(npe_path, f"{size:,}")
+        # Rebound, so the compressed bytes are gone before the text is made.
+        data = zstd.uncompress(data)
     return data
 
 
@@ -337,23 +343,17 @@ def _from_trace(npe_path: Path) -> _NocRead:
     # Every refusal `from None`: its message carries the cause, and no frame of the read.
     compressed = npe_path.suffix == ".zst"
     try:
-        text = npe_index.trace_text(_trace_bytes(npe_path, compressed), compressed)
+        text = npe_index.trace_text(_trace_json(npe_path, compressed))
     except OSError as error:
         raise ValueError(f"{npe_path.name} cannot be read: {error.strerror}") from None
     except zstd.Error as error:
-        raise ValueError(
-            f"{npe_path.name} is not a readable tt-npe trace: {error}"
-        ) from None
+        raise _unreadable(npe_path, error) from None
     try:
         return _summed(npe_index.streamed_link_demand(text))
     except json.JSONDecodeError as error:
-        raise ValueError(
-            f"{npe_path.name} is not a readable tt-npe trace: {error}"
-        ) from None
+        raise _unreadable(npe_path, error) from None
     except RecursionError:
-        raise ValueError(
-            f"{npe_path.name} is not a readable tt-npe trace: it nests too deep"
-        ) from None
+        raise _unreadable(npe_path, "it nests too deep") from None
     except ValueError as error:
         raise ValueError(f"{npe_path.name}: {error}") from None
 
@@ -378,6 +378,15 @@ def _exit_with(sentinel: int) -> None:
     os._exit(1)
 
 
+def _reader_pool(
+    initializer: Callable[[], None] = _reader_setup,
+) -> ProcessPoolExecutor:
+    """The process a large trace is read in: spawned, since a fork copies the server."""
+    return ProcessPoolExecutor(
+        1, mp_context=multiprocessing.get_context("spawn"), initializer=initializer
+    )
+
+
 def _read_trace(npe_path: Path) -> _NocRead:
     """`_from_trace`, in a process of its own for a trace past
     `MAX_INLINE_TRACE_JSON_BYTES`."""
@@ -386,18 +395,15 @@ def _read_trace(npe_path: Path) -> _NocRead:
     except OSError:
         size = None
     # Past the cap the read refuses it at once, so no process is started for it.
+    # Sized before it is read: one that grows meanwhile is read here, still capped.
     if size is None or not MAX_INLINE_TRACE_JSON_BYTES < size <= MAX_TRACE_JSON_BYTES:
         return _from_trace(npe_path)
-    with ProcessPoolExecutor(
-        1, mp_context=multiprocessing.get_context("spawn"), initializer=_reader_setup
-    ) as reader:
+    with _reader_pool() as reader:
         try:
             return reader.submit(_from_trace, npe_path).result()
         except RecursionError:
             # Sending the read back nests as deep as its `common_info` does.
-            raise ValueError(
-                f"{npe_path.name} is not a readable tt-npe trace: it nests too deep"
-            ) from None
+            raise _unreadable(npe_path, "it nests too deep") from None
         except BrokenProcessPool:
             # Not a refusal, which would be kept: what ended the process may pass.
             raise RuntimeError(

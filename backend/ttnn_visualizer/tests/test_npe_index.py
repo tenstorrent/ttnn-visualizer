@@ -934,9 +934,7 @@ def _read_through(rows):
 
 def _streamed(text: str):
     """The streamed read of a trace's JSON, given as the tool gives it: its bytes."""
-    return streamed_link_demand(
-        trace_text(text.encode("utf-8", "surrogatepass"), False)
-    )
+    return streamed_link_demand(trace_text(text.encode("utf-8", "surrogatepass")))
 
 
 _STREAMED_TRACES = {
@@ -1071,12 +1069,6 @@ def test_a_refusal_is_placed_where_the_whole_parse_places_it():
         whole.value.msg,
         whole.value.pos,
     )
-
-
-def test_trace_text_reads_zstd_frames_and_json():
-    data = orjson.dumps({"timestep_data": []})
-
-    assert trace_text(zstd.compress(data), True) == trace_text(data, False)
 
 
 def _random_json(chooser, depth):

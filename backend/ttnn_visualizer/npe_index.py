@@ -13,7 +13,8 @@ window (~135 KB) instead of the whole payload.
 The build parses the whole object in memory. The agent's `noc_congestion` reads a
 trace a timestep at a time (`streamed_link_demand`); a build reading the same way would
 bound its peak RSS on the multi-user hosted path, once its walk of the JSON is split
-from the link-demand rules it applies.
+from the link-demand rules it applies. `trace_link_demand`, the same read of a parsed
+trace, is the reference the tests hold the streamed read to.
 """
 
 import contextlib
@@ -168,10 +169,7 @@ def load_npe_object(npe_path: Path) -> dict:
 
 def parse_trace(data: bytes, compressed: bool) -> dict:
     """A trace's bytes as `load_npe_object` reads them: zstd frames, or JSON."""
-    if compressed:
-        # Rebound, so the compressed bytes are freed before the parse.
-        data = zstd.uncompress(data)
-    return orjson.loads(data)
+    return orjson.loads(zstd.uncompress(data) if compressed else data)
 
 
 ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
@@ -550,7 +548,7 @@ def indexed_link_demand(npe_path: Path) -> Iterator[Optional[LinkDemand]]:
         common_info = orjson.loads(meta["common_info"])
         (transfers,) = conn.execute("SELECT count(*) FROM transfer").fetchone()
         yield LinkDemand(
-            common_info if isinstance(common_info, dict) else {},
+            _common_info_of(common_info),
             transfers,
             (
                 (start, end, orjson.loads(link_demand))
@@ -564,31 +562,38 @@ def indexed_link_demand(npe_path: Path) -> Iterator[Optional[LinkDemand]]:
         conn.close()
 
 
+_NOT_A_TRACE = "it holds no timestep_data list, so it is not a tt-npe trace"
+
+
+def _common_info_of(value: object) -> dict:
+    """A trace's `common_info` as every read keeps it: an object, else empty."""
+    return value if isinstance(value, dict) else {}
+
+
+def _step_row(step: object) -> Tuple[Any, Any, Any]:
+    """A timestep as a read of the trace hands it on: empty where it is not an object."""
+    return _step_cells(step) if isinstance(step, dict) else (None, None, [])
+
+
 def trace_link_demand(trace: object) -> LinkDemand:
     """A parsed trace's link demand, read as `_write_index` would store it: the
     reference `StreamedLinkDemand` is tested against."""
     if not isinstance(trace, dict) or not isinstance(trace.get("timestep_data"), list):
-        raise ValueError("it holds no timestep_data list, so it is not a tt-npe trace")
+        raise ValueError(_NOT_A_TRACE)
     steps = trace["timestep_data"]
-    common_info = trace.get("common_info")
     return LinkDemand(
-        common_info if isinstance(common_info, dict) else {},
+        _common_info_of(trace.get("common_info")),
         _transfer_count(trace.get("noc_transfers")),
-        (
-            _step_cells(step) if isinstance(step, dict) else (None, None, [])
-            for step in steps
-        ),
+        (_step_row(step) for step in steps),
         truncated=False,
         unreadable_timesteps=sum(1 for step in steps if not isinstance(step, dict)),
     )
 
 
-def trace_text(data: bytes, compressed: bool) -> str:
-    """A trace's bytes, zstd frames or JSON, one character a byte for
-    `streamed_link_demand` to scan: a character past Latin-1 anywhere would make the
-    whole text two or four bytes a character, and orjson checks the UTF-8 itself."""
-    if compressed:
-        data = zstd.uncompress(data)
+def trace_text(data: bytes) -> str:
+    """A trace's JSON, one character a byte, for `streamed_link_demand` to scan: a
+    character past Latin-1 anywhere would make the whole text two or four bytes a
+    character, and orjson checks the UTF-8 itself."""
     return data.decode("latin-1")
 
 
@@ -596,7 +601,6 @@ _JSON_SPACE = re.compile(r"[ \t\n\r]*")
 # Finds where a value ends; orjson then reads it, so each value reads as `parse_trace`
 # would read it, and a refusal falls where its refusal would.
 _VALUE_END = json.JSONDecoder()
-_NOT_A_TRACE = "it holds no timestep_data list, so it is not a tt-npe trace"
 
 
 class StreamedLinkDemand:
@@ -633,6 +637,8 @@ class StreamedLinkDemand:
     def _walk(self, text: str) -> Iterator[Tuple[Any, Any, Any]]:
         at = _space(text, 0)
         if not text.startswith("{", at):
+            # Read through first: what the whole parse cannot read is refused as such.
+            _at_end(text, _past_value(text, at))
             raise ValueError(_NOT_A_TRACE)
         at = _space(text, at + 1)
         steps_read = False
@@ -650,9 +656,7 @@ class StreamedLinkDemand:
                 value, at = _value(text, at)
                 self._take(key, value)
             at = _after_member(text, at, "}")
-        end = _space(text, at + 1)
-        if end < len(text):
-            _refuse(text, end, "Extra data")
+        _at_end(text, at + 1)
         if not steps_read:
             raise ValueError(_NOT_A_TRACE)
         self._read_through = True
@@ -668,16 +672,14 @@ class StreamedLinkDemand:
         for value in values:
             if key != "timestep_data":
                 continue
-            if isinstance(value, dict):
-                yield _step_cells(value)
-            else:
+            if not isinstance(value, dict):
                 self._unreadable_timesteps += 1
-                yield None, None, []
+            yield _step_row(value)
 
     def _take(self, key: str, value: object) -> None:
         """A member whose value is not an array."""
         if key == "common_info":
-            self._common_info = value if isinstance(value, dict) else {}
+            self._common_info = _common_info_of(value)
         elif key == "noc_transfers":
             self._transfer_count = 0
 
@@ -716,6 +718,23 @@ def _value(text: str, at: int) -> Tuple[object, int]:
     except orjson.JSONDecodeError as error:
         # Where in the trace, as the whole parse would say, not where in the value.
         raise json.JSONDecodeError(error.msg, text, at + error.pos) from None
+
+
+def _past_value(text: str, at: int) -> int:
+    """Past the value at `at`, read as `_value` reads it, an array an element at a time."""
+    if text.startswith("[", at):
+        values = _Elements(text, at)
+        for _ in values:
+            pass
+        return values.end
+    return _value(text, at)[1]
+
+
+def _at_end(text: str, at: int) -> None:
+    """Refuse anything but whitespace from `at` on, as the whole parse does."""
+    end = _space(text, at)
+    if end < len(text):
+        _refuse(text, end, "Extra data")
 
 
 def _key(text: str, at: int) -> Tuple[str, int]:

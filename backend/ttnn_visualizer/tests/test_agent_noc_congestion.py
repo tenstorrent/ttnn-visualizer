@@ -194,15 +194,15 @@ def _counted_reads(monkeypatch) -> list:
     reads: list = []
     real_text = npe_index.trace_text
 
-    def counting_text(data, compressed):
+    def counting_text(data):
         reads.append(data)
-        return real_text(data, compressed)
+        return real_text(data)
 
     monkeypatch.setattr(npe_index, "trace_text", counting_text)
     return reads
 
 
-def _never_read(data, compressed):
+def _never_read(data):
     raise AssertionError("the trace was read, not its index")
 
 
@@ -1133,7 +1133,7 @@ class TestPinning:
         handle = _load(registry, path)
         real_text = npe_index.trace_text
 
-        def exhausted(data, compressed):
+        def exhausted(data):
             raise MemoryError
 
         monkeypatch.setattr(npe_index, "trace_text", exhausted)

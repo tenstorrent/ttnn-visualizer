@@ -805,15 +805,18 @@ data directory, so an `npe_path` naming that copy reuses the index, in a fractio
 time and memory a parse takes. Otherwise the first call on a handle reads the trace itself
 a timestep at a time: a trace of tens of thousands of timesteps and millions of link rows
 takes seconds to tens of seconds and about twice its JSON's size at its peak, against
-several times that for building the visualizer's index. A trace past 64 MiB of JSON is
-read in a process of its own, so that memory goes back to the system when the read ends
-rather than staying with the server; starting it adds about half a second, and it ends
-with the server if the server is stopped mid-read. A trace whose JSON passes 1 GiB, summed over every
-zstd frame, or a `.zst` file itself past that size, is refused rather than read, and so
-is a `.zst` with a frame that does not declare its size. Later
-calls answer from the first read, and so does every handle on the same unchanged file. A
-handle stays with the trace it first read: if the file changes or goes away afterwards,
-its answers say so in their caveat, and a fresh `load_report` reads the new one.
+several times that for building the visualizer's index. That bound assumes the trace's
+bulk is spread over its timesteps, as tt-npe writes it: each value is read whole, so a
+single timestep or `common_info` holding most of the trace costs more than a whole
+parse. A trace past 64 MiB of JSON is read in a process of its own, so that memory goes
+back to the system when the read ends rather than staying with the server; starting it
+adds about half a second, and it ends with the server if the server is stopped mid-read.
+A trace whose JSON passes 1 GiB, summed over every zstd frame, or a `.zst` file itself
+past that size, is refused rather than read, and so is a `.zst` with a frame that does
+not declare its size. Later calls answer from the first read, and so does every handle
+on the same unchanged file. A handle stays with the trace it first read: if the file
+changes or goes away afterwards, its answers say so in their caveat, and a fresh
+`load_report` reads the new one.
 
 **A performance row and a memory report operation are linked by order, not by a shared id.**
 Neither report records the other's id, so when a handle is loaded with both, the tools
