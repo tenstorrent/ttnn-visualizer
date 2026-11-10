@@ -6,21 +6,18 @@
 does, so a name of wide or escaped characters cannot take more than its share. #2255
 """
 
-import json
-
 import pytest
 from ttnn_visualizer.agent import noc_congestion, server, tools
 from ttnn_visualizer.agent.bounds import answer_size, name_fits
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
+from ttnn_visualizer.event_logging import McpToolOutcome
+from ttnn_visualizer.tests.mcp_calls import tool_call
 from ttnn_visualizer.tests.smoke_capture import signpost, smoke_rows, write_ops_perf
+from ttnn_visualizer.tests.test_agent_core_spread import _op, _spread, _zone
 from ttnn_visualizer.tests.test_agent_perf_detail import ANSWER_BUDGET_BYTES
 from ttnn_visualizer.tests.test_agent_tools import _zone_timings
 from ttnn_visualizer.tests.test_agent_zone_intervals import _intervals, _run
-from ttnn_visualizer.tests.test_device_log_columns import (
-    MODERN_HEADER,
-    modern_row,
-    write_device_log,
-)
+from ttnn_visualizer.tests.test_device_log_columns import modern_row
 
 # Three bytes each in UTF-8.
 WIDE = "€"
@@ -43,6 +40,16 @@ def test_a_name_is_measured_in_utf8_bytes():
     assert not name_fits("x" * 300, 256)
 
 
+@pytest.mark.parametrize("name", ["abc", WIDE, "😀", "\x01", '"', "\\", "\udc80", "\n"])
+def test_a_name_is_measured_as_the_server_writes_an_answer(name):
+    """Pinned to the serialiser itself, so the bounds follow it if it changes."""
+
+    def written(value):
+        return len(server._answer_text({"k": value}).encode())
+
+    assert answer_size(name) == written(name) - written("")
+
+
 @pytest.mark.parametrize("extra, listed", [(0, True), (1, False)])
 def test_a_zone_name_is_listed_up_to_the_bound_in_bytes(tmp_path, extra, listed):
     name = _wide(tools.MAX_ZONE_NAME_LENGTH + extra)
@@ -60,6 +67,19 @@ def test_a_risc_name_is_listed_up_to_the_bound_in_bytes(tmp_path, extra, listed)
     result = _zone_timings(tmp_path, [("MATMUL", risc, 900)])
 
     assert ([zone["risc"] for zone in result["zones"]] == [risc]) is listed
+    assert result.get("zones_unlisted_too_long", 0) == (0 if listed else 1)
+
+
+@pytest.mark.parametrize("extra, listed", [(0, True), (1, False)])
+def test_core_spread_lists_a_risc_up_to_the_bound_in_bytes(tmp_path, extra, listed):
+    risc = _wide(tools.MAX_RISC_NAME_LENGTH + extra)
+
+    op = _spread(
+        tmp_path, _zone(0, 1, 1, risc, 0, 2000), [_op(cores="1")], perf_id="1"
+    )["ops"][0]
+
+    assert (list(op["by_risc"]) == [risc]) is listed
+    assert op.get("by_risc_unlisted_too_long", 0) == (0 if listed else 1)
 
 
 @pytest.mark.parametrize(
@@ -88,20 +108,61 @@ def test_a_hundred_names_keep_zone_timings_within_its_budget(
     assert len(server._answer_text(result).encode()) < ANSWER_BUDGET_BYTES
 
 
-def test_a_zone_argument_past_the_bound_in_bytes_is_refused(tmp_path):
-    with pytest.raises(ValueError, match="zone is 258 bytes as an answer writes it"):
-        _intervals(tmp_path, _run(0, 1, 1, "BRISC", 0, [100]), zone=WIDE * 86)
+@pytest.mark.parametrize(
+    "zone",
+    [_wide(tools.MAX_ZONE_NAME_LENGTH + 1), "\udc80" * 42 + "x" * 5],
+    ids=["wide-characters", "lone-surrogates"],
+)
+def test_a_zone_argument_one_byte_past_the_bound_is_refused(tmp_path, zone):
+    """A JSON argument can carry a lone surrogate, which the wire writes in six bytes."""
+    with pytest.raises(ValueError, match="zone is 257 bytes as an answer writes it"):
+        _intervals(tmp_path, _run(0, 1, 1, "BRISC", 0, [100]), zone=zone)
 
 
-def test_a_signpost_argument_past_the_bound_in_bytes_is_refused(tmp_path):
-    write_device_log(tmp_path, MODERN_HEADER, [])
+def _signposted(tmp_path, names):
+    """A loaded report holding a signpost of each name, in order."""
+    rows = smoke_rows()
+    for position, name in enumerate(names, start=2):
+        rows.insert(position, signpost(name, rows[position]))
+    write_ops_perf(tmp_path, rows)
     registry = ReportRegistry()
     load_report(registry, performance_path=str(tmp_path))
+    return registry
 
-    with pytest.raises(
-        ValueError, match="start_signpost is 258 bytes as an answer writes it"
-    ):
-        tools.top_ops(registry, "report-1", start_signpost=WIDE * 86)
+
+@pytest.mark.parametrize(
+    "extra, refusal",
+    [
+        (0, "no signpost named"),
+        (1, "start_signpost is 257 bytes as an answer writes it"),
+    ],
+)
+def test_a_signpost_argument_is_taken_up_to_the_bound_in_bytes(
+    tmp_path, extra, refusal
+):
+    """One at the bound is looked for, and missed; one byte past it is refused unread."""
+    registry = _signposted(tmp_path, ["PERF_START"])
+
+    with pytest.raises(ValueError, match=refusal):
+        tools.top_ops(
+            registry,
+            "report-1",
+            start_signpost=_wide(tools.MAX_SIGNPOST_NAME_LENGTH + extra),
+        )
+
+
+def test_a_signpost_argument_within_the_schema_is_refused_by_its_bytes(tmp_path):
+    """100 characters pass the schema's maxLength; the tool refuses their 300 bytes."""
+    registry = _signposted(tmp_path, ["PERF_START"])
+
+    result, outcome = tool_call(
+        registry, "top_ops", {"handle": "report-1", "start_signpost": WIDE * 100}
+    )
+
+    assert result["isError"] and outcome is McpToolOutcome.REFUSED
+    assert "start_signpost is 300 bytes as an answer writes it" in (
+        result["content"][0]["text"]
+    )
 
 
 @pytest.mark.parametrize("extra, kept", [(0, True), (1, False)])
@@ -158,14 +219,6 @@ def test_a_signpost_is_listed_up_to_the_bound_in_bytes(tmp_path, extra, listed):
     assert loaded.get("signposts_unlisted_too_long", 0) == (0 if listed else 1)
 
 
-def test_a_zone_argument_of_lone_surrogates_is_measured_as_the_wire_writes_it(
-    tmp_path,
-):
-    """A JSON argument can carry one, and the wire writes each as a six-byte escape."""
-    with pytest.raises(ValueError, match="zone is 258 bytes as an answer writes it"):
-        _intervals(tmp_path, _run(0, 1, 1, "BRISC", 0, [100]), zone="\udc80" * 43)
-
-
 def test_an_unknown_signpost_refusal_lists_only_names_a_range_can_take(tmp_path):
     """The names `load_report` lists: one past the bound would be refused if passed."""
     long_name = _wide(tools.MAX_SIGNPOST_NAME_LENGTH + 1)
@@ -183,6 +236,38 @@ def test_an_unknown_signpost_refusal_lists_only_names_a_range_can_take(tmp_path)
         "'report-1': no signpost named 'TYPO' in this report; it holds 'PERF_START'; "
         f"1 more have names past {tools.MAX_SIGNPOST_NAME_LENGTH} bytes, which are "
         "not listed"
+    )
+
+
+_TOO_LONG_NOTE = f"1 more have names past {tools.MAX_SIGNPOST_NAME_LENGTH} bytes, which are not listed"
+_TWENTY_LISTED = ", ".join(repr(f"S{index:02}") for index in range(20))
+
+
+@pytest.mark.parametrize(
+    "short, long, tail",
+    [
+        (23, 0, f"it holds {_TWENTY_LISTED} and 3 more"),
+        (
+            0,
+            1,
+            f"none of its signpost names is short enough to list; {_TOO_LONG_NOTE}",
+        ),
+        (21, 1, f"it holds {_TWENTY_LISTED} and 1 more; {_TOO_LONG_NOTE}"),
+    ],
+    ids=["past-the-list", "only-too-long", "both"],
+)
+def test_an_unknown_signpost_refusal_counts_what_it_leaves_out(
+    tmp_path, short, long, tail
+):
+    names = [f"S{index:02}" for index in range(short)]
+    names += [_wide(tools.MAX_SIGNPOST_NAME_LENGTH + 1)] * long
+    registry = _signposted(tmp_path, names)
+
+    with pytest.raises(ValueError) as refused:
+        tools.top_ops(registry, "report-1", start_signpost="TYPO")
+
+    assert str(refused.value) == (
+        f"'report-1': no signpost named 'TYPO' in this report; {tail}"
     )
 
 
