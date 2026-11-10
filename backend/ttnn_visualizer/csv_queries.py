@@ -623,6 +623,11 @@ class ZoneIntervals:
     untracked_starts: int
 
 
+def _unmatched_starts(open_starts: int, replaced_starts: int) -> int:
+    """Starts that never ended: those still open, and those a second start replaced."""
+    return open_starts + replaced_starts
+
+
 def _pairing_counts(
     unmatched_starts: int = 0, unmatched_ends: int = 0, dropped_starts: int = 0
 ) -> Dict[str, int]:
@@ -671,13 +676,12 @@ class _ZonePairer:
                 self.replaced_starts += 1
                 if self.group is not None:
                     self.replaced_starts_by[self.group(key)] += 1
-                self.open_starts[key] = int(cycles)
             elif len(self.open_starts) >= MAX_OPEN_ZONE_STARTS:
                 self.dropped_starts += 1
                 if self.group is not None:
                     self.dropped_starts_by[self.group(key)] += 1
-            else:
-                self.open_starts[key] = int(cycles)
+                return None
+            self.open_starts[key] = int(cycles)
             return None
         if phase != self.end_token:
             return None
@@ -691,16 +695,16 @@ class _ZonePairer:
     def pairing_by_group(self) -> Dict[Hashable, Dict[str, int]]:
         """`pairing`'s counts for each group that has any, without logging them."""
         assert self.group is not None, "constructed without a group"
-        unmatched_starts = Counter(self.group(key) for key in self.open_starts)
-        unmatched_starts.update(self.replaced_starts_by)
+        open_starts = Counter(self.group(key) for key in self.open_starts)
         groups = (
-            set(unmatched_starts)
+            set(open_starts)
+            | set(self.replaced_starts_by)
             | set(self.unpaired_ends_by)
             | set(self.dropped_starts_by)
         )
         return {
             group: _pairing_counts(
-                unmatched_starts[group],
+                _unmatched_starts(open_starts[group], self.replaced_starts_by[group]),
                 self.unpaired_ends_by[group],
                 self.dropped_starts_by[group],
             )
@@ -716,8 +720,7 @@ class _ZonePairer:
         cannot see that from the figures themselves.
         """
         pairing = _pairing_counts(
-            # A replaced start never ended either.
-            len(self.open_starts) + self.replaced_starts,
+            _unmatched_starts(len(self.open_starts), self.replaced_starts),
             self.unpaired_ends,
             self.dropped_starts,
         )
