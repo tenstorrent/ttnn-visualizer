@@ -157,8 +157,11 @@ first call, which refuses one that is not a readable tt-npe trace.
   it occurs twice — and `signpost_count` counts them all, since the list stops at 20. Both
   are absent when the performance CSV cannot be reported on, and empty when it holds no
   signposts. A name longer than 256 characters, which a range cannot take, is counted but
-  left out of the list, and `signposts_unlisted_too_long` says how many were. When the CSV
-  can be reported on but its signposts cannot be read, `signposts_problem` says why. Loading reads the signposts, so a handle answers from the
+  left out of the list, and `signposts_unlisted_too_long` says how many were. A CSV whose
+  header and rows look sound but that pandas cannot parse, such as one with a quote left
+  open, has its parse error in `performance_csv_problem`, with the tools that read it
+  listed as unanswerable; when it parses but its signposts cannot be read,
+  `signposts_problem` says why. Loading reads the signposts, so a handle answers from the
   CSV it was loaded on: one rewritten or superseded after that is refused, and
   `load_report` again gives a fresh handle.
 - `arch` and `device_count` are keyed by the file each was read from, since a handle's two

@@ -46,6 +46,7 @@ from ttnn_visualizer.agent.handles import (
     UnsharedSnapshot,
     perf_csv_columns,
     read_once,
+    without_performance_csv,
 )
 from ttnn_visualizer.csv_queries import (
     L1_ZONE_MARKER_CAPACITY,
@@ -402,7 +403,10 @@ def with_signposts(
         return loaded
     try:
         resolved = _signposts(registry, str(loaded["handle"]))
-    except (DataFormatError, OSError, TypeError, ValueError) as error:
+    except DataFormatError as error:
+        # It does not parse past the lines the inventory checks, so no tool reads it.
+        return without_performance_csv(loaded, str(error))
+    except (OSError, TypeError, ValueError) as error:
         return {**loaded, "signposts_problem": str(error)}
     named = resolved.occurrences()
     # A longer name cannot be passed back as a bound, and is the capture's text, not ours.

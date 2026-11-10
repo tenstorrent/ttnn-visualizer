@@ -28,6 +28,7 @@ from ttnn_visualizer.agent.bounds import MAX_LIMIT
 from ttnn_visualizer.agent.handles import (
     MAX_SCOPED_DIFF_TOTALS,
     MAX_SCOPED_REPORTS,
+    PERF_CSV_TOOLS,
     CacheVariant,
     ReportRegistry,
     UnkeptSnapshot,
@@ -808,7 +809,7 @@ class TestReportFacts:
         assert "isError" not in response["result"]
         loaded = json.loads(response["result"]["content"][0]["text"])
         assert loaded["device_count"] == {}
-        assert "signposts_problem" in loaded
+        assert "EOF inside string" in loaded["performance_csv_problem"]
 
     @pytest.mark.parametrize(
         "schema",
@@ -980,9 +981,12 @@ class TestLoadReportSignposts:
             registry, load_report(registry, performance_path=str(tmp_path))
         )
 
-        assert loaded["performance_csv_problem"] is None
+        assert "could not read the report's signposts" in (
+            loaded["performance_csv_problem"]
+        )
         assert "signposts" not in loaded
-        assert "could not read the report's signposts" in loaded["signposts_problem"]
+        assert "signposts_problem" not in loaded
+        assert PERF_CSV_TOOLS.isdisjoint(loaded["answerable"])
 
     def test_signposts_that_cannot_be_read_are_parsed_once_per_capture(self, tmp_path):
         """Loading the capture again, or asking it a range, parsed to the failure again."""
@@ -1004,7 +1008,10 @@ class TestLoadReportSignposts:
                 tools.top_ops(registry, answers[0]["handle"], start_signpost="A")
 
         resolve.assert_called_once()
-        assert answers[0]["signposts_problem"] == answers[1]["signposts_problem"]
+        assert (
+            answers[0]["performance_csv_problem"]
+            == answers[1]["performance_csv_problem"]
+        )
 
     def test_the_read_is_shared_by_every_handle_on_one_capture(self, tmp_path):
         """`load_report` again, as a refusal asks, should not read the CSV again."""
@@ -1071,15 +1078,22 @@ class TestLoadReportSignposts:
         assert {"top_ops", "op_breakdown"} <= set(loaded["answerable"])
 
     @pytest.mark.parametrize(
-        "error", [TypeError("'<' not supported"), DataFormatError("ragged")]
+        "error, field",
+        [
+            (TypeError("'<' not supported"), "signposts_problem"),
+            (DataFormatError("ragged"), "performance_csv_problem"),
+        ],
     )
-    def test_a_signpost_read_that_fails_never_refuses_the_report(self, tmp_path, error):
-        """The signposts describe the capture; failing to read them is said, not raised."""
+    def test_a_signpost_read_that_fails_never_refuses_the_report(
+        self, tmp_path, error, field
+    ):
+        """The signposts describe the capture; failing to read them is said, not raised.
+        A CSV that does not parse is one no tool reading it can answer. #2198"""
         registry = ReportRegistry()
         with patch.object(tools, "_resolve_signposts", side_effect=error):
             loaded = self._loaded(registry, tmp_path, signposted_rows())
 
-        assert loaded["signposts_problem"] == str(error)
+        assert loaded[field] == str(error)
         assert "signposts" not in loaded
 
     def test_a_capture_rewritten_after_loading_is_refused(self, tmp_path):
