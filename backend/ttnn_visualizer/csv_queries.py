@@ -488,7 +488,8 @@ _INT64_END = 2.0**63
 _INT64_MAX = np.uint64(2**63 - 1)
 # What `_whole_number_rows` leaves out, as the caveats that count it say.
 UNREADABLE_NUMBER_REASON = (
-    "that is not a number or does not fit a 64-bit integer, or a negative cycle count"
+    "that is not a whole number or does not fit a 64-bit integer, or a negative cycle "
+    "count"
 )
 
 
@@ -522,6 +523,16 @@ def _fits_int64(numbers: pd.Series) -> np.ndarray:
     return (values >= -_INT64_END) & (values < _INT64_END)
 
 
+def _is_whole(numbers: pd.Series) -> np.ndarray:
+    """Whether each cell is a whole number, which a cast to int64 would not truncate:
+    tt-metal writes slots, cores, runs and cycle counts as integers. #2259"""
+    if pd.api.types.is_integer_dtype(numbers):
+        return np.ones(len(numbers), dtype=bool)
+    values = numbers.to_numpy(dtype=float)
+    with np.errstate(invalid="ignore"):
+        return np.floor(values) == values
+
+
 def _whole_number_rows(
     chunk: pd.DataFrame, columns: Sequence[str], *, non_negative: Sequence[str]
 ) -> Tuple[pd.DataFrame, np.ndarray]:
@@ -531,7 +542,7 @@ def _whole_number_rows(
     numbers = chunk[list(columns)].apply(pd.to_numeric, errors="coerce")
     readable: np.ndarray = np.ones(len(chunk), dtype=bool)
     for column in columns:
-        readable &= _fits_int64(numbers[column])
+        readable &= _fits_int64(numbers[column]) & _is_whole(numbers[column])
     for column in non_negative:
         readable &= (numbers[column] >= 0).to_numpy()
     # A blank cell elsewhere makes pandas read a column as floats; keys stay ints.

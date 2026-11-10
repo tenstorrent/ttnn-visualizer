@@ -538,8 +538,8 @@ class TestUnreadableCells:
         assert op["core_span"]["max_us"] == 3.0
         assert result["caveat"].startswith(
             f"{rows} kernel rows of these operations' call counts have a slot, core or "
-            "cycle count that is not a number or does not fit a 64-bit integer, or a "
-            "negative cycle count, and were left out"
+            "cycle count that is not a whole number or does not fit a 64-bit integer, "
+            "or a negative cycle count, and were left out"
         )
 
     def test_large_whole_numbers_are_kept(self, tmp_path):

@@ -723,8 +723,8 @@ zones than the row reports, as a DRAM-sharded matmul's helper cores do, the medi
 `imbalance` mix cores with different roles, while the maximum and `slowest_cores` still
 name the cores that set the time; a caveat says so. Unpaired zones are counted per call
 count and device, not per replay, so an unpaired zone in one replay is reported on every
-replay of that operation. A kernel row whose slot, core or cycle count is not a number or
-does not fit a 64-bit integer, or whose cycle count is negative, is left out and counted in
+replay of that operation. A kernel row whose slot, core or cycle count is not a whole
+number or does not fit a 64-bit integer, or whose cycle count is negative, is left out and counted in
 a caveat rather than failing the call. The first call on a handle reads the whole device
 log once for every operation in the report, and later calls answer from that read, with
 the clock it was read at.
@@ -763,8 +763,8 @@ except a firmware zone, which starts before the kernel start that opens its run,
 start replaced before its end counts as unpaired. A zone the log does not start is refused
 with the zones it does, most started first, leaving out any name longer than 256
 characters, which is the capture's text, not the tool's; a zone asked for by a longer name
-is refused. A row whose slot, core, run or cycle count is not a number or does not fit a
-64-bit integer, or whose cycle count is negative, is left out and counted in a caveat, and
+is refused. A row whose slot, core, run or cycle count is not a whole number or does not
+fit a 64-bit integer, or whose cycle count is negative, is left out and counted in a caveat, and
 a zone whose every start was left out is refused with how many were unreadable that way
 and how many lay past the 200,000 core-RISC timelines followed at once. The first call on
 a handle reads the device log once for every zone, and later calls, for any zone and the

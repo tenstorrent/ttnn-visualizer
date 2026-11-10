@@ -821,7 +821,7 @@ class TestGaps:
         assert answer["by_core_risc"][0]["intervals"] == 2
         assert answer["by_core_risc"][0]["max_us"] == 1.0
         assert (
-            "1 rows have a slot, core, run or cycle count that is not a number or does "
+            "1 rows have a slot, core, run or cycle count that is not a whole number or does "
             "not fit a 64-bit integer, or a negative cycle count, and were left out."
         ) in answer["caveat"]
 
@@ -1207,7 +1207,7 @@ class TestRefusals:
 
         assert str(refusal.value) == (
             "'LOOP' starts 2 times in profile_log_device.csv, but none could be read: "
-            "2 have a slot, core, run or cycle count that is not a number or does not "
+            "2 have a slot, core, run or cycle count that is not a whole number or does not "
             "fit a 64-bit integer, or a negative cycle count, and 0 lie on core-RISC "
             "timelines past the 200000 followed at once"
         )
@@ -1238,7 +1238,7 @@ class TestRefusals:
             _intervals(tmp_path, rows)
 
         assert str(refusal.value).endswith(
-            ": 0 have a slot, core, run or cycle count that is not a number or does not "
+            ": 0 have a slot, core, run or cycle count that is not a whole number or does not "
             "fit a 64-bit integer, or a negative cycle count, and 2 lie on core-RISC "
             "timelines past the 0 followed at once"
         )
