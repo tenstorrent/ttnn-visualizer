@@ -203,7 +203,10 @@ def _forget_gone_holders(
 ) -> None:
     """`forgetGoneHolders`. A later buffer at a gone tensor's address is another
     tensor's: drop a holder whose buffer left a recorded snapshot, or that a deallocate
-    call freed."""
+    call freed.
+
+    `deallocated` is the call's inputs, while a hold's ending reads the deallocate calls
+    among the tensor's consumers; both come from the `input_tensors` rows."""
     if sizes:
         for address in [
             address for address in holder_by_address if address not in sizes

@@ -146,10 +146,11 @@ const hasAddress = <T extends { address?: number | null }>(item: T): item is T &
  */
 const forgetGoneHolders = (
     holderByAddress: Map<number, Tensor>,
-    snapshotAddresses: ReadonlySet<number> | null,
+    snapshotAddresses: ReadonlySet<number>,
     deallocated: readonly Tensor[],
 ) => {
-    if (snapshotAddresses) {
+    // An operation that recorded no buffers says nothing about which ones left.
+    if (snapshotAddresses.size > 0) {
         holderByAddress.forEach((_, address) => {
             if (!snapshotAddresses.has(address)) {
                 holderByAddress.delete(address);
@@ -158,11 +159,14 @@ const forgetGoneHolders = (
     }
 
     deallocated.forEach((tensor) => {
-        if (tensor && hasAddress(tensor) && holderByAddress.get(tensor.address)?.id === tensor.id) {
+        if (hasAddress(tensor) && holderByAddress.get(tensor.address)?.id === tensor.id) {
             holderByAddress.delete(tensor.address);
         }
     });
 };
+
+const NO_TENSORS: readonly Tensor[] = [];
+const NO_TENSOR_IDS: ReadonlySet<number> = new Set();
 
 /**
  * The tensor each operation's buffers belong to, by address: the last one seen at that address, until
@@ -183,8 +187,8 @@ export const buildTensorsByOperationByAddress = (
     const holderByAddress = new Map<number, Tensor>();
 
     for (const op of operations) {
-        const deallocated = isDeallocate(op.name) ? (op.inputs ?? []) : [];
-        const deallocatedIds = new Set(deallocated.map((tensor) => tensor?.id));
+        const deallocated = isDeallocate(op.name) ? (op.inputs ?? []).filter(Boolean) : NO_TENSORS;
+        const deallocatedIds = deallocated.length > 0 ? new Set(deallocated.map((tensor) => tensor.id)) : NO_TENSOR_IDS;
 
         for (const tensor of [...(op.inputs ?? []), ...(op.outputs ?? [])]) {
             if (tensor && hasAddress(tensor) && !deallocatedIds.has(tensor.id)) {
@@ -197,7 +201,7 @@ export const buildTensorsByOperationByAddress = (
         const snapshotAddresses = new Set<number>();
 
         for (const buffer of buffers) {
-            const tensor = hasAddress(buffer) ? holderByAddress.get(buffer.address) : undefined;
+            const tensor = holderByAddress.get(buffer.address);
             snapshotAddresses.add(buffer.address);
             if (tensor) {
                 tensorsByBufferAddress.set(buffer.address, {
@@ -208,7 +212,7 @@ export const buildTensorsByOperationByAddress = (
         }
 
         tensorsByOperationByAddress.set(op.id, tensorsByBufferAddress);
-        forgetGoneHolders(holderByAddress, buffers.length > 0 ? snapshotAddresses : null, deallocated);
+        forgetGoneHolders(holderByAddress, snapshotAddresses, deallocated);
     }
 
     return tensorsByOperationByAddress;
