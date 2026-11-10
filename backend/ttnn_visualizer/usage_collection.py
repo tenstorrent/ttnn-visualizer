@@ -4,6 +4,7 @@
 
 """Opt-in configuration for exporting aggregate usage metrics."""
 
+import errno
 import ipaddress
 import json
 import logging
@@ -292,10 +293,17 @@ def describe_usage_collection(
     """The collection status line a launch reports, shared by the app and MCP server."""
     if collection_config.enabled and recording_disabled:
         return "📈 Aggregate usage collection is DISABLED: event logging is disabled."
-    if collection_config.enabled and not collection_config.can_export:
+    if collection_config.enabled and collection_config.remote_write_endpoint is None:
         return (
             "📈 Aggregate usage collection is DISABLED: no remote_write_endpoint "
             f"is set in {get_collection_config_path()}."
+        )
+    if collection_config.enabled and not collection_config.can_export:
+        # Endpoint set but no ID: another process held the config lock, so this start
+        # read it without preparing it.
+        return (
+            "📈 Aggregate usage collection is DISABLED for this session: "
+            "the machine ID has not been created yet. It will be at the next start."
         )
     if collection_config.enabled:
         return (
@@ -336,13 +344,27 @@ def usage_file_lock(name: str, *, timeout_seconds: float) -> Iterator[bool]:
     directory.mkdir(mode=PRIVATE_DIRECTORY_MODE, parents=True, exist_ok=True)
     # Append mode, so opening never truncates a file another process holds.
     with open(directory / name, "a", encoding="utf-8") as lock_file:
-        if not _acquire_lock(fcntl, lock_file, timeout_seconds):
+        try:
+            acquired = _acquire_lock(fcntl, lock_file, timeout_seconds)
+        except OSError as error:
+            # Not contention but a home where flock cannot work, such as ``ENOLCK`` on
+            # an NFS mount without a lock manager. Run unserialised, as on Windows,
+            # rather than let optional telemetry fail as an invalid config.
+            logger.debug("Usage lock %s unavailable: %s", name, error)
+            yield True
+            return
+        if not acquired:
             yield False
             return
         try:
             yield True
         finally:
             fcntl.flock(lock_file, fcntl.LOCK_UN)
+
+
+# What ``flock`` raises under ``LOCK_NB`` when another holder has the lock. Anything
+# else means locking itself is unavailable.
+_LOCK_HELD_ERRNOS = frozenset({errno.EWOULDBLOCK, errno.EAGAIN})
 
 
 def _acquire_lock(fcntl: Any, lock_file: IO[str], timeout_seconds: float) -> bool:
@@ -352,7 +374,9 @@ def _acquire_lock(fcntl: Any, lock_file: IO[str], timeout_seconds: float) -> boo
         try:
             fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
             return True
-        except BlockingIOError:
+        except OSError as error:
+            if error.errno not in _LOCK_HELD_ERRNOS:
+                raise
             if time.monotonic() >= deadline:
                 return False
             time.sleep(_LOCK_POLL_SECONDS)

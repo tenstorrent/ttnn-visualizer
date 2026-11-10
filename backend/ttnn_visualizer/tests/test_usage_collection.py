@@ -2,6 +2,7 @@
 #
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
+import errno
 import json
 import logging
 import os
@@ -691,7 +692,9 @@ def test_read_failure_sets_the_scan_error(tmp_path, monkeypatch):
     assert _health_value(metrics, "scan_errors") == 1
 
 
-def test_read_failure_preserves_cached_counters(tmp_path, monkeypatch):
+def test_read_failure_sends_only_the_health_gauges(tmp_path, monkeypatch):
+    """This process's cached totals can trail what another process already pushed
+    from the same log, and a lower value reads as a counter reset."""
     config = usage_collection.UsageCollectionConfig(
         enabled=True,
         remote_write_endpoint="https://metrics.example/write",
@@ -708,12 +711,19 @@ def test_read_failure_preserves_cached_counters(tmp_path, monkeypatch):
     def _raise_permission_error(*_args, **_kwargs):
         raise PermissionError("refused")
 
-    monkeypatch.setattr(Path, "open", _raise_permission_error)
-    failed_metrics = _exported_series(config, log_path=log_path)
+    with monkeypatch.context() as unreadable:
+        unreadable.setattr(Path, "open", _raise_permission_error)
+        failed_metrics = _exported_series(config, log_path=log_path)
+    recovered_metrics = _exported_series(config, log_path=log_path)
 
     assert 'view="operations"} 1' in first_metrics
-    assert 'view="operations"} 1' in failed_metrics
+    assert "view_opened_total" not in failed_metrics
+    assert "parse_errors_total" not in failed_metrics
     assert _health_value(failed_metrics, "scan_errors") == 1
+    assert _health_value(failed_metrics, "files_found") == 1
+    # Cumulative, so the next good read carries everything, the cache included.
+    assert 'view="operations"} 1' in recovered_metrics
+    assert _health_value(recovered_metrics, "scan_errors") == 0
 
 
 def test_metrics_increment_from_appended_bytes_without_double_counting(tmp_path):
@@ -1628,8 +1638,22 @@ def test_push_uses_the_requested_timeout(
 
     ((_command, kwargs),) = curl_calls
     options = _curl_options(kwargs["input"])
-    assert ("max-time", "2.5") in options
-    assert ("connect-timeout", "2.5") in options
+    assert ("max-time", "2.500") in options
+    assert ("connect-timeout", "2.500") in options
+
+
+def test_push_formats_a_small_timeout_without_an_exponent(
+    event_log_directory, usage_collection_config_path, curl_calls
+):
+    """curl reads ``5e-05`` as no limit at all."""
+    _opt_in(usage_collection_config_path, remote_write_endpoint=_ENDPOINT)
+
+    assert push_usage_metrics(timeout_seconds=0.25) is True
+
+    ((_command, kwargs),) = curl_calls
+    for name, value in _curl_options(kwargs["input"]):
+        if name in ("max-time", "connect-timeout"):
+            assert re.fullmatch(r"\d+\.\d{3}", value), (name, value)
 
 
 def test_push_raises_when_curl_times_out(
@@ -1796,6 +1820,18 @@ def test_a_waiting_push_gives_curl_only_the_time_left(
     assert 2.0 < max_time < 2.6
 
 
+def test_a_waiting_push_with_too_little_time_left_sends_nothing(
+    event_log_directory, usage_collection_config_path, curl_calls, monkeypatch
+):
+    """A sliver of budget would reach curl as no limit, so the subprocess margin
+    rather than the budget would end the exit push."""
+    _opt_in(usage_collection_config_path, remote_write_endpoint=_ENDPOINT)
+    monkeypatch.setattr(usage_metrics, "MIN_REQUEST_SECONDS", 10.0)
+
+    assert push_usage_metrics(timeout_seconds=3.0, wait_for_lock=True) is False
+    assert curl_calls == []
+
+
 @_requires_flock
 @pytest.mark.parametrize("change", ["environment", "marker", "config-disabled"])
 def test_a_waiting_push_honours_an_opt_out_that_arrived_while_it_waited(
@@ -1946,6 +1982,84 @@ def test_preparation_behind_a_held_lock_keeps_an_existing_identity(
 
     assert config.can_export
     assert config.machine_id == prepared.machine_id
+
+
+@_requires_flock
+def test_preparation_behind_a_held_lock_reports_the_missing_identity(
+    usage_collection_config_path, monkeypatch
+):
+    """The endpoint is set; only the ID is missing, and the next start creates it."""
+    _write_config(
+        usage_collection_config_path, enabled=True, remote_write_endpoint=_ENDPOINT
+    )
+    monkeypatch.setattr(usage_collection, "_COLLECTION_LOCK_TIMEOUT_SECONDS", 0.1)
+
+    with usage_collection.usage_file_lock(
+        usage_collection.COLLECTION_LOCK_NAME, timeout_seconds=5
+    ):
+        config = usage_collection.prepare_usage_collection_config()
+    status = usage_collection.describe_usage_collection(
+        config, recording_disabled=False
+    )
+
+    assert "machine ID has not been created yet" in status
+    assert "no remote_write_endpoint" not in status
+
+
+def _flock_unavailable(monkeypatch):
+    """Make every ``flock`` fail as an NFS home without a lock manager does."""
+    import fcntl
+
+    def _no_locks(*_args):
+        raise OSError(errno.ENOLCK, os.strerror(errno.ENOLCK))
+
+    monkeypatch.setattr(fcntl, "flock", _no_locks)
+
+
+@_requires_flock
+def test_preparation_runs_unlocked_where_flock_is_unavailable(
+    usage_collection_config_path, monkeypatch
+):
+    _write_config(
+        usage_collection_config_path, enabled=True, remote_write_endpoint=_ENDPOINT
+    )
+    _flock_unavailable(monkeypatch)
+
+    config = usage_collection.prepare_usage_collection_config()
+
+    assert config.error is None
+    assert config.can_export
+    assert "machine_id" in json.loads(usage_collection_config_path.read_text())
+
+
+@_requires_flock
+@pytest.mark.parametrize("wait_for_lock", [False, True])
+def test_push_runs_unlocked_where_flock_is_unavailable(
+    event_log_directory,
+    usage_collection_config_path,
+    curl_calls,
+    monkeypatch,
+    wait_for_lock,
+):
+    _opt_in(usage_collection_config_path, remote_write_endpoint=_ENDPOINT)
+    _flock_unavailable(monkeypatch)
+
+    assert push_usage_metrics(wait_for_lock=wait_for_lock) is True
+    assert len(curl_calls) == 1
+
+
+@_requires_flock
+def test_a_held_lock_is_still_contention_not_unavailability(
+    usage_collection_config_path,
+):
+    """Only a failure other than "already held" may run unserialised."""
+    with usage_collection.usage_file_lock(
+        usage_collection.COLLECTION_LOCK_NAME, timeout_seconds=5
+    ):
+        with usage_collection.usage_file_lock(
+            usage_collection.COLLECTION_LOCK_NAME, timeout_seconds=0
+        ) as locked:
+            assert locked is False
 
 
 def test_exporter_pushes_at_start_and_stop(monkeypatch):
@@ -2180,11 +2294,14 @@ def test_launch_reports_each_disabled_collection_state(
     assert "remote_write_endpoint must" not in output
 
 
+@pytest.mark.parametrize("opt_out", ["environment", "marker"])
 def test_launch_reports_collection_disabled_by_the_recording_opt_out(
-    usage_collection_config_path, monkeypatch, capsys
+    usage_collection_config_path, monkeypatch, capsys, opt_out
 ):
-    _write_config(usage_collection_config_path, enabled=True)
-    monkeypatch.setenv(RECORDING_DISABLED_ENV_VAR, "true")
+    _write_config(
+        usage_collection_config_path, enabled=True, remote_write_endpoint=_ENDPOINT
+    )
+    _enable_recording_opt_out(opt_out, monkeypatch)
 
     output = _record_launch_output(monkeypatch, capsys)
 
@@ -2192,6 +2309,13 @@ def test_launch_reports_collection_disabled_by_the_recording_opt_out(
         "Aggregate usage collection is DISABLED: event logging is disabled." in output
     )
     assert "Aggregate usage collection is ENABLED" not in output
+    # Read-only, as the MCP server is: an opted-out launch writes no identity and
+    # takes no preparation lock.
+    assert "machine_id" not in json.loads(usage_collection_config_path.read_text())
+    lock_path = (
+        usage_collection_config_path.parent / usage_collection.COLLECTION_LOCK_NAME
+    )
+    assert not lock_path.exists()
 
 
 def test_hosted_launch_reports_no_collection_status(

@@ -1150,10 +1150,20 @@ def _start_usage_export() -> Optional[UsageMetricsExporter]:
     return start_usage_exporter(collection_config)
 
 
+class _Terminated(SystemExit):
+    """Raised by the SIGTERM handler, so ``main()`` can tell a termination apart."""
+
+
 def _exit_on_sigterm(signum: int, frame: Optional[FrameType]) -> None:
     # Raised in the main thread, so ``main()``'s ``finally`` still makes the final push
     # when a host terminates the server rather than closing its stdin.
-    raise SystemExit(0)
+    raise _Terminated(0)
+
+
+def _defer_sigterm(signum: int, frame: Optional[FrameType]) -> None:
+    # A handler rather than ``SIG_IGN``: a caught signal is reset to the default in an
+    # exec'd child, so the final push's curl still dies with a process-group SIGTERM.
+    pass
 
 
 def main() -> None:
@@ -1181,17 +1191,30 @@ def main() -> None:
     except Exception:
         logger.exception("Event-log startup failed; serving without recording")
 
-    if exporter is not None:
-        signal.signal(signal.SIGTERM, _exit_on_sigterm)
+    if exporter is None:
+        serve(sys.stdin, sys.stdout)
+        return
+
+    previous_handler = signal.signal(signal.SIGTERM, _exit_on_sigterm)
+    terminated = False
     try:
         serve(sys.stdin, sys.stdout)
+    except _Terminated:
+        terminated = True
     finally:
-        if exporter is not None:
-            # A repeated SIGTERM would otherwise raise inside ``stop()`` and drop the
-            # final push the first one started. The push is bounded, and a host that
-            # will not wait can still SIGKILL.
-            signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        # A repeated SIGTERM would otherwise raise inside ``stop()`` and drop the
+        # final push the first one started. The push is bounded, and a host that
+        # will not wait can still SIGKILL.
+        signal.signal(signal.SIGTERM, _defer_sigterm)
+        try:
             exporter.stop()
+        finally:
+            signal.signal(signal.SIGTERM, previous_handler)
+    if terminated:
+        # Skip interpreter shutdown: it flushes what is left in stdout's buffer, which
+        # blocks for good while a client that is not reading has the pipe full. Those
+        # bytes are a partial frame for a client that is leaving anyway.
+        os._exit(0)
 
 
 if __name__ == "__main__":

@@ -21,6 +21,7 @@ import signal
 import sqlite3
 import subprocess
 import sys
+import threading
 import time
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -3253,7 +3254,7 @@ def _patch_main_for_export(monkeypatch, order, *, can_export=True, recording=Tru
     monkeypatch.setattr(
         server.signal,
         "signal",
-        lambda signum, handler: handlers.append((signum, handler)),
+        lambda signum, handler: handlers.append((signum, handler)) or signal.SIG_DFL,
     )
     return handlers
 
@@ -3266,12 +3267,52 @@ def test_main_exports_around_serving_when_collection_can_export(monkeypatch):
     server.main()
 
     assert order == ["compact", "prepare", "export-start", "serve", "export-stop"]
-    # Installed for serving, then ignored while the final push runs, so a repeated
-    # SIGTERM cannot raise inside ``stop()`` and drop it.
+    # Installed for serving, deferred while the final push runs, so a repeated
+    # SIGTERM cannot raise inside ``stop()`` and drop it, then restored.
     assert handlers == [
         (signal.SIGTERM, server._exit_on_sigterm),
-        (signal.SIGTERM, signal.SIG_IGN),
+        (signal.SIGTERM, server._defer_sigterm),
+        (signal.SIGTERM, signal.SIG_DFL),
     ]
+
+
+def test_main_exits_without_interpreter_shutdown_after_sigterm(monkeypatch):
+    """Interpreter shutdown flushes stdout, which blocks for good on a full pipe."""
+    order = []
+    handlers = _patch_main_for_export(monkeypatch, order)
+
+    def _terminated(*_args, **_kwargs):
+        order.append("serve")
+        raise server._Terminated(0)
+
+    monkeypatch.setattr(server, "serve", _terminated)
+    monkeypatch.setattr(
+        server.os, "_exit", lambda code: order.append(f"os._exit({code})")
+    )
+
+    server.main()
+
+    assert order == [
+        "compact",
+        "prepare",
+        "export-start",
+        "serve",
+        "export-stop",
+        "os._exit(0)",
+    ]
+    assert handlers[-1] == (signal.SIGTERM, signal.SIG_DFL)
+
+
+def test_main_exits_normally_when_stdin_closes(monkeypatch):
+    order = []
+    _patch_main_for_export(monkeypatch, order)
+    monkeypatch.setattr(
+        server.os, "_exit", lambda code: order.append(f"os._exit({code})")
+    )
+
+    server.main()
+
+    assert "os._exit(0)" not in order
 
 
 def test_main_starts_no_exporter_without_an_endpoint(monkeypatch):
@@ -3350,9 +3391,10 @@ def test_main_serves_when_preparing_collection_raises(monkeypatch):
 
 
 def test_sigterm_exits_through_mains_finally():
-    with pytest.raises(SystemExit) as exit_info:
+    with pytest.raises(server._Terminated) as exit_info:
         server._exit_on_sigterm(signal.SIGTERM, None)
 
+    assert isinstance(exit_info.value, SystemExit)
     assert exit_info.value.code == 0
 
 
@@ -3467,6 +3509,35 @@ def test_mcp_pushes_on_exit_after_sigterm(tmp_path):
 
     assert process.returncode == 0, stderr
     assert stdout == ""
+    assert calls_path.read_text().splitlines() == ["called", "called"]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="SIGTERM and the fake curl are POSIX")
+def test_mcp_sigterm_ends_a_server_whose_client_stopped_reading(tmp_path):
+    """With stdout's pipe full, a flush at interpreter exit would block for good, and
+    a SIGTERM still ignored after the final push could never end it."""
+    process, calls_path, _config_path = _start_exporting_server(tmp_path)
+    pings = "".join(
+        json.dumps({"jsonrpc": "2.0", "id": index, "method": "ping"}) + "\n"
+        for index in range(20_000)
+    )
+
+    def _send_without_reading():
+        try:
+            process.stdin.write(pings)
+            process.stdin.flush()
+        except (BrokenPipeError, OSError, ValueError):
+            pass
+
+    def _terminate():
+        sender = threading.Thread(target=_send_without_reading, daemon=True)
+        sender.start()
+        # Long enough for the replies to fill the pipe nobody reads.
+        time.sleep(2)
+        process.send_signal(signal.SIGTERM)
+        return process.wait(timeout=30)
+
+    assert _finish(process, _terminate) == 0
     assert calls_path.read_text().splitlines() == ["called", "called"]
 
 
