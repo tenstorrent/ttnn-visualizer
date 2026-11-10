@@ -2255,6 +2255,24 @@ class TestZoneSummary:
         assert by_zone["MATMUL"]["total_cycles"] == 500
         assert by_zone["MATMUL"]["occurrences"] == 2
 
+    @pytest.mark.parametrize(
+        "extra, malformed",
+        [
+            pytest.param([], 0, id="every-row-readable"),
+            pytest.param(
+                [modern_row(1, 1, 1, "BRISC", "x", "MATMUL", "ZONE_START")],
+                1,
+                id="one-unreadable-row",
+            ),
+        ],
+    )
+    def test_the_count_of_rows_left_out_is_returned(self, tmp_path, extra, malformed):
+        write_device_log(tmp_path, MODERN_HEADER, [*ZONED_ROWS, *extra])
+        instance = Instance(instance_id="pytest", performance_path=str(tmp_path))
+
+        with DeviceLogProfilerQueries(instance, stream=True) as queries:
+            assert queries.query_zone_summary()[2] == malformed
+
     def test_a_core_is_scoped_to_its_device(self, tmp_path):
         """`(core_x, core_y)` repeats on every PCIe slot.
 
@@ -2491,6 +2509,10 @@ class TestZoneTimingsUnreadableCells:
                 id="cycles-past-int64",
             ),
             pytest.param(
+                modern_row(0, 1, 1, "BRISC", 2**63, "MATMUL", "ZONE_END"),
+                id="cycles-one-past-int64",
+            ),
+            pytest.param(
                 modern_row(0, 1, 1, "BRISC", -5, "MATMUL", "ZONE_END"),
                 id="negative-end",
             ),
@@ -2573,6 +2595,100 @@ class TestZoneTimingsUnreadableCells:
         (zone,) = result["zones"]
         assert zone["occurrences"] == 1
         assert "1 rows have a slot, core, run or cycle count" in result["caveat"]
+
+    def test_rows_left_out_in_different_chunks_are_all_counted(
+        self, tmp_path, monkeypatch
+    ):
+        """A count reset per chunk, or a chunk the name filter empties, would lose one."""
+        write_device_log(
+            tmp_path,
+            MODERN_HEADER,
+            [
+                modern_row(0, 1, 1, "BRISC", 100, "MATMUL", "ZONE_START"),
+                modern_row(0, 1, 1, "BRISC", "x", "MATMUL", "ZONE_START"),
+                modern_row(0, 1, 1, "BRISC", 200, "", "TS_DATA"),
+                modern_row(0, 1, 1, "BRISC", "2.5", "MATMUL", "ZONE_END"),
+                modern_row(0, 1, 1, "BRISC", 400, "MATMUL", "ZONE_END"),
+            ],
+        )
+        monkeypatch.setattr(csv_queries, "CSV_CHUNK_SIZE", 1)
+        registry = ReportRegistry()
+        load_report(registry, performance_path=str(tmp_path))
+
+        result = tools.zone_timings(registry, "report-1")
+
+        (zone,) = result["zones"]
+        assert (zone["occurrences"], zone["total_cycles"]) == (1, 300)
+        assert result["caveat"].startswith(
+            "2 rows have a slot, core, run or cycle count"
+        )
+
+    def test_a_zone_whose_every_row_is_unreadable_is_not_listed(self, tmp_path):
+        result = self._answer(
+            tmp_path, [modern_row(0, 1, 1, "NCRISC", "x", "READ", "ZONE_START")]
+        )
+
+        assert [zone["zone"] for zone in result["zones"]] == ["MATMUL"]
+        assert "zones_unlisted_too_long" not in result
+        assert result["caveat"].startswith(
+            "1 rows have a slot, core, run or cycle count"
+        )
+
+    def test_a_kept_read_keeps_its_count(self, tmp_path):
+        calls = []
+        original = DeviceLogProfilerQueries.query_zone_summary
+
+        def counted(self):
+            calls.append(self)
+            return original(self)
+
+        with patch.object(DeviceLogProfilerQueries, "query_zone_summary", counted):
+            registry = ReportRegistry()
+            write_device_log(
+                tmp_path,
+                MODERN_HEADER,
+                [
+                    modern_row(0, 1, 1, "BRISC", 100, "MATMUL", "ZONE_START"),
+                    modern_row(0, 1, 1, "BRISC", 400, "MATMUL", "ZONE_END"),
+                    modern_row(0, 1, 1, "BRISC", "x", "MATMUL", "ZONE_START"),
+                ],
+            )
+            load_report(registry, performance_path=str(tmp_path))
+            first = tools.zone_timings(registry, "report-1")
+            again = tools.zone_timings(registry, "report-1")
+
+        assert len(calls) == 1
+        assert again["caveat"] == first["caveat"]
+        assert first["caveat"].startswith("1 rows have")
+
+    def test_zone_intervals_counts_the_same_unreadable_row(self, tmp_path):
+        """One wording and one rule for both tools; the nameless row neither keeps."""
+        write_device_log(
+            tmp_path,
+            MODERN_HEADER,
+            [
+                modern_row(0, 1, 1, "BRISC", 50, "BRISC-KERNEL", "ZONE_START"),
+                modern_row(0, 1, 1, "BRISC", 100, "MATMUL", "ZONE_START"),
+                modern_row(0, 1, 1, "BRISC", 200, "MATMUL", "ZONE_END"),
+                modern_row(0, 1, 1, "BRISC", 300, "MATMUL", "ZONE_START"),
+                modern_row(0, 1, 1, "BRISC", 400, "MATMUL", "ZONE_END"),
+                modern_row(0, 1, 1, "BRISC", "x", "MATMUL", "ZONE_START"),
+                modern_row(0, 1, 1, "BRISC", "x", "", "TS_DATA"),
+            ],
+        )
+        registry = ReportRegistry()
+        load_report(registry, performance_path=str(tmp_path))
+
+        timings = tools.zone_timings(registry, "report-1")
+        intervals = tools.zone_intervals(registry, "report-1", "MATMUL")
+
+        unreadable = (
+            "1 rows have a slot, core, run or cycle count that is not a whole number "
+            "or does not fit a 64-bit integer, or a negative cycle count, and were "
+            "left out."
+        )
+        assert unreadable in timings["caveat"]
+        assert unreadable in intervals["caveat"]
 
     def test_a_log_pandas_cannot_parse_is_refused(self, tmp_path):
         """Refused, so the server counts it as one, not as a failure of the tool."""
@@ -2676,10 +2792,11 @@ class TestZoneTimingsRead:
             for _ in range(2):
                 with pytest.raises(ValueError, match="core_y") as refusal:
                     tools.zone_timings(registry, "report-1")
-                refusals.append(str(refusal.value))
+                refusals.append(refusal.value)
 
         assert len(calls) == 1
-        assert refusals[0] == refusals[1]
+        assert str(refusals[0]) == str(refusals[1])
+        assert all(isinstance(r.__cause__, DataFormatError) for r in refusals)
 
     def test_the_architecture_is_read_as_zone_intervals_reads_it(self, tmp_path):
         """One reader for both tools, so a first line read two ways cannot give them
