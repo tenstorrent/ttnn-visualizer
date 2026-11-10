@@ -1463,8 +1463,8 @@ class DeviceLogProfilerQueries:
         for chunk in self._zone_chunks(columns):
             names = chunk["zone name"].astype(str).str.strip()
             named = (names != "") & (names != "nan")
-            # Read as the other zone queries read it, so a cell none of them reads is
-            # left out and counted here too, rather than failing or mis-totalling. #2258
+            # Shared with the other zone queries, so all three leave out and count the
+            # same unreadable rows. #2258
             chunk, readable = _whole_number_rows(
                 chunk[named].assign(**{"zone name": names[named]}),
                 self._WHOLE_NUMBER_COLUMNS,
