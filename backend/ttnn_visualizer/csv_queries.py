@@ -492,6 +492,23 @@ UNREADABLE_NUMBER_REASON = (
 )
 
 
+# Past this a float no longer holds every whole number, so a column pandas reads as floats
+# can hold another cycle count than its cell's.
+_FLOAT_EXACT_END = 2.0**53
+
+
+def _inexact_as_floats(chunk: pd.DataFrame, columns: Sequence[str]) -> bool:
+    """Whether a column reads as floats holding a whole number a float cannot: a read of
+    fewer of the chunk's rows can read that column as integers, and so differently."""
+    for column in columns:
+        numbers = pd.to_numeric(chunk[column], errors="coerce")
+        if pd.api.types.is_float_dtype(numbers) and bool(
+            (numbers.abs() >= _FLOAT_EXACT_END).any()
+        ):
+            return True
+    return False
+
+
 def _fits_int64(numbers: pd.Series) -> np.ndarray:
     """Whether each cell holds an int64, checked in the column's own dtype: read as
     floats, an int64 column's top 512 values would round up to 2**63."""
@@ -546,9 +563,9 @@ class _OpenRun:
     run_id: int
     # Unique to the run, so one run's zones never pair another's.
     seq: int
-    # Run host IDs since the timeline's last kernel start, which a read of every zone
-    # checks; one back again would part a run that a read of one zone does not.
-    seen: Set[int]
+    # Run host IDs since the timeline's last kernel start, kept by a pass of every zone:
+    # one back again would part a run that a read of one zone does not.
+    seen: Optional[Set[int]]
     # Zone markers since the run began or the profiler last flushed, which empties it.
     markers: int = 0
     full: bool = False
@@ -568,7 +585,8 @@ class _OpenRun:
 
 @dataclass
 class ZoneIntervals:
-    """What `query_zone_intervals` read of one zone."""
+    """What a read of the device log holds of one zone: its own, or a pass of every
+    zone's."""
 
     timelines: Dict[RiscTimeline, ZoneRepeats]
     # Starts per zone name across the log, for a refusal to list, and whether names past
@@ -700,15 +718,10 @@ class _ZoneReader:
         self.displaced = 0
 
     def take(
-        self,
-        timeline: RiscTimeline,
-        run: _OpenRun,
-        run_id: int,
-        phase: str,
-        cycles: int,
+        self, timeline: RiscTimeline, run: _OpenRun, phase: str, cycles: int
     ) -> None:
         """One of the zone's rows, in ``run`` on ``timeline``."""
-        key = (timeline, run_id if self.firmware else run.seq)
+        key = (timeline, run.run_id if self.firmware else run.seq)
         if phase != self.start_token:
             self.pairer.offer(key, phase, cycles)
             return
@@ -747,7 +760,6 @@ class ZoneIntervalPass:
     """What one pass of the device log followed of its zones, which `intervals` reads
     any zone's `ZoneIntervals` from."""
 
-    readers: Dict[str, _ZoneReader]
     zone_starts: Counter
     zone_names_capped: bool
     # Names on rows that neither start nor end a zone, which join only their own zone's
@@ -763,14 +775,19 @@ class ZoneIntervalPass:
     unreadable_starts: Counter
     untracked: int
     untracked_starts: int
+    # Each zone the pass followed, read when the pass ended.
+    followed: Dict[str, ZoneIntervals] = field(default_factory=dict)
 
     def intervals(self, zone: str) -> Optional[ZoneIntervals]:
         """``zone`` as `query_zone_intervals` reads it, or None where it must be read
         alone."""
         if zone in self.read_alone:
             return None
+        found = self.followed.get(zone)
+        return found if found is not None else self._read(zone, None)
+
+    def _read(self, zone: str, reader: Optional[_ZoneReader]) -> ZoneIntervals:
         reserved = zone.endswith(RESERVED_ZONE_SUFFIXES)
-        reader = self.readers.get(zone)
         if reader is None:
             timelines: Dict[RiscTimeline, ZoneRepeats] = {}
             pairing = {"unmatched_starts": 0, "unmatched_ends": 0, "dropped_starts": 0}
@@ -791,6 +808,7 @@ class ZoneIntervalPass:
             out_of_order=out_of_order,
             accumulated=self.accumulated and not reserved,
             timestamped=self.timestamped and not reserved,
+            # The rows the zone's own read keeps, as `_zone_interval_pass` picks them.
             malformed=self.unreadable_kernel_starts
             + (0 if reserved else self.unreadable_markers)
             + self.unreadable_others[zone],
@@ -798,6 +816,13 @@ class ZoneIntervalPass:
             malformed_starts=self.unreadable_starts[zone],
             untracked_starts=self.untracked_starts,
         )
+
+    def follow(self, readers: Dict[str, _ZoneReader]) -> "ZoneIntervalPass":
+        """Read each zone the pass followed, so none of its readers is kept."""
+        self.followed = {
+            name: self._read(name, reader) for name, reader in readers.items()
+        }
+        return self
 
 
 class _Unheld(Exception):
@@ -1338,17 +1363,18 @@ class DeviceLogProfilerQueries:
         assert runner is not None, "checked by `_zone_phase`"
         wanted = set(columns)
         try:
-            chunks = pd.read_csv(
+            # Closed as the generator is, so a read given up partway leaves no file open.
+            with pd.read_csv(
                 runner.file_path,
                 skiprows=runner.offset,
                 chunksize=CSV_CHUNK_SIZE,
                 # The header carries a leading space on every field after the
                 # first, so the names are matched stripped.
                 usecols=lambda name: name.strip() in wanted,
-            )
-            for chunk in chunks:
-                chunk.columns = chunk.columns.str.strip()
-                yield chunk
+            ) as chunks:
+                for chunk in chunks:
+                    chunk.columns = chunk.columns.str.strip()
+                    yield chunk
         except (pd.errors.EmptyDataError, pd.errors.ParserError) as error:
             raise runner._unparseable(error) from error
 
@@ -1587,7 +1613,9 @@ class DeviceLogProfilerQueries:
         arrive: at a kernel start, which also parts a traced op's replays, or a new run
         host ID. The trace columns are not read: they can change partway through a run.
         """
-        return cast(ZoneIntervals, self._zone_interval_pass(zone).intervals(zone))
+        read = self._zone_interval_pass(zone).intervals(zone)
+        assert read is not None, "only a pass of every zone leaves one to be read alone"
+        return read
 
     def query_every_zone_intervals(self) -> Optional[ZoneIntervalPass]:
         """Every zone as `query_zone_intervals` reads it, from one pass, or None for a
@@ -1611,11 +1639,11 @@ class DeviceLogProfilerQueries:
         # Each kept row's flags ride beside its cells, named apart from any log column.
         row_columns = [*columns, "_kernel_start", "_marker", "_flush"]
 
-        readers: Dict[str, _ZoneReader] = (
-            {} if only is None else {only: _ZoneReader(only, start_token, end_token)}
-        )
+        readers: Dict[str, _ZoneReader] = {}
+        if only is not None:
+            readers[only] = _ZoneReader(only, start_token, end_token)
         # Nothing counts markers for a zone the cap never cuts.
-        count_markers = only is None or not only.endswith(RESERVED_ZONE_SUFFIXES)
+        count_markers = every or not readers[cast(str, only)].reserved
         open_runs: Dict[RiscTimeline, _OpenRun] = {}
         seqs = itertools.count()
         zone_starts: Counter = Counter()
@@ -1672,6 +1700,8 @@ class DeviceLogProfilerQueries:
                 }
             )
 
+            if every and _inexact_as_floats(chunk, self._WHOLE_NUMBER_COLUMNS):
+                raise _Unheld
             whole, readable = _whole_number_rows(
                 chunk,
                 self._WHOLE_NUMBER_COLUMNS,
@@ -1717,14 +1747,17 @@ class DeviceLogProfilerQueries:
                         untracked_starts += name == only and phase == start_token
                         continue
                     run = open_runs[timeline] = _OpenRun(
-                        run_id, next(seqs), seen={run_id}
+                        run_id, next(seqs), seen={run_id} if every else None
                     )
                 elif run.run_id != run_id or kernel_start:
-                    if every and not kernel_start and run_id in run.seen:
-                        raise _Unheld
+                    seen = run.seen
+                    if seen is not None:
+                        if kernel_start:
+                            seen = set()
+                        elif run_id in seen:
+                            raise _Unheld
+                        seen.add(run_id)
                     run.close()
-                    seen = set() if kernel_start else run.seen
-                    seen.add(run_id)
                     run = open_runs[timeline] = _OpenRun(run_id, next(seqs), seen=seen)
 
                 if flush:
@@ -1739,7 +1772,7 @@ class DeviceLogProfilerQueries:
                     if not every or not name:
                         continue
                     reader = readers[name] = _ZoneReader(name, start_token, end_token)
-                reader.take(timeline, run, run_id, phase, cycles)
+                reader.take(timeline, run, phase, cycles)
 
             # What one zone's read holds at most, the pass of every zone holds in all.
             if every and (
@@ -1755,7 +1788,6 @@ class DeviceLogProfilerQueries:
         for run in open_runs.values():
             run.close()
         return ZoneIntervalPass(
-            readers=readers,
             zone_starts=zone_starts,
             zone_names_capped=zone_names_capped,
             read_alone=read_alone,
@@ -1767,7 +1799,7 @@ class DeviceLogProfilerQueries:
             unreadable_starts=unreadable_starts,
             untracked=untracked,
             untracked_starts=untracked_starts,
-        )
+        ).follow(readers)
 
     @staticmethod
     def get_raw_csv(instance: Instance):

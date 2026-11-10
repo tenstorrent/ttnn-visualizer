@@ -578,6 +578,12 @@ def _device_meta(instance: Instance) -> Optional[DeviceLogMeta]:
         return None
 
 
+def _log_architecture(instance: Instance) -> Optional[str]:
+    """The architecture the device log's first line names, or None."""
+    meta = DeviceLogProfilerQueries.read_device_meta(instance)
+    return meta.architecture if meta is not None else None
+
+
 def read_flag_inputs(
     registry: ReportRegistry, handle: str, groups: Sequence[perf_detail.DetailGroup]
 ) -> Optional[perf_flags.FlagInputs]:
@@ -1265,7 +1271,6 @@ def _core_spread_index(
             # A log without phases is a deliberate refusal, not an unexpected
             # failure, and the server records only a ValueError as one.
             raise ValueError(str(error)) from error
-        meta = DeviceLogProfilerQueries.read_device_meta(instance)
         held = [request for request, cores in read.spans.items() if cores]
         return _CoreSpreadIndex(
             figures={
@@ -1280,7 +1285,7 @@ def _core_spread_index(
             malformed=read.malformed,
             rows_per_run=dict(Counter(request.run for request in requests)),
             clock_mhz=clock_mhz,
-            arch=meta.architecture if meta is not None else None,
+            arch=_log_architecture(instance),
         )
 
     return registry.cached_report(handle, build, variant=CacheVariant.CORE_SPREAD)
@@ -1527,10 +1532,7 @@ def _zone_intervals_read(
     def read(instance: Instance) -> _ZoneIntervalsRead:
         with DeviceLogProfilerQueries(instance, stream=True) as queries:
             zones = queries.query_every_zone_intervals()
-        meta = DeviceLogProfilerQueries.read_device_meta(instance)
-        return _ZoneIntervalsRead(
-            zones, clock_mhz, meta.architecture if meta is not None else None
-        )
+        return _ZoneIntervalsRead(zones, clock_mhz, _log_architecture(instance))
 
     return read_once(
         registry,
@@ -1558,8 +1560,7 @@ def _zone_read(
     except DataFormatError as error:
         # The server records only a ValueError as a refusal.
         raise ValueError(str(error)) from error
-    meta = DeviceLogProfilerQueries.read_device_meta(instance)
-    return read, clock_mhz, meta.architecture if meta is not None else None
+    return read, clock_mhz, _log_architecture(instance)
 
 
 def _unreadable_zone(zone: str, read: ZoneIntervals) -> str:

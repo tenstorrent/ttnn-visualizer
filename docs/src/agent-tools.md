@@ -767,11 +767,15 @@ is refused. A row whose slot, core, run or cycle count is not a number or does n
 64-bit integer, or whose cycle count is negative, is left out and counted in a caveat, and
 a zone whose every start was left out is refused with how many were unreadable that way
 and how many lay past the 200,000 core-RISC timelines followed at once. The first call on
-a handle reads the device log once for every zone, and later calls, for any zone and
-refusals included, answer from that read, with the clock it was read at. A log that one
-pass cannot read as each zone's own read would is read again on every call: one past those
-caps or naming more than 1,000 zones, one where a RISC's run host ID comes back before its
-next kernel start, and a zone also named on rows that neither start nor end one.
+a handle reads the device log once for every zone, and later calls, for any zone and the
+refusal of one the log does not start included, answer from that read, with the clock it
+was read at; a log that cannot be read is refused until `load_report` loads it again. A log
+that one pass cannot read as each zone's own read would has the zone asked for read alone
+on every call, the first after the pass: one past those caps counted across all its zones,
+or naming more than 1,000 zones, one where a RISC's run host ID comes back before its next
+kernel start, and one whose cycle counts run past what a float holds exactly where a cell
+is not a whole number. A zone also named on rows that neither start nor end one is read
+alone the same way.
 
 No zone tool shows a zone name longer than 256 characters or a RISC name longer than 32
 characters: such a name is the capture's text, not the tool's, and tt-metal's longest RISC
