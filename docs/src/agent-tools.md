@@ -100,7 +100,7 @@ another rank's operation under the same id.
 | `core_spread` | How evenly one operation's kernel time fell across the cores that ran it, or the costliest operations': the minimum, median and maximum per-core span and per RISC, the imbalance between them, the slowest cores by coordinate, and how many cores recorded zones against the row's core count. |
 | `diff_reports` | Per-operation-code deltas between two reports, largest movement first, over the whole reports or one signpost range in every capture: only moves past a noise threshold count as changes, operations one report lacks are listed apart, and repeated captures of either side are compared by their median. `match: signature` groups by raw op code and tensors instead. |
 | `find_operations` | Operations matching a name substring or a call-stack substring, with the ids `operation_detail` takes. |
-| `operation_detail` | One operation: its input and output tensors with shape, dtype, layout and memory config, what it had allocated, and the circular buffers each of its device operations allocated, with size per core, core range and device count, with its error and likely DRAM fallback when it has one, and its per-device `l1_pressure` (`fullness_pct`, `free_segments`, `largest_free_block`, `largest_free_pct`). With a linked performance report, also the performance rows it launched, their device time and share of the report's, and the operation's total and slowest row, with the same `include` as `top_ops`. |
+| `operation_detail` | One operation: its input and output tensors with shape, dtype, layout and memory config, what it had allocated, and the circular buffers each of its device operations allocated, with size per core, core range and device count, with its error and likely DRAM fallback when it has one, and `l1_pressure` on its most constrained device (`fullness_pct`, `free_segments`, `largest_free_block`, `largest_free_pct`). With a linked performance report, also the performance rows it launched, their device time and share of the report's, and the operation's total and slowest row, with the same `include` as `top_ops`. |
 | `memory_profile` | Memory footprint per operation, keyed by buffer type and ranked within each, with each type's largest footprint, the device's L1 geometry, and `l1_pressure` ranking operations by smallest `largest_free_block` on the most constrained device, with `operations_at_top` counting those that share the first row's `largest_free_block`. A floor rather than the peak — see below. |
 | `tensor_flow` | Which operation produced a tensor and which ones consumed it. |
 | `operation_provenance` | What one operation was called with, and where in the model code it came from. |
@@ -978,10 +978,10 @@ those rows come fullest first: 60 of 255 share it on the `sentence_bert` demo.
 `l1_pressure` is null, with a caveat saying why, for an operation with no `buffers` rows,
 a report whose devices record no L1 geometry, or a report holding more than one rank whose
 `devices` table carries no `rank`. `memory_profile`'s is also null, with no caveat, under
-any `buffer_type` but `L1` and, without one, for a report holding no L1 buffers;
-`buffer_type` `L1` on such a report is refused. A `device_id` with more than one row is
-read as its last row, as the web application reads it, for `l1_pressure` and the `device`
-block alike, and `device.devices` counts distinct ids.
+any `buffer_type` but `L1` and for a report holding no L1 buffers, where `buffer_type`
+`L1` is refused if the report holds other buffer types. A `device_id` with more than one
+row is read as its last row, as the web application reads it, for `l1_pressure` and the
+`device` block alike, and `device.devices` counts distinct ids.
 
 Device profiler logs carry named zones only where a kernel was instrumented to emit them.
 Most captures contain only the default firmware and kernel zones — `BRISC-FW`,

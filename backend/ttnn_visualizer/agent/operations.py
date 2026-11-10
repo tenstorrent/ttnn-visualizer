@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import (
     Callable,
     Dict,
+    Final,
     Hashable,
     Iterator,
     List,
@@ -289,6 +290,9 @@ L1_PRESSURE_NOTE = (
     "`usable_bytes` while L1 is mostly free."
 )
 
+# What `l1_pressure` ranks by first, and so what `operations_at_top` ties on.
+L1_PRESSURE_RANK_KEY: Final = "largest_free_block"
+
 NO_L1_GEOMETRY_CAVEAT = (
     "l1_pressure is null because no device records a usable L1 window "
     "(`l1_bank_size` and `worker_l1_size` are zero or missing)."
@@ -381,7 +385,7 @@ def _pressure_rank(
     """Most constrained first: smallest largest free block, then fullest, then most
     allocated, then `tie`. Fullness is compared unrounded, as the app compares it."""
     return (
-        pressure["largest_free_block"],
+        pressure[L1_PRESSURE_RANK_KEY],
         -pressure["allocated_bytes"] / pressure["usable_bytes"],
         -pressure["allocated_bytes"],
         tie,
@@ -538,7 +542,7 @@ def _ranked_l1_pressure(
         nonlocal count, at_top, smallest
         for item in measured():
             count += 1
-            free = item[1]["largest_free_block"]
+            free = item[1][L1_PRESSURE_RANK_KEY]
             if smallest is None or free < smallest:
                 smallest, at_top = free, 1
             elif free == smallest:
@@ -549,11 +553,11 @@ def _ranked_l1_pressure(
         cap, counted(), key=lambda item: _pressure_rank(item[1], item[0])
     )
     return {
-        "ranked_by": "largest_free_block",
+        "ranked_by": L1_PRESSURE_RANK_KEY,
         "size_unit": BUFFER_SIZE_UNIT,
         "operation_count": count,
-        # As `operations_at_peak`: tens of operations routinely share the top, and
-        # a limit that shows ten of them must not read as all there are.
+        # As `operations_at_peak`, but a zero counts, since a full L1 is a real top:
+        # tens of operations routinely share it, and a limit must not hide them.
         "operations_at_top": at_top,
         "returned": len(top),
         "operations": [
@@ -1104,9 +1108,10 @@ def memory_profile(
     be derived from this response. #2034
 
     `l1_pressure` ranks the operations by their most constrained device's largest free
-    block. It is None under any `buffer_type` but L1, when no operation holds L1
-    buffers (a `buffer_type` of L1 is then refused), and, with a caveat, when no device
-    records an L1 window or the devices rows cannot be attributed to the rank.
+    block. It is None under any `buffer_type` but L1, for a report holding no L1
+    buffers (where a `buffer_type` of L1 is refused if the report holds other types),
+    and, with a caveat, when no device records an L1 window or the devices rows cannot
+    be attributed to the rank.
 
     Nothing here adds one memory type to another. `max_size_per_bank` is divided
     by the bank count of its own memory type, and those counts differ, so a

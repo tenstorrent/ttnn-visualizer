@@ -608,10 +608,9 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "note says which figures are bounds. l1_pressure is null, with a "
                 "caveat, when the operation has no buffers rows, no device records "
                 "L1 geometry, or the devices rows cannot be attributed to the rank. "
-                "Read "
-                "tensor_size_unit: a "
-                "tensor size is whole-tensor bytes only where the report carries "
-                "that column, and per bank otherwise. When the handle also holds a "
+                "Read tensor_size_unit: a tensor size is whole-tensor bytes only "
+                "where the report carries that column, and per bank otherwise. "
+                "When the handle also holds a "
                 "linked performance report, perf_rows lists the device operations "
                 "it launched with their device time and the same bound, "
                 "bound_analysis and op_category fields as top_ops. Each row's "
@@ -670,8 +669,8 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "response, and the report carries no DRAM capacity. device and "
                 "l1_pressure are null, with a caveat, when the devices rows cannot be "
                 "attributed to the rank, and l1_pressure also when no device records "
-                "L1 geometry, and without one under any buffer_type but L1 or for a "
-                "report holding no L1 buffers."
+                "L1 geometry, and with no caveat under any buffer_type but L1 or for "
+                "a report holding no L1 buffers."
             ),
             "schema": {
                 "type": "object",
