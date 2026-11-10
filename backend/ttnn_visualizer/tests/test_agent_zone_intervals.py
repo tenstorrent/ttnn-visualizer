@@ -810,11 +810,37 @@ class TestGaps:
                 False,
                 id="run-past-int64",
             ),
+            pytest.param(
+                modern_row("0.5", 1, 1, "BRISC", 1500, LOOP, "ZONE_START"),
+                True,
+                id="slot-not-whole",
+            ),
+            pytest.param(
+                modern_row(0, "1.5", 1, "BRISC", 1500, LOOP, "ZONE_START"),
+                True,
+                id="core-not-whole",
+            ),
+            pytest.param(
+                modern_row(0, 1, "1.5", "BRISC", 1500, LOOP, "ZONE_START"),
+                True,
+                id="core-y-not-whole",
+            ),
+            pytest.param(
+                modern_row(0, 1, 1, "BRISC", "1500.5", LOOP, "ZONE_START"),
+                True,
+                id="cycles-not-whole",
+            ),
+            pytest.param(
+                modern_row(0, 1, 1, "BRISC", 1500, LOOP, "ZONE_START", run="1.5"),
+                True,
+                id="run-not-whole",
+            ),
         ],
     )
     def test_unreadable_rows_are_left_out_and_counted(self, tmp_path, bad, held):
-        """Cast to int64, a cell past it would wrap into some other device, core,
-        run or time. One past a float's exact range is read per zone."""
+        """Cast to int64, a cell past it would wrap, and a fraction truncate, into some
+        other device, core, run or time. One past a float's exact range is read per
+        zone."""
         rows = _run(0, 1, 1, "BRISC", 0, [100, 1100, 2100])
         rows.insert(3, bad)
 
@@ -823,8 +849,8 @@ class TestGaps:
         assert answer["by_core_risc"][0]["intervals"] == 2
         assert answer["by_core_risc"][0]["max_us"] == 1.0
         assert (
-            "1 rows have a slot, core, run or cycle count that is not a number or does "
-            "not fit a 64-bit integer, or a negative cycle count, and were left out."
+            "1 rows have a slot, core, run or cycle count "
+            f"{csv_queries.UNREADABLE_NUMBER_REASON}, and were left out."
         ) in answer["caveat"]
 
     def test_large_whole_numbers_are_kept_and_subtracted(self, tmp_path):
@@ -1306,9 +1332,9 @@ class TestRefusals:
 
         assert str(refusal.value) == (
             "'LOOP' starts 2 times in profile_log_device.csv, but none could be read: "
-            "2 have a slot, core, run or cycle count that is not a number or does not "
-            "fit a 64-bit integer, or a negative cycle count, and 0 lie on core-RISC "
-            "timelines past the 200000 followed at once"
+            "2 have a slot, core, run or cycle count "
+            f"{csv_queries.UNREADABLE_NUMBER_REASON}, and 0 lie on core-RISC timelines "
+            "past the 200000 followed at once"
         )
 
     def test_a_zone_the_log_lacks_is_refused_as_absent_beside_unreadable_rows(
@@ -1337,9 +1363,9 @@ class TestRefusals:
             _intervals(tmp_path, rows, held=False)
 
         assert str(refusal.value).endswith(
-            ": 0 have a slot, core, run or cycle count that is not a number or does not "
-            "fit a 64-bit integer, or a negative cycle count, and 2 lie on core-RISC "
-            "timelines past the 0 followed at once"
+            ": 0 have a slot, core, run or cycle count "
+            f"{csv_queries.UNREADABLE_NUMBER_REASON}, and 2 lie on core-RISC timelines "
+            "past the 0 followed at once"
         )
 
     def test_the_zone_asked_for_is_counted_past_the_names_cap(self, tmp_path):
