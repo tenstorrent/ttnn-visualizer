@@ -186,20 +186,20 @@ def _without(answer: dict, *keys: str) -> dict:
 
 
 def _counted_reads(monkeypatch) -> list:
-    """The bytes of each trace parsed."""
+    """The bytes of each trace read."""
     reads: list = []
-    real_parse = npe_index.parse_trace
+    real_text = npe_index.trace_text
 
-    def counting_parse(data, compressed):
+    def counting_text(data, compressed):
         reads.append(data)
-        return real_parse(data, compressed)
+        return real_text(data, compressed)
 
-    monkeypatch.setattr(npe_index, "parse_trace", counting_parse)
+    monkeypatch.setattr(npe_index, "trace_text", counting_text)
     return reads
 
 
 def _never_read(data, compressed):
-    raise AssertionError("the trace was parsed, not its index")
+    raise AssertionError("the trace was read, not its index")
 
 
 def _memory_report(directory: Path) -> Path:
@@ -595,10 +595,14 @@ class TestMalformedInput:
     def test_a_demand_json_cannot_hold_is_counted_and_left_out(
         self, tmp_path, monkeypatch, demand
     ):
-        # orjson refuses NaN and infinities, so the parsed trace is handed over as is.
+        # orjson refuses NaN and infinities, so the trace's rows are handed over as is.
         trace = _trace(_step(0, _GOOD, [*B, demand]))
         path = _write(tmp_path, _trace(_step(0)))
-        monkeypatch.setattr(npe_index, "parse_trace", lambda data, compressed: trace)
+        monkeypatch.setattr(
+            npe_index,
+            "streamed_link_demand",
+            lambda text: npe_index.trace_link_demand(trace),
+        )
 
         answer = _answer(path)
 
@@ -771,7 +775,7 @@ class TestIndexParity:
         path = _write(tmp_path, _parity_trace(), name)
         from_trace = _answer(path)
         npe_index.ensure_index(str(path))
-        monkeypatch.setattr(npe_index, "parse_trace", _never_read)
+        monkeypatch.setattr(npe_index, "trace_text", _never_read)
 
         assert _answer(path) == from_trace
         assert from_trace["transfers"] == 3
@@ -1123,15 +1127,15 @@ class TestPinning:
         path = _write(tmp_path, _hand_checked())
         registry = ReportRegistry()
         handle = _load(registry, path)
-        real_parse = npe_index.parse_trace
+        real_text = npe_index.trace_text
 
         def exhausted(data, compressed):
             raise MemoryError
 
-        monkeypatch.setattr(npe_index, "parse_trace", exhausted)
+        monkeypatch.setattr(npe_index, "trace_text", exhausted)
         with pytest.raises(MemoryError):
             _call(registry, handle)
-        monkeypatch.setattr(npe_index, "parse_trace", real_parse)
+        monkeypatch.setattr(npe_index, "trace_text", real_text)
         _rewrite(path, _trace(_step(0, [*A, 10.0])))
 
         with pytest.raises(ValueError, match="has changed since 'report-1' first read"):
@@ -1201,21 +1205,18 @@ class TestPinning:
         self, tmp_path, monkeypatch
     ):
         """The refusal is kept for the registry's lifetime, so it must not hold the
-        parse its frames saw."""
-
-        class _Parsed(dict):
-            pass
-
+        read its frames saw."""
         parsed: list = []
+        real_read = npe_index.streamed_link_demand
 
-        def parse(data, compressed):
-            trace = _Parsed(common_info={})
-            parsed.append(weakref.ref(trace))
-            return trace
+        def read(text):
+            rows = real_read(text)
+            parsed.append(weakref.ref(rows))
+            return rows
 
-        monkeypatch.setattr(npe_index, "parse_trace", parse)
+        monkeypatch.setattr(npe_index, "streamed_link_demand", read)
         registry = ReportRegistry()
-        handle = _load(registry, _write(tmp_path, _hand_checked()))
+        handle = _load(registry, _write(tmp_path, {"common_info": {}}))
 
         for _ in range(2):
             with pytest.raises(ValueError, match="no timestep_data list"):

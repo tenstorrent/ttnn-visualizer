@@ -10,13 +10,16 @@ renders only the transfers active at one timestep (~tens of them). This builds a
 timestep-keyed SQLite index once, so the frontend can fetch just the visible
 window (~135 KB) instead of the whole payload.
 
-The build parses the whole object in memory (matches the current read path); a
-streaming parse to bound peak RSS is a follow-up for the multi-user hosted path.
+The build parses the whole object in memory; the agent's `noc_congestion` reads a
+trace a timestep at a time (`streamed_link_demand`), which a build could share to bound
+its peak RSS on the multi-user hosted path.
 """
 
 import contextlib
+import json
 import logging
 import os
+import re
 import sqlite3
 import tempfile
 import threading
@@ -28,8 +31,10 @@ from typing import (
     Iterator,
     List,
     NamedTuple,
+    NoReturn,
     Optional,
     Tuple,
+    cast,
 )
 
 import orjson
@@ -497,20 +502,33 @@ class LinkDemand(NamedTuple):
     unreadable_timesteps: int = 0
 
 
+class _TransferIds:
+    """The ids of transfers seen one at a time, counted as `_write_index` stores them."""
+
+    def __init__(self) -> None:
+        self.ids: set = set()
+        self.spelled: List[object] = []
+
+    def add(self, transfer: object) -> None:
+        if isinstance(transfer, dict):
+            tid = _transfer_id(transfer)
+            if isinstance(tid, int):
+                self.ids.add(tid)
+            elif isinstance(tid, (float, str)):
+                self.spelled.append(tid)
+
+    def count(self) -> int:
+        return len(self.ids.union(_integer_keys(self.spelled)))
+
+
 def _transfer_count(transfers: object) -> int:
     """Transfers as `_write_index` stores them: one row per id, none without one."""
     if not isinstance(transfers, list):
         return 0
-    ids = set()
-    spelled: List[object] = []
+    ids = _TransferIds()
     for transfer in transfers:
-        if isinstance(transfer, dict):
-            tid = _transfer_id(transfer)
-            if isinstance(tid, int):
-                ids.add(tid)
-            elif isinstance(tid, (float, str)):
-                spelled.append(tid)
-    return len(ids.union(_integer_keys(spelled)))
+        ids.add(transfer)
+    return ids.count()
 
 
 def _integer_keys(values: List[object]) -> List[int]:
@@ -574,6 +592,152 @@ def trace_link_demand(trace: object) -> LinkDemand:
         truncated=False,
         unreadable_timesteps=sum(1 for step in steps if not isinstance(step, dict)),
     )
+
+
+def trace_text(data: bytes, compressed: bool) -> str:
+    """A trace's bytes as the text `streamed_link_demand` reads: zstd frames, or JSON."""
+    if compressed:
+        # Rebound, so the compressed bytes are freed before the decode.
+        data = zstd.uncompress(data)
+    return data.decode("utf-8")
+
+
+_JSON_SPACE = re.compile(r"[ \t\n\r]*")
+# Finds where a value ends; orjson then reads it, so each reads as `parse_trace` would.
+_VALUE_END = json.JSONDecoder()
+
+
+class StreamedLinkDemand:
+    """`trace_link_demand` of a trace's text, read a timestep at a time rather than
+    parsed whole, so the parse never holds the trace. Its other fields are final once
+    `timesteps` has been read through. #2275"""
+
+    truncated = False
+
+    def __init__(self, text: str) -> None:
+        self.common_info: dict = {}
+        self.transfer_count = 0
+        self.unreadable_timesteps = 0
+        self.timesteps: Iterator[Tuple[Any, Any, Any]] = self._walk(text)
+
+    def _walk(self, text: str) -> Iterator[Tuple[Any, Any, Any]]:
+        at = _space(text, 0)
+        if not text.startswith("{", at):
+            trace_link_demand(orjson.loads(text))
+            _refuse(text)
+        at = _space(text, at + 1)
+        transfers: Optional[_TransferIds] = None
+        steps_read = False
+        while not text.startswith("}", at):
+            key, at = _key(text, at)
+            if key == "timestep_data" and steps_read:
+                # orjson keeps the last of two, and the first has already been read.
+                raise ValueError("it names timestep_data twice")
+            if text.startswith("[", at):
+                values = _Elements(text, at)
+                if key == "timestep_data":
+                    steps_read = True
+                    yield from self._steps(values)
+                else:
+                    ids = _ids_or_none(key, values)
+                    transfers = ids if key == "noc_transfers" else transfers
+                at = values.end
+            else:
+                value, at = _value(text, at)
+                if key == "common_info":
+                    self.common_info = value if isinstance(value, dict) else {}
+                transfers = None if key == "noc_transfers" else transfers
+            at = _after_member(text, at, "}")
+        if text[_space(text, at + 1) :]:
+            _refuse(text)
+        if not steps_read:
+            raise ValueError(
+                "it holds no timestep_data list, so it is not a tt-npe trace"
+            )
+        self.transfer_count = transfers.count() if transfers is not None else 0
+
+    def _steps(self, values: "_Elements") -> Iterator[Tuple[Any, Any, Any]]:
+        for step in values:
+            if isinstance(step, dict):
+                yield _step_cells(step)
+            else:
+                self.unreadable_timesteps += 1
+                yield None, None, []
+
+
+def _ids_or_none(key: str, values: "_Elements") -> Optional[_TransferIds]:
+    """The transfer ids of `noc_transfers`' elements; any other array is read and let go."""
+    if key != "noc_transfers":
+        for _ in values:
+            pass
+        return None
+    ids = _TransferIds()
+    for transfer in values:
+        ids.add(transfer)
+    return ids
+
+
+class _Elements:
+    """Each element of the array at `at`, read by orjson; `end` is past it once read."""
+
+    def __init__(self, text: str, at: int) -> None:
+        self.text, self.at, self.end = text, at, at
+
+    def __iter__(self) -> Iterator[object]:
+        text = self.text
+        at = _space(text, self.at + 1)
+        if text.startswith("]", at):
+            self.end = at + 1
+            return
+        while True:
+            value, at = _value(text, at)
+            yield value
+            at = _after_member(text, at, "]")
+            if text.startswith("]", at):
+                self.end = at + 1
+                return
+
+
+def _space(text: str, at: int) -> int:
+    return cast(re.Match, _JSON_SPACE.match(text, at)).end()
+
+
+def _value(text: str, at: int) -> Tuple[object, int]:
+    """orjson's read of the value at `at`, and where it ends."""
+    _, end = _VALUE_END.raw_decode(text, at)
+    return orjson.loads(text[at:end]), end
+
+
+def _key(text: str, at: int) -> Tuple[str, int]:
+    """The member name at `at` as orjson reads it, and where its value starts."""
+    key, at = _value(text, at) if text.startswith('"', at) else (None, at)
+    at = _space(text, at)
+    if not isinstance(key, str) or not text.startswith(":", at):
+        _refuse(text)
+    return cast(str, key), _space(text, at + 1)
+
+
+def _after_member(text: str, at: int, close: str) -> int:
+    """Past the comma after a member, or at the bracket that closes its container."""
+    at = _space(text, at)
+    if text.startswith(",", at):
+        at = _space(text, at + 1)
+        if text.startswith(close, at):
+            _refuse(text)
+        return at
+    if not text.startswith(close, at):
+        _refuse(text)
+    return at
+
+
+def _refuse(text: str) -> NoReturn:
+    """orjson's refusal of text the read could not follow, or one of its own."""
+    orjson.loads(text)
+    raise ValueError("its JSON could not be read a timestep at a time")
+
+
+def streamed_link_demand(text: str) -> StreamedLinkDemand:
+    return StreamedLinkDemand(text)
 
 
 def ensure_index(npe_path: str) -> Path:

@@ -802,10 +802,12 @@ index of it when that index is built and current, and from the trace itself othe
 tool never builds the index, so it writes nothing beside the trace. The visualizer builds
 its index beside the copy it opens, which for an upload is its own copy under its report
 data directory, so an `npe_path` naming that copy reuses the index, in a fraction of the
-time and memory a parse takes. Otherwise the first call on a handle parses the whole
-trace: a trace of tens of thousands of timesteps and millions of link rows takes seconds
-to tens of seconds and several GB at its peak, as building the visualizer's index does,
-and the server process can keep much of that memory afterwards. A trace whose JSON passes
+time and memory a parse takes. Otherwise the first call on a handle reads the trace itself
+a timestep at a time: a trace of tens of thousands of timesteps and millions of link rows
+takes seconds to tens of seconds and about twice its JSON's size at its peak, against
+several times that for building the visualizer's index. A trace past 64 MiB of JSON is
+read in a process of its own, so that memory goes back to the system when the read ends
+rather than staying with the server. A trace whose JSON passes
 1 GiB, summed over every zstd frame, or a `.zst` file itself past that size, is refused
 rather than parsed, and so is a `.zst` with a frame that does not declare its size. Later
 calls answer from the first read, and so does every handle on the same unchanged file. A
