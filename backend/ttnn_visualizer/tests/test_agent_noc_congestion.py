@@ -16,8 +16,11 @@ import logging
 import math
 import os
 import sqlite3
+import subprocess
+import sys
 import time
 import weakref
+from concurrent.futures import Future
 from concurrent.futures.process import BrokenProcessPool
 from pathlib import Path
 from types import SimpleNamespace
@@ -1228,6 +1231,28 @@ class TestPinning:
         assert parsed[0]() is None
 
 
+class TestStreamedRefusals:
+    """What the streamed read refuses through the tool, as the whole parse would. #2275"""
+
+    def test_a_trace_that_is_not_utf8_is_refused(self, tmp_path):
+        path = tmp_path / "trace.json"
+        path.write_bytes(b'{"common_info": {"arch": "\xc3\x28"}, "timestep_data": []}')
+
+        with pytest.raises(
+            ValueError, match="trace.json is not a readable tt-npe trace"
+        ):
+            _answer(path)
+
+    def test_a_trace_nested_deeper_than_a_parse_follows_is_refused(self, tmp_path):
+        path = tmp_path / "trace.json"
+        path.write_text('{"timestep_data": [' + "[" * 5000 + "]" * 5000 + "]}")
+
+        with pytest.raises(
+            ValueError, match="trace.json is not a readable tt-npe trace"
+        ):
+            _answer(path)
+
+
 class TestReadApart:
     """A trace past `MAX_INLINE_TRACE_JSON_BYTES` is read in a process of its own, so
     the memory its read takes goes back to the system when the read ends. #2275"""
@@ -1256,7 +1281,9 @@ class TestReadApart:
 
         answer = _answered(tmp_path / "apart", _hand_checked())
 
-        assert len(apart) == 1
+        (options,) = apart
+        assert options["mp_context"].get_start_method() == "spawn"
+        assert options["initializer"] is noc_congestion._reader_setup
         assert _without(answer, "npe_trace") == _without(inline, "npe_trace")
 
     def test_a_refusal_read_apart_is_the_one_read_in_the_server_gives(
@@ -1298,6 +1325,127 @@ class TestReadApart:
         assert _call(registry, handle)["timesteps"] == len(
             _hand_checked()["timestep_data"]
         )
+
+    def test_a_read_too_deep_to_send_back_is_refused_as_too_deep(
+        self, tmp_path, monkeypatch
+    ):
+        """Sending the read back nests as deep as its `common_info`, past pickle's
+        limit before the read's own."""
+
+        class _TooDeep:
+            def __init__(self, *arguments, **options):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exception):
+                return False
+
+            def submit(self, *arguments):
+                sent: Future = Future()
+                sent.set_exception(RecursionError("while pickling an object"))
+                return sent
+
+        path = _write(tmp_path, _hand_checked())
+        monkeypatch.setattr(noc_congestion, "MAX_INLINE_TRACE_JSON_BYTES", 0)
+        monkeypatch.setattr(noc_congestion, "ProcessPoolExecutor", _TooDeep)
+
+        with pytest.raises(
+            ValueError, match="trace.json is not a readable .* too deep"
+        ):
+            _answer(path)
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="the test locks with flock")
+    def test_a_reading_process_ends_with_the_server(self, tmp_path):
+        """A pool's worker outlives a killed parent, holding what it read."""
+        lock = tmp_path / "held"
+        server_process = subprocess.Popen(
+            [sys.executable, "-c", _SERVER_READING, str(lock)],
+            stdout=subprocess.PIPE,
+            text=True,
+        )
+        try:
+            reader = int(server_process.stdout.readline())
+        finally:
+            server_process.kill()
+            server_process.wait()
+            server_process.stdout.close()
+
+        freed = _lock_freed(lock, within=10)
+        if not freed:
+            os.kill(reader, 9)
+        assert freed
+
+    def test_a_reading_process_without_stderr_writes_nothing_to_stdout(self, capfd):
+        context = noc_congestion.multiprocessing.get_context("spawn")
+        with noc_congestion.ProcessPoolExecutor(
+            1, mp_context=context, initializer=_setup_without_stderr
+        ) as reader:
+            reader.submit(print, "from the reader", flush=True).result()
+
+        assert "from the reader" not in capfd.readouterr().out
+
+    def test_a_reading_process_writes_nothing_to_stdout(self, capfd):
+        """The server's stdout carries its messages, so a reader's print goes to stderr."""
+        context = noc_congestion.multiprocessing.get_context("spawn")
+        with noc_congestion.ProcessPoolExecutor(
+            1, mp_context=context, initializer=noc_congestion._reader_setup
+        ) as reader:
+            reader.submit(print, "from the reader", flush=True).result()
+
+        out, err = capfd.readouterr()
+        assert "from the reader" not in out
+        assert "from the reader" in err
+
+
+def _setup_without_stderr() -> None:
+    sys.stderr = None
+    noc_congestion._reader_setup()
+
+
+def _hold_lock(path: str) -> int:
+    """Lock `path` for as long as this process lives; its id."""
+    import fcntl
+
+    fcntl.flock(os.open(path, os.O_RDWR | os.O_CREAT), fcntl.LOCK_EX)
+    return os.getpid()
+
+
+def _lock_freed(path: Path, within: float) -> bool:
+    import fcntl
+
+    descriptor = os.open(path, os.O_RDWR)
+    deadline = time.monotonic() + within
+    try:
+        while True:
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return True
+            except BlockingIOError:
+                if time.monotonic() > deadline:
+                    return False
+                time.sleep(0.05)
+    finally:
+        os.close(descriptor)
+
+
+# A server whose reading process holds a lock, so the test sees when that process ends.
+_SERVER_READING = """
+import multiprocessing, sys, time
+from concurrent.futures import ProcessPoolExecutor
+from ttnn_visualizer.agent import noc_congestion
+from ttnn_visualizer.tests.test_agent_noc_congestion import _hold_lock
+
+if __name__ == "__main__":
+    reader = ProcessPoolExecutor(
+        1,
+        mp_context=multiprocessing.get_context("spawn"),
+        initializer=noc_congestion._reader_setup,
+    )
+    print(reader.submit(_hold_lock, sys.argv[1]).result(), flush=True)
+    time.sleep(60)
+"""
 
 
 class TestLoadReport:

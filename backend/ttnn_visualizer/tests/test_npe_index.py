@@ -12,6 +12,7 @@ readers `noc_congestion` uses, which must never write beside the trace (#2156).
 
 import json
 import os
+import random
 import sqlite3
 import threading
 import time
@@ -957,11 +958,26 @@ _STREAMED_TRACES = {
     },
     "empty-lists": {"timestep_data": [], "noc_transfers": [], "zones": []},
     "common-info-not-an-object": {"common_info": [1], "timestep_data": []},
+    "common-info-null": {"common_info": None, "timestep_data": []},
     "transfers-not-a-list": {"noc_transfers": {"id": 1}, "timestep_data": []},
     # orjson keeps the last of two members, as the read must.
     "repeated-members": {"common_info": {"arch": "a"}, "timestep_data": []},
     "unicode": {"common_info": {"name": "é€😀"}, "timestep_data": [{"x": " "}]},
 }
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        '{"noc_transfers": [{"id": 1}], "noc_transfers": null, "timestep_data": []}',
+        '{"common_info": {"a": 1}, "common_info": [], "timestep_data": []}',
+        '{"common_info": {"a": 1}, "common_info": 7, "timestep_data": []}',
+    ],
+)
+def test_a_member_named_twice_reads_as_its_last(text):
+    assert _read_through(_streamed(text)) == _read_through(
+        trace_link_demand(orjson.loads(text))
+    )
 
 
 def _with_repeats(text: str) -> str:
@@ -1043,7 +1059,70 @@ def test_a_streamed_read_holds_one_timestep_at_a_time():
         next(rows.timesteps)
 
 
+def test_a_refusal_is_placed_where_the_whole_parse_places_it():
+    text = '{"common_info": {}, "timestep_data": [{"start_cycle": 0}, {"x": NaN}]}'
+    with pytest.raises(orjson.JSONDecodeError) as whole:
+        orjson.loads(text)
+
+    with pytest.raises(json.JSONDecodeError) as streamed:
+        _read_through(_streamed(text))
+
+    assert (streamed.value.msg, streamed.value.pos) == (
+        whole.value.msg,
+        whole.value.pos,
+    )
+
+
 def test_trace_text_reads_zstd_frames_and_json():
     data = orjson.dumps({"timestep_data": []})
 
     assert trace_text(zstd.compress(data), True) == trace_text(data, False)
+
+
+def _random_json(chooser, depth):
+    """A value of any JSON kind, nested at most `depth` deep."""
+    kind = chooser.randrange(7 if depth else 4)
+    if kind == 0:
+        return chooser.choice([None, True, False])
+    if kind == 1:
+        return chooser.choice([0, -1, 7, 2**63, -(2**63), 1.5, -0.0, 1e300])
+    if kind == 2:
+        return chooser.choice(["", "x", "é", "😀", '"', "\\", "\n", "\u2028"])
+    if kind == 3:
+        return {"start_cycle": chooser.randrange(9), "link_demand": []}
+    if kind in (4, 5):
+        return [_random_json(chooser, depth - 1) for _ in range(chooser.randrange(4))]
+    return {
+        chooser.choice(["a", "id", "noc", "start_cycle", "end_cycle", "link_demand"]): (
+            _random_json(chooser, depth - 1)
+        )
+        for _ in range(chooser.randrange(4))
+    }
+
+
+def _random_trace_text(chooser):
+    """A trace's text with its top-level members in any order, some repeated."""
+    names = ["common_info", "noc_transfers", "zones", "chips", "other", "timestep_data"]
+    members = []
+    for name in chooser.sample(names, chooser.randrange(1, len(names) + 1)):
+        for _ in range(1 if name == "timestep_data" else chooser.randrange(1, 3)):
+            value = [_random_json(chooser, 2) for _ in range(chooser.randrange(5))]
+            if chooser.randrange(4) == 0 and name != "timestep_data":
+                value = _random_json(chooser, 2)
+            members.append(f"{json.dumps(name)}:{orjson.dumps(value).decode()}")
+    space = chooser.choice(["", " ", "\n  "])
+    return "{" + space + ("," + space).join(members) + space + "}"
+
+
+@pytest.mark.parametrize("seed", range(40))
+def test_a_streamed_read_answers_as_the_whole_parse_does_on_random_traces(seed):
+    chooser = random.Random(seed)
+    for _ in range(10):
+        text = _random_trace_text(chooser)
+        try:
+            expected = _read_through(trace_link_demand(orjson.loads(text)))
+        except ValueError as refusal:
+            with pytest.raises(type(refusal)):
+                _read_through(_streamed(text))
+            continue
+        assert _read_through(_streamed(text)) == expected, text
