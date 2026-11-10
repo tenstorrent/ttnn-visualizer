@@ -393,8 +393,10 @@ def test_int64_range_is_checked_in_the_columns_own_dtype(numbers, fits):
         pytest.param(pd.Series([0, 1, -5]), [True, True, True], id="int64"),
         pytest.param(pd.Series([2**63], dtype="uint64"), [True], id="uint64"),
         pytest.param(
-            pd.Series([1.0, -0.0, 0.5, float("nan"), float("inf")]),
-            [True, True, False, False, True],
+            pd.Series(
+                [1.0, -0.0, 0.5, -0.5, float("nan"), float("inf"), -float("inf")]
+            ),
+            [True, True, False, False, False, True, True],
             id="float64",
         ),
     ],
@@ -402,6 +404,18 @@ def test_int64_range_is_checked_in_the_columns_own_dtype(numbers, fits):
 def test_wholeness_is_its_own_check_beside_the_range(numbers, whole):
     """inf is whole, which only `_fits_int64` leaves out. #2259"""
     assert csv_queries._is_whole(numbers).tolist() == whole
+
+
+def test_a_row_with_a_fraction_is_left_out_and_the_rest_cast():
+    chunk = pd.DataFrame({"cycles": [5.0, 7.5], "core": [1.0, 2.0]})
+
+    whole, readable = csv_queries._whole_number_rows(
+        chunk, ["cycles", "core"], non_negative=["cycles"]
+    )
+
+    assert readable.tolist() == [True, False]
+    assert whole.to_dict("list") == {"cycles": [5], "core": [1]}
+    assert whole.dtypes.tolist() == ["int64", "int64"]
 
 
 def test_only_the_non_negative_columns_refuse_a_negative():
