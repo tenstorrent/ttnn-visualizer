@@ -16,7 +16,12 @@ from unittest.mock import patch
 
 import pytest
 from ttnn_visualizer.agent import op_signatures, report_diff, server, tools
-from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_LIMIT
+from ttnn_visualizer.agent.bounds import (
+    CUT_DIGEST_CHARS,
+    MAX_DETAILED_LIMIT,
+    MAX_LIMIT,
+    MAX_OP_CODE_CHARS,
+)
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
 from ttnn_visualizer.csv_queries import (
     DegradedPerformanceReport,
@@ -1606,7 +1611,7 @@ class TestSignatures:
         (change,) = result["changes"]
         assert len(change["signature"]) == report_diff.MAX_SIGNATURE_CHARS
         assert change["signature_full_length"] > report_diff.MAX_SIGNATURE_CHARS
-        assert len(change["signature_digest"]) == report_diff.SIGNATURE_DIGEST_CHARS
+        assert len(change["signature_digest"]) == CUT_DIGEST_CHARS
 
     def test_signatures_cut_alike_are_told_apart_by_their_digests(self, tmp_path):
         """A last output's height moved from 32 to 64 keeps the cut and the length, so
@@ -1681,8 +1686,8 @@ class TestSignatureKeys:
         for listed in ("changes", "new", "missing", "unmeasured"):
             assert result[listed] == []
 
-    def test_an_op_code_past_the_cut_is_cut_as_a_signature_is(self, tmp_path):
-        long_code = "Matmul" + "x" * report_diff.MAX_SIGNATURE_CHARS
+    def test_an_op_code_past_the_cut_is_cut_as_every_tool_cuts_one(self, tmp_path):
+        long_code = "Matmul" + "x" * MAX_OP_CODE_CHARS
         rows = {
             "report-1": [_row(op_code=long_code, device_time="10.0")],
             "report-2": [_row(op_code=long_code, device_time="20.0")],
@@ -1690,9 +1695,9 @@ class TestSignatureKeys:
 
         (change,) = _diff(_registry(tmp_path), rows)["changes"]
 
-        assert change["op_code"] == long_code[: report_diff.MAX_SIGNATURE_CHARS]
+        assert change["op_code"] == long_code[:MAX_OP_CODE_CHARS]
         assert change["op_code_full_length"] == len(long_code)
-        assert len(change["op_code_digest"]) == report_diff.SIGNATURE_DIGEST_CHARS
+        assert len(change["op_code_digest"]) == CUT_DIGEST_CHARS
 
 
 class TestAnswerBudget:
