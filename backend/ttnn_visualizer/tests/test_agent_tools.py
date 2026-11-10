@@ -2227,7 +2227,7 @@ class TestZoneSummary:
         write_device_log(tmp_path, MODERN_HEADER, ZONED_ROWS)
 
         with DeviceLogProfilerQueries(instance, stream=True) as queries:
-            summary, _pairing = queries.query_zone_summary()
+            summary, _pairing, _malformed = queries.query_zone_summary()
 
         by_zone = {entry["zone"]: entry for entry in summary}
         # 400 cycles on core (1,1) plus 100 on core (2,1).
@@ -2249,7 +2249,7 @@ class TestZoneSummary:
         instance = Instance(instance_id="pytest", performance_path=str(tmp_path))
 
         with DeviceLogProfilerQueries(instance, stream=True) as queries:
-            summary, _pairing = queries.query_zone_summary()
+            summary, _pairing, _malformed = queries.query_zone_summary()
 
         by_zone = {entry["zone"]: entry for entry in summary}
         assert by_zone["MATMUL"]["total_cycles"] == 500
@@ -2268,7 +2268,7 @@ class TestZoneSummary:
         instance = Instance(instance_id="pytest", performance_path=str(tmp_path))
 
         with DeviceLogProfilerQueries(instance, stream=True) as queries:
-            summary, _pairing = queries.query_zone_summary()
+            summary, _pairing, _malformed = queries.query_zone_summary()
 
         assert summary[0]["cores"] == 2
         assert summary[0]["occurrences"] == 2
@@ -2289,7 +2289,7 @@ class TestZoneSummary:
         instance = Instance(instance_id="pytest", performance_path=str(tmp_path))
 
         with DeviceLogProfilerQueries(instance, stream=True) as queries:
-            summary, pairing = queries.query_zone_summary()
+            summary, pairing, _malformed = queries.query_zone_summary()
 
         assert pairing == {
             "unmatched_starts": 1,
@@ -2318,7 +2318,7 @@ class TestZoneSummary:
         instance = Instance(instance_id="pytest", performance_path=str(tmp_path))
 
         with DeviceLogProfilerQueries(instance, stream=True) as queries:
-            summary, _pairing = queries.query_zone_summary()
+            summary, _pairing, _malformed = queries.query_zone_summary()
 
         assert summary[0]["occurrences"] == 2
         assert summary[0]["total_cycles"] is None
@@ -2524,7 +2524,7 @@ class TestPreRenameCaptures:
         instance = Instance(instance_id="pytest", performance_path=str(tmp_path))
 
         with DeviceLogProfilerQueries(instance, stream=True) as queries:
-            summary, pairing = queries.query_zone_summary()
+            summary, pairing, _malformed = queries.query_zone_summary()
 
         assert summary[0]["occurrences"] == 1
         assert summary[0]["total_cycles"] == 700
@@ -2554,7 +2554,7 @@ class TestOpenZoneCeiling:
         instance = Instance(instance_id="pytest", performance_path=str(tmp_path))
 
         with DeviceLogProfilerQueries(instance, stream=True) as queries:
-            _summary, pairing = queries.query_zone_summary()
+            _summary, pairing, _malformed = queries.query_zone_summary()
 
         assert pairing["unmatched_starts"] == 2
         assert pairing["dropped_starts"] == 3

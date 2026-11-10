@@ -787,6 +787,8 @@ class _ZoneTimingsRead:
 
     summary: List[Dict[str, object]]
     pairing: Dict[str, int]
+    # Rows `_whole_number_rows` left out.
+    malformed: int
     arch: Optional[str]
     clock_mhz: Optional[float]
 
@@ -795,10 +797,11 @@ def _zone_timings_read(registry: ReportRegistry, handle: str) -> _ZoneTimingsRea
     def read(instance: Instance) -> _ZoneTimingsRead:
         metadata = DeviceLogProfilerQueries.read_capture_metadata(instance)
         with DeviceLogProfilerQueries(instance, stream=True) as queries:
-            summary, pairing = queries.query_zone_summary()
+            summary, pairing, malformed = queries.query_zone_summary()
         return _ZoneTimingsRead(
             summary,
             pairing,
+            malformed,
             metadata.get("ARCH"),
             finite_number(metadata.get("CHIP_FREQ[MHz]")),
         )
@@ -819,7 +822,11 @@ def zone_timings(
     """Per-zone, per-RISC totals from the device profiler log."""
     _require_performance_report(registry, handle)
     count = bounded(limit)
-    read = _zone_timings_read(registry, handle)
+    try:
+        read = _zone_timings_read(registry, handle)
+    except DataFormatError as error:
+        # The server records only a ValueError as a refusal.
+        raise ValueError(str(error)) from error
     summary, pairing, clock_mhz = read.summary, read.pairing, read.clock_mhz
     # Filtered whole, so the limit counts only entries whose names can be shown.
     listed, too_long = _shown_and_dropped(
@@ -864,7 +871,13 @@ def zone_timings(
     }
     if too_long:
         result["zones_unlisted_too_long"] = too_long
-    caveat = _pairing_caveat(pairing, "these totals")
+    caveats = [_pairing_caveat(pairing, "these totals")]
+    if read.malformed:
+        caveats.append(
+            f"{read.malformed} rows have a slot, core, run or cycle count "
+            f"{UNREADABLE_NUMBER_REASON}, and were left out."
+        )
+    caveat = " ".join(filter(None, caveats))
     if caveat:
         result["caveat"] = caveat
     return result

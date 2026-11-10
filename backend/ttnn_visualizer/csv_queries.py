@@ -1423,7 +1423,9 @@ class DeviceLogProfilerQueries:
         meta = cls.read_device_meta(instance)
         return meta.frequency if meta is not None and meta.frequency else None
 
-    def query_zone_summary(self) -> Tuple[List[Dict[str, object]], Dict[str, int]]:
+    def query_zone_summary(
+        self,
+    ) -> Tuple[List[Dict[str, object]], Dict[str, int], int]:
         """Aggregate the whole log into one row per (zone, RISC).
 
         The two existing zone queries both need you to already know the zone you
@@ -1444,9 +1446,9 @@ class DeviceLogProfilerQueries:
         captures in `reports/` span 32 and 8 slots, so coordinates alone collide
         across devices and one device's start would close against another's end.
 
-        Returns the summary and a count of what did not pair. A truncated
-        capture leaves starts open, which is invisible in a total that reports
-        only what matched.
+        Returns the summary, a count of what did not pair, and how many rows
+        `_whole_number_rows` left out. A truncated capture leaves starts open,
+        which is invisible in a total that reports only what matched.
         """
         phase_column, start_token, end_token = self._zone_phase("summarised by zone")
 
@@ -1457,15 +1459,24 @@ class DeviceLogProfilerQueries:
         pairer = _ZonePairer(start_token, end_token)
 
         columns = list(self._ZONE_COLUMNS) + ([phase_column] if phase_column else [])
+        malformed = 0
 
         for chunk in self._zone_chunks(columns):
+            names = chunk["zone name"].astype(str).str.strip()
+            named = (names != "") & (names != "nan")
+            # Read as the other zone queries read it, so a cell none of them reads is
+            # left out and counted here too, rather than failing or mis-totalling. #2258
+            chunk, readable = _whole_number_rows(
+                chunk[named].assign(**{"zone name": names[named]}),
+                self._WHOLE_NUMBER_COLUMNS,
+                non_negative=self._NON_NEGATIVE_COLUMNS,
+            )
+            malformed += int((~readable).sum())
             # Zipped column-wise rather than `itertuples`, which renames any
             # field that is not a valid identifier -- "zone name" arrives as
             # `_1` and every lookup by name silently misses.
-            for values in zip(*(chunk[column] for column in columns)):
-                zone = str(values[0]).strip()
-                if not zone or zone == "nan":
-                    continue
+            for values in zip(*(chunk[column].tolist() for column in columns)):
+                zone = values[0]
                 risc = str(values[1]).strip()
                 cycles = values[6]
                 phase = str(values[7]).strip() if phase_column else ""
@@ -1486,7 +1497,7 @@ class DeviceLogProfilerQueries:
                     continue
 
                 occurrences[zone_key] += 1
-                cycle_totals[zone_key] += int(cycles) - start
+                cycle_totals[zone_key] += cycles - start
 
         summary = []
         for zone, risc in zone_keys:
@@ -1520,7 +1531,7 @@ class DeviceLogProfilerQueries:
         )
 
         pairing = pairer.pairing(self.DEVICE_LOG_FILE)
-        return summary, pairing
+        return summary, pairing, malformed
 
     def query_core_spans(self, requests: Set[SpanRequest]) -> CoreSpans:
         """Each core's kernel zones for the given perf rows' runs and windows.
