@@ -26,6 +26,7 @@ import time
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import matplotlib
 import pytest
 from ttnn_visualizer import csv_queries
 from ttnn_visualizer.agent import handles, server, tools
@@ -3251,6 +3252,7 @@ def _patch_main_for_export(monkeypatch, order, *, can_export=True, recording=Tru
     )
     monkeypatch.delenv("SERVER_MODE", raising=False)
     # Never replace pytest's own SIGTERM handler.
+    monkeypatch.setattr(server.signal, "getsignal", lambda signum: signal.SIG_DFL)
     monkeypatch.setattr(
         server.signal,
         "signal",
@@ -3352,9 +3354,11 @@ def test_main_stops_the_exporter_when_serving_raises(monkeypatch):
     assert order[-2:] == ["serve", "export-stop"]
 
 
-@pytest.mark.parametrize("value", ["true", "1", "Ture"])
+@pytest.mark.parametrize("value", ["true", "1", "Ture", ""])
 def test_main_exports_nothing_under_server_mode(monkeypatch, value):
-    """Aggregate collection is local-only; an unreadable value counts as hosted."""
+    """Aggregate collection is local-only; an unreadable value counts as hosted.
+
+    That includes an empty one, which the app refuses to start on."""
     order = []
     handlers = _patch_main_for_export(monkeypatch, order)
     monkeypatch.setenv("SERVER_MODE", value)
@@ -3365,11 +3369,14 @@ def test_main_exports_nothing_under_server_mode(monkeypatch, value):
     assert handlers == []
 
 
-@pytest.mark.parametrize("value", ["false", "0", ""])
+@pytest.mark.parametrize("value", ["false", "0", None])
 def test_main_exports_when_server_mode_reads_as_local(monkeypatch, value):
     order = []
     _patch_main_for_export(monkeypatch, order)
-    monkeypatch.setenv("SERVER_MODE", value)
+    if value is None:
+        monkeypatch.delenv("SERVER_MODE", raising=False)
+    else:
+        monkeypatch.setenv("SERVER_MODE", value)
 
     server.main()
 
@@ -3390,7 +3397,7 @@ def test_main_serves_when_preparing_collection_raises(monkeypatch):
     assert order == ["compact", "serve"]
 
 
-def test_sigterm_exits_through_mains_finally():
+def test_sigterm_handler_raises_a_clean_exit():
     with pytest.raises(server._Terminated) as exit_info:
         server._exit_on_sigterm(signal.SIGTERM, None)
 
@@ -3440,6 +3447,11 @@ def _start_exporting_server(tmp_path):
     # Built from scratch, so a developer's own opt-out or config cannot leak in.
     environment = {
         "HOME": str(home),
+        # This process's matplotlib cache rather than one under the fresh ``HOME``:
+        # importing the server builds the font cache, which on macOS runs
+        # ``system_profiler`` for several seconds per test, and counts against the
+        # start-push deadline below.
+        "MPLCONFIGDIR": matplotlib.get_configdir(),
         "PATH": f"{bin_directory}{os.pathsep}{os.environ.get('PATH', '')}",
         "PYTHONIOENCODING": "utf-8",
     }

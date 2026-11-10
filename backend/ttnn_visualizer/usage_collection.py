@@ -352,17 +352,30 @@ def usage_file_lock(name: str, *, timeout_seconds: float) -> Iterator[bool]:
         yield True
         return
 
-    directory = get_collection_config_path().parent
-    directory.mkdir(mode=PRIVATE_DIRECTORY_MODE, parents=True, exist_ok=True)
-    # Append mode, so opening never truncates a file another process holds.
-    with open(directory / name, "a", encoding="utf-8") as lock_file:
+    try:
+        lock_file: Optional[IO[str]] = _open_lock_file(name)
+    except OSError as error:
+        # A lock file this account cannot open, such as one a ``sudo`` run that kept
+        # ``HOME`` left behind. Run unserialised rather than fail as an invalid config.
+        logger.debug("Usage lock %s unavailable: %s", name, error)
+        lock_file = None
+    if lock_file is None:
+        yield True
+        return
+
+    with lock_file:
+        unavailable: Optional[OSError] = None
         try:
             acquired = _acquire_lock(fcntl, lock_file, timeout_seconds)
         except OSError as error:
             # Not contention but a home where flock cannot work, such as ``ENOLCK`` on
             # an NFS mount without a lock manager. Run unserialised, as on Windows,
             # rather than let optional telemetry fail as an invalid config.
-            logger.debug("Usage lock %s unavailable: %s", name, error)
+            unavailable = error
+        if unavailable is not None:
+            # Yielded outside the handler, so the flock error does not become the
+            # ``__context__`` of anything the caller's ``with`` body raises.
+            logger.debug("Usage lock %s unavailable: %s", name, unavailable)
             yield True
             return
         if not acquired:
@@ -372,6 +385,18 @@ def usage_file_lock(name: str, *, timeout_seconds: float) -> Iterator[bool]:
             yield True
         finally:
             fcntl.flock(lock_file, fcntl.LOCK_UN)
+
+
+def _open_lock_file(name: str) -> IO[str]:
+    directory = get_collection_config_path().parent
+    directory.mkdir(mode=PRIVATE_DIRECTORY_MODE, parents=True, exist_ok=True)
+    # Created 0600, as the config is: another local user who can open a lock can also
+    # hold it, stalling every push and start behind it. Append mode, so opening never
+    # truncates a file another process holds.
+    descriptor = os.open(
+        directory / name, os.O_WRONLY | os.O_APPEND | os.O_CREAT, PRIVATE_FILE_MODE
+    )
+    return os.fdopen(descriptor, "a", encoding="utf-8")
 
 
 # What ``flock`` raises under ``LOCK_NB`` when another holder has the lock. Anything

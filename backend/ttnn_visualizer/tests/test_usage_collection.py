@@ -1782,7 +1782,10 @@ def test_a_waiting_push_gives_up_within_its_timeout(
         usage_metrics.EXPORT_LOCK_NAME, timeout_seconds=5
     ) as held:
         assert held
+        started = time.monotonic()
         assert push_usage_metrics(timeout_seconds=0.2, wait_for_lock=True) is False
+        # The wait is the exit push's, so it must end with its budget, not a multiple.
+        assert time.monotonic() - started < 1.0
 
     assert curl_calls == []
 
@@ -1818,6 +1821,51 @@ def test_a_waiting_push_gives_curl_only_the_time_left(
         if name == "max-time"
     ]
     assert 2.0 < max_time < 2.6
+
+
+def test_a_waiting_push_below_the_default_floor_sends_nothing(
+    event_log_directory, usage_collection_config_path, curl_calls
+):
+    """At the real ``MIN_REQUEST_SECONDS``, a remainder below it never reaches curl.
+
+    A fixed sliver rather than one derived from the floor, so lowering the floor to
+    nothing fails here instead of shrinking the sliver with it."""
+    _opt_in(usage_collection_config_path, remote_write_endpoint=_ENDPOINT)
+
+    assert push_usage_metrics(timeout_seconds=0.05, wait_for_lock=True) is False
+    assert curl_calls == []
+
+
+def test_a_waiting_push_charges_the_log_read_to_curls_budget(
+    event_log_directory, usage_collection_config_path, curl_calls, monkeypatch
+):
+    """The remainder is taken after the read, so a slow read shortens the request
+    rather than lengthening exit."""
+    _opt_in(usage_collection_config_path, remote_write_endpoint=_ENDPOINT)
+    collect = usage_metrics.collect_usage_metrics
+
+    def _slow_collect(*args, **kwargs):
+        time.sleep(0.5)
+        return collect(*args, **kwargs)
+
+    monkeypatch.setattr(usage_metrics, "collect_usage_metrics", _slow_collect)
+
+    assert push_usage_metrics(timeout_seconds=3.0, wait_for_lock=True) is True
+
+    ((_command, kwargs),) = curl_calls
+    (max_time,) = [
+        float(value)
+        for name, value in _curl_options(kwargs["input"])
+        if name == "max-time"
+    ]
+    assert 2.0 < max_time < 2.6
+
+
+def test_the_exit_push_stays_within_a_few_seconds():
+    """The docs limit the exit push, its lock wait included, to "a few seconds".
+    ``test_exporter_pushes_at_start_and_stop`` checks only that ``stop()`` uses this
+    budget, so without a bound here it could grow without a test failing."""
+    assert 0 < usage_metrics.FINAL_PUSH_TIMEOUT_SECONDS <= 5.0
 
 
 def test_a_waiting_push_with_too_little_time_left_sends_nothing(
@@ -2062,6 +2110,66 @@ def test_a_held_lock_is_still_contention_not_unavailability(
             assert locked is False
 
 
+@_requires_flock
+@pytest.mark.skipif(
+    hasattr(os, "geteuid") and os.geteuid() == 0,
+    reason="root opens a mode-000 file regardless",
+)
+def test_unopenable_lock_files_run_unlocked(
+    event_log_directory, usage_collection_config_path, curl_calls
+):
+    """Lock files left by another account, such as a ``sudo`` run that kept ``HOME``,
+    must not fail collection as an invalid config when ``dev`` had no lock files."""
+    _opt_in(usage_collection_config_path, remote_write_endpoint=_ENDPOINT)
+    for name in (usage_collection.COLLECTION_LOCK_NAME, usage_metrics.EXPORT_LOCK_NAME):
+        lock_path = usage_collection_config_path.parent / name
+        lock_path.touch()
+        lock_path.chmod(0)
+
+    config = usage_collection.prepare_usage_collection_config()
+
+    assert config.error is None
+    assert config.can_export
+    assert push_usage_metrics() is True
+    assert len(curl_calls) == 1
+
+
+@_requires_flock
+def test_lock_files_are_created_private(usage_collection_config_path):
+    """Another local user who can open a lock can also hold it, stalling every push
+    and start behind it."""
+    _write_config(usage_collection_config_path, enabled=True)
+    previous_umask = os.umask(0o022)
+    try:
+        with usage_collection.usage_file_lock(
+            usage_collection.COLLECTION_LOCK_NAME, timeout_seconds=0
+        ):
+            pass
+    finally:
+        os.umask(previous_umask)
+
+    lock_path = usage_collection_config_path.parent / (
+        usage_collection.COLLECTION_LOCK_NAME
+    )
+    assert stat.S_IMODE(lock_path.stat().st_mode) == 0o600
+
+
+@_requires_flock
+def test_an_unavailable_flock_is_not_the_context_of_the_callers_error(
+    usage_collection_config_path, monkeypatch
+):
+    _write_config(usage_collection_config_path, enabled=True)
+    _flock_unavailable(monkeypatch)
+
+    with pytest.raises(ValueError) as raised:
+        with usage_collection.usage_file_lock(
+            usage_collection.COLLECTION_LOCK_NAME, timeout_seconds=0
+        ):
+            raise ValueError("from the caller")
+
+    assert raised.value.__context__ is None
+
+
 def test_exporter_pushes_at_start_and_stop(monkeypatch):
     pushes = []
     monkeypatch.setattr(
@@ -2143,6 +2251,31 @@ def test_exporter_logs_a_run_of_failures_once(monkeypatch, caplog):
     assert [record.getMessage() for record in caplog.records] == [
         "Unable to export usage metrics: down",
         "Unable to export usage metrics: down again",
+    ]
+
+
+def test_exporter_logs_a_run_of_failures_once_across_skipped_pushes(
+    monkeypatch, caplog
+):
+    """A push skipped because another process held the lock returns ``False``, and
+    is not the success that ends a run of failures."""
+    outcomes = [OSError("down"), False, OSError("still down"), OSError("down")]
+
+    def _push(*, timeout_seconds, wait_for_lock):
+        outcome = outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    monkeypatch.setattr(usage_metrics, "push_usage_metrics", _push)
+    exporter = UsageMetricsExporter()
+
+    with caplog.at_level(logging.WARNING, logger=usage_metrics.__name__):
+        for _ in range(4):
+            exporter._push()
+
+    assert [record.getMessage() for record in caplog.records] == [
+        "Unable to export usage metrics: down",
     ]
 
 

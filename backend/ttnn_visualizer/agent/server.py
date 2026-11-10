@@ -1142,7 +1142,9 @@ def _start_usage_export() -> Optional[UsageMetricsExporter]:
     """
     # Anything but a readable false counts as hosted, failing closed: aggregate
     # collection is local-only, and the app refuses to start on an unreadable value.
-    if parse_bool(os.environ.get("SERVER_MODE") or "false") is not False:
+    # Only an unset variable defaults to local; an empty one is unreadable, as it is
+    # to the app.
+    if parse_bool(os.environ.get("SERVER_MODE", "false")) is not False:
         logger.info("Aggregate usage collection is unavailable under SERVER_MODE.")
         return None
     collection_config = prepare_usage_collection_config()
@@ -1195,9 +1197,12 @@ def main() -> None:
         serve(sys.stdin, sys.stdout)
         return
 
-    previous_handler = signal.signal(signal.SIGTERM, _exit_on_sigterm)
+    previous_handler = signal.getsignal(signal.SIGTERM)
     terminated = False
     try:
+        # Inside the ``try``, so a SIGTERM that lands as soon as the handler is in
+        # place still reaches ``stop()`` below.
+        signal.signal(signal.SIGTERM, _exit_on_sigterm)
         serve(sys.stdin, sys.stdout)
     except _Terminated:
         terminated = True

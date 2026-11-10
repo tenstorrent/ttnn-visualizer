@@ -509,7 +509,7 @@ class UsageMetricsExporter:
         wait_for_lock: bool = False,
     ) -> None:
         try:
-            push_usage_metrics(
+            sent = push_usage_metrics(
                 timeout_seconds=timeout_seconds, wait_for_lock=wait_for_lock
             )
         except (OSError, ValueError) as error:
@@ -518,7 +518,11 @@ class UsageMetricsExporter:
                 logger.warning("Unable to export usage metrics: %s", error)
             self._failing = True
         else:
-            self._failing = False
+            # Only a push that sent ends the run. One skipped because another process
+            # held the lock says nothing about the endpoint, and resetting on it would
+            # log the same outage again after every skip.
+            if sent:
+                self._failing = False
 
 
 def start_usage_exporter(
