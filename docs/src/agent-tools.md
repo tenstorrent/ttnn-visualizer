@@ -725,9 +725,9 @@ name the cores that set the time; a caveat says so. Unpaired zones are counted p
 count and device, not per replay, so an unpaired zone in one replay is reported on every
 replay of that operation. A kernel row whose slot, core or cycle count is not a whole
 number or does not fit a 64-bit integer, or whose cycle count is negative, is left out and
-counted in a caveat rather than failing the call. The first call on a handle reads the whole device
-log once for every operation in the report, and later calls answer from that read, with
-the clock it was read at.
+counted in a caveat rather than failing the call. The first call on a handle reads the
+whole device log once for every operation in the report, and later calls answer from that
+read, with the clock it was read at.
 
 `zone_intervals` times a zone that recurs within one kernel run. An interval runs from one
 start of the zone to its next start on the same core's RISC, so for a zone placed once per
@@ -765,18 +765,18 @@ with the zones it does, most started first, leaving out any name longer than 256
 characters, which is the capture's text, not the tool's; a zone asked for by a longer name
 is refused. A row whose slot, core, run or cycle count is not a whole number or does not
 fit a 64-bit integer, or whose cycle count is negative, is left out and counted in a
-caveat, and a zone whose every start was left out is refused with how many were unreadable that way
-and how many lay past the 200,000 core-RISC timelines followed at once. The first call on
-a handle reads the device log once for every zone, and later calls, for any zone and the
-refusal of one the log does not start included, answer from that read, with the clock it
-was read at; a log that cannot be read is refused until `load_report` loads it again. A log
-that one pass cannot read as each zone's own read would has the zone asked for read alone
-on every call, the first after the pass: one past those caps counted across all its zones,
-naming more than 1,000 zones or holding more than 4,000,000 intervals, one where a RISC's
-run host ID comes back before its next kernel start, and one whose cycle counts run past
-what a float holds exactly where a cell is not a whole number. A zone also named on rows
-that neither start nor end one is read alone the same way. The server's log says when and
-why the pass gave up.
+caveat, and a zone whose every start was left out is refused with how many were unreadable
+that way and how many lay past the 200,000 core-RISC timelines followed at once. The first
+call on a handle reads the device log once for every zone, and later calls, for any zone
+and the refusal of one the log does not start included, answer from that read, with the
+clock it was read at; a log that cannot be read is refused until `load_report` loads it
+again. A log that one pass cannot read as each zone's own read would has the zone asked
+for read alone on every call, the first after the pass: one past those caps counted across
+all its zones, naming more than 1,000 zones or holding more than 4,000,000 intervals, one
+where a RISC's run host ID comes back before its next kernel start, and one whose cycle
+counts run past what a float holds exactly where a cell is not a whole number. A zone also
+named on rows that neither start nor end one is read alone the same way. The server's log
+says when and why the pass gave up.
 
 No zone tool shows a zone name longer than 256 characters or a RISC name longer than 32
 characters: such a name is the capture's text, not the tool's, and tt-metal's longest RISC

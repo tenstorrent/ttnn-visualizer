@@ -528,7 +528,8 @@ def _fits_int64(numbers: pd.Series) -> np.ndarray:
 
 def _is_whole(numbers: pd.Series) -> np.ndarray:
     """Whether each cell is whole, which a cast to int64 would not truncate; inf is, so
-    it pairs with `_fits_int64`. tt-metal writes all four columns as integers. #2259"""
+    it pairs with `_fits_int64`. tt-metal writes the five whole-number columns as
+    integers. #2259"""
     if pd.api.types.is_integer_dtype(numbers):
         return np.ones(len(numbers), dtype=bool)
     values = numbers.to_numpy(dtype=float)
@@ -538,9 +539,10 @@ def _is_whole(numbers: pd.Series) -> np.ndarray:
 def _whole_number_rows(
     chunk: pd.DataFrame, columns: Sequence[str], *, non_negative: Sequence[str]
 ) -> Tuple[pd.DataFrame, np.ndarray]:
-    """The rows whose ``columns`` all hold int64s, none of ``non_negative`` below
-    zero, those columns as int64, and the mask that chose them, so each caller counts
-    the rest its own way. Two non-negative values kept differ by less than 2**63."""
+    """The rows whose ``columns`` hold whole numbers in int64's range, none of
+    ``non_negative`` below zero, those columns as int64, and the mask that chose them,
+    so each caller counts the rest its own way. Two non-negative values kept differ by
+    less than 2**63."""
     numbers = chunk[list(columns)].apply(pd.to_numeric, errors="coerce")
     readable: np.ndarray = np.ones(len(chunk), dtype=bool)
     for column in columns:
