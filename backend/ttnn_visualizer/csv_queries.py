@@ -639,7 +639,7 @@ class _ZonePairer:
         self.open_starts: Dict[tuple, int] = {}
         self.unpaired_ends = 0
         self.dropped_starts = 0
-        # Starts a second start under their key replaced before they ended. #2249
+        # Starts that a second start under their key replaced before they ended. #2249
         self.replaced_starts = 0
         # What each count is also kept by, so a caller can read the counts of some
         # keys' groups alone -- one operation's run, say -- rather than the log's.
@@ -675,14 +675,16 @@ class _ZonePairer:
     def pairing_by_group(self) -> Dict[Hashable, Dict[str, int]]:
         """`pairing`'s counts for each group that has any, without logging them."""
         assert self.group is not None, "constructed without a group"
-        open_starts = Counter(self.group(key) for key in self.open_starts)
-        open_starts.update(self.replaced_starts_by)
+        unmatched_starts = Counter(self.group(key) for key in self.open_starts)
+        unmatched_starts.update(self.replaced_starts_by)
         groups = (
-            set(open_starts) | set(self.unpaired_ends_by) | set(self.dropped_starts_by)
+            set(unmatched_starts)
+            | set(self.unpaired_ends_by)
+            | set(self.dropped_starts_by)
         )
         return {
             group: {
-                "unmatched_starts": open_starts[group],
+                "unmatched_starts": unmatched_starts[group],
                 "unmatched_ends": self.unpaired_ends_by[group],
                 "dropped_starts": self.dropped_starts_by[group],
             }
@@ -738,10 +740,9 @@ class _ZoneReader:
     ) -> None:
         """One of the zone's rows, in ``run`` on ``timeline``."""
         key = (timeline, run.run_id if self.firmware else run.seq)
-        if phase != self.start_token:
-            self.pairer.offer(key, phase, cycles)
-            return
         self.pairer.offer(key, phase, cycles)
+        if phase != self.start_token:
+            return
         state = self.timelines.get(timeline)
         if state is None:
             state = self.timelines[timeline] = _ZoneOnTimeline(
