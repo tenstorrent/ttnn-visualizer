@@ -897,9 +897,16 @@ class DeviceLogMeta(NamedTuple):
     max_cores: Optional[int] = None
 
 
+# A first-line name or value past this is the capture's text, not tt-metal's, whose
+# longest is a 32-character run ID; such a field is left out. #2256
+MAX_CAPTURE_FIELD_CHARS = 64
+# First-line fields kept, of the four tt-metal writes.
+MAX_CAPTURE_FIELDS = 16
 # Searched for anywhere on the line, so a missing comma or a leading BOM still reads. A
 # number of ten digits or more is no count, rather than an int too long to parse.
-_META_ARCHITECTURE = re.compile(r"ARCH:\s*([\w\d_]+)")
+_META_ARCHITECTURE = re.compile(
+    rf"ARCH:\s*([\w\d_]{{1,{MAX_CAPTURE_FIELD_CHARS}}})(?![\w\d_])"
+)
 _META_FREQUENCY = re.compile(r"CHIP_FREQ\[MHz\]:\s*(\d{1,9})(?!\d)")
 _META_MAX_CORES = re.compile(r"Max Compute Cores:\s*(\d{1,9})(?!\d)")
 # The meta reads only the first line, and a log with no newline must not be read whole.
@@ -1133,8 +1140,12 @@ class DeviceLogProfilerQueries:
         metadata: Dict[str, str] = {}
         for field in first_line.split(","):
             key, separator, value = field.partition(":")
-            if separator:
-                metadata[key.strip()] = value.strip()
+            key, value = key.strip(), value.strip()
+            if not separator or max(len(key), len(value)) > MAX_CAPTURE_FIELD_CHARS:
+                continue
+            metadata[key] = value
+            if len(metadata) == MAX_CAPTURE_FIELDS:
+                break
         return metadata
 
     def _zone_phase(self, purpose: str) -> Tuple[Optional[str], str, str]:

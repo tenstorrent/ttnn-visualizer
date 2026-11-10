@@ -163,7 +163,9 @@ first call, which refuses one that is not a readable tt-npe trace.
   `load_report` again gives a fresh handle.
 - `arch` and `device_count` are keyed by the file each was read from, since a handle's two
   reports can come from different runs. `arch.device_log` is the device profiler log's
-  header, which `capture` also returns whole; `arch.cluster_descriptor` is what the `arch`
+  header, which `capture` also returns, but for a field whose name or value runs past 64
+  characters, which tt-metal never writes, and any past the first 16; every tool reads an
+  architecture that long as none. `arch.cluster_descriptor` is what the `arch`
   mapping in rank 0's `cluster_descriptor.yaml`, beside the memory report database, names — as
   written, since older descriptors spell Wormhole `Wormhole` and newer ones
   `wormhole_b0`, and joined with commas if its chips differ. The memory report database itself
