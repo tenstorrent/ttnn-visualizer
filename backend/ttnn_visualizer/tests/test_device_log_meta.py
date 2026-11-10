@@ -13,6 +13,7 @@ from http import HTTPStatus
 
 import pytest
 from ttnn_visualizer.csv_queries import (
+    MAX_CAPTURE_FIELD_CHARS,
     DeviceLogMeta,
     DeviceLogProfilerQueries,
     parse_device_meta,
@@ -187,6 +188,16 @@ def test_a_value_is_found_anywhere_on_the_line():
     assert parse_device_meta(
         "RUN_ID: x, Max Compute Cores: 72 cores, ARCH:wormhole_b0 (n300)"
     ) == DeviceLogMeta("wormhole_b0", None, 72)
+
+
+@pytest.mark.parametrize("extra, kept", [(0, True), (1, False)])
+def test_an_architecture_longer_than_tt_metal_writes_is_none(extra, kept):
+    """#2256"""
+    architecture = "a" * (MAX_CAPTURE_FIELD_CHARS + extra)
+
+    meta = parse_device_meta(f"ARCH: {architecture}, CHIP_FREQ[MHz]: 1000")
+
+    assert meta == DeviceLogMeta(architecture if kept else None, 1000, None)
 
 
 def test_the_route_still_refuses_a_report_without_a_device_log(client, mounted):

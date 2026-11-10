@@ -901,6 +901,29 @@ class TestCaptureMetadata:
             == {}
         )
 
+    def test_a_field_longer_than_tt_metal_writes_is_left_out(self, tmp_path):
+        """#2256"""
+        too_long = csv_queries.MAX_CAPTURE_FIELD_CHARS + 1
+        line = (
+            f"ARCH: {'a' * too_long}, CHIP_FREQ[MHz]: 1000, {'k' * too_long}: v"
+        ).encode()
+
+        metadata = DeviceLogProfilerQueries.read_capture_metadata(
+            self._instance(tmp_path, line)
+        )
+
+        assert metadata == {"CHIP_FREQ[MHz]": "1000"}
+
+    def test_fields_past_the_cap_are_left_out(self, tmp_path):
+        count = csv_queries.MAX_CAPTURE_FIELDS
+        line = ", ".join(f"F{index}: {index}" for index in range(count + 5)).encode()
+
+        metadata = DeviceLogProfilerQueries.read_capture_metadata(
+            self._instance(tmp_path, line)
+        )
+
+        assert list(metadata) == [f"F{index}" for index in range(count)]
+
 
 class TestInventory:
     def test_a_pre_rename_log_with_a_perf_csv_answers_core_spread(self, tmp_path):

@@ -581,6 +581,28 @@ class TestReportFacts:
             "cluster_descriptor": "blackhole",
         }
 
+    def test_a_crafted_first_line_stays_out_of_the_answers(self, tmp_path):
+        """#2256: a 60,000-character ARCH made load_report answer 120,553 B."""
+        log = write_device_log(
+            tmp_path,
+            MODERN_HEADER,
+            [
+                modern_row(1, 1, 1, "BRISC", 0, "MATMUL", "ZONE_START"),
+                modern_row(1, 1, 1, "BRISC", 10, "MATMUL", "ZONE_END"),
+            ],
+        )
+        log.write_text(log.read_text().replace("wormhole_b0", "a" * 60_000))
+        registry = ReportRegistry()
+
+        loaded = load_report(registry, performance_path=str(tmp_path))
+        timings = tools.zone_timings(registry, loaded["handle"])
+
+        assert "ARCH" not in loaded["capture"]
+        assert "device_log" not in loaded["arch"]
+        assert timings["arch"] is None
+        assert len(json.dumps(loaded)) < 10_000
+        assert len(json.dumps(timings)) < 2_000
+
     def test_a_profiler_only_report_takes_its_arch_from_the_descriptor(self, tmp_path):
         """The database records no architecture, and `capture` is the device log's."""
         profiler = _write_devices(tmp_path, [(0, 0)])
