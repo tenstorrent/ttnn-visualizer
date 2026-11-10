@@ -1767,6 +1767,23 @@ class TestSignpostRangeEndToEnd:
         # What the handle already holds still answers, from the first capture.
         assert tools.top_ops(registry, handle) == whole
 
+    def test_a_handle_loaded_before_its_csv_pins_the_first_one_read(self, tmp_path):
+        """With no CSV to pin at first, the first read that finds one pins it. #2227"""
+        registry = ReportRegistry()
+        directory = tmp_path / "signposted"
+        directory.mkdir()
+        handle = load_report(registry, performance_path=str(directory))["handle"]
+        with pytest.raises(FileNotFoundError):
+            tools.top_ops(registry, handle)
+
+        write_ops_perf(directory, signposted_rows())
+        whole = tools.top_ops(registry, handle)
+        write_ops_perf(directory, signposted_rows()[:-1])
+
+        with pytest.raises(ValueError, match="has changed since it was first read"):
+            self._ranged(registry, handle)
+        assert tools.top_ops(registry, handle) == whole
+
     def test_a_newer_capture_beside_the_first_is_refused_too(self, tmp_path):
         registry = ReportRegistry()
         handle = self._handle(registry, tmp_path)
