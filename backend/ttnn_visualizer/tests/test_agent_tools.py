@@ -19,6 +19,7 @@ import os
 import re
 import sqlite3
 import time
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -179,6 +180,58 @@ def _touch_in_order(older, newer):
     """`_touch_after`, with both mtimes aged too, for any reader that uses them."""
     os.utime(older, (1000, 1000))
     _touch_after(older, newer, (2000, 2000))
+
+
+class TestPerfCsvTools:
+    """The tools a CSV that does not parse leaves unanswerable. #2198"""
+
+    def test_they_are_the_tools_the_inventory_lists_only_for_a_readable_csv(self):
+        """With everything else present, a CSV problem flips exactly these."""
+        everything = frozenset().union(
+            *handles.TOOL_TABLES.values(), {"captured_graph"}
+        )
+        instance = handles.Instance(
+            instance_id="x", profiler_path="p", performance_path="q", npe_path=None
+        )
+
+        def answerable(problem):
+            with (
+                patch.object(handles, "_perf_csv_problem", return_value=problem),
+                patch.object(
+                    handles,
+                    "_csv_columns",
+                    return_value=frozenset({"PROGRAM HASH", "PROGRAM CACHE HIT"}),
+                ),
+                patch.object(
+                    handles,
+                    "_answerable_device_log_columns",
+                    return_value=frozenset({"type"}),
+                ),
+                patch.object(
+                    handles.DeviceLogProfilerQueries, "clock_mhz", return_value=1000
+                ),
+                patch.object(handles, "_readable_tables", return_value=everything),
+            ):
+                return set(handles._inventory(instance, Path("q.csv"))["answerable"])
+
+        assert answerable(None) - answerable("bad") == PERF_CSV_TOOLS
+
+    def test_a_csv_pandas_cannot_parse_moves_them_to_unanswerable(self, tmp_path):
+        write_ops_perf(tmp_path, smoke_rows())
+        with (tmp_path / "ops_perf_results.csv").open("a") as out:
+            out.write('"unclosed,row\n')
+        registry = ReportRegistry()
+
+        loaded = tools.with_signposts(
+            registry, load_report(registry, performance_path=str(tmp_path))
+        )
+
+        assert {"top_ops", "op_breakdown", "program_cache"} <= set(
+            loaded["unanswerable"]
+        )
+        assert PERF_CSV_TOOLS.isdisjoint(loaded["answerable"])
+        with pytest.raises(DataFormatError, match="EOF inside string"):
+            tools.top_ops(registry, loaded["handle"])
 
 
 class TestReportInventory:
