@@ -640,19 +640,24 @@ class _ZonePairer:
         self.open_starts: Dict[tuple, int] = {}
         self.unpaired_ends = 0
         self.dropped_starts = 0
+        # Starts a second start under their key replaced before they ended. #2249
+        self.replaced_starts = 0
         # What each count is also kept by, so a caller can read the counts of some
         # keys' groups alone -- one operation's run, say -- rather than the log's.
         self.group = group
         self.unpaired_ends_by: Counter = Counter()
         self.dropped_starts_by: Counter = Counter()
+        self.replaced_starts_by: Counter = Counter()
 
     def offer(self, key: tuple, phase: str, cycles: Union[int, float]) -> Optional[int]:
         """Take one row; return its start's cycles when the row is an end that paired."""
         if phase == self.start_token:
-            if (
-                len(self.open_starts) >= MAX_OPEN_ZONE_STARTS
-                and key not in self.open_starts
-            ):
+            if key in self.open_starts:
+                self.replaced_starts += 1
+                if self.group is not None:
+                    self.replaced_starts_by[self.group(key)] += 1
+                self.open_starts[key] = int(cycles)
+            elif len(self.open_starts) >= MAX_OPEN_ZONE_STARTS:
                 self.dropped_starts += 1
                 if self.group is not None:
                     self.dropped_starts_by[self.group(key)] += 1
@@ -672,6 +677,7 @@ class _ZonePairer:
         """`pairing`'s counts for each group that has any, without logging them."""
         assert self.group is not None, "constructed without a group"
         open_starts = Counter(self.group(key) for key in self.open_starts)
+        open_starts.update(self.replaced_starts_by)
         groups = (
             set(open_starts) | set(self.unpaired_ends_by) | set(self.dropped_starts_by)
         )
@@ -693,7 +699,8 @@ class _ZonePairer:
         cannot see that from the figures themselves.
         """
         pairing = {
-            "unmatched_starts": len(self.open_starts),
+            # A replaced start never ended either.
+            "unmatched_starts": len(self.open_starts) + self.replaced_starts,
             "unmatched_ends": self.unpaired_ends,
             # Non-zero only past `MAX_OPEN_ZONE_STARTS`, which a well-formed
             # capture cannot reach. Reported so a bounded read is never mistaken
@@ -726,7 +733,6 @@ class _ZoneReader:
         self.timelines: Dict[RiscTimeline, _ZoneOnTimeline] = {}
         self.across_flush = 0
         self.out_of_order = 0
-        self.displaced = 0
 
     def take(
         self, timeline: RiscTimeline, run: _OpenRun, phase: str, cycles: int
@@ -736,9 +742,6 @@ class _ZoneReader:
         if phase != self.start_token:
             self.pairer.offer(key, phase, cycles)
             return
-        # The pairer keeps one open start a key, so a start replaced unended would
-        # otherwise go uncounted.
-        self.displaced += key in self.pairer.open_starts
         self.pairer.offer(key, phase, cycles)
         state = self.timelines.get(timeline)
         if state is None:
@@ -808,7 +811,6 @@ class ZoneIntervalPass:
                 timeline: state.repeats for timeline, state in reader.timelines.items()
             }
             pairing = reader.pairer.pairing(DeviceLogProfilerQueries.DEVICE_LOG_FILE)
-            pairing["unmatched_starts"] += reader.displaced
             across_flush, out_of_order = reader.across_flush, reader.out_of_order
         return ZoneIntervals(
             timelines=timelines,
