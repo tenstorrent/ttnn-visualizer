@@ -11,6 +11,7 @@ way the reader must: at kernel starts and at changes of run host ID or trace rep
 """
 
 import json
+from contextlib import contextmanager
 from itertools import zip_longest
 from typing import List
 from unittest.mock import patch
@@ -20,6 +21,7 @@ from ttnn_visualizer import csv_queries
 from ttnn_visualizer.agent import server, tools
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
 from ttnn_visualizer.event_logging import McpToolOutcome
+from ttnn_visualizer.models import Instance
 from ttnn_visualizer.tests.mcp_calls import tool_call
 from ttnn_visualizer.tests.smoke_capture import SMOKE_CAPTURE_DIR
 from ttnn_visualizer.tests.test_agent_tools import (
@@ -61,11 +63,32 @@ def _every(start: int, step: int, count: int) -> List[int]:
     return [start + step * index for index in range(count)]
 
 
-def _intervals(tmp_path, rows, zone=LOOP, header=MODERN_HEADER, **arguments):
+def _answer(directory, zone, **arguments):
+    """The tool's answer on a fresh handle, or its refusal."""
     registry = ReportRegistry()
+    load_report(registry, performance_path=str(directory))
+    try:
+        return tools.zone_intervals(registry, "report-1", zone, **arguments)
+    except ValueError as refusal:
+        return refusal
+
+
+def _intervals(tmp_path, rows, zone=LOOP, header=MODERN_HEADER, **arguments):
+    """The tool's answer, which must be the same read from one pass of every zone as
+    read for the zone alone. #2248"""
     write_device_log(tmp_path, header, rows)
-    load_report(registry, performance_path=str(tmp_path))
-    return tools.zone_intervals(registry, "report-1", zone, **arguments)
+    answer = _answer(tmp_path, zone, **arguments)
+    with patch.object(
+        csv_queries.DeviceLogProfilerQueries,
+        "query_every_zone_intervals",
+        return_value=None,
+    ):
+        alone = _answer(tmp_path, zone, **arguments)
+    if isinstance(answer, ValueError):
+        assert (type(alone), str(alone)) == (type(answer), str(answer))
+        raise answer
+    assert alone == answer
+    return answer
 
 
 class TestIntervals:
@@ -903,6 +926,148 @@ class TestGaps:
         assert answer["timeline_count"] == 1
         # A kernel start and two zones' starts and ends: the kernel's end is not read.
         assert "5 rows belong to core-RISC timelines past the" in answer["caveat"]
+
+
+class TestOneRead:
+    """Every zone comes from one pass of the log, kept per handle. #2248"""
+
+    @staticmethod
+    def _loaded(tmp_path, rows, header=MODERN_HEADER):
+        write_device_log(tmp_path, header, rows)
+        registry = ReportRegistry()
+        load_report(registry, performance_path=str(tmp_path))
+        return registry
+
+    @staticmethod
+    def _every_zone(tmp_path):
+        instance = Instance(instance_id="pytest", performance_path=str(tmp_path))
+        with csv_queries.DeviceLogProfilerQueries(instance, stream=True) as queries:
+            return queries.query_every_zone_intervals()
+
+    @staticmethod
+    @contextmanager
+    def _counting(method):
+        """The calls of `DeviceLogProfilerQueries.<method>` while the block runs."""
+        calls = []
+        original = getattr(csv_queries.DeviceLogProfilerQueries, method)
+
+        def counted(self, *arguments):
+            calls.append(arguments)
+            return original(self, *arguments)
+
+        with patch.object(csv_queries.DeviceLogProfilerQueries, method, counted):
+            yield calls
+
+    def test_the_log_is_read_once_for_every_zone_and_refusal(self, tmp_path):
+        registry = self._loaded(
+            tmp_path,
+            [
+                *_run(0, 1, 1, "BRISC", 0, [100, 1100]),
+                *_run(0, 1, 1, "NCRISC", 0, [100, 2100], zone="OTHER"),
+            ],
+        )
+
+        with self._counting("_zone_chunks") as reads:
+            loop = tools.zone_intervals(registry, "report-1", LOOP)
+            other = tools.zone_intervals(registry, "report-1", "OTHER")
+            with pytest.raises(ValueError, match="no zone named 'LOPO'"):
+                tools.zone_intervals(registry, "report-1", "LOPO")
+
+        assert len(reads) == 1
+        assert loop["by_core_risc"][0]["median_us"] == 1.0
+        assert other["by_core_risc"][0]["median_us"] == 2.0
+
+    def test_a_kept_read_answers_with_the_clock_it_was_read_at(self, tmp_path):
+        """A log rewritten since must not pair its new clock with the old intervals."""
+        registry = self._loaded(tmp_path, _run(0, 1, 1, "BRISC", 0, [100, 1100]))
+        first = tools.zone_intervals(registry, "report-1", LOOP)
+        log = write_device_log(
+            tmp_path, MODERN_HEADER, _run(0, 1, 1, "BRISC", 0, [100, 5100])
+        )
+        log.write_text(
+            log.read_text()
+            .replace("wormhole_b0", "blackhole")
+            .replace("CHIP_FREQ[MHz]: 1000", "CHIP_FREQ[MHz]: 2000")
+        )
+
+        again = tools.zone_intervals(registry, "report-1", LOOP)
+        fresh = tools.zone_intervals(
+            registry,
+            load_report(registry, performance_path=str(tmp_path))["handle"],
+            LOOP,
+        )
+
+        assert again == first
+        assert (fresh["arch"], fresh["clock_mhz"]) == ("blackhole", 2000)
+        assert fresh["by_core_risc"][0]["median_us"] == 2.5
+
+    @pytest.mark.parametrize(
+        "zone, between",
+        [
+            # A firmware zone's read keeps no other zone's rows, so they cannot part it.
+            ("BRISC-FW", LOOP),
+            # Nor does a firmware zone's row part another zone's run.
+            (LOOP, "BRISC-FW"),
+        ],
+    )
+    def test_a_run_host_id_back_before_a_kernel_start_is_read_per_zone(
+        self, tmp_path, zone, between
+    ):
+        rows = [
+            *_zone(0, 1, 1, "BRISC", 0, 5, zone=zone),
+            *_zone(0, 1, 1, "BRISC", 10, 20, zone=between, run=2),
+            *_zone(0, 1, 1, "BRISC", 1000, 1005, zone=zone),
+        ]
+
+        answer = _intervals(tmp_path, rows, zone=zone)
+
+        assert self._every_zone(tmp_path) is None
+        assert answer["by_core_risc"][0]["median_us"] == 1.0
+
+    def test_a_zone_also_named_on_other_rows_is_read_alone(self, tmp_path):
+        """Such a row joins only its own zone's read, so one pass leaves that zone."""
+        rows = [
+            *_run(0, 1, 1, "BRISC", 0, [100, 1100]),
+            modern_row(0, 1, 1, "BRISC", 1200, LOOP, "TS_DATA"),
+            *_run(0, 1, 1, "NCRISC", 0, [100, 2100], zone="OTHER"),
+        ]
+
+        answer = _intervals(tmp_path, rows)
+        every = self._every_zone(tmp_path)
+
+        assert every.read_alone == {LOOP}
+        assert every.intervals(LOOP) is None
+        assert every.intervals("OTHER") is not None
+        assert answer["by_core_risc"][0]["intervals"] == 1
+
+    @pytest.mark.parametrize(
+        "cap, value",
+        [("MAX_COUNTED_ZONE_NAMES", 2), ("MAX_ZONE_TIMELINES", 1)],
+    )
+    def test_a_log_past_what_one_zones_read_holds_is_read_per_zone(
+        self, tmp_path, cap, value
+    ):
+        write_device_log(
+            tmp_path,
+            MODERN_HEADER,
+            [
+                *_run(0, 1, 1, "BRISC", 0, [100, 1100]),
+                *_run(0, 2, 1, "BRISC", 0, [100], zone="OTHER"),
+            ],
+        )
+
+        with patch.object(csv_queries, cap, value):
+            assert self._every_zone(tmp_path) is None
+
+    def test_a_refusal_for_the_logs_shape_is_kept_too(self, tmp_path):
+        registry = self._loaded(tmp_path, UNTYPED_ROWS, header=UNTYPED_HEADER)
+
+        with self._counting("query_every_zone_intervals") as reads:
+            for _ in range(2):
+                with pytest.raises(ValueError, match="marks no zone starts or ends"):
+                    tools.zone_intervals(registry, "report-1", "MATMUL")
+
+        assert len(reads) == 1
 
 
 class TestRefusals:
