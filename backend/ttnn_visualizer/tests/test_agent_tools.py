@@ -785,9 +785,7 @@ class TestReportFacts:
 
         assert loaded["device_count"] == {"performance_csv": 1}
 
-    def test_a_csv_pandas_cannot_parse_gives_no_count_and_still_loads(
-        self, tmp_path, event_log_directory
-    ):
+    def test_a_csv_pandas_cannot_parse_gives_no_count_and_still_loads(self, tmp_path):
         write_ops_perf(tmp_path, smoke_rows())
         with (tmp_path / "ops_perf_results.csv").open("a") as out:
             out.write('"unclosed,row\n')
@@ -1033,9 +1031,7 @@ class TestLoadReportSignposts:
         assert loaded["signposts"] == [{"name": "PERF_START", "occurrences": 1}]
         assert loaded["signposts_unlisted_too_long"] == 1
 
-    def test_a_host_time_a_chunk_types_apart_still_loads(
-        self, tmp_path, event_log_directory
-    ):
+    def test_a_host_time_a_chunk_types_apart_still_loads(self, tmp_path):
         """One non-numeric host time past pandas' first chunk raised `TypeError`, which
         refused the whole `load_report` on a capture that loaded before."""
         template = smoke_rows()[0]
@@ -1120,9 +1116,7 @@ class TestLoadReportSignposts:
 
         resolve.assert_called_once()
 
-    def test_the_server_lists_them_in_load_reports_answer(
-        self, tmp_path, event_log_directory
-    ):
+    def test_the_server_lists_them_in_load_reports_answer(self, tmp_path):
         write_ops_perf(tmp_path, signposted_rows())
 
         response = server.handle_message(
@@ -1152,7 +1146,7 @@ class TestTopOps:
             yield
 
     def test_a_csv_missing_device_id_converts_perf_report_exit_naming_the_csv(
-        self, tmp_path, event_log_directory
+        self, tmp_path
     ):
         """A CSV missing `DEVICE ID` triggers `tt-perf-report`'s `sys.exit(1)`, which
         is converted into `DataFormatError` naming only the file (never `tmp_path`) so
@@ -2550,10 +2544,6 @@ class TestZeroDuration:
 
 
 class TestTransport:
-    @pytest.fixture(autouse=True)
-    def _never_touch_the_real_event_log(self, event_log_directory):
-        """Any tools/call reaches the recorder now; none may write outside tmp_path."""
-
     def _table(self):
         return server._tool_table(ReportRegistry())
 

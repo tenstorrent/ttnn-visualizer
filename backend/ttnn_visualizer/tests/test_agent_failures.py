@@ -1528,7 +1528,7 @@ class TestInventoryAndTransport:
         [("errors", {}), ("dram_fallbacks", {"limit": 5}), ("l1_peak", {"limit": 5})],
     )
     def test_each_answers_over_the_server_in_valid_json(
-        self, tmp_path, event_log_directory, tool, arguments
+        self, tmp_path, tool, arguments
     ):
         registry, handle = _report(
             tmp_path,

@@ -1369,10 +1369,6 @@ def _crowded_trace() -> dict:
 
 
 class TestThroughTheServer:
-    @pytest.fixture(autouse=True)
-    def _never_touch_the_real_event_log(self, event_log_directory):
-        """Every tools/call reaches the recorder; none may write outside tmp_path."""
-
     def test_load_report_takes_a_trace_alone(self, tmp_path):
         path = _write(tmp_path, _hand_checked())
 
@@ -1476,10 +1472,6 @@ def _required_arguments(name: McpToolName, handle: str) -> dict:
 
 
 class TestOtherToolsOnATrace:
-    @pytest.fixture(autouse=True)
-    def _never_touch_the_real_event_log(self, event_log_directory):
-        """Every tools/call reaches the recorder; none may write outside tmp_path."""
-
     @pytest.mark.parametrize(
         "name", [name for name in McpToolName if name not in _TRACE_TOOLS]
     )

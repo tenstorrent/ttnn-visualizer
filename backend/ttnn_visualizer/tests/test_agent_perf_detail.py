@@ -1229,10 +1229,6 @@ def _linked_table(tmp_path, rows, graph_of=None):
 class TestAnswerSize:
     """Unmocked `tools/call`s on a linked capture: the detailed-row cap is for these."""
 
-    @pytest.fixture(autouse=True)
-    def _never_touch_the_real_event_log(self, event_log_directory):
-        """Any tools/call reaches the recorder; none may write outside tmp_path."""
-
     @pytest.fixture
     def table(self, tmp_path):
         """Five smoke runs, one profiler operation launching all of them, and one
