@@ -998,12 +998,12 @@ class TestRefusals:
 
         assert long_name not in str(refusal.value)
         assert str(refusal.value).endswith(
-            "; 1 more have names past 256 bytes in UTF-8, which are not listed"
+            "; 1 more have names past 256 bytes, which are not listed"
         )
 
     def test_an_oversized_zone_argument_is_refused(self, tmp_path):
         with pytest.raises(
-            ValueError, match="zone is 257 bytes in UTF-8; a zone name is"
+            ValueError, match="zone is 257 bytes as an answer writes it; a zone name is"
         ):
             _intervals(tmp_path, _run(0, 1, 1, "BRISC", 0, [100]), zone="Q" * 257)
 
@@ -1058,7 +1058,7 @@ class TestRefusals:
         assert str(refusal.value) == (
             "no zone named 'LOPO' starts in profile_log_device.csv. Its zones by "
             "starts, most first: 'LOOP' (4), and 2 more; 1 more have names past 256 "
-            "bytes in UTF-8, which are not listed"
+            "bytes, which are not listed"
         )
 
     def test_a_blank_zone_is_refused(self, tmp_path):

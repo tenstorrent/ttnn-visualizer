@@ -8,9 +8,11 @@ and how much captured graph a tool reads at once.
 Shared rather than declared per module: `server` quotes the caps to an agent in every
 limit schema, so a second copy would eventually promise one cap and enforce another.
 #2012 The graph guard is shared because the link and the failure tools read the same
-column.
+column. A bound that leaves out or refuses a name counts its `answer_size`, the bytes
+an answer's budget counts. #2255
 """
 
+import json
 from typing import TYPE_CHECKING, Any, Dict, Iterable, Optional
 
 if TYPE_CHECKING:
@@ -65,6 +67,19 @@ def bounded(limit: Optional[int], maximum: int = MAX_LIMIT) -> int:
     return max(1, min(requested, maximum))
 
 
+def answer_size(name: str) -> int:
+    """The bytes a name takes in an answer: UTF-8, with JSON's escapes and the wire's
+    escape of a lone surrogate, so a control character is six and a wide one four."""
+    encoded = json.dumps(name, ensure_ascii=False).encode("utf-8", "backslashreplace")
+    return len(encoded) - 2
+
+
+def name_fits(name: str, limit: int) -> bool:
+    """Whether a name takes at most `limit` bytes of an answer; one longer than that in
+    characters never does, so it is not encoded."""
+    return len(name) <= limit and answer_size(name) <= limit
+
+
 def normalised_choice(value: Optional[str]) -> Optional[str]:
     """A choice as `require_choice` compares it: trimmed and upper-cased, None if blank."""
     return (value.strip().upper() or None) if isinstance(value, str) else value
@@ -88,4 +103,6 @@ __all__ = [
     "ensure_graph_readable",
     "normalised_choice",
     "require_choice",
+    "answer_size",
+    "name_fits",
 ]

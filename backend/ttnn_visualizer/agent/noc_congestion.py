@@ -21,11 +21,11 @@ from typing import Dict, List, Optional, Tuple
 import orjson
 import zstd
 from ttnn_visualizer import npe_index
-from ttnn_visualizer.agent.bounds import MAX_LIMIT, bounded
+from ttnn_visualizer.agent.bounds import MAX_LIMIT, bounded, name_fits
 from ttnn_visualizer.agent.cells import finite_number, whole_number
 from ttnn_visualizer.agent.handles import CacheVariant, ReportRegistry, read_once
 from ttnn_visualizer.agent.report_diff import as_answered
-from ttnn_visualizer.agent.tools import share_percent, utf8_size
+from ttnn_visualizer.agent.tools import share_percent
 from ttnn_visualizer.file_source import FileSource
 
 # Demand past a link's whole bandwidth: asked of it, but more than it could carry.
@@ -156,7 +156,7 @@ def _link(device: object, y: object, x: object, name: object) -> Optional[Link]:
         and type(y) is int
         and type(x) is int
         and type(name) is str
-        and utf8_size(name) <= MAX_LINK_NAME_LENGTH
+        and name_fits(name, MAX_LINK_NAME_LENGTH)
     ):
         return device, y, x, name
     return None
@@ -408,7 +408,7 @@ def _pinned_read(
 
 
 def _label(value: object) -> Optional[str]:
-    if isinstance(value, str) and utf8_size(value) <= MAX_LABEL_LENGTH:
+    if isinstance(value, str) and name_fits(value, MAX_LABEL_LENGTH):
         return value
     return None
 
@@ -444,7 +444,7 @@ def _run(info: Dict[str, object]) -> Dict[str, object]:
             for name, figures in sorted(
                 (name, figures)
                 for name, figures in nocs.items()
-                if isinstance(figures, dict) and utf8_size(name) <= MAX_LINK_NAME_LENGTH
+                if isinstance(figures, dict) and name_fits(name, MAX_LINK_NAME_LENGTH)
             )[:MAX_NOCS]
         }
     return run

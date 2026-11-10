@@ -35,7 +35,9 @@ from ttnn_visualizer.agent import op_signatures, perf_detail, perf_flags, report
 from ttnn_visualizer.agent.bounds import (
     MAX_DETAILED_LIMIT,
     MAX_LIMIT,
+    answer_size,
     bounded,
+    name_fits,
     require_choice,
 )
 from ttnn_visualizer.agent.cells import finite_number, whole_number
@@ -157,14 +159,8 @@ def share_percent(part: Optional[float], whole: float) -> Optional[float]:
 
 
 # Longer than any signpost a model emits, and short enough that a refusal or a
-# projection echoing the name stays small. Every name bound counts `utf8_size`.
+# projection echoing the name stays small; in an answer's bytes, as `name_fits` counts.
 MAX_SIGNPOST_NAME_LENGTH = 256
-
-
-def utf8_size(name: str) -> int:
-    """A name's size as an answer's budget counts it: a bound in characters would let a
-    name of four-byte characters take four times its share. #2255"""
-    return len(name.encode("utf-8", "surrogatepass"))
 
 
 @dataclass(frozen=True)
@@ -192,10 +188,10 @@ class SignpostRange:
         not key a second snapshot of the same whole report.
         """
         for label, name in (("start_signpost", start), ("end_signpost", end)):
-            if name and utf8_size(name) > MAX_SIGNPOST_NAME_LENGTH:
+            if name and not name_fits(name, MAX_SIGNPOST_NAME_LENGTH):
                 raise ValueError(
-                    f"{label} is {utf8_size(name)} bytes in UTF-8; a signpost name is "
-                    f"at most {MAX_SIGNPOST_NAME_LENGTH}"
+                    f"{label} is {answer_size(name)} bytes as an answer writes it; a "
+                    f"signpost name is at most {MAX_SIGNPOST_NAME_LENGTH} bytes"
                 )
         start, end = start or None, end or None
         if start is None and end is None:
@@ -269,14 +265,41 @@ def check_range(
     """Refuse a range this handle's signposts cannot honour, naming the handle.
 
     `diff_reports` asks it of every capture before generating any, so the
-    refusal has to say which one it is about.
+    refusal has to say which one it is about. A name the report lacks is refused
+    here, listing the names `load_report` lists rather than every one the CSV holds.
     """
+    resolved = _signposts(registry, handle)
+    if not signpost_range_ignored(resolved, signposts.start, signposts.end):
+        for name in (signposts.start, signposts.end):
+            if name and name not in resolved.positions_by_name:
+                raise InvalidSignpostRange(
+                    f"{handle!r}: {_unknown_signpost(name, resolved)}"
+                )
     try:
-        check_signpost_range(
-            _signposts(registry, handle), signposts.start, signposts.end
-        )
+        check_signpost_range(resolved, signposts.start, signposts.end)
     except InvalidSignpostRange as error:
         raise InvalidSignpostRange(f"{handle!r}: {error}") from error
+
+
+def _unknown_signpost(name: str, resolved: ResolvedSignposts) -> str:
+    named = resolved.occurrences()
+    listed, too_long = _short_names(
+        named, MAX_SIGNPOST_NAME_LENGTH, MAX_LISTED_SIGNPOSTS
+    )
+    refusal = f"no signpost named {name!r} in this report; " + (
+        f"it holds {', '.join(repr(known) for known, _ in listed)}"
+        if listed
+        else "none of its signpost names is short enough to list"
+    )
+    unlisted = len(named) - too_long - len(listed)
+    if unlisted:
+        refusal += f" and {unlisted} more"
+    if too_long:
+        refusal += (
+            f"; {too_long} more have names past {MAX_SIGNPOST_NAME_LENGTH} bytes, "
+            "which are not listed"
+        )
+    return refusal
 
 
 def _source_now(instance: Instance) -> Optional[object]:
@@ -365,7 +388,7 @@ def _resolve_signposts(instance: Instance) -> ResolvedSignposts:
 
 def _name_shown(name: str, max_length: int) -> bool:
     """Whether a name the capture supplied is short enough to show an agent."""
-    return utf8_size(name) <= max_length
+    return name_fits(name, max_length)
 
 
 def _shown_and_dropped(
@@ -1512,8 +1535,8 @@ def _unknown_zone(zone: str, read: ZoneIntervals) -> str:
         refusal += f", and {unlisted} more"
     if too_long:
         refusal += (
-            f"; {too_long} more have names past {MAX_ZONE_NAME_LENGTH} bytes in "
-            "UTF-8, which are not listed"
+            f"; {too_long} more have names past {MAX_ZONE_NAME_LENGTH} bytes, "
+            "which are not listed"
         )
     if read.zone_names_capped:
         refusal += (
@@ -1534,10 +1557,10 @@ def zone_intervals(
     if not isinstance(zone, str) or not zone.strip():
         raise ValueError("zone must name a zone the device log records")
     name = zone.strip()
-    if utf8_size(name) > MAX_ZONE_NAME_LENGTH:
+    if not name_fits(name, MAX_ZONE_NAME_LENGTH):
         raise ValueError(
-            f"zone is {utf8_size(name)} bytes in UTF-8; a zone name is at most "
-            f"{MAX_ZONE_NAME_LENGTH}"
+            f"zone is {answer_size(name)} bytes as an answer writes it; a zone name is "
+            f"at most {MAX_ZONE_NAME_LENGTH} bytes"
         )
     count = bounded(limit)
     instance = registry.get(handle)

@@ -125,7 +125,8 @@ _HANDLE_LIMIT_RANK_SCHEMA = {
     "required": ["handle"],
 }
 # The bounds `tt-perf-report --start-signpost/--end-signpost` take; see
-# `tools.SignpostRange`. #2122
+# `tools.SignpostRange`. #2122 maxLength counts characters, a looser check than the
+# tool's in bytes, since a schema cannot count bytes.
 _SIGNPOST_SCHEMAS = {
     "start_signpost": {
         "type": "string",

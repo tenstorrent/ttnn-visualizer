@@ -10,6 +10,7 @@ import json
 
 import pytest
 from ttnn_visualizer.agent import noc_congestion, tools
+from ttnn_visualizer.agent.bounds import answer_size
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
 from ttnn_visualizer.tests.test_agent_perf_detail import ANSWER_BUDGET_BYTES
 from ttnn_visualizer.tests.test_agent_tools import _zone_timings
@@ -30,9 +31,9 @@ def _wide(size: int) -> str:
 
 
 def test_a_name_is_measured_in_utf8_bytes():
-    assert tools.utf8_size("abc") == 3
-    assert tools.utf8_size(WIDE) == 3
-    assert tools.utf8_size("😀") == 4
+    assert answer_size("abc") == 3
+    assert answer_size(WIDE) == 3
+    assert answer_size("😀") == 4
 
 
 @pytest.mark.parametrize("extra, listed", [(0, True), (1, False)])
@@ -66,7 +67,7 @@ def test_a_hundred_wide_zone_names_keep_zone_timings_within_its_budget(tmp_path)
 
 
 def test_a_zone_argument_past_the_bound_in_bytes_is_refused(tmp_path):
-    with pytest.raises(ValueError, match="zone is 258 bytes in UTF-8"):
+    with pytest.raises(ValueError, match="zone is 258 bytes as an answer writes it"):
         _intervals(tmp_path, _run(0, 1, 1, "BRISC", 0, [100]), zone=WIDE * 86)
 
 
@@ -75,7 +76,9 @@ def test_a_signpost_argument_past_the_bound_in_bytes_is_refused(tmp_path):
     registry = ReportRegistry()
     load_report(registry, performance_path=str(tmp_path))
 
-    with pytest.raises(ValueError, match="start_signpost is 258 bytes in UTF-8"):
+    with pytest.raises(
+        ValueError, match="start_signpost is 258 bytes as an answer writes it"
+    ):
         tools.top_ops(registry, "report-1", start_signpost=WIDE * 86)
 
 
