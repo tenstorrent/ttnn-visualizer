@@ -901,8 +901,42 @@ class TestCaptureMetadata:
             == {}
         )
 
+    @pytest.mark.parametrize("extra, kept", [(0, True), (1, False)])
+    @pytest.mark.parametrize("side", ["name", "value"])
+    def test_a_field_is_kept_up_to_the_bound_and_left_out_past_it(
+        self, tmp_path, side, extra, kept
+    ):
+        """Measured stripped, as the field is kept: the regex's bound, so both agree."""
+        text = "a" * (csv_queries.MAX_CAPTURE_FIELD_CHARS + extra)
+        name, value = (text, "v") if side == "name" else ("K", text)
+        line = f"CHIP_FREQ[MHz]: 1000,  {name} :  {value} ".encode()
+
+        metadata = DeviceLogProfilerQueries.read_capture_metadata(
+            self._instance(tmp_path, line)
+        )
+
+        assert (metadata.get(name) == value) is kept
+
+    def test_the_longest_real_first_line_reads_whole(self, tmp_path):
+        """A 2026 capture's four fields, its RUN_ID the longest value seen."""
+        line = (
+            b"ARCH: wormhole_b0, CHIP_FREQ[MHz]: 1000, Max Compute Cores: 64, "
+            b"RUN_ID: e4f3b5ca429bbb18e8fb771ad33e8ee2"
+        )
+
+        metadata = DeviceLogProfilerQueries.read_capture_metadata(
+            self._instance(tmp_path, line)
+        )
+
+        assert metadata == {
+            "ARCH": "wormhole_b0",
+            "CHIP_FREQ[MHz]": "1000",
+            "Max Compute Cores": "64",
+            "RUN_ID": "e4f3b5ca429bbb18e8fb771ad33e8ee2",
+        }
+
     def test_a_field_longer_than_tt_metal_writes_is_left_out(self, tmp_path):
-        """#2256"""
+        """A crafted first line must not fill load_report's answer. #2256"""
         too_long = csv_queries.MAX_CAPTURE_FIELD_CHARS + 1
         line = (
             f"ARCH: {'a' * too_long}, CHIP_FREQ[MHz]: 1000, {'k' * too_long}: v"

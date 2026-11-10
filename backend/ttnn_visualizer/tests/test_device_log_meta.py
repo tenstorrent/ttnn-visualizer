@@ -191,8 +191,8 @@ def test_a_value_is_found_anywhere_on_the_line():
 
 
 @pytest.mark.parametrize("extra, kept", [(0, True), (1, False)])
-def test_an_architecture_longer_than_tt_metal_writes_is_none(extra, kept):
-    """#2256"""
+def test_an_architecture_is_read_up_to_the_bound_and_as_none_past_it(extra, kept):
+    """A longer one is the capture's text, not tt-metal's. #2256"""
     architecture = "a" * (MAX_CAPTURE_FIELD_CHARS + extra)
 
     meta = parse_device_meta(f"ARCH: {architecture}, CHIP_FREQ[MHz]: 1000")
