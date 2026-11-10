@@ -58,8 +58,8 @@ from ttnn_visualizer.startup_requirements import report as report_startup_requir
 from ttnn_visualizer.usage_collection import (
     UsageCollectionConfig,
     describe_usage_collection,
-    load_usage_collection_config,
     prepare_usage_collection_config,
+    secure_usage_collection_config,
 )
 from ttnn_visualizer.usage_metrics import (
     UsageMetricsExporter,
@@ -626,13 +626,14 @@ def _record_launch(config) -> Optional[UsageCollectionConfig]:
     disabled_reason = get_recording_disabled_reason(server_mode)
     collection_config: Optional[UsageCollectionConfig] = None
     if not server_mode:
-        # Read-only under an opt-out, as the MCP server does nothing then: the banner
+        # Unprepared under an opt-out, as the MCP server does nothing then: the banner
         # still needs the config, but nothing should write an identity or take the
-        # preparation lock for a session that cannot export.
+        # preparation lock for a session that cannot export. The file is still kept
+        # at 0600, as every launch did before.
         collection_config = (
             prepare_usage_collection_config()
             if disabled_reason is None
-            else load_usage_collection_config()
+            else secure_usage_collection_config()
         )
         print(
             describe_usage_collection(

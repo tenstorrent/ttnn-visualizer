@@ -237,17 +237,19 @@ def _read_config(path: Path, persist: bool) -> UsageCollectionConfig:
     )
 
 
-def _load_config(persist: bool) -> UsageCollectionConfig:
+def _load_config(persist: bool, secure: bool = False) -> UsageCollectionConfig:
     try:
         path = get_collection_config_path()
         if not path.exists():
             return UsageCollectionConfig()
+        # Outside the lock: it is idempotent, and a start that times out on the lock,
+        # or that may not prepare at all, must still not leave a token readable by
+        # other users.
+        if persist or secure:
+            _secure_config_permissions(path)
         if not persist:
             return _read_config(path, persist=False)
 
-        # Outside the lock: it is idempotent, and a start that times out on the lock
-        # must still not leave a token readable by other users.
-        _secure_config_permissions(path)
         # The read is inside the lock with the write: an MCP server per agent session
         # plus the app can prepare together, and two that both read no ID would each
         # generate one, leaving the loser's whole session under an orphan identity.
@@ -276,6 +278,16 @@ def load_usage_collection_config() -> UsageCollectionConfig:
     not yet been prepared has no ``machine_id``, and nothing is exported until it does.
     """
     return _load_config(persist=False)
+
+
+def secure_usage_collection_config() -> UsageCollectionConfig:
+    """Read the opt-in file after restricting its permissions, without preparing it.
+
+    For a launch under a recording opt-out: it may not write an identity or take the
+    preparation lock, but a start is still where ``collection.json`` is kept at
+    ``0600``, so a token in a loosely-moded config does not stay readable.
+    """
+    return _load_config(persist=False, secure=True)
 
 
 def prepare_usage_collection_config() -> UsageCollectionConfig:

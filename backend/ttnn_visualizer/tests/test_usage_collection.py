@@ -2299,8 +2299,12 @@ def test_launch_reports_collection_disabled_by_the_recording_opt_out(
     usage_collection_config_path, monkeypatch, capsys, opt_out
 ):
     _write_config(
-        usage_collection_config_path, enabled=True, remote_write_endpoint=_ENDPOINT
+        usage_collection_config_path,
+        enabled=True,
+        remote_write_endpoint=_ENDPOINT,
+        remote_write_auth_token="secret-token",
     )
+    usage_collection_config_path.chmod(0o644)
     _enable_recording_opt_out(opt_out, monkeypatch)
 
     output = _record_launch_output(monkeypatch, capsys)
@@ -2316,6 +2320,8 @@ def test_launch_reports_collection_disabled_by_the_recording_opt_out(
         usage_collection_config_path.parent / usage_collection.COLLECTION_LOCK_NAME
     )
     assert not lock_path.exists()
+    # Still restricted, though: a token must not stay readable by other users.
+    assert stat.S_IMODE(usage_collection_config_path.stat().st_mode) == 0o600
 
 
 def test_hosted_launch_reports_no_collection_status(
