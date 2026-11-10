@@ -1278,6 +1278,7 @@ class TestOperationDetail:
         # 13 holds 1,000 B near the top of L1: by high-water mark it would rank
         # first, by largest free block (1,360,000 B) it ranks third.
         assert order == [11, 10, 13, 2, 3, 12]
+        assert ranked["operations_at_top"] == 1
         # An operation whose L1 rows occupy nothing is still measured, as empty.
         assert ranked["operations"][-1]["allocated_bytes"] == 0
         assert ranked["operation_count"] == 6
@@ -1312,6 +1313,32 @@ class TestOperationDetail:
         assert "upper bound" in note
         assert "circular buffers" in note
         assert "smallest largest free block" in note
+        assert "in-use figures a floor" in note
+        assert "`high_water_bytes`" in note
+
+    def test_memory_profile_counts_the_operations_sharing_the_top(self, loaded):
+        """As `operations_at_peak`: a limit that shows one of them is not all of them."""
+        sql = _REPORT_SQL + """
+        INSERT INTO operations VALUES
+            (20, 'ttnn.first', 1.0),
+            (21, 'ttnn.second', 1.0),
+            (22, 'ttnn.roomier', 1.0);
+        INSERT INTO buffers VALUES
+            (20, 0, 300000, 10000, 'L1', 0),
+            (20, 0, 700000, 10000, 'L1', 0),
+            (21, 0, 300000, 10000, 'L1', 0),
+            (21, 0, 700000, 10000, 'L1', 0),
+            (22, 0, 300000, 10000, 'L1', 0);
+        """
+        registry, handle = loaded(sql, name="l1-ties")
+
+        ranked = agent_operations.memory_profile(registry, handle, limit=1)[
+            "l1_pressure"
+        ]
+
+        assert [row["operation_id"] for row in ranked["operations"]] == [20]
+        assert ranked["operations_at_top"] == 2
+        assert ranked["operation_count"] > ranked["operations_at_top"]
 
     def test_memory_profile_l1_pressure_reads_integer_buffer_types(self, loaded):
         sql = _INTEGER_BUFFER_TYPE_SQL + """
