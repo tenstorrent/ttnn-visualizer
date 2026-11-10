@@ -4,7 +4,7 @@
 
 import { QueryStatus } from '@tanstack/react-query';
 import { NumberRange } from '@blueprintjs/core';
-import { DEALLOCATE_OP_NAME_LIST } from '../definitions/Deallocate';
+import { isDeallocate } from '../definitions/Deallocate';
 import {
     LATE_DEALLOC_OPPORTUNITY_TEXT,
     LateDeallocationAvailability,
@@ -13,11 +13,10 @@ import {
 } from '../definitions/LateDeallocation';
 import { Buffer, BuffersByOperation, Operation, Tensor } from '../model/APIData';
 import { TensorDeallocationReport, TensorsByOperationByAddress } from '../model/BufferSummary';
+import { isInOperationRange } from './filterByOperationRange';
 
 /** Sentinel for "this tensor has no consumer we can attribute a last use to". */
 export const NO_CONSUMER_OPERATION_ID = -1;
-
-const DEALLOCATE_OP_NAMES = new Set(DEALLOCATE_OP_NAME_LIST);
 
 export interface LastValidConsumer {
     lastConsumerOperationId: number;
@@ -49,7 +48,7 @@ export const getLastValidConsumer = (
 
         const consumerName = operationNamesById.get(consumerOperationId) ?? '';
 
-        if (DEALLOCATE_OP_NAMES.has(consumerName.toLowerCase())) {
+        if (isDeallocate(consumerName)) {
             return;
         }
 
@@ -137,12 +136,45 @@ export const getUniqueBuffersByOperation = (buffersByOperation: readonly Buffers
         };
     });
 
+const hasAddress = <T extends { address?: number | null }>(item: T): item is T & { address: number } =>
+    item.address !== null && item.address !== undefined;
+
 /**
- * The tensor each operation's buffers belong to, by address: the last one seen at that address.
+ * A later buffer at a gone tensor's address is another tensor's: drop a holder whose buffer left a
+ * recorded snapshot, or that a deallocate call freed.
+ * Mirrored as `_forget_gone_holders` in `backend/ttnn_visualizer/agent/late_deallocations.py`.
+ */
+const forgetGoneHolders = (
+    holderByAddress: Map<number, Tensor>,
+    snapshotAddresses: ReadonlySet<number>,
+    deallocated: readonly Tensor[],
+) => {
+    // An operation that recorded no buffers says nothing about which ones left.
+    if (snapshotAddresses.size > 0) {
+        holderByAddress.forEach((_, address) => {
+            if (!snapshotAddresses.has(address)) {
+                holderByAddress.delete(address);
+            }
+        });
+    }
+
+    deallocated.forEach((tensor) => {
+        if (hasAddress(tensor) && holderByAddress.get(tensor.address)?.id === tensor.id) {
+            holderByAddress.delete(tensor.address);
+        }
+    });
+};
+
+const NO_TENSORS: readonly Tensor[] = [];
+const NO_TENSOR_IDS: ReadonlySet<number> = new Set();
+
+/**
+ * The tensor each operation's buffers belong to, by address: the last one seen at that address, until
+ * its buffer leaves an operation's snapshot or a deallocate call frees it.
  * Mirrored as `held_tensors_by_operation` in `backend/ttnn_visualizer/agent/late_deallocations.py`.
  */
 export const buildTensorsByOperationByAddress = (
-    operations: readonly Pick<Operation, 'id' | 'inputs' | 'outputs'>[],
+    operations: readonly Pick<Operation, 'id' | 'name' | 'inputs' | 'outputs'>[],
     uniqueBuffersByOperation: readonly BuffersByOperation[],
 ): TensorsByOperationByAddress => {
     const tensorsByOperationByAddress: TensorsByOperationByAddress = new Map();
@@ -152,22 +184,27 @@ export const buildTensorsByOperationByAddress = (
         buffersByOpId.set(op.id, op.buffers);
     });
 
-    const latestTensorByAddress = new Map<number, Tensor>();
+    const holderByAddress = new Map<number, Tensor>();
 
     for (const op of operations) {
+        const deallocated = isDeallocate(op.name) ? (op.inputs ?? []).filter(Boolean) : NO_TENSORS;
+        const deallocatedIds = deallocated.length > 0 ? new Set(deallocated.map((tensor) => tensor.id)) : NO_TENSOR_IDS;
+
         for (const tensor of [...(op.inputs ?? []), ...(op.outputs ?? [])]) {
-            if (tensor && tensor.address !== null && tensor.address !== undefined) {
-                latestTensorByAddress.set(tensor.address, tensor);
+            if (tensor && hasAddress(tensor) && !deallocatedIds.has(tensor.id)) {
+                holderByAddress.set(tensor.address, tensor);
             }
         }
 
+        const buffers = buffersByOpId.get(op.id) ?? [];
         const tensorsByBufferAddress = new Map<number, Tensor>();
+        const snapshotAddresses = new Set<number>();
 
-        for (const buffer of buffersByOpId.get(op.id) ?? []) {
-            const addr = buffer.address;
-            const tensor = addr === null || addr === undefined ? undefined : latestTensorByAddress.get(addr);
+        for (const buffer of buffers) {
+            const tensor = holderByAddress.get(buffer.address);
+            snapshotAddresses.add(buffer.address);
             if (tensor) {
-                tensorsByBufferAddress.set(addr, {
+                tensorsByBufferAddress.set(buffer.address, {
                     ...tensor,
                     buffer_type: buffer.buffer_type,
                 });
@@ -175,6 +212,7 @@ export const buildTensorsByOperationByAddress = (
         }
 
         tensorsByOperationByAddress.set(op.id, tensorsByBufferAddress);
+        forgetGoneHolders(holderByAddress, snapshotAddresses, deallocated);
     }
 
     return tensorsByOperationByAddress;
@@ -426,7 +464,7 @@ export const getOperationLateDeallocationAvailability = ({
         return LateDeallocationAvailability.LOADING;
     }
 
-    if (operationRange && (operationId < operationRange[0] || operationId > operationRange[1])) {
+    if (operationRange && !isInOperationRange(operationId, operationRange)) {
         return LateDeallocationAvailability.OUT_OF_RANGE;
     }
 

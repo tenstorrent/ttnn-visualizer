@@ -668,21 +668,20 @@ host, and two for some.
 Each hold's `ending` says how it stopped, and `ended` counts them: `deallocated` by a
 deallocate call naming the tensor, `freed_otherwise` when it left the snapshot or its
 address went to another tensor without one, or `held_to_end` when the capture ended first,
-as weights, outputs and caches often do by design. The app's address map keeps crediting an
-address to the last tensor seen there after that tensor is gone, so a later buffer at the
-same address reads as the old tensor held again. A hold that opens after its tensor's
-buffer left the snapshot, or after its deallocate call, is that case: it is counted in
-`unattributed_hold_count`, left out of everything else, and named in the caveat. On one
-local capture that is 95 of 123 L1 holds. `run_start_count` is the count beside Buffer
-Summary's L1 toggle: the operations where at least one run starts, those included. An
+as weights, outputs and caches often do by design. A buffer belongs to the last tensor
+seen at its address only until a later operation with buffers of the type no longer has
+that address, or a deallocate call frees the tensor. An operation that recorded none of
+these buffers leaves the address with the old tensor, so where L1 empties and refills, a
+later buffer there can still read as that tensor held (#2284). `run_start_count` is the
+count beside Buffer Summary's L1 toggle: the operations where at least one run starts. An
 operation that recorded none of these buffers ends every run in the app but no hold here,
 so the app counts the next operation with buffers as a start again, and `operations_held`
-counts only operations with buffers; the caveat says when that happened. The tool reads the
-same tables the overlay does, so it answers on any capture with `buffers`, not only the
-ones that recorded `tensor_lifetime`. `l1_peak` counts a tensor stale only where no other
-tensor used its address, so it can call a tensor held here persistent: on the llama capture
-it counts all three tensors held at its peak as persistent. Match a hold to `l1_peak`'s
-peak by operation id.
+counts only operations with buffers; the caveat says when that happened. The tool reads
+the same tables the overlay does, so it answers on any capture with `buffers`, not only
+the ones that recorded `tensor_lifetime`. `l1_peak` counts a tensor stale only where no
+other tensor used its address, so it can call a tensor held here persistent: on the llama
+capture it counts all three tensors held at its peak as persistent. Match a hold to
+`l1_peak`'s peak by operation id.
 
 `zone_timings` carries a caveat of its own: cycles are summed across every core that ran
 the zone, so they measure occupancy rather than wall-clock duration. A core is counted per
