@@ -15,6 +15,7 @@ import json
 import logging
 import math
 import os
+import select
 import sqlite3
 import subprocess
 import sys
@@ -599,7 +600,8 @@ class TestMalformedInput:
     def test_a_demand_json_cannot_hold_is_counted_and_left_out(
         self, tmp_path, monkeypatch, demand
     ):
-        # orjson refuses NaN and infinities, so the trace's rows are handed over as is.
+        # orjson refuses NaN and infinities, so the trace's rows are handed over as is,
+        # as a whole parse's `LinkDemand`: this covers `_summed`, not the streamed walk.
         trace = _trace(_step(0, _GOOD, [*B, demand]))
         path = _write(tmp_path, _trace(_step(0)))
         monkeypatch.setattr(
@@ -1248,9 +1250,70 @@ class TestStreamedRefusals:
         path.write_text('{"timestep_data": [' + "[" * 5000 + "]" * 5000 + "]}")
 
         with pytest.raises(
-            ValueError, match="trace.json is not a readable tt-npe trace"
+            ValueError,
+            match="trace.json is not a readable tt-npe trace: it nests too deep",
         ):
             _answer(path)
+
+    @pytest.mark.parametrize(
+        "text, why",
+        [
+            (
+                '{"timestep_data": [{"start_cycle": 0}]} x',
+                "trace.json is not a readable tt-npe trace: Extra data",
+            ),
+            (
+                '{"timestep_data": [{"start_cycle": 0}], "timestep_data": []}',
+                "trace.json: it names timestep_data twice",
+            ),
+        ],
+        ids=["extra-data", "timestep-data-twice"],
+    )
+    def test_a_refusal_found_after_a_timestep_was_summed_is_kept(
+        self, tmp_path, monkeypatch, text, why
+    ):
+        path = tmp_path / "trace.json"
+        path.write_text(text)
+        reads = _counted_reads(monkeypatch)
+        registry = ReportRegistry()
+        handle = _load(registry, path)
+
+        for _ in range(2):
+            with pytest.raises(ValueError, match=why):
+                _call(registry, handle)
+        assert len(reads) == 1
+
+    @pytest.mark.parametrize(
+        "body",
+        [b"[1,", b'\xef\xbb\xbf{"timestep_data": []}', b""],
+        ids=["cut-off-array", "byte-order-mark", "empty"],
+    )
+    def test_a_zst_whose_json_cannot_be_read_is_refused_as_the_whole_parse_did(
+        self, tmp_path, body
+    ):
+        """Only a `.zst`'s frames are checked before it is read, so its JSON may start
+        any way at all."""
+        with pytest.raises(orjson.JSONDecodeError):
+            orjson.loads(body)
+        path = tmp_path / "trace.npeviz.zst"
+        path.write_bytes(zstd.compress(body))
+
+        with pytest.raises(
+            ValueError, match="trace.npeviz.zst is not a readable tt-npe trace"
+        ):
+            _answer(path)
+
+    @pytest.mark.parametrize("name", ["trace.json", "trace.npeviz.zst"])
+    def test_a_trace_is_read_as_a_byte_a_character(self, tmp_path, name):
+        """As UTF-8, a character past Latin-1 would make the whole text two or four
+        bytes a character. #2275"""
+        trace = _trace(_step(0, [*A, 1.0]), common_info={"name": "é€😀"})
+        path = _write(tmp_path, trace, name)
+
+        data = noc_congestion._trace_json(path, path.suffix == ".zst")
+
+        assert data == orjson.dumps(trace)
+        assert sys.getsizeof(npe_index.trace_text(data)) < len(data) + 200
 
 
 class TestReadApart:
@@ -1286,14 +1349,73 @@ class TestReadApart:
         assert options["initializer"] is noc_congestion._reader_setup
         assert _without(answer, "npe_trace") == _without(inline, "npe_trace")
 
-    def test_a_refusal_read_apart_is_the_one_read_in_the_server_gives(
-        self, tmp_path, apart
+    @pytest.mark.parametrize(
+        "past_inline_cap, past_cap, sized, processes",
+        [
+            (0, -1, True, 0),
+            (1, 0, True, 1),
+            (1, 1, True, 0),
+            (1, 0, None, 0),
+            (1, 0, OSError, 0),
+        ],
+        ids=[
+            "at-the-inline-cap",
+            "past-it-at-the-cap",
+            "past-the-cap",
+            "size-not-declared",
+            "size-not-read",
+        ],
+    )
+    def test_which_traces_are_read_apart(
+        self, tmp_path, apart, monkeypatch, past_inline_cap, past_cap, sized, processes
     ):
-        path = _write(tmp_path, {"common_info": {}})
+        """Past the inline cap and within the cap, by the size read before the trace
+        is; past the cap it is refused unread, in the server."""
+        path = _write(tmp_path, _hand_checked())
+        size = path.stat().st_size
+        monkeypatch.setattr(
+            noc_congestion, "MAX_INLINE_TRACE_JSON_BYTES", size - past_inline_cap
+        )
+        monkeypatch.setattr(noc_congestion, "MAX_TRACE_JSON_BYTES", size - past_cap)
+        if sized is not True:
 
-        with pytest.raises(ValueError, match="trace.json: it holds no timestep_data"):
-            _answer(path)
+            def unsized(npe_path):
+                if sized is OSError:
+                    raise OSError("not read")
+                return None
+
+            monkeypatch.setattr(npe_index, "trace_size", unsized)
+
+        if past_cap > 0:
+            with pytest.raises(ValueError, match=f"holds {size:,} bytes of JSON, past"):
+                _answer(path)
+        else:
+            assert _answer(path)["timesteps"] == 8
+        assert len(apart) == processes
+
+    def test_a_refusal_read_apart_is_the_one_read_in_the_server_gives(
+        self, tmp_path, apart, monkeypatch
+    ):
+        """And it is kept as that one is, without the reading process's traceback."""
+        path = _write(tmp_path, {"common_info": {}})
+        with monkeypatch.context() as inline_only:
+            inline_only.setattr(noc_congestion, "MAX_INLINE_TRACE_JSON_BYTES", 1 << 62)
+            with pytest.raises(
+                ValueError, match="trace.json: it holds no timestep_data"
+            ) as inline:
+                _answer(path)
+        registry = ReportRegistry()
+        handle = _load(registry, path)
+
+        refusals = []
+        for _ in range(2):
+            with pytest.raises(ValueError) as refused:
+                _call(registry, handle)
+            refusals.append(refused.value)
+
         assert len(apart) == 1
+        assert [str(refusal) for refusal in refusals] == [str(inline.value)] * 2
+        assert [refusal.__cause__ for refusal in refusals] == [None, None]
 
     def test_a_reading_process_that_ends_unanswered_is_tried_again(
         self, tmp_path, monkeypatch
@@ -1363,14 +1485,20 @@ class TestReadApart:
         server_process = subprocess.Popen(
             [sys.executable, "-c", _SERVER_READING, str(lock)],
             stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
         )
         try:
-            reader = int(server_process.stdout.readline())
+            ready, _, _ = select.select([server_process.stdout], [], [], 60)
+            line = server_process.stdout.readline() if ready else ""
         finally:
             server_process.kill()
             server_process.wait()
             server_process.stdout.close()
+            errors = server_process.stderr.read()
+            server_process.stderr.close()
+        assert line, f"the server printed no reading process: {errors}"
+        reader = int(line)
 
         freed = _lock_freed(lock, within=10)
         if not freed:
@@ -1378,20 +1506,14 @@ class TestReadApart:
         assert freed
 
     def test_a_reading_process_without_stderr_writes_nothing_to_stdout(self, capfd):
-        context = noc_congestion.multiprocessing.get_context("spawn")
-        with noc_congestion.ProcessPoolExecutor(
-            1, mp_context=context, initializer=_setup_without_stderr
-        ) as reader:
+        with noc_congestion._reader_pool(_setup_without_stderr) as reader:
             reader.submit(print, "from the reader", flush=True).result()
 
         assert "from the reader" not in capfd.readouterr().out
 
     def test_a_reading_process_writes_nothing_to_stdout(self, capfd):
         """The server's stdout carries its messages, so a reader's print goes to stderr."""
-        context = noc_congestion.multiprocessing.get_context("spawn")
-        with noc_congestion.ProcessPoolExecutor(
-            1, mp_context=context, initializer=noc_congestion._reader_setup
-        ) as reader:
+        with noc_congestion._reader_pool() as reader:
             reader.submit(print, "from the reader", flush=True).result()
 
         out, err = capfd.readouterr()
@@ -1432,20 +1554,30 @@ def _lock_freed(path: Path, within: float) -> bool:
 
 # A server whose reading process holds a lock, so the test sees when that process ends.
 _SERVER_READING = """
-import multiprocessing, sys, time
-from concurrent.futures import ProcessPoolExecutor
+import sys, time
 from ttnn_visualizer.agent import noc_congestion
 from ttnn_visualizer.tests.test_agent_noc_congestion import _hold_lock
 
 if __name__ == "__main__":
-    reader = ProcessPoolExecutor(
-        1,
-        mp_context=multiprocessing.get_context("spawn"),
-        initializer=noc_congestion._reader_setup,
-    )
+    reader = noc_congestion._reader_pool()
     print(reader.submit(_hold_lock, sys.argv[1]).result(), flush=True)
     time.sleep(60)
 """
+
+
+_AGENT_DOCS = Path(__file__).resolve().parents[3] / "docs" / "src" / "agent-tools.md"
+
+
+def test_the_page_gives_the_sizes_the_tool_reads_by():
+    page = " ".join(_AGENT_DOCS.read_text(encoding="utf-8").split())
+    inline_mib, inline_rest = divmod(
+        noc_congestion.MAX_INLINE_TRACE_JSON_BYTES, 1 << 20
+    )
+    cap_gib, cap_rest = divmod(noc_congestion.MAX_TRACE_JSON_BYTES, 1 << 30)
+
+    assert inline_rest == cap_rest == 0
+    assert f"A trace past {inline_mib} MiB of JSON is read in a process" in page
+    assert f"A trace whose JSON passes {cap_gib} GiB" in page
 
 
 class TestLoadReport:

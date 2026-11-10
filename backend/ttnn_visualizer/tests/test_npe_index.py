@@ -14,8 +14,10 @@ import json
 import os
 import random
 import sqlite3
+import sys
 import threading
 import time
+import tracemalloc
 from pathlib import Path
 
 import orjson
@@ -1008,6 +1010,7 @@ def test_a_streamed_read_answers_as_the_whole_parse_does(name, indent):
         '{"timestep_data": null}',
         '{"common_info": {}}',
         "[]",
+        '[{"timestep_data": []}, [1]]',
         '"timestep_data"',
     ],
 )
@@ -1030,6 +1033,13 @@ def test_a_streamed_read_refuses_what_holds_no_timestep_data_list(text):
         '{"timestep_data": [1 2]}',
         '{"timestep_data" []}',
         "{timestep_data: []}",
+        # Not an object, so read through to be refused as the whole parse refuses it.
+        "",
+        "  ",
+        "[1,",
+        "[1] x",
+        "[[1}]",
+        '\ufeff{"timestep_data": []}',
     ],
 )
 def test_a_streamed_read_refuses_what_orjson_refuses(text):
@@ -1069,6 +1079,46 @@ def test_a_refusal_is_placed_where_the_whole_parse_places_it():
         whole.value.msg,
         whole.value.pos,
     )
+
+
+def test_a_traces_text_takes_a_byte_a_character():
+    """Read as UTF-8, one character past Latin-1 would make the whole text two or four
+    bytes a character, and every parity test would still pass. #2275"""
+    body = orjson.dumps({"common_info": {"name": "é€😀"}, "timestep_data": []})
+    body += b" " * 10_000
+
+    assert sys.getsizeof(trace_text(body)) < len(body) + 200
+
+
+def _many_timesteps(count: int) -> str:
+    step = {
+        "start_cycle": 0,
+        "end_cycle": 9,
+        "link_demand": [[0, 0, 0, "NOC0_EAST", 12.5], [0, 0, 1, "NOC1_WEST", 7.25]],
+        "noc": {"NOC0": {"avg_link_demand": 1.5, "max_link_demand": 12.5}},
+    }
+    return trace_text(
+        orjson.dumps({"common_info": {}, "timestep_data": [step] * count})
+    )
+
+
+def test_a_streamed_read_holds_a_fraction_of_its_text_at_its_peak():
+    """Bounded memory is what #2275 asks for: a read that kept the steps it handed on,
+    or built the whole object, would hold several times the text."""
+    text = _many_timesteps(32_000)
+    assert len(text) > 4_000_000
+
+    tracemalloc.start()
+    try:
+        before = tracemalloc.get_traced_memory()[0]
+        rows = streamed_link_demand(text)
+        for _ in rows.timesteps:
+            pass
+        peak = tracemalloc.get_traced_memory()[1] - before
+    finally:
+        tracemalloc.stop()
+
+    assert peak < 0.5 * len(text)
 
 
 def _random_json(chooser, depth):
