@@ -883,8 +883,8 @@ class TestRepeats:
     def test_a_handle_loaded_before_its_csv_is_the_capture_it_then_reads(
         self, tmp_path
     ):
-        """Pinned to no capture, it once diffed against its own capture as a change
-        of nothing. #2227"""
+        """Pinned to no capture, it would diff against its own capture as no change.
+        #2227"""
         registry = ReportRegistry()
         (tmp_path / "a").mkdir()
         early = load_report(registry, performance_path=str(tmp_path / "a"))["handle"]

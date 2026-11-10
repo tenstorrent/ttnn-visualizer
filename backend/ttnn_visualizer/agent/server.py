@@ -90,7 +90,7 @@ INSTRUCTIONS = (
     "- On a multi-host report the database tools read rank 0 unless given rank.\n"
     "- The first call that generates or links the performance report can take "
     "seconds on a large capture; later calls reuse it. A CSV rewritten or superseded "
-    "after load_report is refused: load it again.\n"
+    "after a handle first read it is refused: load it again.\n"
     "- Give the reader any app_link, or an app_link_template filled with an "
     "operation_id: it opens the same thing in the visualizer."
 )

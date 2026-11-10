@@ -62,8 +62,8 @@ class CacheVariant(str, Enum):
     OPERATION_LINK = "operation_link"
     # Which signposts the performance CSV holds, read without generating a report.
     SIGNPOSTS = "signposts"
-    # The performance CSV the handle's first read came from, so a later read can
-    # tell whether it is still reading the same capture.
+    # The performance CSV the handle's first read that found one came from, so a later
+    # read can tell whether it is still reading the same capture.
     SOURCE = "source"
     # Each CSV row's tensor signature, which `diff_reports` matches on when asked.
     OP_SIGNATURES = "op_signatures"
