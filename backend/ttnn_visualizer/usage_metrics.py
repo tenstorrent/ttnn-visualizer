@@ -30,6 +30,7 @@ from ttnn_visualizer.usage_collection import (
     UsageCollectionConfig,
     is_loopback_host,
     load_usage_collection_config,
+    usage_file_lock,
 )
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,15 @@ CONNECT_TIMEOUT_SECONDS = 3.0
 # Short, because the launcher waits on these before it exits.
 STOP_JOIN_TIMEOUT_SECONDS = 2.0
 FINAL_PUSH_TIMEOUT_SECONDS = 3.0
+# Serialises pushes from every process sharing a home directory: the launcher and one
+# MCP server per agent session all push the same cumulative series, and one stamped
+# later with a value read earlier reads as a counter reset.
+EXPORT_LOCK_NAME = ".export.lock"
+# Beyond curl's own ``max-time``, so curl reports the timeout itself.
+CURL_SUBPROCESS_MARGIN_SECONDS = 5.0
+# Below this a waiting push sends nothing. curl works in whole milliseconds and reads a
+# smaller ``max-time`` as none at all, and no request completes in less anyway.
+MIN_REQUEST_SECONDS = 0.1
 CURL_COMMAND = "curl"
 # ``AGGREGATION_TEMPORALITY_CUMULATIVE`` in the OTLP metrics protocol.
 _CUMULATIVE_TEMPORALITY = 2
@@ -107,7 +117,9 @@ def _update_metrics(
     # The first call reads the whole log while holding this lock; every later call
     # reads only what was appended. That cold read is bounded by the log's size cap
     # (`MAX_LOG_BYTES`) and took about 0.3 s at the cap against 0.1 ms warm. It runs on
-    # the exporter's own thread in the launcher process, so it never pauses a request.
+    # the exporter's own thread, in the launcher or an MCP server, so it never pauses a
+    # request. Pushes call this under the cross-process export lock, so other
+    # processes' periodic pushes skip while a cold read runs.
     with _metrics_lock:
         state = _metrics_state
         if state.path != path or state.machine_id != machine_id:
@@ -247,10 +259,17 @@ def build_otlp_payload(
 
     Counter names keep their ``_total`` suffix: Prometheus' OTLP translation removes
     and re-appends it, so the stored name is the same whether or not it adds suffixes.
+
+    After a failed read only the gauges are sent. The counters would be this process's
+    cached totals, which can trail what another process has already pushed from the
+    same log, and a lower value reads as a counter reset that ``increase()`` counts
+    again. They are cumulative, so the next good read carries everything.
     """
     metrics: list[Dict[str, Any]] = []
+    send_counters = not snapshot.scan_errors
     for event_name, series in groupby(
-        sorted(snapshot.count_by_series.items()), key=lambda item: item[0][0]
+        sorted(snapshot.count_by_series.items() if send_counters else ()),
+        key=lambda item: item[0][0],
     ):
         metrics.append(
             _counter(
@@ -264,24 +283,27 @@ def build_otlp_payload(
         )
 
     identity: MetricLabels = ((MACHINE_ID_LABEL, machine_id),)
-    metrics.extend(
-        [
-            _gauge(
-                _metric_name("usage_collector_files_found"),
-                "Whether the local usage event log exists.",
-                _data_point(identity, snapshot.files_found, time_ns),
-            ),
+    metrics.append(
+        _gauge(
+            _metric_name("usage_collector_files_found"),
+            "Whether the local usage event log exists.",
+            _data_point(identity, snapshot.files_found, time_ns),
+        )
+    )
+    if send_counters:
+        metrics.append(
             _counter(
                 _metric_name("usage_collector_parse_errors_total"),
                 "Cumulative malformed or unsupported lines in the local usage event log.",
                 [_data_point(identity, snapshot.parse_errors, time_ns)],
-            ),
-            _gauge(
-                _metric_name("usage_collector_scan_errors"),
-                "Whether reading the local usage event log failed.",
-                _data_point(identity, snapshot.scan_errors, time_ns),
-            ),
-        ]
+            )
+        )
+    metrics.append(
+        _gauge(
+            _metric_name("usage_collector_scan_errors"),
+            "Whether reading the local usage event log failed.",
+            _data_point(identity, snapshot.scan_errors, time_ns),
+        )
     )
     return {
         "resourceMetrics": [
@@ -322,8 +344,10 @@ def _post_with_curl(
         "data-binary": body,
         "output": os.devnull,
         "write-out": "%{http_code}",
-        "connect-timeout": str(min(CONNECT_TIMEOUT_SECONDS, timeout_seconds)),
-        "max-time": str(timeout_seconds),
+        # Fixed decimals: ``str`` can give ``5e-05``, and curl reads below a
+        # millisecond as no limit.
+        "connect-timeout": f"{min(CONNECT_TIMEOUT_SECONDS, timeout_seconds):.3f}",
+        "max-time": f"{timeout_seconds:.3f}",
         "max-redirs": "0",
         "proto": "=http,https",
     }
@@ -347,8 +371,7 @@ def _post_with_curl(
             input="\n".join(lines) + "\n",
             capture_output=True,
             text=True,
-            # Beyond curl's own ``max-time``, so curl reports the timeout itself.
-            timeout=timeout_seconds + 5,
+            timeout=timeout_seconds + CURL_SUBPROCESS_MARGIN_SECONDS,
             check=False,
         )
     except subprocess.TimeoutExpired as error:
@@ -369,10 +392,23 @@ def _post_with_curl(
         raise OSError(f"endpoint answered HTTP {status}{hint}")
 
 
+def _exportable_config() -> Optional[Tuple[UsageCollectionConfig, str, str]]:
+    """The config with its endpoint and identity when a push may send, else ``None``."""
+    if not is_recording_enabled():
+        return None
+    config = load_usage_collection_config()
+    # ``can_export`` decides; the locals only narrow the types for mypy.
+    endpoint, machine_id = config.remote_write_endpoint, config.machine_id
+    if not config.can_export or endpoint is None or machine_id is None:
+        return None
+    return config, endpoint, machine_id
+
+
 def push_usage_metrics(
     *,
     log_path: Optional[Path] = None,
     timeout_seconds: float = EXPORT_TIMEOUT_SECONDS,
+    wait_for_lock: bool = False,
 ) -> bool:
     """Send the current counters to the configured endpoint.
 
@@ -380,29 +416,50 @@ def push_usage_metrics(
     call, so switching either off stops the next push without a restart. Raises
     ``OSError`` when the request fails, including on a non-2xx response or when
     ``curl`` is not installed.
+
+    Reading the log, stamping the payload and posting it happen under one lock shared
+    by every process, so samples reach the receiver in the order they were read. By
+    default a push that finds the lock held sends nothing: every process reads the same
+    log, so the holder or the next push carries these counts, and waiters would only
+    queue behind a slow endpoint. ``wait_for_lock`` waits instead, within
+    ``timeout_seconds``, which then bounds the whole push rather than curl alone: one
+    deadline covers the wait, the log read and the request.
     """
-    if not is_recording_enabled():
-        return False
-    config = load_usage_collection_config()
-    # ``can_export`` decides; the locals only narrow the types for mypy.
-    endpoint, machine_id = config.remote_write_endpoint, config.machine_id
-    if not config.can_export or endpoint is None or machine_id is None:
-        return False
-    snapshot = collect_usage_metrics(config, log_path=log_path)
-    if snapshot is None:
+    # Checked before the lock too, so an opted-out process never creates it.
+    if _exportable_config() is None:
         return False
 
-    payload = build_otlp_payload(
-        snapshot,
-        machine_id,
-        time_ns=time.time_ns(),
-    )
-    _post_with_curl(
-        endpoint,
-        json.dumps(payload),
-        config.remote_write_auth_token,
-        timeout_seconds,
-    )
+    deadline = time.monotonic() + timeout_seconds
+    with usage_file_lock(
+        EXPORT_LOCK_NAME, timeout_seconds=timeout_seconds if wait_for_lock else 0
+    ) as locked:
+        if not locked:
+            return False
+        # Again after waiting: an opt-out or a disabled config that arrived while this
+        # push waited for another process's must still stop it.
+        exportable = _exportable_config()
+        if exportable is None:
+            return False
+        config, endpoint, machine_id = exportable
+        snapshot = collect_usage_metrics(config, log_path=log_path)
+        if snapshot is None:
+            return False
+
+        payload = build_otlp_payload(
+            snapshot,
+            machine_id,
+            time_ns=time.time_ns(),
+        )
+        if wait_for_lock:
+            timeout_seconds = deadline - time.monotonic()
+            if timeout_seconds < MIN_REQUEST_SECONDS:
+                return False
+        _post_with_curl(
+            endpoint,
+            json.dumps(payload),
+            config.remote_write_auth_token,
+            timeout_seconds,
+        )
     return True
 
 
@@ -410,9 +467,10 @@ class UsageMetricsExporter:
     """Pushes the counters once at start, then every interval, then once on stop.
 
     Runs in the launcher process rather than in gunicorn, so one exporter serves
-    however many workers there are. The launcher stops it when gunicorn returns, so
-    under ``--daemon``, where gunicorn detaches at once, both pushes happen at launch
-    and a daemon session's usage is only sent by the next launch.
+    however many workers there are, and in each MCP server process. The launcher stops
+    it when gunicorn returns, so under ``--daemon``, where gunicorn detaches at once,
+    both pushes happen at launch and a daemon session's usage is only sent by the next
+    launch. Exporters in several processes take turns through ``EXPORT_LOCK_NAME``.
     """
 
     def __init__(self, interval_seconds: float = EXPORT_INTERVAL_SECONDS) -> None:
@@ -435,21 +493,47 @@ class UsageMetricsExporter:
         # it would only race it, so the final push is skipped rather than overlapped.
         if self._thread.is_alive():
             return
-        # Final push, so a session shorter than one interval is still counted.
-        self._push(timeout_seconds=FINAL_PUSH_TIMEOUT_SECONDS)
+        # Final push, so a session shorter than one interval is still counted. It waits
+        # for another process's push, since none may follow it, but within the same
+        # budget as the request, so the lock does not lengthen exit.
+        self._push(timeout_seconds=FINAL_PUSH_TIMEOUT_SECONDS, wait_for_lock=True)
 
     def _run(self) -> None:
         self._push()
         while not self._stopping.wait(self._interval_seconds):
             self._push()
 
-    def _push(self, timeout_seconds: float = EXPORT_TIMEOUT_SECONDS) -> None:
+    def _push(
+        self,
+        timeout_seconds: float = EXPORT_TIMEOUT_SECONDS,
+        wait_for_lock: bool = False,
+    ) -> None:
         try:
-            push_usage_metrics(timeout_seconds=timeout_seconds)
+            sent = push_usage_metrics(
+                timeout_seconds=timeout_seconds, wait_for_lock=wait_for_lock
+            )
         except (OSError, ValueError) as error:
             # Logged once per run of failures rather than every interval.
             if not self._failing:
                 logger.warning("Unable to export usage metrics: %s", error)
             self._failing = True
         else:
-            self._failing = False
+            # Only a push that sent ends the run. One skipped because another process
+            # held the lock says nothing about the endpoint, and resetting on it would
+            # log the same outage again after every skip.
+            if sent:
+                self._failing = False
+
+
+def start_usage_exporter(
+    collection_config: Optional[UsageCollectionConfig],
+) -> Optional[UsageMetricsExporter]:
+    """Start pushing when a prepared config has an endpoint and an identity.
+
+    Shared by the launcher and the MCP server so both start on the same ``can_export``
+    test their banner reports. Each caller still decides on its own whether a launch may
+    export at all (hosted, or under a recording opt-out) and passes ``None`` when not.
+    """
+    if collection_config is None or not collection_config.can_export:
+        return None
+    return UsageMetricsExporter().start()

@@ -17,10 +17,16 @@ import io
 import json
 import os
 import re
+import signal
 import sqlite3
+import subprocess
+import sys
+import threading
 import time
+from types import SimpleNamespace
 from unittest.mock import patch
 
+import matplotlib
 import pytest
 from ttnn_visualizer import csv_queries
 from ttnn_visualizer.agent import handles, server, tools
@@ -3209,6 +3215,342 @@ def test_main_serves_when_event_log_startup_raises(monkeypatch):
     server.main()
 
     assert order == ["serve"]
+
+
+class _OrderedExporter:
+    def __init__(self, order):
+        self._order = order
+
+    def start(self):
+        self._order.append("export-start")
+        return self
+
+    def stop(self):
+        self._order.append("export-stop")
+
+
+def _patch_main_for_export(monkeypatch, order, *, can_export=True, recording=True):
+    """Stub ``main()``'s collaborators so only its ordering and decisions run."""
+    handlers = []
+    monkeypatch.setattr(server, "compact_if_needed", lambda: order.append("compact"))
+    monkeypatch.setattr(server, "serve", lambda *args, **kwargs: order.append("serve"))
+    monkeypatch.setattr(server, "is_recording_enabled", lambda: recording)
+    monkeypatch.setattr(server, "get_event_log_path", lambda: "/tmp/events.log")
+    monkeypatch.setattr(server, "describe_opt_out", lambda: "opt-out")
+    monkeypatch.setattr(server, "get_recording_disabled_reason", lambda: "opt-out")
+
+    def _prepare():
+        order.append("prepare")
+        return SimpleNamespace(can_export=can_export)
+
+    monkeypatch.setattr(server, "prepare_usage_collection_config", _prepare)
+    monkeypatch.setattr(server, "describe_usage_collection", lambda *args, **kw: "")
+    monkeypatch.setattr(
+        server,
+        "start_usage_exporter",
+        lambda config: _OrderedExporter(order).start() if config.can_export else None,
+    )
+    monkeypatch.delenv("SERVER_MODE", raising=False)
+    # Never replace pytest's own SIGTERM handler.
+    monkeypatch.setattr(server.signal, "getsignal", lambda signum: signal.SIG_DFL)
+    monkeypatch.setattr(
+        server.signal,
+        "signal",
+        lambda signum, handler: handlers.append((signum, handler)) or signal.SIG_DFL,
+    )
+    return handlers
+
+
+def test_main_exports_around_serving_when_collection_can_export(monkeypatch):
+    """#2282: an agent-only user's usage is pushed without the app ever launching."""
+    order = []
+    handlers = _patch_main_for_export(monkeypatch, order)
+
+    server.main()
+
+    assert order == ["compact", "prepare", "export-start", "serve", "export-stop"]
+    # Installed for serving, deferred while the final push runs, so a repeated
+    # SIGTERM cannot raise inside ``stop()`` and drop it, then restored.
+    assert handlers == [
+        (signal.SIGTERM, server._exit_on_sigterm),
+        (signal.SIGTERM, server._defer_sigterm),
+        (signal.SIGTERM, signal.SIG_DFL),
+    ]
+
+
+def test_main_exits_without_interpreter_shutdown_after_sigterm(monkeypatch):
+    """Interpreter shutdown flushes stdout, which blocks for good on a full pipe."""
+    order = []
+    handlers = _patch_main_for_export(monkeypatch, order)
+
+    def _terminated(*_args, **_kwargs):
+        order.append("serve")
+        raise server._Terminated(0)
+
+    monkeypatch.setattr(server, "serve", _terminated)
+    monkeypatch.setattr(
+        server.os, "_exit", lambda code: order.append(f"os._exit({code})")
+    )
+
+    server.main()
+
+    assert order == [
+        "compact",
+        "prepare",
+        "export-start",
+        "serve",
+        "export-stop",
+        "os._exit(0)",
+    ]
+    assert handlers[-1] == (signal.SIGTERM, signal.SIG_DFL)
+
+
+def test_main_exits_normally_when_stdin_closes(monkeypatch):
+    order = []
+    _patch_main_for_export(monkeypatch, order)
+    monkeypatch.setattr(
+        server.os, "_exit", lambda code: order.append(f"os._exit({code})")
+    )
+
+    server.main()
+
+    assert "os._exit(0)" not in order
+
+
+def test_main_starts_no_exporter_without_an_endpoint(monkeypatch):
+    order = []
+    handlers = _patch_main_for_export(monkeypatch, order, can_export=False)
+
+    server.main()
+
+    assert order == ["compact", "prepare", "serve"]
+    # Behaviour without collection is unchanged: the default SIGTERM stays.
+    assert handlers == []
+
+
+def test_main_prepares_no_collection_under_the_recording_opt_out(monkeypatch):
+    order = []
+    handlers = _patch_main_for_export(monkeypatch, order, recording=False)
+
+    server.main()
+
+    assert order == ["serve"]
+    assert handlers == []
+
+
+def test_main_stops_the_exporter_when_serving_raises(monkeypatch):
+    order = []
+    _patch_main_for_export(monkeypatch, order)
+
+    def _broken_serve(*args, **kwargs):
+        order.append("serve")
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(server, "serve", _broken_serve)
+
+    with pytest.raises(KeyboardInterrupt):
+        server.main()
+
+    assert order[-2:] == ["serve", "export-stop"]
+
+
+@pytest.mark.parametrize("value", ["true", "1", "Ture", ""])
+def test_main_exports_nothing_under_server_mode(monkeypatch, value):
+    """Aggregate collection is local-only; an unreadable value counts as hosted.
+
+    That includes an empty one, which the app refuses to start on."""
+    order = []
+    handlers = _patch_main_for_export(monkeypatch, order)
+    monkeypatch.setenv("SERVER_MODE", value)
+
+    server.main()
+
+    assert order == ["compact", "serve"]
+    assert handlers == []
+
+
+@pytest.mark.parametrize("value", ["false", "0", None])
+def test_main_exports_when_server_mode_reads_as_local(monkeypatch, value):
+    order = []
+    _patch_main_for_export(monkeypatch, order)
+    if value is None:
+        monkeypatch.delenv("SERVER_MODE", raising=False)
+    else:
+        monkeypatch.setenv("SERVER_MODE", value)
+
+    server.main()
+
+    assert "export-start" in order
+
+
+def test_main_serves_when_preparing_collection_raises(monkeypatch):
+    order = []
+    _patch_main_for_export(monkeypatch, order)
+
+    def _no_home():
+        raise RuntimeError("Could not determine home directory.")
+
+    monkeypatch.setattr(server, "prepare_usage_collection_config", _no_home)
+
+    server.main()
+
+    assert order == ["compact", "serve"]
+
+
+def test_sigterm_handler_raises_a_clean_exit():
+    with pytest.raises(server._Terminated) as exit_info:
+        server._exit_on_sigterm(signal.SIGTERM, None)
+
+    assert isinstance(exit_info.value, SystemExit)
+    assert exit_info.value.code == 0
+
+
+_INITIALIZE_REQUEST = {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {
+        "protocolVersion": server.PROTOCOL_VERSION,
+        "capabilities": {},
+        "clientInfo": {"name": "test", "version": "0"},
+    },
+}
+
+
+def _start_exporting_server(tmp_path):
+    """Run the real MCP server opted in to collection, once its start push has landed.
+
+    Returns the process, the file the fake curl appends a line to per call, and the
+    collection config. Stdin stays open until the start push lands: closed at once, a
+    start push still running when ``stop()`` gives up joining would skip the exit push,
+    and how fast it runs depends on the machine.
+    """
+    home = tmp_path / "home"
+    usage_directory = home / ".ttnn-visualizer" / "usage"
+    usage_directory.mkdir(parents=True)
+    config_path = usage_directory / "collection.json"
+    config_path.write_text(
+        json.dumps(
+            {"enabled": True, "remote_write_endpoint": "http://127.0.0.1:9/v1/metrics"}
+        )
+    )
+    bin_directory = tmp_path / "bin"
+    bin_directory.mkdir()
+    calls_path = tmp_path / "curl-calls"
+    fake_curl = bin_directory / "curl"
+    # Answers on stdout as real curl does with ``write-out``: were curl's stdout
+    # inherited rather than captured, this would land in the protocol stream.
+    fake_curl.write_text(
+        f"#!/bin/sh\ncat > /dev/null\necho called >> '{calls_path}'\nprintf 200\n"
+    )
+    fake_curl.chmod(0o755)
+    # Built from scratch, so a developer's own opt-out or config cannot leak in.
+    environment = {
+        "HOME": str(home),
+        # This process's matplotlib cache rather than one under the fresh ``HOME``:
+        # importing the server builds the font cache, which on macOS runs
+        # ``system_profiler`` for several seconds per test, and counts against the
+        # start-push deadline below.
+        "MPLCONFIGDIR": matplotlib.get_configdir(),
+        "PATH": f"{bin_directory}{os.pathsep}{os.environ.get('PATH', '')}",
+        "PYTHONIOENCODING": "utf-8",
+    }
+    process = subprocess.Popen(
+        [sys.executable, "-m", "ttnn_visualizer.agent.server"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=environment,
+    )
+    deadline = time.monotonic() + 30
+    while not calls_path.exists():
+        if process.poll() is not None or time.monotonic() >= deadline:
+            process.kill()
+            _stdout, stderr = process.communicate()
+            pytest.fail(f"the start push never ran: {stderr}")
+        time.sleep(0.05)
+    return process, calls_path, config_path
+
+
+def _finish(process, finish):
+    """Run ``finish`` against ``process``, killing it if anything goes wrong."""
+    try:
+        return finish()
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.communicate()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="the fake curl is a shell script")
+def test_mcp_stdout_is_only_protocol_while_exporting(tmp_path):
+    """curl runs beside the protocol stream, so none of its output may reach stdout."""
+    process, calls_path, config_path = _start_exporting_server(tmp_path)
+
+    stdout, stderr = _finish(
+        process,
+        lambda: process.communicate(json.dumps(_INITIALIZE_REQUEST) + "\n", timeout=60),
+    )
+
+    assert process.returncode == 0, stderr
+    responses = [json.loads(line) for line in stdout.splitlines()]
+    assert [response["id"] for response in responses] == [1]
+    assert all(response["jsonrpc"] == "2.0" for response in responses)
+    # One push at start and one on exit.
+    assert calls_path.read_text().splitlines() == ["called", "called"]
+    assert "machine_id" in json.loads(config_path.read_text())
+    # The collection status is reported, on stderr.
+    assert "Aggregate usage collection is ENABLED" in stderr
+
+
+@pytest.mark.skipif(os.name == "nt", reason="SIGTERM and the fake curl are POSIX")
+def test_mcp_pushes_on_exit_after_sigterm(tmp_path):
+    """A host that terminates the server rather than closing stdin still gets the
+    final push: the signal must interrupt the blocked stdin read and reach the
+    ``finally``."""
+    process, calls_path, _config_path = _start_exporting_server(tmp_path)
+
+    def _terminate():
+        # Stdin stays open, so only the signal can end ``serve()``.
+        process.send_signal(signal.SIGTERM)
+        process.wait(timeout=30)
+        return process.stdout.read(), process.stderr.read()
+
+    stdout, stderr = _finish(process, _terminate)
+
+    assert process.returncode == 0, stderr
+    assert stdout == ""
+    assert calls_path.read_text().splitlines() == ["called", "called"]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="SIGTERM and the fake curl are POSIX")
+def test_mcp_sigterm_ends_a_server_whose_client_stopped_reading(tmp_path):
+    """With stdout's pipe full, a flush at interpreter exit would block for good, and
+    a SIGTERM still ignored after the final push could never end it."""
+    process, calls_path, _config_path = _start_exporting_server(tmp_path)
+    pings = "".join(
+        json.dumps({"jsonrpc": "2.0", "id": index, "method": "ping"}) + "\n"
+        for index in range(20_000)
+    )
+
+    def _send_without_reading():
+        try:
+            process.stdin.write(pings)
+            process.stdin.flush()
+        except (BrokenPipeError, OSError, ValueError):
+            pass
+
+    def _terminate():
+        sender = threading.Thread(target=_send_without_reading, daemon=True)
+        sender.start()
+        # Long enough for the replies to fill the pipe nobody reads.
+        time.sleep(2)
+        process.send_signal(signal.SIGTERM)
+        return process.wait(timeout=30)
+
+    assert _finish(process, _terminate) == 0
+    assert calls_path.read_text().splitlines() == ["called", "called"]
 
 
 class TestProjectRow:
