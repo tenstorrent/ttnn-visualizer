@@ -220,9 +220,10 @@ def canonical_report(
     read again: an agent guessing names would otherwise pay a full read per guess.
 
     Every read that misses the cache first checks the capture is the one the
-    handle's first read came from; see `_require_same_source`. Snapshots are kept
-    per capture rather than per handle, so handles loaded on the same unchanged
-    CSV share one. The rows are shared with them: copy a row before changing it.
+    handle pinned at the first read that found one; see `_require_same_source`.
+    Snapshots are kept per capture rather than per handle, so handles loaded on the
+    same unchanged CSV share one. The rows are shared with them: copy a row before
+    changing it.
     A report generated with swallowed errors is the exception: it is marked `degraded`
     and kept by the handle that read it alone, so loading the report again regenerates
     it. `keep=False` reads a report no tool has kept without keeping it.
@@ -285,9 +286,9 @@ def _source_now(instance: Instance) -> Optional[object]:
 
 
 def _pin_source(registry: ReportRegistry, handle: str) -> Optional[object]:
-    """The capture the handle's first read found, or None while there is none: a None
-    is not kept, so a handle loaded before its CSV was written pins the first CSV a
-    read finds."""
+    """The capture pinned by the handle's first read that finds one, or None until
+    then: a None is not kept, so a handle loaded before its CSV was written pins the
+    first CSV a read finds."""
 
     def pin(instance: Instance) -> Optional[object]:
         source = _source_now(instance)
@@ -301,10 +302,10 @@ def _pin_source(registry: ReportRegistry, handle: str) -> Optional[object]:
 def _require_same_source(
     registry: ReportRegistry, handle: str, instance: Instance
 ) -> None:
-    """Refuse to read a capture other than the one the handle first read.
+    """Refuse to read a capture other than the one the handle has pinned.
 
-    The whole snapshot and the operation link are pinned to the capture the
-    handle first read, and rows are matched to operations by CSV position. A
+    The first read that finds one pins it, and the whole snapshot and the operation
+    link come from it; rows are matched to operations by CSV position. A
     read of a rewritten or newer CSV would put its rows under the old link's
     operation ids, so it is refused and a fresh handle asked for.
     """

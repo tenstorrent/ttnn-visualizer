@@ -159,8 +159,9 @@ first call, which refuses one that is not a readable tt-npe trace.
   signposts. A name longer than 256 characters, which a range cannot take, is counted but
   left out of the list, and `signposts_unlisted_too_long` says how many were. When the CSV
   can be reported on but its signposts cannot be read, `signposts_problem` says why. Loading reads the signposts, so a handle answers from the
-  CSV it was loaded on: one rewritten or superseded after that is refused, and
-  `load_report` again gives a fresh handle.
+  CSV it was loaded on, or, if it had none yet, from the first one a read of it finds:
+  one rewritten or superseded after that is refused, and `load_report` again gives a
+  fresh handle.
 - `arch` and `device_count` are keyed by the file each was read from, since a handle's two
   reports can come from different runs. `arch.device_log` is the device profiler log's
   header, which `capture` also returns whole; `arch.cluster_descriptor` is what the `arch`
