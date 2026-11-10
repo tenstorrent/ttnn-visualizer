@@ -19,6 +19,7 @@ answers from the same rows.
 
 import random
 from typing import Dict, List, Mapping, Optional, Sequence, Set
+from unittest.mock import patch
 
 from ttnn_visualizer.agent import late_deallocations as late
 from ttnn_visualizer.models import Tensor
@@ -346,6 +347,25 @@ def _curated_cases() -> List[Dict]:
             ],
             _snapshots(1, 6),
         ),
+        # A deallocate call naming its tensor with no address leaves the tensor there.
+        _case(
+            [
+                _operation(1, outputs=[_tensor(10, 100, [2, 3])]),
+                _operation(2, inputs=[_tensor(10, 100, [2, 3])]),
+                _operation(3, "ttnn.deallocate", inputs=[_tensor(10, None, [2, 3])]),
+                _operation(4),
+            ],
+            _snapshots(1, 4),
+        ),
+        # A tensor first named at the deallocate call that frees it is never credited.
+        _case(
+            [
+                _operation(1),
+                _operation(2, "ttnn.deallocate", inputs=[_tensor(10, 100, [1, 2])]),
+                _operation(3),
+            ],
+            _snapshots(1, 3),
+        ),
     ]
 
 
@@ -429,8 +449,6 @@ def test_the_golden_reaches_each_rule():
 def test_the_golden_reaches_each_way_a_holder_is_forgotten():
     """A buffer back at an address after its tensor's buffer left a snapshot, and
     after a deallocate call freed it, so a change to the cases cannot drop either."""
-    from unittest.mock import patch
-
     forget = late._forget_gone_holders
     forgotten: Dict[int, str] = {}
     reached: Set[str] = set()

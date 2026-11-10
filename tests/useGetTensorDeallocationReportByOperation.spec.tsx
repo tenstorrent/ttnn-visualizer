@@ -10,15 +10,14 @@
  * come from the real queries. #1862
  */
 
-import { cleanup, renderHook, waitFor } from '@testing-library/react';
-import type { ReactNode } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Provider, createStore } from 'jotai';
+import { cleanup, waitFor } from '@testing-library/react';
+import { createStore } from 'jotai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGetTensorDeallocationReportByOperation } from '../src/hooks/useAPI';
 import { activeProfilerReportAtom, selectedOperationRangeAtom } from '../src/store/app';
 import axiosInstance from '../src/libs/axiosInstance';
 import Endpoints from '../src/definitions/Endpoints';
+import { renderHookWithStore } from './helpers/renderHookWithStore';
 
 vi.mock('../src/libs/axiosInstance', () => ({
     default: {
@@ -36,19 +35,8 @@ const mockBuffersResponse = (buffersResponse: () => Promise<unknown>) =>
             String(url) === Endpoints.OPERATION_BUFFERS ? buffersResponse() : Promise.resolve({ data: [] }),
         );
 
-// A fresh client per test: `staleTime: Infinity` would otherwise let one test's
-// buffers answer the next test's request.
-const renderReport = (store: ReturnType<typeof createStore>) => {
-    const queryClient = new QueryClient();
-
-    return renderHook(() => useGetTensorDeallocationReportByOperation(), {
-        wrapper: ({ children }: { children: ReactNode }) => (
-            <QueryClientProvider client={queryClient}>
-                <Provider store={store}>{children}</Provider>
-            </QueryClientProvider>
-        ),
-    });
-};
+const renderReport = (store: ReturnType<typeof createStore>) =>
+    renderHookWithStore(() => useGetTensorDeallocationReportByOperation(), store);
 
 const activeStore = () => {
     const store = createStore();

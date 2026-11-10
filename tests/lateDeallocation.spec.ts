@@ -237,6 +237,18 @@ describe('buildTensorsByOperationByAddress', () => {
         expect(tensorsByOperation.get(3)?.get(100)?.id).toBe(10);
     });
 
+    it('keeps crediting an address across an operation missing from the buffers', () => {
+        const tensor = buildFullTensor({ id: 10, address: 100 });
+
+        const tensorsByOperation = buildTensorsByOperationByAddress(
+            [op(1, { outputs: [tensor] }), op(2), op(3)],
+            [snapshot(1, [100]), snapshot(3, [100])],
+        );
+
+        expect(tensorsByOperation.get(2)).toEqual(new Map());
+        expect(tensorsByOperation.get(3)?.get(100)?.id).toBe(10);
+    });
+
     it('stops crediting an address after a deallocate call frees its tensor', () => {
         const tensor = buildFullTensor({ id: 10, address: 100 });
 
@@ -276,6 +288,32 @@ describe('buildTensorsByOperationByAddress', () => {
 
         expect(tensorsByOperation.get(3)?.get(100)?.id).toBe(11);
         expect(tensorsByOperation.get(4)?.get(100)?.id).toBe(11);
+    });
+
+    it('leaves an address with its tensor when a deallocate call names it with no address', () => {
+        const tensor = buildFullTensor({ id: 10, address: 100 });
+
+        const tensorsByOperation = buildTensorsByOperationByAddress(
+            [
+                op(1, { outputs: [tensor] }),
+                op(2, { name: 'ttnn.deallocate', inputs: [{ ...tensor, address: null }] }),
+                op(3),
+            ],
+            [1, 2, 3].map((id) => snapshot(id, [100])),
+        );
+
+        expect(tensorsByOperation.get(3)?.get(100)?.id).toBe(10);
+    });
+
+    it('never credits a tensor first named at the deallocate call that frees it', () => {
+        const tensor = buildFullTensor({ id: 10, address: 100 });
+
+        const tensorsByOperation = buildTensorsByOperationByAddress(
+            [op(1), op(2, { name: 'ttnn.deallocate', inputs: [tensor] }), op(3)],
+            [1, 2, 3].map((id) => snapshot(id, [100])),
+        );
+
+        expect([1, 2, 3].map((id) => tensorsByOperation.get(id))).toEqual([new Map(), new Map(), new Map()]);
     });
 });
 

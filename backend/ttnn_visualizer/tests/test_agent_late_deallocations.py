@@ -1106,6 +1106,58 @@ class TestCaveats:
         assert (result["byte_operations"], result["run_start_count"]) == (100, 1)
         assert "carry on past operations" not in result.get("caveat", "")
 
+    def test_a_deallocate_row_frees_its_tensors_address(self, tmp_path):
+        """Operation 4 records no buffers, so only its name, read from the report,
+        keeps the buffer at 5 from being carried on as tensor 10's."""
+        registry, handle = _report(
+            tmp_path,
+            _rows(
+                operations=[
+                    (1, "ttnn.add"),
+                    (2, "ttnn.add"),
+                    (3, "ttnn.add"),
+                    (4, "ttnn.deallocate"),
+                    (5, "ttnn.add"),
+                ],
+                tensors=[(10, 1000)],
+                inputs=[(2, 10), (4, 10)],
+                outputs=[(1, 10)],
+                buffers=[*_snapshot(3, {1000: 100}), *_snapshot(5, {1000: 100})],
+                traces=[(2, _trace("/m/model.py", 10))],
+            ),
+        )
+
+        result = failures.late_deallocations(registry, handle)
+
+        assert result["hold_count"] == 1
+        assert result["ended"]["deallocated"] == 1
+        assert result["top_holds"][0]["held_from_operation_id"] == 3
+
+    def test_a_tensor_named_again_at_its_address_is_held_again(self, tmp_path):
+        """Tensor 10's buffer leaves operation 4's snapshot, and operation 5 names it
+        at its address again."""
+        registry, handle = _report(
+            tmp_path,
+            _rows(
+                operations=[(op, "ttnn.add") for op in range(1, 7)],
+                tensors=[(10, 1000)],
+                inputs=[(2, 10)],
+                outputs=[(1, 10), (5, 10)],
+                buffers=[
+                    *_snapshot(3, {1000: 100}),
+                    *_snapshot(4, {9000: 1}),
+                    *_snapshot(5, {1000: 100}),
+                    *_snapshot(6, {1000: 100}),
+                ],
+                traces=[(2, _trace("/m/model.py", 10))],
+            ),
+        )
+
+        result = failures.late_deallocations(registry, handle)
+
+        assert (result["hold_count"], result["held_tensor_count"]) == (2, 1)
+        assert result["ended"]["freed_otherwise"] == 1
+
     def test_a_multi_device_report_reads_each_address_at_its_largest(self, tmp_path):
         registry, handle = _report(
             tmp_path,

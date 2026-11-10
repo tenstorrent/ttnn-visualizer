@@ -7,11 +7,9 @@
  * range, so a buffer that left before the range still clears its address inside it. #2272
  */
 
-import { cleanup, renderHook, waitFor } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import { act, cleanup, waitFor } from '@testing-library/react';
 import { NumberRange } from '@blueprintjs/core';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Provider, createStore } from 'jotai';
+import { createStore } from 'jotai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useCreateTensorsByOperationByIdList, useGetTensorDeallocationReportByOperation } from '../src/hooks/useAPI';
 import { activeProfilerReportAtom, selectedOperationRangeAtom } from '../src/store/app';
@@ -19,6 +17,7 @@ import axiosInstance from '../src/libs/axiosInstance';
 import Endpoints from '../src/definitions/Endpoints';
 import { BufferType } from '../src/model/BufferType';
 import { buildOperationDescription, buildTensor } from './helpers/operationDetailsFixtures';
+import { renderHookWithStore } from './helpers/renderHookWithStore';
 
 vi.mock('../src/libs/axiosInstance', () => ({
     default: {
@@ -30,8 +29,11 @@ vi.mock('../src/libs/axiosInstance', () => ({
 const TENSOR_ID = 10;
 const ADDRESS = 100;
 
-/** Operation 1 outputs tensor 10 at address 100 and is its last use; operation `i + 1` records `snapshots[i]`. */
-const mockReport = (snapshots: number[][]) =>
+/**
+ * Operation 1 outputs tensor 10 at address 100 and is its last use; operation `i + 1` records
+ * `snapshots[i]`, and operation `deallocatedAt` deallocates the tensor.
+ */
+const mockReport = (snapshots: number[][], deallocatedAt?: number) =>
     vi.mocked(axiosInstance.get).mockImplementation((url) => {
         const operationIds = snapshots.map((_, index) => index + 1);
 
@@ -40,7 +42,9 @@ const mockReport = (snapshots: number[][]) =>
 
             return Promise.resolve({
                 data: operationIds.map((id) =>
-                    buildOperationDescription({ id, name: 'ttnn.add', outputs: id === 1 ? [tensor] : [] }),
+                    id === deallocatedAt
+                        ? buildOperationDescription({ id, name: 'ttnn.deallocate', inputs: [tensor] })
+                        : buildOperationDescription({ id, name: 'ttnn.add', outputs: id === 1 ? [tensor] : [] }),
                 ),
             });
         }
@@ -63,27 +67,22 @@ const mockReport = (snapshots: number[][]) =>
         return Promise.resolve({ data: [] });
     });
 
-// A fresh client per test: `staleTime: Infinity` would otherwise let one test's report answer the next.
 const renderWithReport = <T,>(hook: () => T, range: NumberRange | null) => {
     const store = createStore();
     store.set(activeProfilerReportAtom, { path: 'testPath', reportName: 'test' });
     store.set(selectedOperationRangeAtom, range);
-    const queryClient = new QueryClient();
 
-    return renderHook(hook, {
-        wrapper: ({ children }: { children: ReactNode }) => (
-            <QueryClientProvider client={queryClient}>
-                <Provider store={store}>{children}</Provider>
-            </QueryClientProvider>
-        ),
-    });
+    return { ...renderHookWithStore(hook, store), store };
 };
 
-const renderTensors = async (range: NumberRange | null) => {
-    const { result } = renderWithReport(() => useCreateTensorsByOperationByIdList(), range);
+const renderTensors = async (range: NumberRange | null, bufferType?: BufferType) => {
+    const { result } = renderWithReport(() => useCreateTensorsByOperationByIdList(bufferType), range);
     await waitFor(() => expect(result.current.status).toBe('success'));
     return result.current;
 };
+
+const buffersRequests = () =>
+    vi.mocked(axiosInstance.get).mock.calls.filter(([url]) => String(url) === Endpoints.OPERATION_BUFFERS);
 
 const renderLateDeallocations = async (range: NumberRange | null) => {
     const { result } = renderWithReport(() => useGetTensorDeallocationReportByOperation(), range);
@@ -132,6 +131,51 @@ describe('useCreateTensorsByOperationByIdList', () => {
             TENSOR_ID,
             TENSOR_ID,
             TENSOR_ID,
+        ]);
+    });
+
+    it('clears an address a deallocate call freed before the selected range', async () => {
+        mockReport([[ADDRESS], [ADDRESS], [ADDRESS], [ADDRESS]], 2);
+
+        const { tensorListByOperation } = await renderTensors([3, 4]);
+
+        expect(tensorListByOperation.get(3)).toEqual(new Map());
+        expect(tensorListByOperation.get(4)).toEqual(new Map());
+    });
+
+    it('shares one empty map across the operations outside the selected range', async () => {
+        mockReport([[ADDRESS], [ADDRESS], [ADDRESS], [ADDRESS]]);
+
+        const { tensorListByOperation } = await renderTensors([3, 4]);
+
+        expect(tensorListByOperation.get(1)).toBe(tensorListByOperation.get(2));
+    });
+
+    it('recuts the map when the range changes, without fetching the buffers again', async () => {
+        mockReport([[ADDRESS], [ADDRESS], [ADDRESS], [ADDRESS]]);
+        const { result, store } = renderWithReport(() => useCreateTensorsByOperationByIdList(), [3, 4]);
+        await waitFor(() => expect(tensorIdAt(result.current.tensorListByOperation, 3)).toBe(TENSOR_ID));
+
+        act(() => store.set(selectedOperationRangeAtom, null));
+
+        await waitFor(() =>
+            expect([1, 2, 3, 4].map((id) => tensorIdAt(result.current.tensorListByOperation, id))).toEqual([
+                TENSOR_ID,
+                TENSOR_ID,
+                TENSOR_ID,
+                TENSOR_ID,
+            ]),
+        );
+        expect(buffersRequests()).toHaveLength(1);
+    });
+
+    it('asks for the buffers of the type it was given', async () => {
+        mockReport([[ADDRESS]]);
+
+        await renderTensors(null, BufferType.DRAM);
+
+        expect(buffersRequests()).toEqual([
+            [Endpoints.OPERATION_BUFFERS, { params: { buffer_type: BufferType.DRAM } }],
         ]);
     });
 
