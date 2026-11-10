@@ -394,6 +394,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                     "handle": {"type": "string"},
                     "zone": {
                         "type": "string",
+                        # In characters, looser than the tool's bytes, as the signposts'.
                         "maxLength": tools.MAX_ZONE_NAME_LENGTH,
                         "description": (
                             "The zone's name as profile_log_device.csv records it. A "

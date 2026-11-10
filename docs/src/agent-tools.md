@@ -156,11 +156,14 @@ first call, which refuses one that is not a readable tt-npe trace.
   resolves them, with how often each occurs — one name bounds both ends of a range only if
   it occurs twice — and `signpost_count` counts them all, since the list stops at 20. Both
   are absent when the performance CSV cannot be reported on, and empty when it holds no
-  signposts. A name longer than 256 bytes in an answer (256 ASCII characters), which a
-  range cannot take, is counted but left out of the list, and `signposts_unlisted_too_long`
-  says how many were. A range naming a signpost the report lacks is refused with the
-  names this list holds. When the CSV can be reported on but its signposts cannot be read, `signposts_problem` says why. Loading reads the signposts, so a handle answers from the
-  CSV it was loaded on: one rewritten or superseded after that is refused, and
+  signposts. A name longer than 256 bytes as an answer writes it, which a range cannot
+  take, is counted but left out of the list, and `signposts_unlisted_too_long` says how
+  many were. Bytes as an answer writes it means UTF-8 with JSON's escapes, so a four-byte
+  character counts four and a control character or a lone surrogate six; every name bound
+  on this page counts that way. A range naming a signpost the report lacks is refused with
+  the names this list holds. When the CSV can be reported on but its signposts cannot be
+  read, `signposts_problem` says why. Loading reads the signposts, so a handle answers from
+  the CSV it was loaded on: one rewritten or superseded after that is refused, and
   `load_report` again gives a fresh handle.
 - `arch` and `device_count` are keyed by the file each was read from, since a handle's two
   reports can come from different runs. `arch.device_log` is the device profiler log's
@@ -206,14 +209,14 @@ answer cut down — it is what the signposted run reports.
 A range the report cannot honour is refused rather than answered from other rows: a name
 the report does not hold (the refusal lists the names it does), one name for both bounds
 when it occurs only once, an end that falls before the start, or a name longer than 256
-bytes in UTF-8. A report with no signposts at all is read whole, because tt-perf-report then
-uses the whole file rather than some other window, and the response's `projection` says so
-with `signpost_range_ignored`. Every ranged response's `projection` names the range, so a
-windowed answer cannot be taken for a whole-report one. `diff_reports` applies one range to
-every capture it compares, and refuses when only some of them hold signposts: a window
-compared against a whole report would show every row outside the window as a change. It
-checks the range against every capture before generating any, and a refusal names the
-report it is about.
+bytes as an answer writes it. A report with no signposts at all is read whole, because
+tt-perf-report then uses the whole file rather than some other window, and the response's
+`projection` says so with `signpost_range_ignored`. Every ranged response's `projection`
+names the range, so a windowed answer cannot be taken for a whole-report one.
+`diff_reports` applies one range to every capture it compares, and refuses when only some
+of them hold signposts: a window compared against a whole report would show every row
+outside the window as a change. It checks the range against every capture before
+generating any, and a refusal names the report it is about.
 
 One filter is applied, deliberately: per-device rows are **merged**, so an operation that
 ran on eight devices is one row rather than eight. That is the unit an operation is
@@ -769,10 +772,10 @@ and how many lay past the 200,000 core-RISC timelines followed at once.
 
 No zone tool shows a zone name longer than 256 bytes or a RISC name longer than 32 bytes:
 such a name is the capture's text, not the tool's, and tt-metal's longest RISC name,
-`QUASAR_NEO3_TRISC3`, is 18. These bounds, like the signposts', count the bytes a name
-takes in an answer, in UTF-8 with JSON's escapes, so a name of four-byte characters is
-held to a quarter as many characters, and one of control characters to a sixth. `zone_timings` leaves an entry with one out, counted in
-`zones_unlisted_too_long`, and `limit` counts only the entries listed. Both count
+`QUASAR_NEO3_TRISC3`, is 18. These bounds, like the signposts', count bytes as an answer
+writes it, so a name of four-byte characters is held to a quarter as many characters, and
+one of control characters to a sixth. `zone_timings` leaves an entry with one out, counted
+in `zones_unlisted_too_long`, and `limit` counts only the entries listed. Both count
 zone-and-RISC entries, not names, so a long zone name on five RISCs counts five.
 `core_spread` leaves such a RISC out of `by_risc`, counted in `by_risc_unlisted_too_long`,
 though its kernels still count in their cores' spans. `zone_intervals` leaves such a

@@ -26,6 +26,7 @@ from typing import (
     Optional,
     Sequence,
     Set,
+    Sized,
     Tuple,
     TypeVar,
     cast,
@@ -35,10 +36,10 @@ from ttnn_visualizer.agent import op_signatures, perf_detail, perf_flags, report
 from ttnn_visualizer.agent.bounds import (
     MAX_DETAILED_LIMIT,
     MAX_LIMIT,
-    answer_size,
     bounded,
     name_fits,
     require_choice,
+    require_name_fits,
 )
 from ttnn_visualizer.agent.cells import finite_number, whole_number
 from ttnn_visualizer.agent.handles import (
@@ -188,11 +189,8 @@ class SignpostRange:
         not key a second snapshot of the same whole report.
         """
         for label, name in (("start_signpost", start), ("end_signpost", end)):
-            if name and not name_fits(name, MAX_SIGNPOST_NAME_LENGTH):
-                raise ValueError(
-                    f"{label} is {answer_size(name)} bytes as an answer writes it; a "
-                    f"signpost name is at most {MAX_SIGNPOST_NAME_LENGTH} bytes"
-                )
+            if name:
+                require_name_fits(label, "signpost", name, MAX_SIGNPOST_NAME_LENGTH)
         start, end = start or None, end or None
         if start is None and end is None:
             return None
@@ -291,15 +289,12 @@ def _unknown_signpost(name: str, resolved: ResolvedSignposts) -> str:
         if listed
         else "none of its signpost names is short enough to list"
     )
-    unlisted = len(named) - too_long - len(listed)
+    unlisted, too_long_note = _unlisted_names(
+        len(named), listed, too_long, MAX_SIGNPOST_NAME_LENGTH
+    )
     if unlisted:
         refusal += f" and {unlisted} more"
-    if too_long:
-        refusal += (
-            f"; {too_long} more have names past {MAX_SIGNPOST_NAME_LENGTH} bytes, "
-            "which are not listed"
-        )
-    return refusal
+    return refusal + too_long_note
 
 
 def _source_now(instance: Instance) -> Optional[object]:
@@ -386,11 +381,6 @@ def _resolve_signposts(instance: Instance) -> ResolvedSignposts:
         return read_signposts(csv_file, low_memory=True)
 
 
-def _name_shown(name: str, max_length: int) -> bool:
-    """Whether a name the capture supplied is short enough to show an agent."""
-    return name_fits(name, max_length)
-
-
 def _shown_and_dropped(
     items: Iterable[_Item],
     shown: Callable[[_Item], bool],
@@ -413,8 +403,20 @@ def _short_names(
     """Up to `limit` names, with their counts and in order, short enough to show an
     agent, and how many were too long."""
     return _shown_and_dropped(
-        named, lambda entry: _name_shown(entry[0], max_length), limit
+        named, lambda entry: name_fits(entry[0], max_length), limit
     )
+
+
+def _unlisted_names(
+    total: int, listed: Sized, too_long: int, max_length: int
+) -> Tuple[int, str]:
+    """How many short names a refusal's list left out, and its note on the long ones."""
+    too_long_note = (
+        f"; {too_long} more have names past {max_length} bytes, which are not listed"
+        if too_long
+        else ""
+    )
+    return total - too_long - len(listed), too_long_note
 
 
 def with_signposts(
@@ -817,7 +819,7 @@ def zone_timings(
     # Filtered whole, so the limit counts only entries whose names can be shown.
     listed, too_long = _shown_and_dropped(
         summary,
-        lambda entry: _name_shown(cast(str, entry["zone"]), MAX_ZONE_NAME_LENGTH)
+        lambda entry: name_fits(cast(str, entry["zone"]), MAX_ZONE_NAME_LENGTH)
         and _risc_shown(cast(str, entry["risc"])),
         count,
     )
@@ -1435,16 +1437,16 @@ def core_spread(
 
 # Zone names a refusal lists, most started first.
 MAX_LISTED_ZONES = MAX_LISTED_SIGNPOSTS
-# A zone name longer than this is the capture's text, not ours: no zone tool shows it, and
-# a zone asked for by such a name is refused, as a signpost's is.
+# A zone name past this many bytes is the capture's text, not ours: no zone tool shows
+# it, and a zone asked for by such a name is refused, as a signpost's is.
 MAX_ZONE_NAME_LENGTH = MAX_SIGNPOST_NAME_LENGTH
-# A RISC name longer than this is the capture's text too; tt-metal's longest,
-# QUASAR_NEO3_TRISC3, is 18 bytes.
+# A RISC name past this many bytes is the capture's text too; tt-metal's longest,
+# QUASAR_NEO3_TRISC3, is 18.
 MAX_RISC_NAME_LENGTH = 32
 
 
 def _risc_shown(risc: str) -> bool:
-    return _name_shown(risc, MAX_RISC_NAME_LENGTH)
+    return name_fits(risc, MAX_RISC_NAME_LENGTH)
 
 
 ZONE_INTERVALS_NOTE = (
@@ -1530,14 +1532,12 @@ def _unknown_zone(zone: str, read: ZoneIntervals) -> str:
         if named
         else "None of its zone names is short enough to list"
     )
-    unlisted = len(read.zone_starts) - too_long - len(listed)
+    unlisted, too_long_note = _unlisted_names(
+        len(read.zone_starts), listed, too_long, MAX_ZONE_NAME_LENGTH
+    )
     if unlisted:
         refusal += f", and {unlisted} more"
-    if too_long:
-        refusal += (
-            f"; {too_long} more have names past {MAX_ZONE_NAME_LENGTH} bytes, "
-            "which are not listed"
-        )
+    refusal += too_long_note
     if read.zone_names_capped:
         refusal += (
             f"; the log names more zones than the {MAX_COUNTED_ZONE_NAMES} counted"
@@ -1557,11 +1557,7 @@ def zone_intervals(
     if not isinstance(zone, str) or not zone.strip():
         raise ValueError("zone must name a zone the device log records")
     name = zone.strip()
-    if not name_fits(name, MAX_ZONE_NAME_LENGTH):
-        raise ValueError(
-            f"zone is {answer_size(name)} bytes as an answer writes it; a zone name is "
-            f"at most {MAX_ZONE_NAME_LENGTH} bytes"
-        )
+    require_name_fits("zone", "zone", name, MAX_ZONE_NAME_LENGTH)
     count = bounded(limit)
     instance = registry.get(handle)
     clock_mhz = _require_timed_device_log(handle, instance, "zones to time")

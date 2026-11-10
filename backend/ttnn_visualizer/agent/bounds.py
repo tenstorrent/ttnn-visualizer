@@ -80,6 +80,15 @@ def name_fits(name: str, limit: int) -> bool:
     return len(name) <= limit and answer_size(name) <= limit
 
 
+def require_name_fits(label: str, kind: str, name: str, limit: int) -> None:
+    """Refuse the argument `label`, naming a `kind`, when it is past `limit` bytes."""
+    if not name_fits(name, limit):
+        raise ValueError(
+            f"{label} is {answer_size(name)} bytes as an answer writes it; a {kind} "
+            f"name is at most {limit} bytes"
+        )
+
+
 def normalised_choice(value: Optional[str]) -> Optional[str]:
     """A choice as `require_choice` compares it: trimmed and upper-cased, None if blank."""
     return (value.strip().upper() or None) if isinstance(value, str) else value
@@ -99,10 +108,11 @@ __all__ = [
     "MAX_CAPTURED_GRAPH_CHARS",
     "MAX_DETAILED_LIMIT",
     "MAX_LIMIT",
+    "answer_size",
     "bounded",
     "ensure_graph_readable",
+    "name_fits",
     "normalised_choice",
     "require_choice",
-    "answer_size",
-    "name_fits",
+    "require_name_fits",
 ]

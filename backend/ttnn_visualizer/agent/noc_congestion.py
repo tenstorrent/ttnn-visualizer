@@ -30,9 +30,9 @@ from ttnn_visualizer.file_source import FileSource
 
 # Demand past a link's whole bandwidth: asked of it, but more than it could carry.
 CONGESTED_PERCENT = 100.0
-# Longer than any link or NoC name tt-npe writes; a longer one is the trace's text.
+# In bytes, past any link or NoC name tt-npe writes; a longer one is the trace's text.
 MAX_LINK_NAME_LENGTH = 32
-# Longer than any architecture, device or model name tt-npe writes.
+# In bytes, past any architecture, device or model name tt-npe writes.
 MAX_LABEL_LENGTH = 64
 # tt-npe models two NoCs; more in a trace's run summary are its text, not a NoC.
 MAX_NOCS = 4
