@@ -190,7 +190,7 @@ class TestPerfCsvTools:
         everything = frozenset().union(
             *handles.TOOL_TABLES.values(), {"captured_graph"}
         )
-        instance = handles.Instance(
+        instance = Instance(
             instance_id="x", profiler_path="p", performance_path="q", npe_path=None
         )
 
@@ -216,7 +216,9 @@ class TestPerfCsvTools:
 
         assert answerable(None) - answerable("bad") == PERF_CSV_TOOLS
 
-    def test_a_csv_pandas_cannot_parse_moves_them_to_unanswerable(self, tmp_path):
+    def test_a_csv_pandas_cannot_parse_moves_them_and_no_other(self, tmp_path):
+        """Beside a device log, so `core_spread` moves and the zone tools stay."""
+        write_device_log(tmp_path, MODERN_HEADER, ZONED_ROWS)
         write_ops_perf(tmp_path, smoke_rows())
         with (tmp_path / "ops_perf_results.csv").open("a") as out:
             out.write('"unclosed,row\n')
@@ -226,10 +228,10 @@ class TestPerfCsvTools:
             registry, load_report(registry, performance_path=str(tmp_path))
         )
 
-        assert {"top_ops", "op_breakdown", "program_cache"} <= set(
-            loaded["unanswerable"]
-        )
-        assert PERF_CSV_TOOLS.isdisjoint(loaded["answerable"])
+        assert set(loaded["answerable"]) == {"zone_timings", "zone_intervals"}
+        assert {"top_ops", "op_breakdown", "core_spread"} <= set(loaded["unanswerable"])
+        assert len(loaded["unanswerable"]) == len(set(loaded["unanswerable"]))
+        assert set(loaded["answerable"]).isdisjoint(loaded["unanswerable"])
         with pytest.raises(DataFormatError, match="EOF inside string"):
             tools.top_ops(registry, loaded["handle"])
 
@@ -1061,6 +1063,7 @@ class TestLoadReportSignposts:
                 tools.top_ops(registry, answers[0]["handle"], start_signpost="A")
 
         resolve.assert_called_once()
+        assert "EOF inside string" in answers[0]["performance_csv_problem"]
         assert (
             answers[0]["performance_csv_problem"]
             == answers[1]["performance_csv_problem"]
@@ -1134,7 +1137,7 @@ class TestLoadReportSignposts:
         "error, field",
         [
             (TypeError("'<' not supported"), "signposts_problem"),
-            (DataFormatError("ragged"), "performance_csv_problem"),
+            (DataFormatError("EOF inside string"), "performance_csv_problem"),
         ],
     )
     def test_a_signpost_read_that_fails_never_refuses_the_report(
@@ -1148,6 +1151,8 @@ class TestLoadReportSignposts:
 
         assert loaded[field] == str(error)
         assert "signposts" not in loaded
+        # Only a CSV that does not parse costs the tools their answer.
+        assert ("top_ops" in loaded["answerable"]) is (field == "signposts_problem")
 
     def test_a_capture_rewritten_after_loading_is_refused(self, tmp_path):
         """The listing pins the capture at load, so a handle never mixes two."""
