@@ -92,7 +92,7 @@ describe('useGetTensorDeallocationReportByOperation', () => {
         expect(result.current.lateDeallocationsByOperation.size).toBe(0);
     });
 
-    it('reports the operation range the buffers were filtered to', async () => {
+    it('reports the selected operation range', async () => {
         mockBuffersResponse(() => Promise.resolve({ data: [] }));
         const store = activeStore();
         store.set(selectedOperationRangeAtom, [2, 5]);

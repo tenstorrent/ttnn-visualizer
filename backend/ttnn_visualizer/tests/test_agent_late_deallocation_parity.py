@@ -18,7 +18,7 @@ answers from the same rows.
 """
 
 import random
-from typing import Dict, List, Mapping, Optional, Sequence
+from typing import Dict, List, Mapping, Optional, Sequence, Set
 
 from ttnn_visualizer.agent import late_deallocations as late
 from ttnn_visualizer.models import Tensor
@@ -242,6 +242,24 @@ def _curated_cases() -> List[Dict]:
             ],
             _snapshots(1, 6),
         ),
+        # A tensor named again at its address after its buffer left the snapshot is
+        # credited again from there.
+        _case(
+            [
+                _operation(1, outputs=[_tensor(10, 100, [3])]),
+                _operation(2),
+                _operation(3, inputs=[_tensor(10, 100, [3])]),
+                _operation(4),
+                _operation(5),
+            ],
+            {2: [_buffer(200, 64)], **_snapshots(3, 5)},
+        ),
+        # A snapshot of only address-0 or addressless buffers records none, so it
+        # keeps the tensor at its address.
+        _case(
+            [_operation(1, outputs=[produced]), used, _operation(3)],
+            {2: [_buffer(0, 64), _buffer(None, 32)], 3: [_buffer(100, 64)]},
+        ),
         # A run that breaks where its buffer leaves the snapshot; one back at its
         # address later is not its tensor's.
         _case(
@@ -406,6 +424,40 @@ def test_the_golden_reaches_each_rule():
     assert any(len(held) >= 3 for case in expected for _, held in case["held"])
     assert sum(1 for case in expected if not case["held"]) >= 5
     assert {0, 16, 32, 64} <= {entry["size"] for entry in entries}
+
+
+def test_the_golden_reaches_each_way_a_holder_is_forgotten():
+    """A buffer back at an address after its tensor's buffer left a snapshot, and
+    after a deallocate call freed it, so a change to the cases cannot drop either."""
+    from unittest.mock import patch
+
+    forget = late._forget_gone_holders
+    forgotten: Dict[int, str] = {}
+    reached: Set[str] = set()
+
+    def recording(holder_by_address, sizes, deallocated):
+        reached.update(
+            forgotten.pop(address) for address in list(forgotten) if address in sizes
+        )
+        before = set(holder_by_address)
+        forget(holder_by_address, sizes, deallocated)
+        for address in before - set(holder_by_address):
+            forgotten[address] = (
+                "snapshot" if sizes and address not in sizes else "deallocate"
+            )
+
+    def per_case(*args):
+        forgotten.clear()
+        return held_tensors_by_operation(*args)
+
+    held_tensors_by_operation = late.held_tensors_by_operation
+    with (
+        patch.object(late, "_forget_gone_holders", recording),
+        patch.object(late, "held_tensors_by_operation", per_case),
+    ):
+        _generate_golden()
+
+    assert reached == {"snapshot", "deallocate"}
 
 
 def test_the_ts_spec_reads_this_golden():

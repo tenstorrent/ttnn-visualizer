@@ -246,7 +246,24 @@ class TestHeldTensorsByOperation:
             consumers={10: [1]},
         )
 
-        assert sorted(held.held_by_operation) == [2, 4]
+        assert held.held_by_operation == {
+            2: [late.HeldTensor(10, 100, 64, 1)],
+            4: [late.HeldTensor(10, 100, 64, 1)],
+        }
+
+    def test_a_forgotten_tensor_named_again_at_its_address_is_held_again(self):
+        held = _held_tensors(
+            [1, 2, 3, 4, 5],
+            {1: {100: 64}, 2: {200: 8}, 3: {100: 64}, 4: {100: 64}, 5: {100: 64}},
+            inputs={3: [(10, 100)]},
+            outputs={1: [(10, 100)]},
+            consumers={10: [3]},
+        )
+
+        assert held.held_by_operation == {
+            4: [late.HeldTensor(10, 100, 64, 3)],
+            5: [late.HeldTensor(10, 100, 64, 3)],
+        }
 
     def test_a_buffer_after_its_tensors_deallocate_is_not_its_tensors(self):
         """The deallocate's own snapshot can still show the buffer it frees."""
@@ -1086,6 +1103,7 @@ class TestCaveats:
         result = failures.late_deallocations(registry, handle)
 
         assert result["hold_count"] == 1
+        assert (result["byte_operations"], result["run_start_count"]) == (100, 1)
         assert "carry on past operations" not in result.get("caveat", "")
 
     def test_a_multi_device_report_reads_each_address_at_its_largest(self, tmp_path):
