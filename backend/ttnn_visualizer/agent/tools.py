@@ -65,6 +65,7 @@ from ttnn_visualizer.csv_queries import (
     OpsPerformanceReportQueries,
     ResolvedSignposts,
     SpanRequest,
+    ZoneIntervalPass,
     ZoneIntervals,
     ZoneRepeats,
     check_signpost_range,
@@ -773,18 +774,47 @@ def program_cache(
     return result
 
 
+@dataclass(frozen=True)
+class _ZoneTimingsRead:
+    """`zone_timings`' read of the device log, kept per handle with the clock and
+    architecture its first line named then. #2248"""
+
+    summary: List[Dict[str, object]]
+    pairing: Dict[str, int]
+    arch: Optional[str]
+    clock_mhz: Optional[float]
+
+
+def _zone_timings_read(registry: ReportRegistry, handle: str) -> _ZoneTimingsRead:
+    def read(instance: Instance) -> _ZoneTimingsRead:
+        metadata = DeviceLogProfilerQueries.read_capture_metadata(instance)
+        with DeviceLogProfilerQueries(instance, stream=True) as queries:
+            summary, pairing = queries.query_zone_summary()
+        return _ZoneTimingsRead(
+            summary,
+            pairing,
+            metadata.get("ARCH"),
+            finite_number(metadata.get("CHIP_FREQ[MHz]")),
+        )
+
+    return read_once(
+        registry,
+        handle,
+        read,
+        variant=CacheVariant.ZONE_TIMINGS,
+        share_key=None,
+        refusals=(DataFormatError,),
+    )
+
+
 def zone_timings(
     registry: ReportRegistry, handle: str, limit: Optional[int] = None
 ) -> Dict[str, object]:
     """Per-zone, per-RISC totals from the device profiler log."""
     _require_performance_report(registry, handle)
     count = bounded(limit)
-    instance = registry.get(handle)
-    metadata = DeviceLogProfilerQueries.read_capture_metadata(instance)
-    clock_mhz = finite_number(metadata.get("CHIP_FREQ[MHz]"))
-
-    with DeviceLogProfilerQueries(instance, stream=True) as queries:
-        summary, pairing = queries.query_zone_summary()
+    read = _zone_timings_read(registry, handle)
+    summary, pairing, clock_mhz = read.summary, read.pairing, read.clock_mhz
     # Filtered whole, so the limit counts only entries whose names can be shown.
     listed, too_long = _shown_and_dropped(
         summary,
@@ -795,7 +825,7 @@ def zone_timings(
 
     zones = []
     for entry in listed:
-        total_cycles = entry["total_cycles"]
+        total_cycles = cast(Optional[int], entry["total_cycles"])
         zones.append(
             {
                 **entry,
@@ -813,7 +843,7 @@ def zone_timings(
 
     result: Dict[str, object] = {
         "handle": handle,
-        "arch": metadata.get("ARCH"),
+        "arch": read.arch,
         "clock_mhz": clock_mhz,
         "returned": len(zones),
         "zones": zones,
@@ -1478,6 +1508,60 @@ def _repeats_figures(
     }
 
 
+@dataclass(frozen=True)
+class _ZoneIntervalsRead:
+    """Every zone's intervals from one read of the device log, kept per handle with the
+    clock and architecture the log named then, so a zone asked after the first costs no
+    read. #2248"""
+
+    # None where one pass cannot read the log as each zone's own read would, so each
+    # call reads its zone alone.
+    zones: Optional[ZoneIntervalPass]
+    clock_mhz: int
+    arch: Optional[str]
+
+
+def _zone_intervals_read(
+    registry: ReportRegistry, handle: str, clock_mhz: int
+) -> _ZoneIntervalsRead:
+    def read(instance: Instance) -> _ZoneIntervalsRead:
+        with DeviceLogProfilerQueries(instance, stream=True) as queries:
+            zones = queries.query_every_zone_intervals()
+        meta = DeviceLogProfilerQueries.read_device_meta(instance)
+        return _ZoneIntervalsRead(
+            zones, clock_mhz, meta.architecture if meta is not None else None
+        )
+
+    return read_once(
+        registry,
+        handle,
+        read,
+        variant=CacheVariant.ZONE_INTERVALS,
+        share_key=None,
+        refusals=(DataFormatError,),
+    )
+
+
+def _zone_read(
+    registry: ReportRegistry, handle: str, zone: str, clock_mhz: int
+) -> Tuple[ZoneIntervals, int, Optional[str]]:
+    """``zone``'s read, with the clock and architecture it was read at: from the
+    handle's read of every zone, or alone where that cannot hold it."""
+    instance = registry.get(handle)
+    try:
+        kept = _zone_intervals_read(registry, handle, clock_mhz)
+        found = kept.zones.intervals(zone) if kept.zones is not None else None
+        if found is not None:
+            return found, kept.clock_mhz, kept.arch
+        with DeviceLogProfilerQueries(instance, stream=True) as queries:
+            read = queries.query_zone_intervals(zone)
+    except DataFormatError as error:
+        # The server records only a ValueError as a refusal.
+        raise ValueError(str(error)) from error
+    meta = DeviceLogProfilerQueries.read_device_meta(instance)
+    return read, clock_mhz, meta.architecture if meta is not None else None
+
+
 def _unreadable_zone(zone: str, read: ZoneIntervals) -> str:
     return (
         f"{zone!r} starts {read.zone_starts[zone]} times in "
@@ -1535,13 +1619,12 @@ def zone_intervals(
         )
     count = bounded(limit)
     instance = registry.get(handle)
-    clock_mhz = _require_timed_device_log(handle, instance, "zones to time")
-    try:
-        with DeviceLogProfilerQueries(instance, stream=True) as queries:
-            read: ZoneIntervals = queries.query_zone_intervals(name)
-    except DataFormatError as error:
-        # The server records only a ValueError as a refusal.
-        raise ValueError(str(error)) from error
+    read, clock_mhz, arch = _zone_read(
+        registry,
+        handle,
+        name,
+        _require_timed_device_log(handle, instance, "zones to time"),
+    )
     if not read.timelines:
         if read.zone_starts.get(name):
             raise ValueError(_unreadable_zone(name, read))
@@ -1595,11 +1678,10 @@ def zone_intervals(
                 ),
             }
         )
-    meta = DeviceLogProfilerQueries.read_device_meta(instance)
     result: Dict[str, object] = {
         "handle": handle,
         "zone": name,
-        "arch": meta.architecture if meta is not None else None,
+        "arch": arch,
         "clock_mhz": clock_mhz,
         "device_count": len(devices),
         "by_device": devices[:MAX_LIMIT],

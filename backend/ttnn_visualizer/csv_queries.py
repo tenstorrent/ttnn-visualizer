@@ -5,6 +5,7 @@
 import argparse
 import csv
 import io
+import itertools
 import json
 import logging
 import os
@@ -524,19 +525,45 @@ def _whole_number_rows(
 
 
 @dataclass(slots=True)
+class _ZoneOnTimeline:
+    """One zone's starts on one RISC timeline, as far as the log has read."""
+
+    repeats: ZoneRepeats
+    # A firmware or kernel zone, which neither a full buffer nor a flush cuts.
+    reserved: bool
+    # The run its starts so far are in, and the last of them kept.
+    seq: int = -1
+    starts: int = 0
+    last_start: Optional[int] = None
+    # The other zones' profiler flushes in the run at that start.
+    flushes_then: int = 0
+
+
+@dataclass(slots=True)
 class _OpenRun:
     """What a RISC timeline's current run has recorded, as far as the log has read."""
 
     run_id: int
-    # The run's place on its timeline, so one run's zones never pair another's.
-    seq: int = 0
+    # Unique to the run, so one run's zones never pair another's.
+    seq: int
+    # Run host IDs since the timeline's last kernel start, which a read of every zone
+    # checks; one back again would part a run that a read of one zone does not.
+    seen: Set[int]
     # Zone markers since the run began or the profiler last flushed, which empties it.
     markers: int = 0
     full: bool = False
-    # A profiler zone since the zone last started, which would taint the next interval.
-    flush_pending: bool = False
-    starts: int = 0
-    last_start: Optional[int] = None
+    # The profiler's own zones in the run, in all and by name: one taints the next
+    # interval of every zone but itself.
+    flushes: int = 0
+    flushes_by_zone: Dict[str, int] = field(default_factory=dict)
+    # The zones that started in the run, which end with it.
+    started: List[_ZoneOnTimeline] = field(default_factory=list)
+
+    def close(self) -> None:
+        for state in self.started:
+            state.repeats.runs += 1
+            if self.full and not state.reserved:
+                state.repeats.full_runs += 1
 
 
 @dataclass
@@ -654,6 +681,127 @@ class _ZonePairer:
                 pairing["dropped_starts"],
             )
         return pairing
+
+
+class _ZoneReader:
+    """One zone's starts, followed run by run on each RISC timeline."""
+
+    def __init__(self, zone: str, start_token: str, end_token: str) -> None:
+        self.zone = zone
+        self.reserved = zone.endswith(RESERVED_ZONE_SUFFIXES)
+        # A firmware zone starts before the kernel start that opens its run, so it pairs
+        # by run host ID; any other zone pairs within its own run.
+        self.firmware = zone.endswith(FIRMWARE_ZONE_SUFFIX)
+        self.start_token = start_token
+        self.pairer = _ZonePairer(start_token, end_token)
+        self.timelines: Dict[RiscTimeline, _ZoneOnTimeline] = {}
+        self.across_flush = 0
+        self.out_of_order = 0
+        self.displaced = 0
+
+    def take(
+        self,
+        timeline: RiscTimeline,
+        run: _OpenRun,
+        run_id: int,
+        phase: str,
+        cycles: int,
+    ) -> None:
+        """One of the zone's rows, in ``run`` on ``timeline``."""
+        key = (timeline, run_id if self.firmware else run.seq)
+        if phase != self.start_token:
+            self.pairer.offer(key, phase, cycles)
+            return
+        # The pairer keeps one open start a key, so a start replaced unended would
+        # otherwise go uncounted.
+        self.displaced += key in self.pairer.open_starts
+        self.pairer.offer(key, phase, cycles)
+        state = self.timelines.get(timeline)
+        if state is None:
+            state = self.timelines[timeline] = _ZoneOnTimeline(
+                ZoneRepeats(), self.reserved
+            )
+        state.repeats.occurrences += 1
+        if state.seq != run.seq:
+            state.seq, state.starts, state.last_start = run.seq, 0, None
+        if not state.starts:
+            run.started.append(state)
+        state.starts += 1
+        if state.last_start is not None and cycles < state.last_start:
+            self.out_of_order += 1
+            return
+        flushes = (
+            0 if self.reserved else run.flushes - run.flushes_by_zone.get(self.zone, 0)
+        )
+        if state.last_start is not None:
+            if flushes > state.flushes_then:
+                self.across_flush += 1
+            else:
+                state.repeats.intervals.append(cycles - state.last_start)
+        state.flushes_then = flushes
+        state.last_start = cycles
+
+
+@dataclass
+class ZoneIntervalPass:
+    """What one pass of the device log followed of its zones, which `intervals` reads
+    any zone's `ZoneIntervals` from."""
+
+    readers: Dict[str, _ZoneReader]
+    zone_starts: Counter
+    zone_names_capped: bool
+    # Names on rows that neither start nor end a zone, which join only their own zone's
+    # read, so a pass of every zone leaves those zones to be read alone.
+    read_alone: Set[str]
+    accumulated: bool
+    timestamped: bool
+    # Rows `_whole_number_rows` left out: kernel starts and other zones' markers, which
+    # every zone's read keeps or every non-reserved zone's does, and the rest by name.
+    unreadable_kernel_starts: int
+    unreadable_markers: int
+    unreadable_others: Counter
+    unreadable_starts: Counter
+    untracked: int
+    untracked_starts: int
+
+    def intervals(self, zone: str) -> Optional[ZoneIntervals]:
+        """``zone`` as `query_zone_intervals` reads it, or None where it must be read
+        alone."""
+        if zone in self.read_alone:
+            return None
+        reserved = zone.endswith(RESERVED_ZONE_SUFFIXES)
+        reader = self.readers.get(zone)
+        if reader is None:
+            timelines: Dict[RiscTimeline, ZoneRepeats] = {}
+            pairing = {"unmatched_starts": 0, "unmatched_ends": 0, "dropped_starts": 0}
+            across_flush = out_of_order = 0
+        else:
+            timelines = {
+                timeline: state.repeats for timeline, state in reader.timelines.items()
+            }
+            pairing = reader.pairer.pairing(DeviceLogProfilerQueries.DEVICE_LOG_FILE)
+            pairing["unmatched_starts"] += reader.displaced
+            across_flush, out_of_order = reader.across_flush, reader.out_of_order
+        return ZoneIntervals(
+            timelines=timelines,
+            zone_starts=self.zone_starts,
+            zone_names_capped=self.zone_names_capped,
+            pairing=pairing,
+            across_flush=across_flush,
+            out_of_order=out_of_order,
+            accumulated=self.accumulated and not reserved,
+            timestamped=self.timestamped and not reserved,
+            malformed=self.unreadable_kernel_starts
+            + (0 if reserved else self.unreadable_markers)
+            + self.unreadable_others[zone],
+            untracked=self.untracked,
+            malformed_starts=self.unreadable_starts[zone],
+            untracked_starts=self.untracked_starts,
+        )
+
+
+class _Unheld(Exception):
+    """A log that one pass of every zone cannot read as each zone's own read would."""
 
 
 @dataclass(frozen=True)
@@ -1439,64 +1587,78 @@ class DeviceLogProfilerQueries:
         arrive: at a kernel start, which also parts a traced op's replays, or a new run
         host ID. The trace columns are not read: they can change partway through a run.
         """
+        return cast(ZoneIntervals, self._zone_interval_pass(zone).intervals(zone))
+
+    def query_every_zone_intervals(self) -> Optional[ZoneIntervalPass]:
+        """Every zone as `query_zone_intervals` reads it, from one pass, or None for a
+        log that pass cannot hold. #2248
+
+        A row of one zone can part a run another zone's read never sees, so the pass
+        refuses a run host ID that comes back on a timeline before a kernel start.
+        """
+        try:
+            return self._zone_interval_pass(None)
+        except _Unheld:
+            return None
+
+    def _zone_interval_pass(self, only: Optional[str]) -> ZoneIntervalPass:
+        """Follow ``only``, or every zone, through the rows its read keeps."""
         phase_column, start_token, end_token = self._required_zone_phase(
             "read for zone intervals", "no zone start can be told apart"
         )
+        every = only is None
         columns = list(self._ZONE_COLUMNS) + [phase_column]
         # Each kept row's flags ride beside its cells, named apart from any log column.
         row_columns = [*columns, "_kernel_start", "_marker", "_flush"]
 
-        timelines: Dict[RiscTimeline, ZoneRepeats] = {}
+        readers: Dict[str, _ZoneReader] = (
+            {} if only is None else {only: _ZoneReader(only, start_token, end_token)}
+        )
+        # Nothing counts markers for a zone the cap never cuts.
+        count_markers = only is None or not only.endswith(RESERVED_ZONE_SUFFIXES)
         open_runs: Dict[RiscTimeline, _OpenRun] = {}
+        seqs = itertools.count()
         zone_starts: Counter = Counter()
-        pairer = _ZonePairer(start_token, end_token)
-        across_flush = out_of_order = malformed = untracked = 0
-        malformed_starts = untracked_starts = displaced = 0
+        read_alone: Set[str] = set()
+        unreadable_others: Counter = Counter()
+        unreadable_starts: Counter = Counter()
+        unreadable_kernel_starts = unreadable_markers = untracked = untracked_starts = 0
         accumulated = timestamped = zone_names_capped = False
-        # A firmware or kernel zone has its own slot, so a full buffer never cuts it.
-        reserved_zone = zone.endswith(RESERVED_ZONE_SUFFIXES)
-        # A firmware zone starts before the kernel start that opens its run, so it pairs
-        # by run host ID; any other zone pairs within its own run.
-        firmware_zone = zone.endswith(FIRMWARE_ZONE_SUFFIX)
-
-        def close(timeline: RiscTimeline, run: _OpenRun) -> None:
-            if not run.starts:
-                return
-            repeats = timelines[timeline]
-            repeats.runs += 1
-            if run.full and not reserved_zone:
-                repeats.full_runs += 1
 
         for chunk in self._zone_chunks(columns):
             names = chunk["zone name"].astype(str).str.strip()
             phases = chunk[phase_column].astype(str).str.strip()
             starts = phases == start_token
-            timestamped = timestamped or (
-                not reserved_zone
-                and bool(phases.str.startswith(TIMESTAMPED_PHASE_PREFIX).any())
+            starts_or_ends = starts | (phases == end_token)
+            timestamped = timestamped or bool(
+                phases.str.startswith(TIMESTAMPED_PHASE_PREFIX).any()
             )
             for name, count in names[starts].value_counts().items():
                 if (
-                    name == zone
+                    name == only
                     or name in zone_starts
                     or len(zone_starts) < MAX_COUNTED_ZONE_NAMES
                 ):
                     zone_starts[name] += count
+                elif every:
+                    raise _Unheld
                 else:
                     zone_names_capped = True
             # Firmware and kernel zones have slots of their own, outside the L1 cap.
             reserved = names.str.endswith(RESERVED_ZONE_SUFFIXES)
             kernel_starts = names.str.endswith(KERNEL_ZONE_SUFFIX) & starts
-            markers = ~reserved & (starts | (phases == end_token))
-            if reserved_zone:
-                # Nothing counts markers for a zone the cap never cuts.
-                markers = markers & False
+            markers = ~reserved & starts_or_ends
             flushes = markers & names.str.startswith(PROFILER_ZONE_PREFIX)
             accumulated = accumulated or bool(
                 (flushes & names.isin(ACCUMULATE_FLUSH_ZONES)).any()
             )
-            wanted = names == zone
-            kept = kernel_starts | markers | wanted
+            if every:
+                read_alone.update(names[~starts_or_ends].unique().tolist())
+                kept = starts_or_ends
+            else:
+                kept = kernel_starts | (names == only)
+                if count_markers:
+                    kept = kept | markers
             chunk = chunk[kept].assign(
                 **{
                     "zone name": names[kept],
@@ -1515,10 +1677,21 @@ class DeviceLogProfilerQueries:
                 self._WHOLE_NUMBER_COLUMNS,
                 non_negative=self._NON_NEGATIVE_COLUMNS,
             )
-            malformed += int((~readable).sum())
-            malformed_starts += int(
-                (~readable & (wanted & starts)[kept].to_numpy()).sum()
-            )
+            if not readable.all():
+                unreadable = ~readable
+                kernel = chunk["_kernel_start"].to_numpy(dtype=bool)
+                marker = chunk["_marker"].to_numpy(dtype=bool)
+                unreadable_kernel_starts += int((unreadable & kernel).sum())
+                unreadable_markers += int((unreadable & marker).sum())
+                unreadable_names = chunk["zone name"]
+                unreadable_others.update(
+                    unreadable_names[unreadable & ~kernel & ~marker].tolist()
+                )
+                unreadable_starts.update(
+                    unreadable_names[
+                        unreadable & (chunk[phase_column] == start_token).to_numpy()
+                    ].tolist()
+                )
             chunk = whole
 
             for (
@@ -1538,60 +1711,61 @@ class DeviceLogProfilerQueries:
                 run = open_runs.get(timeline)
                 if run is None:
                     if len(open_runs) >= MAX_ZONE_TIMELINES:
+                        if every:
+                            raise _Unheld
                         untracked += 1
-                        untracked_starts += name == zone and phase == start_token
+                        untracked_starts += name == only and phase == start_token
                         continue
-                    run = open_runs[timeline] = _OpenRun(run_id)
+                    run = open_runs[timeline] = _OpenRun(
+                        run_id, next(seqs), seen={run_id}
+                    )
                 elif run.run_id != run_id or kernel_start:
-                    close(timeline, run)
-                    run = open_runs[timeline] = _OpenRun(run_id, seq=run.seq + 1)
+                    if every and not kernel_start and run_id in run.seen:
+                        raise _Unheld
+                    run.close()
+                    seen = set() if kernel_start else run.seen
+                    seen.add(run_id)
+                    run = open_runs[timeline] = _OpenRun(run_id, next(seqs), seen=seen)
 
                 if flush:
                     run.markers = 0
-                    run.flush_pending = run.flush_pending or name != zone
+                    run.flushes += 1
+                    run.flushes_by_zone[name] = run.flushes_by_zone.get(name, 0) + 1
                 elif marker:
                     run.markers += 1
                     run.full = run.full or run.markers >= L1_ZONE_MARKER_CAPACITY
-                if name != zone:
-                    continue
-                key = (timeline, run_id if firmware_zone else run.seq)
-                if phase != start_token:
-                    pairer.offer(key, phase, cycles)
-                    continue
-                # The pairer keeps one open start a key, so a start replaced unended
-                # would otherwise go uncounted.
-                displaced += key in pairer.open_starts
-                pairer.offer(key, phase, cycles)
-                repeats = timelines.setdefault(timeline, ZoneRepeats())
-                repeats.occurrences += 1
-                run.starts += 1
-                if run.last_start is not None and cycles < run.last_start:
-                    out_of_order += 1
-                    continue
-                if run.last_start is not None:
-                    if run.flush_pending:
-                        across_flush += 1
-                    else:
-                        repeats.intervals.append(cycles - run.last_start)
-                run.flush_pending = False
-                run.last_start = cycles
+                reader = readers.get(name)
+                if reader is None:
+                    if not every or not name:
+                        continue
+                    reader = readers[name] = _ZoneReader(name, start_token, end_token)
+                reader.take(timeline, run, run_id, phase, cycles)
 
-        for timeline, run in open_runs.items():
-            close(timeline, run)
-        pairing = pairer.pairing(self.DEVICE_LOG_FILE)
-        pairing["unmatched_starts"] += displaced
-        return ZoneIntervals(
-            timelines=timelines,
+            # What one zone's read holds at most, the pass of every zone holds in all.
+            if every and (
+                len(readers) > MAX_COUNTED_ZONE_NAMES
+                or len(read_alone) > MAX_COUNTED_ZONE_NAMES
+                or sum(len(reader.timelines) for reader in readers.values())
+                > MAX_ZONE_TIMELINES
+                or sum(len(reader.pairer.open_starts) for reader in readers.values())
+                > MAX_OPEN_ZONE_STARTS
+            ):
+                raise _Unheld
+
+        for run in open_runs.values():
+            run.close()
+        return ZoneIntervalPass(
+            readers=readers,
             zone_starts=zone_starts,
             zone_names_capped=zone_names_capped,
-            pairing=pairing,
-            across_flush=across_flush,
-            out_of_order=out_of_order,
+            read_alone=read_alone,
             accumulated=accumulated,
             timestamped=timestamped,
-            malformed=malformed,
+            unreadable_kernel_starts=unreadable_kernel_starts,
+            unreadable_markers=unreadable_markers,
+            unreadable_others=unreadable_others,
+            unreadable_starts=unreadable_starts,
             untracked=untracked,
-            malformed_starts=malformed_starts,
             untracked_starts=untracked_starts,
         )
 

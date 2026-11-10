@@ -690,7 +690,9 @@ device — the captures we test against span 8 and 32 PCIe slots, and coordinate
 repeat on each — so a zone can report thousands of cores on a multi-device run. Durations
 need the device log's `type` column to pair zone starts with ends; a capture without it
 reports occurrence counts only, and a capture that stopped mid-zone reports how many starts
-and ends failed to pair so a partial total does not read as a complete one.
+and ends failed to pair so a partial total does not read as a complete one. The first call
+on a handle reads the device log once, and later calls answer from that read, with the
+clock it was read at.
 
 `core_spread` reads each operation on one device only, never pooling devices, since each
 runs its own clock. A performance row's global call count is the device log's `run host ID`
@@ -764,7 +766,12 @@ characters, which is the capture's text, not the tool's; a zone asked for by a l
 is refused. A row whose slot, core, run or cycle count is not a number or does not fit a
 64-bit integer, or whose cycle count is negative, is left out and counted in a caveat, and
 a zone whose every start was left out is refused with how many were unreadable that way
-and how many lay past the 200,000 core-RISC timelines followed at once.
+and how many lay past the 200,000 core-RISC timelines followed at once. The first call on
+a handle reads the device log once for every zone, and later calls, for any zone and
+refusals included, answer from that read, with the clock it was read at. A log that one
+pass cannot read as each zone's own read would is read again on every call: one past those
+caps or naming more than 1,000 zones, one where a RISC's run host ID comes back before its
+next kernel start, and a zone also named on rows that neither start nor end one.
 
 No zone tool shows a zone name longer than 256 characters or a RISC name longer than 32
 characters: such a name is the capture's text, not the tool's, and tt-metal's longest RISC
