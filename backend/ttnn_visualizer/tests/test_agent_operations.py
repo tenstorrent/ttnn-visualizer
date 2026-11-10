@@ -1313,7 +1313,8 @@ class TestOperationDetail:
         assert "upper bound" in note
         assert "circular buffers" in note
         assert "smallest largest free block" in note
-        assert "in-use figures a floor" in note
+        assert "`high_water_bytes` a floor" in note
+        assert "`free_segments` neither" in note
         assert "`high_water_bytes`" in note
 
     def test_memory_profile_counts_the_operations_sharing_the_top(self, loaded):

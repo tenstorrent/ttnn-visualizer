@@ -603,16 +603,12 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
             "title": "Operation detail",
             "description": (
                 "One operation: its input and output tensors with shape, dtype and "
-                "layout, what it had allocated, and its per-device l1_pressure in "
-                "bytes per bank "
-                "(fullness_pct, free_segments, largest_free_block and "
-                "largest_free_pct on the most constrained device, the one with "
-                "the smallest largest_free_block; free-space figures are an upper "
-                "bound and in-use ones, high_water_bytes among them, a floor, "
-                "because buffers excludes circular buffers and intra-op tensors). "
-                "l1_pressure is null, with a caveat, when the operation has no "
-                "buffers rows, no device records L1 geometry, or the devices rows "
-                "cannot be attributed to the rank. Read "
+                "layout, what it had allocated, and l1_pressure: its fullness and "
+                "free space in bytes per bank on its most constrained device, whose "
+                "note says which figures are bounds. l1_pressure is null, with a "
+                "caveat, when the operation has no buffers rows, no device records "
+                "L1 geometry, or the devices rows cannot be attributed to the rank. "
+                "Read "
                 "tensor_size_unit: a "
                 "tensor size is whole-tensor bytes only where the report carries "
                 "that column, and per bank otherwise. When the handle also holds a "
@@ -663,8 +659,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "device's L1 geometry, and l1_pressure (operations ranked by "
                 "smallest largest_free_block on each operation's most constrained "
                 "device, with operations_at_top counting those that share the first "
-                "row's; null under any buffer_type but L1). A floor, not the peak: "
-                "the buffers table "
+                "row's largest_free_block). A floor, not the peak: the buffers table "
                 "records tensor allocations only, so circular buffers and tensors "
                 "allocated and freed inside one operation are absent -- for an "
                 "out-of-memory question read errors and l1_peak instead, and "
@@ -675,7 +670,8 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "response, and the report carries no DRAM capacity. device and "
                 "l1_pressure are null, with a caveat, when the devices rows cannot be "
                 "attributed to the rank, and l1_pressure also when no device records "
-                "L1 geometry."
+                "L1 geometry, and without one under any buffer_type but L1 or for a "
+                "report holding no L1 buffers."
             ),
             "schema": {
                 "type": "object",

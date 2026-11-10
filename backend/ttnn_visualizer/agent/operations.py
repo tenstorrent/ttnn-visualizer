@@ -282,9 +282,11 @@ L1_PRESSURE_NOTE = (
     "Sizes are bytes per bank on `device_id` only, the most constrained device: "
     "the one with the smallest largest free block. `buffers` records tensor "
     "allocations only, excluding circular buffers and tensors allocated and freed "
-    "inside one operation, so free-space figures are an upper bound and in-use "
-    "figures a floor. `high_water_bytes` is where the highest recorded tensor ends, "
-    "not a peak: it can reach `usable_bytes` while L1 is mostly free."
+    "inside one operation, so `largest_free_block` and `largest_free_pct` are an "
+    "upper bound, `allocated_bytes`, `fullness_pct` and `high_water_bytes` a floor, "
+    "and `free_segments` neither. `high_water_bytes` is where the highest recorded "
+    "tensor ends above the window's start, not a peak: it often equals "
+    "`usable_bytes` while L1 is mostly free."
 )
 
 NO_L1_GEOMETRY_CAVEAT = (
@@ -1103,8 +1105,8 @@ def memory_profile(
 
     `l1_pressure` ranks the operations by their most constrained device's largest free
     block. It is None under any `buffer_type` but L1, when no operation holds L1
-    buffers, and, with a caveat, when no device records an L1 window or the devices
-    rows cannot be attributed to the rank.
+    buffers (a `buffer_type` of L1 is then refused), and, with a caveat, when no device
+    records an L1 window or the devices rows cannot be attributed to the rank.
 
     Nothing here adds one memory type to another. `max_size_per_bank` is divided
     by the bank count of its own memory type, and those counts differ, so a
