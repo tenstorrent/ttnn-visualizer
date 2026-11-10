@@ -19,6 +19,7 @@ import pandas as pd
 import pytest
 from tt_perf_report import perf_report
 from ttnn_visualizer.csv_queries import (
+    MAX_LISTED_SIGNPOST_CHARS,
     MAX_LISTED_SIGNPOSTS,
     check_signpost_range,
     resolve_signposts,
@@ -137,6 +138,31 @@ class TestCheckSignpostRange:
             check_signpost_range(_resolved(rows), "missing", None)
 
         assert f"'S{MAX_LISTED_SIGNPOSTS}'" not in str(raised.value)
+
+    def test_a_name_too_long_to_pass_back_is_counted_rather_than_listed(self):
+        """It is the capture's text, so the refusal stays short. #2208"""
+        at_bound = "A" * MAX_LISTED_SIGNPOST_CHARS
+        rows = [("signpost", at_bound), ("signpost", "L" * 300), ("signpost", "B")]
+
+        with pytest.raises(InvalidSignpostRange) as raised:
+            check_signpost_range(_resolved(rows), "missing", None)
+
+        refusal = str(raised.value)
+        assert f"it holds {at_bound!r}, 'B'; 1 more have names past" in refusal
+        assert "LLL" not in refusal
+        assert len(refusal) < 2 * MAX_LISTED_SIGNPOST_CHARS
+
+    def test_a_report_whose_every_name_is_too_long_says_so(self):
+        rows = [("signpost", "L" * 300), ("signpost", "M" * 300)]
+
+        with pytest.raises(InvalidSignpostRange) as raised:
+            check_signpost_range(_resolved(rows), "missing", None)
+
+        assert str(raised.value) == (
+            "no signpost named 'missing' in this report; none of its signpost names "
+            f"is short enough to list; 2 more have names past "
+            f"{MAX_LISTED_SIGNPOST_CHARS} characters, which are not listed"
+        )
 
     def test_one_name_for_both_bounds_needs_two_occurrences(self):
         rows = [("signpost", "A"), ("tt_dnn_device", "x")]

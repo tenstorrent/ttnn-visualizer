@@ -1687,6 +1687,7 @@ class TestSignatureKeys:
             assert result[listed] == []
 
     def test_an_op_code_past_the_cut_is_cut_as_every_tool_cuts_one(self, tmp_path):
+        """262 characters, in the 257–300 that the signature's cut let through. #2208"""
         long_code = "Matmul" + "x" * MAX_OP_CODE_CHARS
         rows = {
             "report-1": [_row(op_code=long_code, device_time="10.0")],
@@ -1698,6 +1699,29 @@ class TestSignatureKeys:
         assert change["op_code"] == long_code[:MAX_OP_CODE_CHARS]
         assert change["op_code_full_length"] == len(long_code)
         assert len(change["op_code_digest"]) == CUT_DIGEST_CHARS
+
+    def test_two_op_codes_cut_alike_are_two_changes_told_apart(self, tmp_path):
+        long_code = "Matmul" + "x" * MAX_OP_CODE_CHARS
+        twin = long_code[:-1] + "y"
+        rows = {
+            "report-1": [
+                _row(id="2", op_code=long_code, device_time="10.0"),
+                _row(id="3", op_code=twin, device_time="10.0"),
+            ],
+            "report-2": [
+                _row(id="2", op_code=long_code, device_time="20.0"),
+                _row(id="3", op_code=twin, device_time="30.0"),
+            ],
+        }
+
+        changes = _diff(_registry(tmp_path), rows)["changes"]
+
+        assert len(changes) == 2
+        assert {change["op_code"] for change in changes} == {
+            long_code[:MAX_OP_CODE_CHARS]
+        }
+        assert {change["op_code_full_length"] for change in changes} == {len(long_code)}
+        assert len({change["op_code_digest"] for change in changes}) == 2
 
     def test_a_raw_op_code_past_the_cut_is_cut_in_a_signatures_group(self, tmp_path):
         long_code = "Matmul" + "x" * MAX_OP_CODE_CHARS
