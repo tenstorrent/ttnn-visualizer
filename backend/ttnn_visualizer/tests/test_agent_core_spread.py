@@ -328,16 +328,27 @@ class TestCaveats:
         # From the second start, at 100, not the first.
         assert result["ops"][0]["slowest_cores"][0] == {"x": 4, "y": 1, "span_us": 4.0}
 
-    def test_a_start_replaced_in_another_run_is_not_this_ops_concern(self, tmp_path):
-        replaced = [
-            modern_row(0, 4, 1, "BRISC", 0, "BRISC-KERNEL", "ZONE_START", run=9999),
-            modern_row(0, 4, 1, "BRISC", 100, "BRISC-KERNEL", "ZONE_START", run=9999),
-            modern_row(0, 4, 1, "BRISC", 4100, "BRISC-KERNEL", "ZONE_END", run=9999),
+    def test_a_start_replaced_in_another_ops_run_is_caveated_on_that_op_only(
+        self, tmp_path
+    ):
+        """Both runs are requested and read, so each is charged its own. #2249"""
+        second_run = [
+            *_zone(0, 1, 1, "BRISC", 0, 1000, run=RUN + 1),
+            modern_row(0, 4, 1, "BRISC", 0, "BRISC-KERNEL", "ZONE_START", run=RUN + 1),
+            modern_row(
+                0, 4, 1, "BRISC", 100, "BRISC-KERNEL", "ZONE_START", run=RUN + 1
+            ),
+            modern_row(0, 4, 1, "BRISC", 4100, "BRISC-KERNEL", "ZONE_END", run=RUN + 1),
         ]
+        perf_rows = [_op(perf_id="1"), _op(perf_id="2", call_count=RUN + 1, cores="2")]
 
-        result = _spread(tmp_path, THREE_CORES + replaced, [_op()], perf_id="1")
+        first, second = (
+            _spread(tmp_path, THREE_CORES + second_run, perf_rows, perf_id=perf_id)
+            for perf_id in ("1", "2")
+        )
 
-        assert "caveat" not in result
+        assert "caveat" not in first
+        assert second["caveat"].startswith("1 zone starts and 0 ends did not pair")
 
     def test_an_unpaired_start_in_another_run_is_not_this_ops_concern(self, tmp_path):
         open_start = "0,4,1,BRISC,1,0,0,9999,,,BRISC-KERNEL,ZONE_START,1,k.cc,"
@@ -522,6 +533,26 @@ class TestFirmwareWindows:
                 tmp_path, self.REPLAYS + [open_start], perf_rows, perf_id=perf_id
             )
             assert "1 zone starts and 0 ends did not pair" in result["caveat"]
+
+    def test_a_replaced_start_in_one_replay_is_caveated_on_every_replay(self, tmp_path):
+        """Replaced starts are counted per call count and device too. #2249"""
+        replaced = [
+            modern_row(0, 2, 1, "BRISC", 10100, "BRISC-KERNEL", "ZONE_START"),
+            modern_row(0, 2, 1, "BRISC", 10200, "BRISC-KERNEL", "ZONE_START"),
+            modern_row(0, 2, 1, "BRISC", 10900, "BRISC-KERNEL", "ZONE_END"),
+        ]
+        perf_rows = [
+            _op(perf_id="1", cores="1", **_window(0, 2000)),
+            _op(perf_id="2", cores="2", **_window(9000, 12000)),
+        ]
+
+        for perf_id in ("1", "2"):
+            result = _spread(
+                tmp_path, self.REPLAYS + replaced, perf_rows, perf_id=perf_id
+            )
+            assert result["caveat"].startswith(
+                "1 zone starts and 0 ends did not pair"
+            ), perf_id
 
 
 class TestUnreadableCells:

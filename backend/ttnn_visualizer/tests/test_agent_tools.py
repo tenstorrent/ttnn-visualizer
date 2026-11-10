@@ -2354,6 +2354,14 @@ class TestZoneSummary:
         assert PREAMBLE.startswith("ARCH")
 
 
+def _loaded_log(tmp_path, rows):
+    """A registry holding one report loaded from a device log of ``rows``."""
+    registry = ReportRegistry()
+    write_device_log(tmp_path, MODERN_HEADER, rows)
+    load_report(registry, performance_path=str(tmp_path))
+    return registry
+
+
 def _zone_log(tmp_path, zones):
     """A loaded log with one paired zone for each ``(zone, risc, cycles)``."""
     rows = [
@@ -2364,10 +2372,7 @@ def _zone_log(tmp_path, zones):
             modern_row(1, 1, 1, risc, cycles, zone, "ZONE_END"),
         )
     ]
-    registry = ReportRegistry()
-    write_device_log(tmp_path, MODERN_HEADER, rows)
-    load_report(registry, performance_path=str(tmp_path))
-    return registry
+    return _loaded_log(tmp_path, rows)
 
 
 def _zone_timings(tmp_path, zones, **arguments):
@@ -2853,11 +2858,7 @@ class TestReplacedZoneStarts:
             modern_row(0, 1, 1, "BRISC", 200, "LOOP", "ZONE_START"),
             modern_row(0, 1, 1, "BRISC", 300, "LOOP", "ZONE_END"),
         ]
-        write_device_log(tmp_path, MODERN_HEADER, rows)
-        registry = ReportRegistry()
-        load_report(registry, performance_path=str(tmp_path))
-
-        result = tools.zone_timings(registry, "report-1")
+        result = tools.zone_timings(_loaded_log(tmp_path, rows), "report-1")
 
         ((zone, occurrences, total),) = [
             (entry["zone"], entry["occurrences"], entry["total_cycles"])
@@ -2882,11 +2883,7 @@ class TestReplacedZoneStarts:
                 ),
                 modern_row(0, 1, 1, "BRISC", base + 300, "BRISC-KERNEL", "ZONE_END"),
             ]
-        write_device_log(tmp_path, MODERN_HEADER, rows)
-        registry = ReportRegistry()
-        load_report(registry, performance_path=str(tmp_path))
-
-        result = tools.zone_timings(registry, "report-1")
+        result = tools.zone_timings(_loaded_log(tmp_path, rows), "report-1")
 
         loop = next(entry for entry in result["zones"] if entry["zone"] == "LOOP")
         assert (loop["occurrences"], loop["total_cycles"]) == (2, 200)
@@ -2900,26 +2897,46 @@ class TestReplacedZoneStarts:
             modern_row(0, 1, 1, "BRISC", 300, "LOOP", "ZONE_END"),
             modern_row(0, 1, 1, "BRISC", 400, "LOOP", "ZONE_END"),
         ]
-        write_device_log(tmp_path, MODERN_HEADER, rows)
-        registry = ReportRegistry()
-        load_report(registry, performance_path=str(tmp_path))
-
-        result = tools.zone_timings(registry, "report-1")
+        result = tools.zone_timings(_loaded_log(tmp_path, rows), "report-1")
 
         assert result["caveat"].startswith("1 zone starts and 1 ends did not pair")
+
+    def test_starts_on_different_cores_are_not_replacements(self, tmp_path):
+        rows = [
+            modern_row(0, 1, 1, "BRISC", 100, "LOOP", "ZONE_START"),
+            modern_row(0, 2, 1, "BRISC", 150, "LOOP", "ZONE_START"),
+            modern_row(0, 1, 1, "BRISC", 300, "LOOP", "ZONE_END"),
+            modern_row(0, 2, 1, "BRISC", 350, "LOOP", "ZONE_END"),
+        ]
+
+        result = tools.zone_timings(_loaded_log(tmp_path, rows), "report-1")
+
+        assert "caveat" not in result
+        assert [entry["occurrences"] for entry in result["zones"]] == [2]
 
     def test_the_pairer_counts_it_for_its_group_too(self):
         pairer = csv_queries._ZonePairer(
             "ZONE_START", "ZONE_END", group=lambda key: key[0]
         )
-        pairer.offer(("run", "core"), "ZONE_START", 100)
-        pairer.offer(("run", "core"), "ZONE_START", 200)
+        pairer.offer(("a", 1), "ZONE_START", 100)
+        pairer.offer(("a", 1), "ZONE_START", 200)
+        pairer.offer(("b", 1), "ZONE_START", 300)
 
-        assert pairer.offer(("run", "core"), "ZONE_END", 300) == 200
-        assert pairer.pairing("log")["unmatched_starts"] == 1
+        assert pairer.offer(("a", 1), "ZONE_END", 400) == 200
+        assert pairer.pairing("log")["unmatched_starts"] == 2
+        paired_otherwise = {"unmatched_ends": 0, "dropped_starts": 0}
         assert pairer.pairing_by_group() == {
-            "run": {"unmatched_starts": 1, "unmatched_ends": 0, "dropped_starts": 0}
+            "a": {"unmatched_starts": 1, **paired_otherwise},
+            "b": {"unmatched_starts": 1, **paired_otherwise},
         }
+
+    def test_each_replacement_counts_once(self):
+        pairer = csv_queries._ZonePairer("ZONE_START", "ZONE_END")
+        for cycles in (100, 200, 300):
+            pairer.offer(("a",), "ZONE_START", cycles)
+
+        assert pairer.offer(("a",), "ZONE_END", 400) == 300
+        assert pairer.pairing("log")["unmatched_starts"] == 2
 
     def test_one_at_the_open_start_ceiling_is_replaced_not_dropped(self, monkeypatch):
         monkeypatch.setattr(csv_queries, "MAX_OPEN_ZONE_STARTS", 1)
