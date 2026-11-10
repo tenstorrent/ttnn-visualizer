@@ -906,7 +906,7 @@ class TestCaptureMetadata:
     def test_a_field_is_kept_up_to_the_bound_and_left_out_past_it(
         self, tmp_path, side, extra, kept
     ):
-        """Measured stripped, as the field is kept: the regex's bound, so both agree."""
+        """Measured stripped, as the field is kept, against the ARCH pattern's bound."""
         text = "a" * (csv_queries.MAX_CAPTURE_FIELD_CHARS + extra)
         name, value = (text, "v") if side == "name" else ("K", text)
         line = f"CHIP_FREQ[MHz]: 1000,  {name} :  {value} ".encode()

@@ -162,10 +162,11 @@ first call, which refuses one that is not a readable tt-npe trace.
   CSV it was loaded on: one rewritten or superseded after that is refused, and
   `load_report` again gives a fresh handle.
 - `arch` and `device_count` are keyed by the file each was read from, since a handle's two
-  reports can come from different runs. `arch.device_log` is the device profiler log's
-  header. `capture` returns the header's fields, leaving out any whose name or value runs
-  past 64 characters, which tt-metal never writes, and any after the first 16 it keeps; an
-  architecture name longer than 64 characters reads as none everywhere.
+  reports can come from different runs. `arch.device_log` is the `ARCH` field of the device
+  profiler log's header. `capture` returns the header's fields, leaving out any whose name
+  or value runs past 64 characters, which tt-metal never writes, and any after the first 16
+  it keeps. An architecture name longer than 64 characters reads as none everywhere, and
+  so does the end of a longer field name such as `MY_ARCH`.
   `arch.cluster_descriptor` is what the `arch` mapping in rank 0's
   `cluster_descriptor.yaml`, beside the memory report database, names — as written, since
   older descriptors spell Wormhole `Wormhole` and newer ones `wormhole_b0`, and joined
