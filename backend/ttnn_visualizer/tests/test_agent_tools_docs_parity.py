@@ -326,6 +326,23 @@ def test_the_page_explains_each_diff_caveat(caveat, page_phrase):
     assert page_phrase in " ".join(_read(_AGENT_DOCS).split())
 
 
+def test_the_page_names_every_tool_a_csv_that_cannot_be_read_costs():
+    """`without_performance_csv` moves exactly these, so the page names them as one set."""
+    from ttnn_visualizer.agent.handles import PERF_CSV_TOOLS
+
+    page = " ".join(_read(_AGENT_DOCS).split())
+    sentence = re.search(
+        r"The (\w+) tools that read the performance CSV's rows, (.+?), are listed only",
+        page,
+    )
+
+    assert sentence is not None
+    named = re.findall(r"`([a-z_]+)`", sentence.group(2))
+    assert set(named) == PERF_CSV_TOOLS
+    assert len(named) == len(PERF_CSV_TOOLS)
+    assert sentence.group(1) == "five"
+
+
 def test_the_signpost_listing_cap_the_page_states_is_the_enforced_one():
     page = " ".join(_read(_AGENT_DOCS).split())
 
