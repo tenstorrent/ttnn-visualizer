@@ -2776,6 +2776,17 @@ class TestTransport:
         # Long instructions get cut by clients, and the system prompt is every turn's.
         assert len(instructions) <= 2000
 
+    def test_every_tool_description_fits_what_a_client_reads_of_it(self):
+        """Claude Code cuts a tool description past 2,048 characters, so a sentence past
+        that never reaches the agent. #2232"""
+        table = server._tool_table(ReportRegistry())
+
+        assert {
+            name: len(spec["description"])
+            for name, spec in table.items()
+            if len(spec["description"]) > 2048
+        } == {}
+
     def test_the_instructions_name_only_registered_tools(self):
         """A tool renamed or removed must not live on in the system prompt."""
         fields = {

@@ -701,6 +701,12 @@ class TestMemoryProfile:
         assert "floor, not the peak" in description
         assert "circular buffers" in description
         assert "out-of-memory" in description
+        # What l1_pressure counts and when it is null, before the call. #2232
+        assert "operations_at_top" in description
+        assert "no L1 buffers" in description
+        detail = table["operation_detail"]["description"]
+        assert "no buffers rows" in detail
+        assert "no device records L1 geometry" in detail
 
     def test_no_figure_adds_one_memory_type_to_another(self, loaded):
         """`max_size_per_bank` is divided by the bank count of its own memory
@@ -1315,6 +1321,7 @@ class TestOperationDetail:
         assert "smallest largest free block" in note
         assert "`high_water_bytes` a floor" in note
         assert "`free_segments` neither" in note
+        assert "not a peak" in note
         assert "`high_water_bytes`" in note
 
     def test_memory_profile_counts_the_operations_sharing_the_top(self, loaded):
@@ -1327,6 +1334,7 @@ class TestOperationDetail:
         INSERT INTO buffers VALUES
             (20, 0, 300000, 10000, 'L1', 0),
             (20, 0, 700000, 10000, 'L1', 0),
+            (20, 0, 200000, 1000, 'L1', 0),
             (21, 0, 300000, 10000, 'L1', 0),
             (21, 0, 700000, 10000, 'L1', 0),
             (22, 0, 300000, 10000, 'L1', 0);
@@ -1337,9 +1345,28 @@ class TestOperationDetail:
             "l1_pressure"
         ]
 
+        # Fuller, 20 ranks first, but 21 shares its largest free block.
         assert [row["operation_id"] for row in ranked["operations"]] == [20]
         assert ranked["operations_at_top"] == 2
+        full = agent_operations.memory_profile(registry, handle)["l1_pressure"]
+        first, second = full["operations"][:2]
+        assert first["largest_free_block"] == second["largest_free_block"]
+        assert first["allocated_bytes"] != second["allocated_bytes"]
         assert ranked["operation_count"] > ranked["operations_at_top"]
+
+    def test_memory_profile_l1_pressure_is_none_for_a_report_without_l1(self, loaded):
+        """Nothing to rank, which is no fault of the report, so no caveat says so; asked
+        for L1 by name, the report is refused as holding none."""
+        registry, handle = loaded(
+            _REPORT_SQL + "DELETE FROM buffers WHERE buffer_type = 'L1';",
+            name="l1-none-held",
+        )
+
+        profile = agent_operations.memory_profile(registry, handle)
+        assert profile["l1_pressure"] is None
+        assert "l1_pressure" not in profile.get("caveat", "")
+        with pytest.raises(ValueError, match="no L1 buffers in this report"):
+            agent_operations.memory_profile(registry, handle, buffer_type="L1")
 
     def test_memory_profile_l1_pressure_reads_integer_buffer_types(self, loaded):
         sql = _INTEGER_BUFFER_TYPE_SQL + """
