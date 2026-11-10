@@ -10,6 +10,7 @@ busy timesteps, and the single-flight build lock under concurrency. Also the
 readers `noc_congestion` uses, which must never write beside the trace (#2156).
 """
 
+import json
 import os
 import sqlite3
 import threading
@@ -33,8 +34,10 @@ from ttnn_visualizer.npe_index import (
     looks_like_trace,
     read_summary,
     read_window,
+    streamed_link_demand,
     trace_link_demand,
     trace_size,
+    trace_text,
     truncate,
 )
 from ttnn_visualizer.tests.npe_fixtures import execute, listing
@@ -914,3 +917,126 @@ def test_indexed_link_demand_never_recreates_a_sidecar_removed_after_its_check(
         with indexed_link_demand(Path(npe_path)):
             pass
     assert not db_path.exists()
+
+
+def _read_through(rows):
+    """Every field of a link-demand read, its timesteps read through first."""
+    steps = list(rows.timesteps)
+    return (
+        steps,
+        rows.common_info,
+        rows.transfer_count,
+        rows.unreadable_timesteps,
+        rows.truncated,
+    )
+
+
+_STREAMED_TRACES = {
+    "every-field": {
+        "common_info": {"arch": "blackhole", "cycles_per_timestep": 128},
+        "noc_transfers": [{"id": 0}, {"id": 0}, {"id": "1"}, {"id": 2.0}, 7, {}],
+        "timestep_data": [
+            {"start_cycle": 0, "end_cycle": 9, "link_demand": [[0, 0, 0, "E", 1.5]]},
+            {"start_cycle": 9, "end_cycle": 18},
+            7,
+            None,
+        ],
+        "zones": [{"name": "z", "nested": [[1, 2], {"a": []}]}],
+    },
+    "steps-first": {
+        "timestep_data": [{"link_demand": []}],
+        "common_info": {"arch": "wormhole_b0"},
+        "noc_transfers": [{"id": 3}],
+    },
+    "empty-lists": {"timestep_data": [], "noc_transfers": [], "zones": []},
+    "common-info-not-an-object": {"common_info": [1], "timestep_data": []},
+    "transfers-not-a-list": {"noc_transfers": {"id": 1}, "timestep_data": []},
+    # orjson keeps the last of two members, as the read must.
+    "repeated-members": {"common_info": {"arch": "a"}, "timestep_data": []},
+    "unicode": {"common_info": {"name": "é€😀"}, "timestep_data": [{"x": " "}]},
+}
+
+
+def _with_repeats(text: str) -> str:
+    return text.replace(
+        '"timestep_data"',
+        '"noc_transfers":[{"id":9}],"common_info":{"arch":"b"},'
+        '"noc_transfers":[{"id":1},{"id":2}],"timestep_data"',
+        1,
+    )
+
+
+@pytest.mark.parametrize("indent", [None, orjson.OPT_INDENT_2])
+@pytest.mark.parametrize("name", sorted(_STREAMED_TRACES))
+def test_a_streamed_read_answers_as_the_whole_parse_does(name, indent):
+    """#2275"""
+    text = orjson.dumps(_STREAMED_TRACES[name], option=indent).decode()
+    if name == "repeated-members":
+        text = _with_repeats(text)
+
+    assert _read_through(streamed_link_demand(text)) == _read_through(
+        trace_link_demand(orjson.loads(text))
+    )
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "{}",
+        '{"timestep_data": {}}',
+        '{"timestep_data": null}',
+        '{"common_info": {}}',
+        "[]",
+        '"timestep_data"',
+    ],
+)
+def test_a_streamed_read_refuses_what_holds_no_timestep_data_list(text):
+    with pytest.raises(ValueError, match="no timestep_data list"):
+        _read_through(streamed_link_demand(text))
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        '{"timestep_data": [],}',
+        '{"timestep_data": [1,]}',
+        '{"timestep_data": [1}',
+        '{"timestep_data": []',
+        '{"timestep_data": []} x',
+        '{"timestep_data": [NaN]}',
+        '{"timestep_data": [{"a": 1e400}]}',
+        '{"timestep_data": [{"a": "\\ud800"}]}',
+        '{"timestep_data": [1 2]}',
+        '{"timestep_data" []}',
+        "{timestep_data: []}",
+    ],
+)
+def test_a_streamed_read_refuses_what_orjson_refuses(text):
+    with pytest.raises(orjson.JSONDecodeError):
+        orjson.loads(text)
+    with pytest.raises(json.JSONDecodeError):
+        _read_through(streamed_link_demand(text))
+
+
+def test_a_streamed_read_refuses_timestep_data_named_twice():
+    """orjson keeps the second, and the first has already been read."""
+    with pytest.raises(ValueError, match="names timestep_data twice"):
+        _read_through(
+            streamed_link_demand('{"timestep_data": [], "timestep_data": []}')
+        )
+
+
+def test_a_streamed_read_holds_one_timestep_at_a_time():
+    """No timestep is read before the one before it has been handed on."""
+    steps = [{"start_cycle": index} for index in range(3)]
+    rows = streamed_link_demand(orjson.dumps({"timestep_data": steps}).decode())
+
+    assert next(rows.timesteps) == (0, None, [])
+    assert rows.unreadable_timesteps == 0
+    assert [step[0] for step in rows.timesteps] == [1, 2]
+
+
+def test_trace_text_reads_zstd_frames_and_json():
+    data = orjson.dumps({"timestep_data": []})
+
+    assert trace_text(zstd.compress(data), True) == trace_text(data, False)

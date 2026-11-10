@@ -18,6 +18,7 @@ import os
 import sqlite3
 import time
 import weakref
+from concurrent.futures.process import BrokenProcessPool
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -1225,6 +1226,69 @@ class TestPinning:
 
         assert len(parsed) == 1
         assert parsed[0]() is None
+
+
+class TestReadApart:
+    """A trace past `MAX_INLINE_TRACE_JSON_BYTES` is read in a process of its own, so
+    the memory its read takes goes back to the system when the read ends. #2275"""
+
+    @pytest.fixture
+    def apart(self, monkeypatch):
+        """Every trace read apart, counting the reading processes started."""
+        started: list = []
+        real = noc_congestion.ProcessPoolExecutor
+
+        def counted(*arguments, **options):
+            started.append(options)
+            return real(*arguments, **options)
+
+        monkeypatch.setattr(noc_congestion, "MAX_INLINE_TRACE_JSON_BYTES", 0)
+        monkeypatch.setattr(noc_congestion, "ProcessPoolExecutor", counted)
+        return started
+
+    def test_a_trace_read_apart_answers_as_one_read_in_the_server(
+        self, tmp_path, apart, monkeypatch
+    ):
+        with monkeypatch.context() as inline_only:
+            inline_only.setattr(noc_congestion, "MAX_INLINE_TRACE_JSON_BYTES", 1 << 62)
+            inline = _answered(tmp_path / "inline", _hand_checked())
+        assert not apart
+
+        answer = _answered(tmp_path / "apart", _hand_checked())
+
+        assert len(apart) == 1
+        assert _without(answer, "npe_trace") == _without(inline, "npe_trace")
+
+    def test_a_refusal_read_apart_is_the_one_read_in_the_server_gives(
+        self, tmp_path, apart
+    ):
+        path = _write(tmp_path, {"common_info": {}})
+
+        with pytest.raises(ValueError, match="trace.json: it holds no timestep_data"):
+            _answer(path)
+        assert len(apart) == 1
+
+    def test_a_reading_process_that_ends_unanswered_is_a_refusal(
+        self, tmp_path, monkeypatch
+    ):
+        class _Ended:
+            def __init__(self, *arguments, **options):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exception):
+                return False
+
+            def submit(self, *arguments):
+                raise BrokenProcessPool("a reading process ended")
+
+        monkeypatch.setattr(noc_congestion, "MAX_INLINE_TRACE_JSON_BYTES", 0)
+        monkeypatch.setattr(noc_congestion, "ProcessPoolExecutor", _Ended)
+
+        with pytest.raises(ValueError, match="ended before it answered"):
+            _answered(tmp_path, _hand_checked())
 
 
 class TestLoadReport:
