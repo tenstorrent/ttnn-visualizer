@@ -112,6 +112,21 @@ class TestStatistics:
         }
         assert op["by_risc"]["TRISC_0"]["max_us"] == 1.1
 
+    def test_risc_names_past_the_cap_are_counted_rather_than_listed(self, tmp_path):
+        """tt-metal has 32 RISC types, so a log naming more is its own text. #2254"""
+        names = [f"RISC_{index:02}" for index in range(tools.MAX_LISTED_RISCS + 8)]
+        rows = [
+            *THREE_CORES,
+            *[row for name in names for row in _zone(0, 1, 1, name, 0, 4000)],
+        ]
+
+        op = _spread(tmp_path, rows, [_op()], perf_id="1")["ops"][0]
+
+        assert len(op["by_risc"]) == tools.MAX_LISTED_RISCS
+        listed = sorted([*names, "BRISC", "TRISC_0"])
+        assert list(op["by_risc"]) == listed[: tools.MAX_LISTED_RISCS]
+        assert op["by_risc_unlisted_past_cap"] == len(listed) - tools.MAX_LISTED_RISCS
+
     def test_a_risc_name_too_long_to_show_is_counted_rather_than_listed(self, tmp_path):
         """Its kernel still sets its core's span, which names no RISC."""
         at_bound = "R" * tools.MAX_RISC_NAME_LENGTH

@@ -223,6 +223,7 @@ def test_the_zone_tools_name_bounds_the_page_states_are_the_enforced_ones():
         f"a zone name longer than {tools.MAX_ZONE_NAME_LENGTH} characters or a RISC "
         f"name longer than {tools.MAX_RISC_NAME_LENGTH} characters"
     ) in page
+    assert f"lists at most {tools.MAX_LISTED_RISCS} RISCs" in page
 
 
 @pytest.mark.parametrize(
