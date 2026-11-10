@@ -368,14 +368,27 @@ def _shown_and_dropped(
     limit: Optional[int] = None,
 ) -> Tuple[List[_Item], int]:
     """Up to `limit` of the items `shown` keeps, in order, and how many it left out."""
+    kept, dropped, _ = _listing(items, shown, limit)
+    return kept, dropped
+
+
+def _listing(
+    items: Iterable[_Item],
+    shown: Callable[[_Item], bool],
+    limit: Optional[int] = None,
+) -> Tuple[List[_Item], int, int]:
+    """Up to `limit` of the items `shown` keeps, in order, how many it left out, and
+    how many it would keep but left out past `limit`."""
     kept: List[_Item] = []
-    dropped = 0
+    dropped = past_limit = 0
     for item in items:
         if not shown(item):
             dropped += 1
         elif limit is None or len(kept) < limit:
             kept.append(item)
-    return kept, dropped
+        else:
+            past_limit += 1
+    return kept, dropped, past_limit
 
 
 def _short_names(
@@ -1099,6 +1112,9 @@ CORE_SPREAD_NOTE = (
 
 # Enough to say where the stragglers sit without listing a 130-core grid.
 SLOWEST_CORES = 5
+# tt-metal's `RiscType` has 32 members and a Quasar Tensix core runs 24 of them;
+# more names than that are the capture's text.
+MAX_LISTED_RISCS = 32
 
 _PERF_PER_CORE_FIELDS = ("per_core_min_us", "per_core_max_us", "per_core_avg_us")
 
@@ -1127,7 +1143,9 @@ def _core_figures(cores: Dict[tuple, CoreSpan], clock_mhz: float) -> Dict[str, o
         for risc, cycles in span.risc_cycles.items():
             risc_us[risc].append(cycles / clock_mhz)
     slowest = sorted(core_us.items(), key=lambda item: item[1], reverse=True)
-    listed, too_long = _shown_and_dropped(sorted(risc_us), _risc_shown)
+    listed, too_long, past_cap = _listing(
+        sorted(risc_us), _risc_shown, MAX_LISTED_RISCS
+    )
     figures: Dict[str, object] = {
         "cores_in_log": len(cores),
         "core_span": _spread(list(core_us.values())),
@@ -1139,6 +1157,8 @@ def _core_figures(cores: Dict[tuple, CoreSpan], clock_mhz: float) -> Dict[str, o
     }
     if too_long:
         figures["by_risc_unlisted_too_long"] = too_long
+    if past_cap:
+        figures["by_risc_unlisted_past_cap"] = past_cap
     return figures
 
 
@@ -1204,7 +1224,8 @@ def _span_request(row: Dict) -> SpanRequest:
 class _CoreSpreadIndex:
     """Every device op's spread, kept per handle so drilling in costs one log read.
 
-    A few hundred bytes an op, where the spans they come from are a core's each.
+    An op's figures grow with the RISCs it lists, to about 16 KB at
+    `MAX_LISTED_RISCS`.
     """
 
     figures: Dict[SpanRequest, Dict[str, object]]
@@ -2111,6 +2132,7 @@ __all__ = [
     "CANONICAL_PROJECTION",
     "CORE_SPREAD_NOTE",
     "DEFAULT_METRIC",
+    "MAX_LISTED_RISCS",
     "MAX_RISC_NAME_LENGTH",
     "MAX_SIGNPOST_NAME_LENGTH",
     "MAX_ZONE_NAME_LENGTH",
