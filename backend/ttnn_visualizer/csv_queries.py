@@ -897,16 +897,14 @@ class DeviceLogMeta(NamedTuple):
     max_cores: Optional[int] = None
 
 
-# A first-line name or value past this is the capture's text, not tt-metal's, whose
-# longest is a 32-character run ID; such a field is left out. #2256
+# A first-line name or value past this is the capture's text, not tt-metal's: the longest
+# in local captures is a 32-character RUN_ID. Such a field is left out. #2256
 MAX_CAPTURE_FIELD_CHARS = 64
-# First-line fields kept, of the four tt-metal writes.
+# tt-metal writes four first-line fields; past 16, the rest are left out.
 MAX_CAPTURE_FIELDS = 16
 # Searched for anywhere on the line, so a missing comma or a leading BOM still reads. A
 # number of ten digits or more is no count, rather than an int too long to parse.
-_META_ARCHITECTURE = re.compile(
-    rf"ARCH:\s*([\w\d_]{{1,{MAX_CAPTURE_FIELD_CHARS}}})(?![\w\d_])"
-)
+_META_ARCHITECTURE = re.compile(rf"ARCH:\s*(\w{{1,{MAX_CAPTURE_FIELD_CHARS}}})(?!\w)")
 _META_FREQUENCY = re.compile(r"CHIP_FREQ\[MHz\]:\s*(\d{1,9})(?!\d)")
 _META_MAX_CORES = re.compile(r"Max Compute Cores:\s*(\d{1,9})(?!\d)")
 # The meta reads only the first line, and a log with no newline must not be read whole.

@@ -163,13 +163,14 @@ first call, which refuses one that is not a readable tt-npe trace.
   `load_report` again gives a fresh handle.
 - `arch` and `device_count` are keyed by the file each was read from, since a handle's two
   reports can come from different runs. `arch.device_log` is the device profiler log's
-  header, which `capture` also returns, but for a field whose name or value runs past 64
-  characters, which tt-metal never writes, and any past the first 16; every tool reads an
-  architecture that long as none. `arch.cluster_descriptor` is what the `arch`
-  mapping in rank 0's `cluster_descriptor.yaml`, beside the memory report database, names — as
-  written, since older descriptors spell Wormhole `Wormhole` and newer ones
-  `wormhole_b0`, and joined with commas if its chips differ. The memory report database itself
-  records no architecture. `device_count.performance_csv` counts the devices the
+  header. `capture` returns the header's fields, leaving out any whose name or value runs
+  past 64 characters, which tt-metal never writes, and any after the first 16 it keeps; an
+  architecture name longer than 64 characters reads as none everywhere.
+  `arch.cluster_descriptor` is what the `arch` mapping in rank 0's
+  `cluster_descriptor.yaml`, beside the memory report database, names — as written, since
+  older descriptors spell Wormhole `Wormhole` and newer ones `wormhole_b0`, and joined
+  with commas if its chips differ. The memory report database itself records no
+  architecture. `device_count.performance_csv` counts the devices the
   performance CSV has rows for, which no other answer shows because rows are merged across
   devices; it is read with the signposts, so it is absent whenever they are.
   `device_count.profiler` counts the memory report database's devices, every rank's.
