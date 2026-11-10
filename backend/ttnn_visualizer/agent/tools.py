@@ -285,7 +285,16 @@ def _source_now(instance: Instance) -> Optional[object]:
 
 
 def _pin_source(registry: ReportRegistry, handle: str) -> Optional[object]:
-    return registry.cached_report(handle, _source_now, variant=CacheVariant.SOURCE)
+    """The capture the handle's first read found, or None while there is none: a None
+    is not kept, so a handle loaded before its CSV was written pins the first one."""
+
+    def pin(instance: Instance) -> Optional[object]:
+        source = _source_now(instance)
+        if source is None:
+            raise UnkeptSnapshot(None)
+        return source
+
+    return registry.cached_report(handle, pin, variant=CacheVariant.SOURCE)
 
 
 def _require_same_source(

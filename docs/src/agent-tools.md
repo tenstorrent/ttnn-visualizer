@@ -876,7 +876,8 @@ kept, so the next call tries again. A handle keeps answering from the capture it
 read, so it never mixes two. A read that needs the CSV again after it was rewritten, or
 after a newer `ops_perf_results` file appeared — a range not asked before, or one dropped
 from the cache — is refused rather than lined up against operations linked from the old
-capture; call `load_report` again for a fresh handle.
+capture; call `load_report` again for a fresh handle. A handle loaded before its CSV was
+written stays with the first CSV a read of it finds.
 
 **`critical_path` and `subgraph_between` read the graph's edges as the graph view does.**
 An edge runs from the operation that produced a tensor to each operation that consumed it,
