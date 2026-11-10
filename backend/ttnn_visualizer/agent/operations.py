@@ -280,9 +280,11 @@ def _buffer_type_name(value: object) -> str:
 
 L1_PRESSURE_NOTE = (
     "Sizes are bytes per bank on `device_id` only, the most constrained device: "
-    "the one with the smallest largest free block. Free-space figures are an "
-    "upper bound: `buffers` records tensor allocations only, excluding "
-    "circular buffers and tensors allocated and freed inside one operation."
+    "the one with the smallest largest free block. `buffers` records tensor "
+    "allocations only, excluding circular buffers and tensors allocated and freed "
+    "inside one operation, so free-space figures are an upper bound and in-use "
+    "figures a floor. `high_water_bytes` is where the highest recorded tensor ends, "
+    "not a peak: it can reach `usable_bytes` while L1 is mostly free."
 )
 
 NO_L1_GEOMETRY_CAVEAT = (
@@ -527,12 +529,18 @@ def _ranked_l1_pressure(
         for operation_id in sorted(operation_ids - seen):
             yield operation_id, empty
 
-    count = 0
+    count = at_top = 0
+    smallest: Optional[int] = None
 
     def counted() -> Iterator[Tuple[int, L1Pressure]]:
-        nonlocal count
+        nonlocal count, at_top, smallest
         for item in measured():
             count += 1
+            free = item[1]["largest_free_block"]
+            if smallest is None or free < smallest:
+                smallest, at_top = free, 1
+            elif free == smallest:
+                at_top += 1
             yield item
 
     top = heapq.nsmallest(
@@ -542,6 +550,9 @@ def _ranked_l1_pressure(
         "ranked_by": "largest_free_block",
         "size_unit": BUFFER_SIZE_UNIT,
         "operation_count": count,
+        # As `operations_at_peak`: tens of operations routinely share the top, and
+        # a limit that shows ten of them must not read as all there are.
+        "operations_at_top": at_top,
         "returned": len(top),
         "operations": [
             _ranked_row(operation_id, names.get(operation_id), pressure)
@@ -1089,6 +1100,11 @@ def memory_profile(
     hold almost no L1 tensors at all, so this reports a figure near zero for a
     model saturating L1. Neither the true peak nor the operation holding it can
     be derived from this response. #2034
+
+    `l1_pressure` ranks the operations by their most constrained device's largest free
+    block. It is None under any `buffer_type` but L1, when no operation holds L1
+    buffers, and, with a caveat, when no device records an L1 window or the devices
+    rows cannot be attributed to the rank.
 
     Nothing here adds one memory type to another. `max_size_per_bank` is divided
     by the bank count of its own memory type, and those counts differ, so a
