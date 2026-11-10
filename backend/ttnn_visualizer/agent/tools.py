@@ -1130,8 +1130,10 @@ def _core_figures(cores: Dict[tuple, CoreSpan], clock_mhz: float) -> Dict[str, o
         for risc, cycles in span.risc_cycles.items():
             risc_us[risc].append(cycles / clock_mhz)
     slowest = sorted(core_us.items(), key=lambda item: item[1], reverse=True)
-    shown, too_long = _shown_and_dropped(sorted(risc_us), _risc_shown)
-    listed = shown[:MAX_LISTED_RISCS]
+    listed, too_long = _shown_and_dropped(
+        sorted(risc_us), _risc_shown, MAX_LISTED_RISCS
+    )
+    past_cap = len(risc_us) - too_long - len(listed)
     figures: Dict[str, object] = {
         "cores_in_log": len(cores),
         "core_span": _spread(list(core_us.values())),
@@ -1143,8 +1145,8 @@ def _core_figures(cores: Dict[tuple, CoreSpan], clock_mhz: float) -> Dict[str, o
     }
     if too_long:
         figures["by_risc_unlisted_too_long"] = too_long
-    if len(shown) > len(listed):
-        figures["by_risc_unlisted_past_cap"] = len(shown) - len(listed)
+    if past_cap:
+        figures["by_risc_unlisted_past_cap"] = past_cap
     return figures
 
 
@@ -1210,8 +1212,8 @@ def _span_request(row: Dict) -> SpanRequest:
 class _CoreSpreadIndex:
     """Every device op's spread, kept per handle so drilling in costs one log read.
 
-    About 4 KB an op of five RISCs and 14 KB at the RISC cap, where the spans they
-    come from are a core's each.
+    About 5 KB an op of five RISCs and 16 KB at the RISC cap on 130 cores, where the
+    spans they come from are a core's each.
     """
 
     figures: Dict[SpanRequest, Dict[str, object]]
