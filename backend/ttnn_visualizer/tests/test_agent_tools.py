@@ -35,6 +35,7 @@ from ttnn_visualizer.agent.handles import (
     UnkeptSnapshot,
     UnknownHandleError,
     load_report,
+    without_performance_csv,
 )
 from ttnn_visualizer.csv_queries import (
     DegradedPerformanceReport,
@@ -62,6 +63,7 @@ from ttnn_visualizer.tests.smoke_capture import (
     SIGNPOST_START_POSITION,
     SIGNPOSTED_WINDOW_IDS,
     SMOKE_CAPTURE_DIR,
+    append_unparsable_row,
     signpost,
     signposted_rows,
     smoke_rows,
@@ -75,6 +77,9 @@ from ttnn_visualizer.tests.test_device_log_columns import (
     write_device_log,
 )
 from ttnn_visualizer.utils import newest_ops_perf_file
+
+# What a CSV pandas cannot parse is refused with, ahead of pandas' own wording.
+SIGNPOST_PREFIX = "could not read the report's signposts"
 
 ZONED_ROWS = [
     # Two cores running the same zone, so `cores` counts distinctly from
@@ -216,24 +221,66 @@ class TestPerfCsvTools:
 
         assert answerable(None) - answerable("bad") == PERF_CSV_TOOLS
 
-    def test_a_csv_pandas_cannot_parse_moves_them_and_no_other(self, tmp_path):
-        """Beside a device log, so `core_spread` moves and the zone tools stay."""
-        write_device_log(tmp_path, MODERN_HEADER, ZONED_ROWS)
-        write_ops_perf(tmp_path, smoke_rows())
-        with (tmp_path / "ops_perf_results.csv").open("a") as out:
-            out.write('"unclosed,row\n')
-        registry = ReportRegistry()
-
-        loaded = tools.with_signposts(
-            registry, load_report(registry, performance_path=str(tmp_path))
+    @staticmethod
+    def _capture(directory, parses):
+        """Beside a device log, with the program-cache columns, so every moved tool
+        but `critical_path`, which needs a database, starts answerable."""
+        write_ops_perf(
+            directory,
+            [
+                {**row, "PROGRAM HASH": "1", "PROGRAM CACHE HIT": "False"}
+                for row in smoke_rows()
+            ],
         )
+        write_device_log(directory, MODERN_HEADER, ZONED_ROWS)
+        if not parses:
+            append_unparsable_row(directory)
+        registry = ReportRegistry()
+        loaded = tools.with_signposts(
+            registry, load_report(registry, performance_path=str(directory))
+        )
+        return registry, loaded
 
+    def test_a_csv_pandas_cannot_parse_moves_them_and_no_other(self, tmp_path):
+        """`core_spread` and `program_cache` move with the rest, and the zone tools stay."""
+        moved = PERF_CSV_TOOLS - {"critical_path"}
+        _, sound = self._capture(tmp_path / "sound", parses=True)
+        _, loaded = self._capture(tmp_path / "unclosed", parses=False)
+
+        assert moved <= set(sound["answerable"])
         assert set(loaded["answerable"]) == {"zone_timings", "zone_intervals"}
-        assert {"top_ops", "op_breakdown", "core_spread"} <= set(loaded["unanswerable"])
+        assert moved <= set(loaded["unanswerable"])
         assert len(loaded["unanswerable"]) == len(set(loaded["unanswerable"]))
         assert set(loaded["answerable"]).isdisjoint(loaded["unanswerable"])
-        with pytest.raises(DataFormatError, match="EOF inside string"):
-            tools.top_ops(registry, loaded["handle"])
+        assert SIGNPOST_PREFIX in loaded["performance_csv_problem"]
+        assert "signposts" not in loaded
+        assert "signposts_problem" not in loaded
+
+    @pytest.mark.parametrize(
+        "tool", ["top_ops", "op_breakdown", "core_spread", "program_cache"]
+    )
+    def test_each_tool_it_moves_refuses_the_csv(self, tmp_path, tool):
+        registry, loaded = self._capture(tmp_path, parses=False)
+
+        with pytest.raises(DataFormatError, match=SIGNPOST_PREFIX):
+            getattr(tools, tool)(registry, loaded["handle"])
+
+    def test_without_performance_csv_moves_only_the_csv_tools(self):
+        loaded = {
+            "handle": "h",
+            "answerable": ["find_operations", "top_ops", "zone_timings"],
+            "unanswerable": ["critical_path"],
+            "performance_csv_problem": None,
+        }
+
+        moved = without_performance_csv(loaded, "could not parse")
+
+        assert moved == {
+            "handle": "h",
+            "answerable": ["find_operations", "zone_timings"],
+            "unanswerable": ["critical_path", "top_ops"],
+            "performance_csv_problem": "could not parse",
+        }
 
 
 class TestReportInventory:
@@ -845,8 +892,7 @@ class TestReportFacts:
         self, tmp_path, event_log_directory
     ):
         write_ops_perf(tmp_path, smoke_rows())
-        with (tmp_path / "ops_perf_results.csv").open("a") as out:
-            out.write('"unclosed,row\n')
+        append_unparsable_row(tmp_path)
 
         response = server.handle_message(
             {
@@ -864,7 +910,8 @@ class TestReportFacts:
         assert "isError" not in response["result"]
         loaded = json.loads(response["result"]["content"][0]["text"])
         assert loaded["device_count"] == {}
-        assert "EOF inside string" in loaded["performance_csv_problem"]
+        assert SIGNPOST_PREFIX in loaded["performance_csv_problem"]
+        assert "top_ops" in loaded["unanswerable"]
 
     @pytest.mark.parametrize(
         "schema",
@@ -1025,29 +1072,10 @@ class TestLoadReportSignposts:
         assert "signposts" not in loaded
         assert "signposts_problem" not in loaded
 
-    def test_signposts_that_cannot_be_read_say_why(self, tmp_path):
-        """A quote left open passes the line scan behind performance_csv_problem."""
-        write_ops_perf(tmp_path, smoke_rows())
-        with (tmp_path / "ops_perf_results.csv").open("a") as out:
-            out.write('"unclosed,signpost\n')
-        registry = ReportRegistry()
-
-        loaded = tools.with_signposts(
-            registry, load_report(registry, performance_path=str(tmp_path))
-        )
-
-        assert "could not read the report's signposts" in (
-            loaded["performance_csv_problem"]
-        )
-        assert "signposts" not in loaded
-        assert "signposts_problem" not in loaded
-        assert PERF_CSV_TOOLS.isdisjoint(loaded["answerable"])
-
     def test_signposts_that_cannot_be_read_are_parsed_once_per_capture(self, tmp_path):
         """Loading the capture again, or asking it a range, parsed to the failure again."""
         write_ops_perf(tmp_path, smoke_rows())
-        with (tmp_path / "ops_perf_results.csv").open("a") as out:
-            out.write('"unclosed,signpost\n')
+        append_unparsable_row(tmp_path)
         registry = ReportRegistry()
 
         with patch.object(
@@ -1063,7 +1091,7 @@ class TestLoadReportSignposts:
                 tools.top_ops(registry, answers[0]["handle"], start_signpost="A")
 
         resolve.assert_called_once()
-        assert "EOF inside string" in answers[0]["performance_csv_problem"]
+        assert SIGNPOST_PREFIX in answers[0]["performance_csv_problem"]
         assert (
             answers[0]["performance_csv_problem"]
             == answers[1]["performance_csv_problem"]
@@ -1134,14 +1162,14 @@ class TestLoadReportSignposts:
         assert {"top_ops", "op_breakdown"} <= set(loaded["answerable"])
 
     @pytest.mark.parametrize(
-        "error, field",
+        "error, field, tools_answer",
         [
-            (TypeError("'<' not supported"), "signposts_problem"),
-            (DataFormatError("EOF inside string"), "performance_csv_problem"),
+            (TypeError("'<' not supported"), "signposts_problem", True),
+            (DataFormatError("EOF inside string"), "performance_csv_problem", False),
         ],
     )
     def test_a_signpost_read_that_fails_never_refuses_the_report(
-        self, tmp_path, error, field
+        self, tmp_path, error, field, tools_answer
     ):
         """The signposts describe the capture; failing to read them is said, not raised.
         A CSV that does not parse is one no tool reading it can answer. #2198"""
@@ -1152,7 +1180,7 @@ class TestLoadReportSignposts:
         assert loaded[field] == str(error)
         assert "signposts" not in loaded
         # Only a CSV that does not parse costs the tools their answer.
-        assert ("top_ops" in loaded["answerable"]) is (field == "signposts_problem")
+        assert ("top_ops" in loaded["answerable"]) is tools_answer
 
     def test_a_capture_rewritten_after_loading_is_refused(self, tmp_path):
         """The listing pins the capture at load, so a handle never mixes two."""
