@@ -524,8 +524,8 @@ def _fits_int64(numbers: pd.Series) -> np.ndarray:
 
 
 def _is_whole(numbers: pd.Series) -> np.ndarray:
-    """Whether each cell is a whole number, which a cast to int64 would not truncate:
-    tt-metal writes slots, cores, runs and cycle counts as integers. #2259"""
+    """Whether each cell is whole, which a cast to int64 would not truncate; inf is, so
+    it pairs with `_fits_int64`. tt-metal writes all four columns as integers. #2259"""
     if pd.api.types.is_integer_dtype(numbers):
         return np.ones(len(numbers), dtype=bool)
     values = numbers.to_numpy(dtype=float)
