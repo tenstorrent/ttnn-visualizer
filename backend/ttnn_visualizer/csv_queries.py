@@ -511,8 +511,8 @@ def _inexact_as_floats(chunk: pd.DataFrame, columns: Sequence[str]) -> bool:
 
 
 def _fits_int64(numbers: pd.Series) -> np.ndarray:
-    """Whether each cell holds an int64, checked in the column's own dtype: read as
-    floats, an int64 column's top 512 values would round up to 2**63."""
+    """Whether each cell lies in int64's range, checked in the column's own dtype: read
+    as floats, an int64 column's top 512 values would round up to 2**63."""
     if pd.api.types.is_signed_integer_dtype(numbers):
         return np.ones(len(numbers), dtype=bool)
     if pd.api.types.is_unsigned_integer_dtype(numbers):
@@ -529,8 +529,7 @@ def _is_whole(numbers: pd.Series) -> np.ndarray:
     if pd.api.types.is_integer_dtype(numbers):
         return np.ones(len(numbers), dtype=bool)
     values = numbers.to_numpy(dtype=float)
-    with np.errstate(invalid="ignore"):
-        return np.floor(values) == values
+    return np.floor(values) == values
 
 
 def _whole_number_rows(
