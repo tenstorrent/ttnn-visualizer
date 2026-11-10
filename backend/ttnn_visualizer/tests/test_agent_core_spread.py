@@ -525,6 +525,11 @@ class TestUnreadableCells:
             pytest.param(
                 _zone(0, "-1e30", 1, "BRISC", 0, 9000), 2, id="core-below-int64"
             ),
+            pytest.param(_zone("0.5", 4, 1, "BRISC", 0, 9000), 2, id="slot-not-whole"),
+            pytest.param(_zone(0, "4.5", 1, "BRISC", 0, 9000), 2, id="core-not-whole"),
+            pytest.param(
+                _zone(0, 4, 1, "BRISC", 0, "9000.5"), 1, id="cycles-not-whole"
+            ),
         ],
     )
     def test_a_row_with_a_cell_that_cannot_be_read_is_left_out(

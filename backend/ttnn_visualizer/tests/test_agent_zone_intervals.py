@@ -808,6 +808,26 @@ class TestGaps:
                 False,
                 id="run-past-int64",
             ),
+            pytest.param(
+                modern_row("0.5", 1, 1, "BRISC", 1500, LOOP, "ZONE_START"),
+                True,
+                id="slot-not-whole",
+            ),
+            pytest.param(
+                modern_row(0, "1.5", 1, "BRISC", 1500, LOOP, "ZONE_START"),
+                True,
+                id="core-not-whole",
+            ),
+            pytest.param(
+                modern_row(0, 1, 1, "BRISC", "1500.5", LOOP, "ZONE_START"),
+                True,
+                id="cycles-not-whole",
+            ),
+            pytest.param(
+                modern_row(0, 1, 1, "BRISC", 1500, LOOP, "ZONE_START", run="1.5"),
+                True,
+                id="run-not-whole",
+            ),
         ],
     )
     def test_unreadable_rows_are_left_out_and_counted(self, tmp_path, bad, held):
