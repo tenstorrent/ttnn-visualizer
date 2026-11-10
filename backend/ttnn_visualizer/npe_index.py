@@ -10,9 +10,10 @@ renders only the transfers active at one timestep (~tens of them). This builds a
 timestep-keyed SQLite index once, so the frontend can fetch just the visible
 window (~135 KB) instead of the whole payload.
 
-The build parses the whole object in memory; the agent's `noc_congestion` reads a
-trace a timestep at a time (`streamed_link_demand`), which a build could share to bound
-its peak RSS on the multi-user hosted path.
+The build parses the whole object in memory. The agent's `noc_congestion` reads a
+trace a timestep at a time (`streamed_link_demand`); a build reading the same way would
+bound its peak RSS on the multi-user hosted path, once its walk of the JSON is split
+from the link-demand rules it applies.
 """
 
 import contextlib
@@ -502,33 +503,20 @@ class LinkDemand(NamedTuple):
     unreadable_timesteps: int = 0
 
 
-class _TransferIds:
-    """The ids of transfers seen one at a time, counted as `_write_index` stores them."""
-
-    def __init__(self) -> None:
-        self.ids: set = set()
-        self.spelled: List[object] = []
-
-    def add(self, transfer: object) -> None:
+def _transfer_count(transfers: object) -> int:
+    """Transfers as `_write_index` stores them: one row per id, none without one."""
+    if not isinstance(transfers, (list, _Elements)):
+        return 0
+    ids = set()
+    spelled: List[object] = []
+    for transfer in transfers:
         if isinstance(transfer, dict):
             tid = _transfer_id(transfer)
             if isinstance(tid, int):
-                self.ids.add(tid)
+                ids.add(tid)
             elif isinstance(tid, (float, str)):
-                self.spelled.append(tid)
-
-    def count(self) -> int:
-        return len(self.ids.union(_integer_keys(self.spelled)))
-
-
-def _transfer_count(transfers: object) -> int:
-    """Transfers as `_write_index` stores them: one row per id, none without one."""
-    if not isinstance(transfers, list):
-        return 0
-    ids = _TransferIds()
-    for transfer in transfers:
-        ids.add(transfer)
-    return ids.count()
+                spelled.append(tid)
+    return len(ids.union(_integer_keys(spelled)))
 
 
 def _integer_keys(values: List[object]) -> List[int]:
@@ -577,7 +565,8 @@ def indexed_link_demand(npe_path: Path) -> Iterator[Optional[LinkDemand]]:
 
 
 def trace_link_demand(trace: object) -> LinkDemand:
-    """A parsed trace's link demand, read as `_write_index` would store it."""
+    """A parsed trace's link demand, read as `_write_index` would store it: the
+    reference `StreamedLinkDemand` is tested against."""
     if not isinstance(trace, dict) or not isinstance(trace.get("timestep_data"), list):
         raise ValueError("it holds no timestep_data list, so it is not a tt-npe trace")
     steps = trace["timestep_data"]
@@ -595,38 +584,57 @@ def trace_link_demand(trace: object) -> LinkDemand:
 
 
 def trace_text(data: bytes, compressed: bool) -> str:
-    """A trace's bytes as the text `streamed_link_demand` reads: zstd frames, or JSON."""
+    """A trace's bytes, zstd frames or JSON, one character a byte for
+    `streamed_link_demand` to scan: a character past Latin-1 anywhere would make the
+    whole text two or four bytes a character, and orjson checks the UTF-8 itself."""
     if compressed:
-        # Rebound, so the compressed bytes are freed before the decode.
         data = zstd.uncompress(data)
-    return data.decode("utf-8")
+    return data.decode("latin-1")
 
 
 _JSON_SPACE = re.compile(r"[ \t\n\r]*")
-# Finds where a value ends; orjson then reads it, so each reads as `parse_trace` would.
+# Finds where a value ends; orjson then reads it, so each value reads as `parse_trace`
+# would read it, and a refusal falls where its refusal would.
 _VALUE_END = json.JSONDecoder()
+_NOT_A_TRACE = "it holds no timestep_data list, so it is not a tt-npe trace"
 
 
 class StreamedLinkDemand:
     """`trace_link_demand` of a trace's text, read a timestep at a time rather than
-    parsed whole, so the parse never holds the trace. Its other fields are final once
-    `timesteps` has been read through. #2275"""
+    parsed whole, so the read never holds the parsed trace. #2275"""
 
     truncated = False
 
     def __init__(self, text: str) -> None:
-        self.common_info: dict = {}
-        self.transfer_count = 0
-        self.unreadable_timesteps = 0
+        self._common_info: dict = {}
+        self._transfer_count = 0
+        self._unreadable_timesteps = 0
+        self._read_through = False
         self.timesteps: Iterator[Tuple[Any, Any, Any]] = self._walk(text)
+
+    @property
+    def common_info(self) -> dict:
+        return self._final(self._common_info)
+
+    @property
+    def transfer_count(self) -> int:
+        return self._final(self._transfer_count)
+
+    @property
+    def unreadable_timesteps(self) -> int:
+        return self._final(self._unreadable_timesteps)
+
+    def _final(self, field: Any) -> Any:
+        # Read before the timesteps, a field would be its default, not the trace's.
+        if not self._read_through:
+            raise RuntimeError("read the timesteps through before the other fields")
+        return field
 
     def _walk(self, text: str) -> Iterator[Tuple[Any, Any, Any]]:
         at = _space(text, 0)
         if not text.startswith("{", at):
-            trace_link_demand(orjson.loads(text))
-            _refuse(text)
+            raise ValueError(_NOT_A_TRACE)
         at = _space(text, at + 1)
-        transfers: Optional[_TransferIds] = None
         steps_read = False
         while not text.startswith("}", at):
             key, at = _key(text, at)
@@ -635,46 +643,43 @@ class StreamedLinkDemand:
                 raise ValueError("it names timestep_data twice")
             if text.startswith("[", at):
                 values = _Elements(text, at)
-                if key == "timestep_data":
-                    steps_read = True
-                    yield from self._steps(values)
-                else:
-                    ids = _ids_or_none(key, values)
-                    transfers = ids if key == "noc_transfers" else transfers
+                steps_read = steps_read or key == "timestep_data"
+                yield from self._array(key, values)
                 at = values.end
             else:
                 value, at = _value(text, at)
-                if key == "common_info":
-                    self.common_info = value if isinstance(value, dict) else {}
-                transfers = None if key == "noc_transfers" else transfers
+                self._take(key, value)
             at = _after_member(text, at, "}")
-        if text[_space(text, at + 1) :]:
-            _refuse(text)
+        end = _space(text, at + 1)
+        if end < len(text):
+            _refuse(text, end, "Extra data")
         if not steps_read:
-            raise ValueError(
-                "it holds no timestep_data list, so it is not a tt-npe trace"
-            )
-        self.transfer_count = transfers.count() if transfers is not None else 0
+            raise ValueError(_NOT_A_TRACE)
+        self._read_through = True
 
-    def _steps(self, values: "_Elements") -> Iterator[Tuple[Any, Any, Any]]:
-        for step in values:
-            if isinstance(step, dict):
-                yield _step_cells(step)
+    def _array(self, key: str, values: "_Elements") -> Iterator[Tuple[Any, Any, Any]]:
+        """A member whose value is an array, its elements read one at a time."""
+        if key == "noc_transfers":
+            self._transfer_count = _transfer_count(values)
+            return
+        if key == "common_info":
+            # The last of two is the one kept, as orjson keeps it.
+            self._common_info = {}
+        for value in values:
+            if key != "timestep_data":
+                continue
+            if isinstance(value, dict):
+                yield _step_cells(value)
             else:
-                self.unreadable_timesteps += 1
+                self._unreadable_timesteps += 1
                 yield None, None, []
 
-
-def _ids_or_none(key: str, values: "_Elements") -> Optional[_TransferIds]:
-    """The transfer ids of `noc_transfers`' elements; any other array is read and let go."""
-    if key != "noc_transfers":
-        for _ in values:
-            pass
-        return None
-    ids = _TransferIds()
-    for transfer in values:
-        ids.add(transfer)
-    return ids
+    def _take(self, key: str, value: object) -> None:
+        """A member whose value is not an array."""
+        if key == "common_info":
+            self._common_info = value if isinstance(value, dict) else {}
+        elif key == "noc_transfers":
+            self._transfer_count = 0
 
 
 class _Elements:
@@ -704,16 +709,23 @@ def _space(text: str, at: int) -> int:
 
 def _value(text: str, at: int) -> Tuple[object, int]:
     """orjson's read of the value at `at`, and where it ends."""
-    _, end = _VALUE_END.raw_decode(text, at)
-    return orjson.loads(text[at:end]), end
+    # Only the end: the scanner's object is let go before orjson builds its own.
+    end = _VALUE_END.raw_decode(text, at)[1]
+    try:
+        return orjson.loads(text[at:end].encode("latin-1")), end
+    except orjson.JSONDecodeError as error:
+        # Where in the trace, as the whole parse would say, not where in the value.
+        raise json.JSONDecodeError(error.msg, text, at + error.pos) from None
 
 
 def _key(text: str, at: int) -> Tuple[str, int]:
     """The member name at `at` as orjson reads it, and where its value starts."""
-    key, at = _value(text, at) if text.startswith('"', at) else (None, at)
+    if not text.startswith('"', at):
+        _refuse(text, at, "Expecting property name enclosed in double quotes")
+    key, at = _value(text, at)
     at = _space(text, at)
-    if not isinstance(key, str) or not text.startswith(":", at):
-        _refuse(text)
+    if not text.startswith(":", at):
+        _refuse(text, at, "Expecting ':' delimiter")
     return cast(str, key), _space(text, at + 1)
 
 
@@ -723,20 +735,20 @@ def _after_member(text: str, at: int, close: str) -> int:
     if text.startswith(",", at):
         at = _space(text, at + 1)
         if text.startswith(close, at):
-            _refuse(text)
+            _refuse(text, at, "Expecting a value after ','")
         return at
     if not text.startswith(close, at):
-        _refuse(text)
+        _refuse(text, at, f"Expecting ',' or '{close}'")
     return at
 
 
-def _refuse(text: str) -> NoReturn:
-    """orjson's refusal of text the read could not follow, or one of its own."""
-    orjson.loads(text)
-    raise ValueError("its JSON could not be read a timestep at a time")
+def _refuse(text: str, at: int, reason: str) -> NoReturn:
+    """A refusal of the JSON at `at`, where the whole parse would refuse it."""
+    raise json.JSONDecodeError(reason, text, at)
 
 
 def streamed_link_demand(text: str) -> StreamedLinkDemand:
+    """The link demand of a trace's text, read a timestep at a time."""
     return StreamedLinkDemand(text)
 
 

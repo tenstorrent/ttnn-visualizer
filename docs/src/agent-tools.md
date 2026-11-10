@@ -807,9 +807,10 @@ a timestep at a time: a trace of tens of thousands of timesteps and millions of 
 takes seconds to tens of seconds and about twice its JSON's size at its peak, against
 several times that for building the visualizer's index. A trace past 64 MiB of JSON is
 read in a process of its own, so that memory goes back to the system when the read ends
-rather than staying with the server. A trace whose JSON passes
-1 GiB, summed over every zstd frame, or a `.zst` file itself past that size, is refused
-rather than parsed, and so is a `.zst` with a frame that does not declare its size. Later
+rather than staying with the server; starting it adds about half a second, and it ends
+with the server if the server is stopped mid-read. A trace whose JSON passes 1 GiB, summed over every
+zstd frame, or a `.zst` file itself past that size, is refused rather than read, and so
+is a `.zst` with a frame that does not declare its size. Later
 calls answer from the first read, and so does every handle on the same unchanged file. A
 handle stays with the trace it first read: if the file changes or goes away afterwards,
 its answers say so in their caveat, and a fresh `load_report` reads the new one.

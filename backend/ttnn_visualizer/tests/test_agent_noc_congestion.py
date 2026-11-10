@@ -1268,9 +1268,11 @@ class TestReadApart:
             _answer(path)
         assert len(apart) == 1
 
-    def test_a_reading_process_that_ends_unanswered_is_a_refusal(
+    def test_a_reading_process_that_ends_unanswered_is_tried_again(
         self, tmp_path, monkeypatch
     ):
+        """What ended it may pass, so the failure is not kept as a refusal is."""
+
         class _Ended:
             def __init__(self, *arguments, **options):
                 pass
@@ -1284,11 +1286,18 @@ class TestReadApart:
             def submit(self, *arguments):
                 raise BrokenProcessPool("a reading process ended")
 
+        registry = ReportRegistry()
+        handle = _load(registry, _write(tmp_path, _hand_checked()))
         monkeypatch.setattr(noc_congestion, "MAX_INLINE_TRACE_JSON_BYTES", 0)
         monkeypatch.setattr(noc_congestion, "ProcessPoolExecutor", _Ended)
 
-        with pytest.raises(ValueError, match="ended before it answered"):
-            _answered(tmp_path, _hand_checked())
+        with pytest.raises(RuntimeError, match="ended before it answered"):
+            _call(registry, handle)
+        monkeypatch.undo()
+
+        assert _call(registry, handle)["timesteps"] == len(
+            _hand_checked()["timestep_data"]
+        )
 
 
 class TestLoadReport:

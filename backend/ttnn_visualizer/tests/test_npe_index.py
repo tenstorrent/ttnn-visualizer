@@ -931,6 +931,13 @@ def _read_through(rows):
     )
 
 
+def _streamed(text: str):
+    """The streamed read of a trace's JSON, given as the tool gives it: its bytes."""
+    return streamed_link_demand(
+        trace_text(text.encode("utf-8", "surrogatepass"), False)
+    )
+
+
 _STREAMED_TRACES = {
     "every-field": {
         "common_info": {"arch": "blackhole", "cycles_per_timestep": 128},
@@ -974,7 +981,7 @@ def test_a_streamed_read_answers_as_the_whole_parse_does(name, indent):
     if name == "repeated-members":
         text = _with_repeats(text)
 
-    assert _read_through(streamed_link_demand(text)) == _read_through(
+    assert _read_through(_streamed(text)) == _read_through(
         trace_link_demand(orjson.loads(text))
     )
 
@@ -992,7 +999,7 @@ def test_a_streamed_read_answers_as_the_whole_parse_does(name, indent):
 )
 def test_a_streamed_read_refuses_what_holds_no_timestep_data_list(text):
     with pytest.raises(ValueError, match="no timestep_data list"):
-        _read_through(streamed_link_demand(text))
+        _read_through(_streamed(text))
 
 
 @pytest.mark.parametrize(
@@ -1015,25 +1022,25 @@ def test_a_streamed_read_refuses_what_orjson_refuses(text):
     with pytest.raises(orjson.JSONDecodeError):
         orjson.loads(text)
     with pytest.raises(json.JSONDecodeError):
-        _read_through(streamed_link_demand(text))
+        _read_through(_streamed(text))
 
 
 def test_a_streamed_read_refuses_timestep_data_named_twice():
     """orjson keeps the second, and the first has already been read."""
     with pytest.raises(ValueError, match="names timestep_data twice"):
-        _read_through(
-            streamed_link_demand('{"timestep_data": [], "timestep_data": []}')
-        )
+        _read_through(_streamed('{"timestep_data": [], "timestep_data": []}'))
 
 
 def test_a_streamed_read_holds_one_timestep_at_a_time():
-    """No timestep is read before the one before it has been handed on."""
-    steps = [{"start_cycle": index} for index in range(3)]
-    rows = streamed_link_demand(orjson.dumps({"timestep_data": steps}).decode())
+    """A timestep is handed on before the next is read, so a bad second one is found
+    only after the first has been."""
+    rows = _streamed('{"timestep_data": [{"start_cycle": 0}, NaN]}')
 
     assert next(rows.timesteps) == (0, None, [])
-    assert rows.unreadable_timesteps == 0
-    assert [step[0] for step in rows.timesteps] == [1, 2]
+    with pytest.raises(RuntimeError, match="read the timesteps through"):
+        rows.unreadable_timesteps
+    with pytest.raises(json.JSONDecodeError):
+        next(rows.timesteps)
 
 
 def test_trace_text_reads_zstd_frames_and_json():

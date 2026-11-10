@@ -13,9 +13,11 @@ import io
 import json
 import logging
 import multiprocessing
+import multiprocessing.connection
 import os
 import stat
 import sys
+import threading
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass, field
@@ -331,14 +333,14 @@ def _trace_bytes(npe_path: Path, compressed: bool) -> bytes:
 
 
 def _from_trace(npe_path: Path) -> _NocRead:
-    """The trace's link demand from the trace itself, read a timestep at a time."""
+    """The trace's summed link demand, read from the trace a timestep at a time."""
     # Every refusal `from None`: its message carries the cause, and no frame of the read.
     compressed = npe_path.suffix == ".zst"
     try:
         text = npe_index.trace_text(_trace_bytes(npe_path, compressed), compressed)
     except OSError as error:
         raise ValueError(f"{npe_path.name} cannot be read: {error.strerror}") from None
-    except (UnicodeDecodeError, zstd.Error) as error:
+    except zstd.Error as error:
         raise ValueError(
             f"{npe_path.name} is not a readable tt-npe trace: {error}"
         ) from None
@@ -356,9 +358,24 @@ def _from_trace(npe_path: Path) -> _NocRead:
         raise ValueError(f"{npe_path.name}: {error}") from None
 
 
-def _quiet_stdout() -> None:
-    """Keep a reading process off stdout, which carries the server's messages."""
-    os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
+def _reader_setup() -> None:
+    """Keep a reading process off stdout, which carries the server's messages, and end
+    it with the server: a pool's worker outlives a killed parent, holding the read."""
+    try:
+        quiet = sys.stderr.fileno()
+    except (AttributeError, OSError, ValueError):
+        quiet = os.open(os.devnull, os.O_WRONLY)
+    os.dup2(quiet, 1)
+    parent = multiprocessing.parent_process()
+    if parent is not None:
+        threading.Thread(
+            target=_exit_with, args=(parent.sentinel,), daemon=True
+        ).start()
+
+
+def _exit_with(sentinel: int) -> None:
+    multiprocessing.connection.wait([sentinel])
+    os._exit(1)
 
 
 def _read_trace(npe_path: Path) -> _NocRead:
@@ -368,17 +385,23 @@ def _read_trace(npe_path: Path) -> _NocRead:
         size = npe_index.trace_size(npe_path)
     except OSError:
         size = None
-    if size is None or size <= MAX_INLINE_TRACE_JSON_BYTES:
+    # Past the cap the read refuses it at once, so no process is started for it.
+    if size is None or not MAX_INLINE_TRACE_JSON_BYTES < size <= MAX_TRACE_JSON_BYTES:
         return _from_trace(npe_path)
     with ProcessPoolExecutor(
-        1, mp_context=multiprocessing.get_context("spawn"), initializer=_quiet_stdout
+        1, mp_context=multiprocessing.get_context("spawn"), initializer=_reader_setup
     ) as reader:
         try:
             return reader.submit(_from_trace, npe_path).result()
-        except BrokenProcessPool:
+        except RecursionError:
+            # Sending the read back nests as deep as its `common_info` does.
             raise ValueError(
-                f"{npe_path.name}: the process reading it ended before it answered, "
-                "as one out of memory does"
+                f"{npe_path.name} is not a readable tt-npe trace: it nests too deep"
+            ) from None
+        except BrokenProcessPool:
+            # Not a refusal, which would be kept: what ended the process may pass.
+            raise RuntimeError(
+                f"{npe_path.name}: the process reading it ended before it answered"
             ) from None
 
 
