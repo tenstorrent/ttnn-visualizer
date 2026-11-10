@@ -772,7 +772,9 @@ name, `QUASAR_NEO3_TRISC3`, is 18. `zone_timings` leaves an entry with one out, 
 `zones_unlisted_too_long`, and `limit` counts only the entries listed. Both count
 zone-and-RISC entries, not names, so a long zone name on five RISCs counts five.
 `core_spread` leaves such a RISC out of `by_risc`, counted in `by_risc_unlisted_too_long`,
-though its kernels still count in their cores' spans. `zone_intervals` leaves such a
+though its kernels still count in their cores' spans, and lists at most 32 RISCs an
+operation, the first by name, counting the rest in `by_risc_unlisted_past_cap`: tt-metal
+has 32 RISC types. `zone_intervals` leaves such a
 timeline out of `by_core_risc`, counted in `by_core_risc_unlisted_too_long`, though its
 intervals still count in `by_device` and `timeline_count`.
 

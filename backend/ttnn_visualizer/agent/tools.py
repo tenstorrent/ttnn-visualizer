@@ -1099,6 +1099,8 @@ CORE_SPREAD_NOTE = (
 
 # Enough to say where the stragglers sit without listing a 130-core grid.
 SLOWEST_CORES = 5
+# tt-metal has 32 RISC types, a Quasar Tensix core runs 24, so more are the log's text.
+MAX_LISTED_RISCS = 32
 
 _PERF_PER_CORE_FIELDS = ("per_core_min_us", "per_core_max_us", "per_core_avg_us")
 
@@ -1127,7 +1129,8 @@ def _core_figures(cores: Dict[tuple, CoreSpan], clock_mhz: float) -> Dict[str, o
         for risc, cycles in span.risc_cycles.items():
             risc_us[risc].append(cycles / clock_mhz)
     slowest = sorted(core_us.items(), key=lambda item: item[1], reverse=True)
-    listed, too_long = _shown_and_dropped(sorted(risc_us), _risc_shown)
+    shown, too_long = _shown_and_dropped(sorted(risc_us), _risc_shown)
+    listed = shown[:MAX_LISTED_RISCS]
     figures: Dict[str, object] = {
         "cores_in_log": len(cores),
         "core_span": _spread(list(core_us.values())),
@@ -1139,6 +1142,8 @@ def _core_figures(cores: Dict[tuple, CoreSpan], clock_mhz: float) -> Dict[str, o
     }
     if too_long:
         figures["by_risc_unlisted_too_long"] = too_long
+    if len(shown) > len(listed):
+        figures["by_risc_unlisted_past_cap"] = len(shown) - len(listed)
     return figures
 
 
@@ -2111,6 +2116,7 @@ __all__ = [
     "CANONICAL_PROJECTION",
     "CORE_SPREAD_NOTE",
     "DEFAULT_METRIC",
+    "MAX_LISTED_RISCS",
     "MAX_RISC_NAME_LENGTH",
     "MAX_SIGNPOST_NAME_LENGTH",
     "MAX_ZONE_NAME_LENGTH",
