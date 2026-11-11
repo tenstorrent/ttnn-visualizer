@@ -900,7 +900,8 @@ class DeviceLogMeta(NamedTuple):
 # Twice the longest first-line name or value tt-metal writes, a 32-character RUN_ID, so a
 # field it adds still reads while a crafted one cannot fill an answer. #2256
 MAX_CAPTURE_FIELD_CHARS = 64
-# Four times the fields tt-metal writes, for the same reason.
+# Four times the fields tt-metal writes, for the same reason. The patterns below read
+# past it, so a clock or ARCH after the cap reaches only the tools that use them. #2292
 MAX_CAPTURE_FIELDS = 16
 # Searched for anywhere on the line, so a missing comma or a leading BOM still reads. A
 # number of ten digits or more is no count, rather than an int too long to parse.
@@ -1120,7 +1121,11 @@ class DeviceLogProfilerQueries:
     def read_capture_metadata(cls, instance: Instance) -> Dict[str, str]:
         """The `ARCH: …, CHIP_FREQ[MHz]: …` line every device log opens with.
 
-        `__enter__` skips it (`offset=1`) because pandas would read it as a
+        A field whose name or value is over `MAX_CAPTURE_FIELD_CHARS` characters, and
+        any after the first `MAX_CAPTURE_FIELDS` names, is left out, so a key the line
+        holds can be missing here.
+
+        `__enter__` skips the line (`offset=1`) because pandas would read it as a
         header, so the only way to the clock is to read the line directly — and
         without the clock a cycle count cannot be turned into a duration.
 
