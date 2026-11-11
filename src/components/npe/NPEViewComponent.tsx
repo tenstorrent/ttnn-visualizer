@@ -62,6 +62,8 @@ import createToastNotification from '../../functions/createToastNotification';
 import { describeBakedGrids, formatGridSize } from '../../functions/formatting';
 import { ToastType } from '../../definitions/ToastType';
 import { TEST_IDS } from '../../definitions/TestIds';
+import { NpeMode } from '../../definitions/EventLogEvent';
+import { recordNpeModeChanged, recordNpePlaybackStarted } from '../../functions/surfaceEvents';
 import {
     NO_ETHERNET_OR_PCIE_EXPLANATION,
     NO_ETHERNET_OR_PCIE_TAG,
@@ -127,6 +129,21 @@ enum VISUALIZATION_MODE {
     CONGESTION,
     TRANSFERS,
 }
+
+// `null` in `nocFilter` means both NoCs are shown; a Record key cannot be null.
+const ALL_NOCS_KEY = 'all';
+
+const NPE_MODE_BY_NOC_FILTER: Readonly<Record<NoCType | typeof ALL_NOCS_KEY, NpeMode>> = Object.freeze({
+    [NoCType.NOC0]: NpeMode.NOC0,
+    [NoCType.NOC1]: NpeMode.NOC1,
+    [ALL_NOCS_KEY]: NpeMode.ALL_NOCS,
+});
+
+const NPE_MODE_BY_EVENT_TYPE_FILTER: Readonly<Record<EVENT_TYPE_FILTER, NpeMode>> = Object.freeze({
+    [EVENT_TYPE_FILTER.ALL_EVENTS]: NpeMode.ALL_EVENTS,
+    [EVENT_TYPE_FILTER.FABRIC_EVENTS]: NpeMode.FABRIC_EVENTS,
+    [EVENT_TYPE_FILTER.LOCAL_EVENTS]: NpeMode.LOCAL_EVENTS,
+});
 
 type RootzoneStateKey = string;
 const getRootZoneKey = (proc: KERNEL_PROCESS, address: NPE_COORDINATES): RootzoneStateKey => {
@@ -307,13 +324,11 @@ const NPEView = ({
     }, [transfers]);
 
     const showNOCType = (value: NoCType) => {
-        if (nocFilter === null) {
-            setNocFilter(value === NoCType.NOC0 ? NoCType.NOC1 : NoCType.NOC0);
-        } else if (nocFilter !== value) {
-            setNocFilter(null);
-        } else {
-            setNocFilter(value === NoCType.NOC0 ? NoCType.NOC1 : NoCType.NOC0);
-        }
+        const otherNoc = value === NoCType.NOC0 ? NoCType.NOC1 : NoCType.NOC0;
+        const nextNocFilter = nocFilter !== null && nocFilter !== value ? null : otherNoc;
+
+        setNocFilter(nextNocFilter);
+        recordNpeModeChanged(NPE_MODE_BY_NOC_FILTER[nextNocFilter ?? ALL_NOCS_KEY]);
     };
 
     useEffect(() => {
@@ -409,12 +424,55 @@ const NPEView = ({
         return clearInterval(animationInterval as number);
     };
 
+    // Recorded here, from the buttons, never in `startAnimation` or its interval: those run
+    // on every tick. 2x during playback changes speed rather than starting it.
     const onPlay = () => {
+        if (playbackSpeed === 0) {
+            recordNpePlaybackStarted();
+        }
+
         startAnimation();
     };
 
     const onPlay2x = () => {
+        if (playbackSpeed === 0) {
+            recordNpePlaybackStarted();
+        }
+
         startAnimation(PLAYBACK_SPEED_2X);
+    };
+
+    const handleVisualizationModeChange = (mode: VISUALIZATION_MODE) => {
+        if (mode === visualizationMode) {
+            return;
+        }
+
+        setVisualizationMode(mode);
+        recordNpeModeChanged(mode === VISUALIZATION_MODE.CONGESTION ? NpeMode.CONGESTION : NpeMode.TRANSFERS);
+    };
+
+    const handleScaleChange = (isTimestepsScale: boolean) => {
+        if (isTimestepsScale === timestepsScale) {
+            return;
+        }
+
+        setTimestepsScale(isTimestepsScale);
+        recordNpeModeChanged(isTimestepsScale ? NpeMode.TIMESTEPS_SCALE : NpeMode.CYCLES_SCALE);
+    };
+
+    // Recorded here, never from the effect that resets the filter for a trace without
+    // fabric events.
+    const handleEventTypeFilterChange = (nextFilter: EVENT_TYPE_FILTER) => {
+        setFabricEventsFilter(nextFilter);
+        recordNpeModeChanged(NPE_MODE_BY_EVENT_TYPE_FILTER[nextFilter]);
+    };
+
+    const handleOpenZonesPanel = () => {
+        if (!openZonesPanel) {
+            recordNpeModeChanged(NpeMode.ZONES);
+        }
+
+        setOpenZonesPanel(true);
     };
 
     const onPause = () => {
@@ -594,13 +652,13 @@ const NPEView = ({
                                 text='Timesteps'
                                 icon={timestepsScale ? IconNames.ENDORSED : IconNames.CIRCLE}
                                 active={timestepsScale}
-                                onClick={() => setTimestepsScale(true)}
+                                onClick={() => handleScaleChange(true)}
                             />
                             <Button
                                 text='Cycles'
                                 icon={!timestepsScale ? IconNames.ENDORSED : IconNames.CIRCLE}
                                 active={!timestepsScale}
-                                onClick={() => setTimestepsScale(false)}
+                                onClick={() => handleScaleChange(false)}
                             />
                         </ButtonGroup>
                     </div>
@@ -610,7 +668,7 @@ const NPEView = ({
                             className='zones-open-panel-btn'
                             icon={IconNames.MultiSelect}
                             active={openZonesPanel}
-                            onClick={() => setOpenZonesPanel(true)}
+                            onClick={handleOpenZonesPanel}
                             disabled={!npeData.zones}
                         />
                         <ButtonGroup
@@ -625,7 +683,7 @@ const NPEView = ({
                                         : IconNames.CIRCLE
                                 }
                                 active={visualizationMode === VISUALIZATION_MODE.CONGESTION}
-                                onClick={() => setVisualizationMode(VISUALIZATION_MODE.CONGESTION)}
+                                onClick={() => handleVisualizationModeChange(VISUALIZATION_MODE.CONGESTION)}
                             />
                             <Button
                                 text='Transfers Scope Mode'
@@ -635,13 +693,16 @@ const NPEView = ({
                                         : IconNames.CIRCLE
                                 }
                                 active={visualizationMode === VISUALIZATION_MODE.TRANSFERS}
-                                onClick={() => setVisualizationMode(VISUALIZATION_MODE.TRANSFERS)}
+                                onClick={() => handleVisualizationModeChange(VISUALIZATION_MODE.TRANSFERS)}
                             />
                         </ButtonGroup>
                         <GlobalSwitch
                             label='Alternate congestion colors'
                             checked={altCongestionColors}
-                            onChange={() => setAltCongestionColors(!altCongestionColors)}
+                            onChange={() => {
+                                setAltCongestionColors(!altCongestionColors);
+                                recordNpeModeChanged(NpeMode.ALT_CONGESTION_COLOURS);
+                            }}
                         />
                     </div>
                     <div className='npe-controls-line'>
@@ -672,15 +733,13 @@ const NPEView = ({
                                 fabricEventsFilter === EVENT_TYPE_FILTER.ALL_EVENTS
                             }
                             disabled={!isFabricTransfersFilteringEnabled}
-                            onChange={() => {
-                                if (fabricEventsFilter === EVENT_TYPE_FILTER.ALL_EVENTS) {
-                                    setFabricEventsFilter(EVENT_TYPE_FILTER.LOCAL_EVENTS);
-                                } else if (fabricEventsFilter === EVENT_TYPE_FILTER.LOCAL_EVENTS) {
-                                    setFabricEventsFilter(EVENT_TYPE_FILTER.ALL_EVENTS);
-                                } else if (fabricEventsFilter === EVENT_TYPE_FILTER.FABRIC_EVENTS) {
-                                    setFabricEventsFilter(EVENT_TYPE_FILTER.LOCAL_EVENTS);
-                                }
-                            }}
+                            onChange={() =>
+                                handleEventTypeFilterChange(
+                                    fabricEventsFilter === EVENT_TYPE_FILTER.LOCAL_EVENTS
+                                        ? EVENT_TYPE_FILTER.ALL_EVENTS
+                                        : EVENT_TYPE_FILTER.LOCAL_EVENTS,
+                                )
+                            }
                         />
                         <Switch
                             labelElement={
@@ -699,15 +758,13 @@ const NPEView = ({
                                 fabricEventsFilter === EVENT_TYPE_FILTER.ALL_EVENTS
                             }
                             disabled={!isFabricTransfersFilteringEnabled}
-                            onChange={() => {
-                                if (fabricEventsFilter === EVENT_TYPE_FILTER.ALL_EVENTS) {
-                                    setFabricEventsFilter(EVENT_TYPE_FILTER.FABRIC_EVENTS);
-                                } else if (fabricEventsFilter === EVENT_TYPE_FILTER.FABRIC_EVENTS) {
-                                    setFabricEventsFilter(EVENT_TYPE_FILTER.ALL_EVENTS);
-                                } else if (fabricEventsFilter === EVENT_TYPE_FILTER.LOCAL_EVENTS) {
-                                    setFabricEventsFilter(EVENT_TYPE_FILTER.FABRIC_EVENTS);
-                                }
-                            }}
+                            onChange={() =>
+                                handleEventTypeFilterChange(
+                                    fabricEventsFilter === EVENT_TYPE_FILTER.FABRIC_EVENTS
+                                        ? EVENT_TYPE_FILTER.ALL_EVENTS
+                                        : EVENT_TYPE_FILTER.FABRIC_EVENTS,
+                                )
+                            }
                         />
 
                         <RemountOnResize>
