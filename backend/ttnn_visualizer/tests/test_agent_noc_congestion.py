@@ -10,18 +10,22 @@ the app's index of a trace when that is current and the trace itself otherwise, 
 parity tests answer one trace both ways.
 """
 
+import contextlib
 import gc
+import hashlib
 import json
 import logging
 import math
 import os
 import select
+import signal
 import sqlite3
 import subprocess
 import sys
 import time
+import tracemalloc
 import weakref
-from concurrent.futures import Future
+from concurrent.futures import Future, ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
 from pathlib import Path
 from types import SimpleNamespace
@@ -1316,19 +1320,52 @@ class TestStreamedRefusals:
         assert sys.getsizeof(npe_index.trace_text(data)) < len(data) + 200
 
 
+class TestReadMemory:
+    def test_a_zst_read_lets_its_compressed_bytes_go_before_its_text_is_made(
+        self, tmp_path
+    ):
+        """With noise zstd only halves, compressed bytes kept past their decoding would
+        show: the read holds the JSON and that JSON's text, no more. #2275"""
+        steps = ({**_step(t, [*A, 1.0]), "noise": _noise(t)} for t in range(4_000))
+        path = _write(tmp_path, _trace(*steps), "trace.npeviz.zst")
+        json_size = npe_index.trace_size(path)
+        assert path.stat().st_size > json_size / 3
+
+        tracemalloc.start()
+        try:
+            before = tracemalloc.get_traced_memory()[0]
+            noc_congestion._from_trace(path)
+            peak = tracemalloc.get_traced_memory()[1] - before
+        finally:
+            tracemalloc.stop()
+
+        assert peak < 2.3 * json_size
+
+
+def _noise(seed: int) -> str:
+    """1 KiB of hex that zstd only halves: digests, not a pattern."""
+    return "".join(
+        hashlib.sha256(f"{seed}:{part}".encode()).hexdigest() for part in range(16)
+    )
+
+
 class TestReadApart:
     """A trace past `MAX_INLINE_TRACE_JSON_BYTES` is read in a process of its own, so
     the memory its read takes goes back to the system when the read ends. #2275"""
+
+    @pytest.fixture(autouse=True)
+    def bounded(self, monkeypatch):
+        """A real reading process that hangs fails its test rather than stalling it."""
+        monkeypatch.setattr(noc_congestion, "ProcessPoolExecutor", _BoundedPool)
 
     @pytest.fixture
     def apart(self, monkeypatch):
         """Every trace read apart, counting the reading processes started."""
         started: list = []
-        real = noc_congestion.ProcessPoolExecutor
 
         def counted(*arguments, **options):
             started.append(options)
-            return real(*arguments, **options)
+            return _BoundedPool(*arguments, **options)
 
         monkeypatch.setattr(noc_congestion, "MAX_INLINE_TRACE_JSON_BYTES", 0)
         monkeypatch.setattr(noc_congestion, "ProcessPoolExecutor", counted)
@@ -1393,6 +1430,44 @@ class TestReadApart:
             assert _answer(path)["timesteps"] == 8
         assert len(apart) == processes
 
+    def test_a_zst_is_read_apart_by_the_json_it_declares(
+        self, tmp_path, apart, monkeypatch
+    ):
+        """Its file can be within the inline cap while the JSON it holds is past it."""
+        path = _write(tmp_path, _hand_checked(), "trace.npeviz.zst")
+        stored = path.stat().st_size
+        assert stored < npe_index.trace_size(path)
+        monkeypatch.setattr(noc_congestion, "MAX_INLINE_TRACE_JSON_BYTES", stored)
+
+        assert _answer(path)["timesteps"] == 8
+        assert len(apart) == 1
+
+    @pytest.mark.parametrize("past", [0, 1], ids=["at-orjsons-depth", "one-deeper"])
+    def test_a_trace_read_apart_refuses_the_depth_the_server_does(
+        self, tmp_path, apart, monkeypatch, past
+    ):
+        """Sending a read back nests as deep as its `common_info`, so the reading
+        process has room for orjson's depth, and both refuse only past it. #2275"""
+        text = _deep_trace_text(npe_index.MAX_JSON_DEPTH + past)
+        path = tmp_path / "trace.json"
+        path.write_text(text)
+        with monkeypatch.context() as inline_only:
+            inline_only.setattr(noc_congestion, "MAX_INLINE_TRACE_JSON_BYTES", 1 << 62)
+            inline = _answer_or_refusal(path)
+        assert not apart
+
+        assert _answer_or_refusal(path) == inline
+        assert len(apart) == 1
+        if past:
+            with pytest.raises(orjson.JSONDecodeError):
+                orjson.loads(text)
+            assert (
+                inline == "trace.json is not a readable tt-npe trace: it nests too deep"
+            )
+        else:
+            orjson.loads(text)
+            assert inline["timesteps"] == 8
+
     def test_a_refusal_read_apart_is_the_one_read_in_the_server_gives(
         self, tmp_path, apart, monkeypatch
     ):
@@ -1416,6 +1491,7 @@ class TestReadApart:
         assert len(apart) == 1
         assert [str(refusal) for refusal in refusals] == [str(inline.value)] * 2
         assert [refusal.__cause__ for refusal in refusals] == [None, None]
+        assert not any("Traceback" in str(refusal) for refusal in refusals)
 
     def test_a_reading_process_that_ends_unanswered_is_tried_again(
         self, tmp_path, monkeypatch
@@ -1447,6 +1523,20 @@ class TestReadApart:
         assert _call(registry, handle)["timesteps"] == len(
             _hand_checked()["timestep_data"]
         )
+
+    def test_a_reading_process_that_dies_is_tried_again(self, tmp_path, monkeypatch):
+        """A real one this time, ended before it answers."""
+        registry = ReportRegistry()
+        handle = _load(registry, _write(tmp_path, _hand_checked()))
+        monkeypatch.setattr(noc_congestion, "MAX_INLINE_TRACE_JSON_BYTES", 0)
+        pool = noc_congestion._reader_pool
+        monkeypatch.setattr(noc_congestion, "_reader_pool", lambda: pool(_die))
+
+        with pytest.raises(RuntimeError, match="ended before it answered"):
+            _call(registry, handle)
+        monkeypatch.setattr(noc_congestion, "_reader_pool", pool)
+
+        assert _call(registry, handle)["timesteps"] == 8
 
     def test_a_read_too_deep_to_send_back_is_refused_as_too_deep(
         self, tmp_path, monkeypatch
@@ -1487,23 +1577,22 @@ class TestReadApart:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            # Its own process group, so cleanup ends a reader that outlived it too.
+            start_new_session=True,
         )
         try:
-            ready, _, _ = select.select([server_process.stdout], [], [], 60)
+            ready, _, _ = select.select([server_process.stdout], [], [], _READ_TIMEOUT)
             line = server_process.stdout.readline() if ready else ""
-        finally:
             server_process.kill()
             server_process.wait()
-            server_process.stdout.close()
-            errors = server_process.stderr.read()
-            server_process.stderr.close()
+            freed = bool(line) and _lock_freed(lock, within=10)
+        finally:
+            # A reader still alive holds the server's pipes, so read them once it is not.
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(server_process.pid, signal.SIGKILL)
+            errors = server_process.communicate(timeout=10)[1]
         assert line, f"the server printed no reading process: {errors}"
-        reader = int(line)
-
-        freed = _lock_freed(lock, within=10)
-        if not freed:
-            os.kill(reader, 9)
-        assert freed
+        assert freed, "the reading process outlived the server"
 
     def test_a_reading_process_without_stderr_writes_nothing_to_stdout(self, capfd):
         with noc_congestion._reader_pool(_setup_without_stderr) as reader:
@@ -1524,6 +1613,44 @@ class TestReadApart:
 def _setup_without_stderr() -> None:
     sys.stderr = None
     noc_congestion._reader_setup()
+
+
+def _die() -> None:
+    os._exit(1)
+
+
+# A test's read apart gives up after this, its processes killed, so a hung one fails it.
+_READ_TIMEOUT = 60
+
+
+class _BoundedPool(ProcessPoolExecutor):
+    """A reading pool whose results wait at most `_READ_TIMEOUT`."""
+
+    def submit(self, fn, /, *arguments, **options):
+        future = super().submit(fn, *arguments, **options)
+        wait = future.result
+        future.result = lambda timeout=_READ_TIMEOUT: wait(timeout)  # type: ignore
+        return future
+
+    def __exit__(self, *exception):
+        if exception[0] is not None:
+            for process in list(self._processes.values()):
+                process.kill()
+        return super().__exit__(*exception)
+
+
+def _deep_trace_text(depth: int) -> str:
+    """`_hand_checked` with arrays in its `common_info` nested `depth` deep in all."""
+    nested = "[" * (depth - 2) + "]" * (depth - 2)
+    text = orjson.dumps(_hand_checked()).decode()
+    return text.replace('"common_info":{', f'"common_info":{{"deep":{nested},', 1)
+
+
+def _answer_or_refusal(path: Path):
+    try:
+        return _without(_answer(path), "npe_trace")
+    except ValueError as refusal:
+        return str(refusal)
 
 
 def _hold_lock(path: str) -> int:

@@ -1168,3 +1168,104 @@ def test_a_streamed_read_answers_as_the_whole_parse_does_on_random_traces(seed):
                 _read_through(_streamed(text))
             continue
         assert _read_through(_streamed(text)) == expected, text
+
+
+def test_a_streamed_read_answers_as_the_whole_parse_does_whatever_its_spacing():
+    """Space before a colon, around commas, tabs, carriage returns, and before the
+    trace's own object. #2275"""
+    text = (
+        '\r\n\t {"common_info" :\t{"arch" : "blackhole"} ,\r\n "noc_transfers"\n:\n'
+        '[ {"id" : 1} ,\t{"id":2} ] , "timestep_data" : [ {"start_cycle" : 0 ,'
+        ' "end_cycle" :9 , "link_demand" : [ [ 0 , 0 , 0 , "E" , 1.5 ] ,\r\n'
+        '[0,0,1,"W",2] ] } \t,\r\n 7 , [ ] ] }\n'
+    )
+
+    assert _read_through(_streamed(text)) == _read_through(
+        trace_link_demand(orjson.loads(text))
+    )
+
+
+# Bytes JSON gives a meaning to, and some it never allows.
+_CORRUPTING_BYTES = b'{}[],:" \t\\-+.0123456789eEtfnu\x00\x7f\x80\xc3\xff'
+
+
+@pytest.mark.parametrize("seed", range(40))
+def test_a_trace_cut_or_with_a_byte_changed_is_read_as_the_whole_parse_reads_it(seed):
+    """Both reads refuse it, or both answer it alike. #2275"""
+    chooser = random.Random(seed)
+    for _ in range(10):
+        body = _random_trace_text(chooser).encode("utf-8", "surrogatepass")
+        at = chooser.randrange(len(body))
+        if chooser.randrange(2):
+            body = body[:at]
+        else:
+            byte = bytes([chooser.choice(_CORRUPTING_BYTES)])
+            body = body[:at] + byte + body[at + 1 :]
+        try:
+            expected = _read_through(trace_link_demand(orjson.loads(body)))
+        except ValueError:
+            with pytest.raises(ValueError):
+                _read_through(streamed_link_demand(trace_text(body)))
+            continue
+        assert _read_through(streamed_link_demand(trace_text(body))) == expected, body
+
+
+def test_orjson_reads_as_deep_as_the_streamed_read_does():
+    """`MAX_JSON_DEPTH`, and the refusal past it, are orjson's own: an orjson that
+    changed either would move the two reads apart. #2275"""
+    depth = npe_index.MAX_JSON_DEPTH
+    orjson.loads("[" * depth + "]" * depth)
+    with pytest.raises(orjson.JSONDecodeError) as refused:
+        orjson.loads("[" * (depth + 1) + "]" * (depth + 1))
+
+    assert refused.value.msg == npe_index._ORJSON_TOO_DEEP
+
+
+def _nested_in(where: str, depth: int) -> str:
+    """A trace whose arrays and objects nest `depth` deep in all, deepest at `where`."""
+    if where == "timestep":
+        inner = "[" * (depth - 3) + "]" * (depth - 3)
+        return '{"timestep_data": [{"start_cycle": 0, "deep": ' + inner + "}]}"
+    inner = "[" * (depth - 2) + "]" * (depth - 2)
+    if where == "element":
+        return '{"timestep_data": [], "zones": [' + inner + "]}"
+    # A member the read drops, so comparing reads does not recurse that deep itself.
+    return '{"timestep_data": [], "other": {"deep": ' + inner + "}}"
+
+
+def _from_frames_deep(frames: int, read):
+    return read() if frames == 0 else _from_frames_deep(frames - 1, read)
+
+
+@pytest.mark.parametrize("frames", [0, 700], ids=["shallow-caller", "deep-caller"])
+@pytest.mark.parametrize("past", [0, 1], ids=["at-orjsons-depth", "one-deeper"])
+@pytest.mark.parametrize("where", ["element", "member", "timestep"])
+def test_a_streamed_read_refuses_the_depth_the_whole_parse_refuses(where, past, frames):
+    """Whatever the caller's stack: before Python 3.12 the stdlib scanner that finds a
+    value's end recursed against the caller's limit, and refused nesting ~1,000 deep
+    that the whole parse reads. #2275"""
+    text = _nested_in(where, npe_index.MAX_JSON_DEPTH + past)
+    limit = sys.getrecursionlimit()
+
+    def streamed():
+        return _read_through(_streamed(text))
+
+    if past:
+        with pytest.raises(orjson.JSONDecodeError, match="depth limit exceeded"):
+            orjson.loads(text)
+        with pytest.raises(npe_index.NestsTooDeep):
+            _from_frames_deep(frames, streamed)
+    else:
+        expected = _read_through(trace_link_demand(orjson.loads(text)))
+        assert _from_frames_deep(frames, streamed) == expected
+    assert sys.getrecursionlimit() == limit
+
+
+def test_a_streamed_read_refuses_nesting_far_past_any_parse():
+    """Past even the stdlib scanner's reach, still refused as too deep. #2275"""
+    text = '{"timestep_data": [' + "[" * 100_000 + "]" * 100_000 + "]}"
+    limit = sys.getrecursionlimit()
+
+    with pytest.raises(npe_index.NestsTooDeep, match="more than 1,024"):
+        _read_through(_streamed(text))
+    assert sys.getrecursionlimit() == limit
