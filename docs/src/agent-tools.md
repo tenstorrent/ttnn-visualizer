@@ -159,7 +159,7 @@ first call, which refuses one that is not a readable tt-npe trace.
   signposts. A name longer than 256 bytes as an answer writes it, which a range cannot
   take, is counted but left out of the list, and `signposts_unlisted_too_long` says how
   many were. Bytes as an answer writes it means UTF-8 with JSON's escapes, so a four-byte
-  character counts four and a control character or a lone surrogate six; every name bound
+  character counts four and a control character or a lone surrogate six; every *name* bound
   on this page counts that way. A range naming a signpost the report lacks is refused with
   the names this list holds. When the CSV can be reported on but its signposts cannot be
   read, `signposts_problem` says why. Loading reads the signposts, so a handle answers from

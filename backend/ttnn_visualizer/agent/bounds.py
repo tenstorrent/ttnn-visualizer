@@ -9,10 +9,12 @@ Shared rather than declared per module: `server` quotes the caps to an agent in 
 limit schema, so a second copy would eventually promise one cap and enforce another.
 #2012 The graph guard is shared because the link and the failure tools read the same
 column. A bound that leaves out or refuses a name counts its `answer_size`, the bytes
-an answer's budget counts. #2255
+an answer's budget counts. #2255 Those are the answer's bytes: the stdio wrapper writes
+non-ASCII as escapes, so a name can take up to three times as many on the wire.
 """
 
 import json
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Dict, Iterable, Optional
 
 if TYPE_CHECKING:
@@ -77,7 +79,14 @@ def answer_size(name: str) -> int:
 def name_fits(name: str, limit: int) -> bool:
     """Whether a name takes at most `limit` bytes of an answer; one longer than that in
     characters never does, so it is not encoded."""
-    return len(name) <= limit and answer_size(name) <= limit
+    return len(name) <= limit and _encoded_fits(name, limit)
+
+
+# So a name a trace repeats on every row, kept or left out, is encoded once; only names
+# within a bound in characters reach it, so its entries stay small.
+@lru_cache(maxsize=1024)
+def _encoded_fits(name: str, limit: int) -> bool:
+    return answer_size(name) <= limit
 
 
 def require_name_fits(label: str, kind: str, name: str, limit: int) -> None:

@@ -280,10 +280,7 @@ def check_range(
 
 
 def _unknown_signpost(name: str, resolved: ResolvedSignposts) -> str:
-    named = resolved.occurrences()
-    listed, too_long = _short_names(
-        named, MAX_SIGNPOST_NAME_LENGTH, MAX_LISTED_SIGNPOSTS
-    )
+    named, listed, too_long = _listable_signposts(resolved)
     refusal = f"no signpost named {name!r} in this report; " + (
         f"it holds {', '.join(repr(known) for known, _ in listed)}"
         if listed
@@ -419,6 +416,18 @@ def _unlisted_names(
     return total - too_long - len(listed), too_long_note
 
 
+def _listable_signposts(
+    resolved: ResolvedSignposts,
+) -> Tuple[List[Tuple[str, int]], List[Tuple[str, int]], int]:
+    """Every signpost name with its occurrences, the ones `load_report` lists, and how
+    many are too long to list; an unknown name's refusal lists the same ones."""
+    named = resolved.occurrences()
+    listed, too_long = _short_names(
+        named, MAX_SIGNPOST_NAME_LENGTH, MAX_LISTED_SIGNPOSTS
+    )
+    return named, listed, too_long
+
+
 def with_signposts(
     registry: ReportRegistry, loaded: Dict[str, object]
 ) -> Dict[str, object]:
@@ -435,11 +444,8 @@ def with_signposts(
         resolved = _signposts(registry, str(loaded["handle"]))
     except (DataFormatError, OSError, TypeError, ValueError) as error:
         return {**loaded, "signposts_problem": str(error)}
-    named = resolved.occurrences()
     # A longer name cannot be passed back as a bound, and is the capture's text, not ours.
-    usable, too_long = _short_names(
-        named, MAX_SIGNPOST_NAME_LENGTH, MAX_LISTED_SIGNPOSTS
-    )
+    named, usable, too_long = _listable_signposts(resolved)
     result: Dict[str, object] = {
         **loaded,
         "signpost_count": len(named),
