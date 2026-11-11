@@ -29,6 +29,11 @@ import { AtomProviderInitialValues } from './helpers/atomProvider';
 import { TestProviders } from './helpers/TestProviders';
 import openMultiSelect from './helpers/openMultiSelect';
 import { DEFAULT_MAX_CORES } from '../src/functions/getCoreCount';
+import { EventLogEvent, FilterSurface, PerfTableOption } from '../src/definitions/EventLogEvent';
+
+const { recordEvent } = vi.hoisted(() => ({ recordEvent: vi.fn() }));
+
+vi.mock('../src/functions/recordEvent', () => ({ default: recordEvent }));
 
 vi.mock('../src/hooks/useAPI.tsx', () => ({
     useGetNPEManifest: vi.fn(),
@@ -160,6 +165,7 @@ function setNormalisation(isOn: boolean) {
 }
 
 beforeEach(() => {
+    recordEvent.mockClear();
     (useGetNPEManifest as Mock).mockReturnValue({ data: [], error: null });
     (useOpToPerfIdFiltered as Mock).mockReturnValue([]);
     (useOperationsList as Mock).mockReturnValue({ data: [] });
@@ -787,5 +793,85 @@ describe('PerformanceReport high dispatch banner', () => {
 
         expect(screen.getByText(/could save 20 µs/)).toBeInTheDocument();
         expect(screen.queryByText(/could save 10 µs/)).not.toBeInTheDocument();
+    });
+});
+
+describe('PerformanceReport usage events', () => {
+    const optionEvent = (option: PerfTableOption) => ({
+        event: EventLogEvent.PERF_TABLE_OPTION_TOGGLED,
+        details: { perf_table_option: option },
+    });
+    const opCodeFilterEvent = {
+        event: EventLogEvent.FILTER_USED,
+        details: { filter_surface: FilterSurface.PERF_OP_CODE },
+    };
+
+    it('records nothing on mount, including when normalisation is reset without a comparison', () => {
+        renderReport();
+
+        expect(screen.getByLabelText('Normalise data')).toHaveProperty('checked', false);
+        expect(recordEvent).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        ['Hide host ops', PerfTableOption.HIDE_HOST_OPS],
+        ['Merge device rows', PerfTableOption.MERGE_DEVICES],
+        ['Tracing mode', PerfTableOption.TRACING_MODE],
+        ['Matmul optimization analysis', PerfTableOption.MATMUL_ADVICE],
+        ['Highlight high dispatch ops', PerfTableOption.HIGHLIGHT_HIGH_DISPATCH],
+    ])('records one toggle per click on %s, whichever way it is flipped', (label, option) => {
+        renderReport();
+
+        fireEvent.click(screen.getByLabelText(label));
+        fireEvent.click(screen.getByLabelText(label));
+
+        expect(recordEvent).toHaveBeenCalledTimes(2);
+        expect(recordEvent).toHaveBeenNthCalledWith(1, optionEvent(option));
+        expect(recordEvent).toHaveBeenNthCalledWith(2, optionEvent(option));
+    });
+
+    it('records the normalise switch when a comparison enables it', () => {
+        renderReport({ comparisonReports: [COMPARISON_REPORT], comparisonData: [[row('Matmul')]] });
+
+        fireEvent.click(screen.getByLabelText('Normalise data'));
+
+        expect(recordEvent).toHaveBeenCalledExactlyOnceWith(optionEvent(PerfTableOption.NORMALISE_DATA));
+    });
+
+    it('records the op-code search once however many keystrokes it takes, and never the query', () => {
+        renderReport();
+        const search = screen.getByPlaceholderText('Filter by operation name');
+
+        fireEvent.change(search, { target: { value: 'M' } });
+        fireEvent.change(search, { target: { value: 'Ma' } });
+        fireEvent.change(search, { target: { value: '' } });
+        fireEvent.change(search, { target: { value: 'Mat' } });
+
+        expect(recordEvent).toHaveBeenCalledExactlyOnceWith(opCodeFilterEvent);
+        expect(JSON.stringify(recordEvent.mock.calls)).not.toContain('Mat');
+    });
+
+    it('does not record an op-code search that is cleared without a query', () => {
+        renderReport();
+
+        fireEvent.change(screen.getByPlaceholderText('Filter by operation name'), { target: { value: '' } });
+
+        expect(recordEvent).not.toHaveBeenCalled();
+    });
+
+    it('records raw op codes picked from the list once per visit', async () => {
+        renderReport({ data: [row('Matmul', 1), row('Conv2d', 2)] });
+
+        await openMultiSelect('Select Op Codes...');
+        fireEvent.click(await screen.findByRole('checkbox', { name: 'Matmul' }, WAIT_FOR_OPTIONS));
+        fireEvent.click(await screen.findByRole('checkbox', { name: 'Conv2d' }, WAIT_FOR_OPTIONS));
+
+        expect(recordEvent).toHaveBeenCalledExactlyOnceWith(opCodeFilterEvent);
+    });
+
+    it('does not record raw op codes restored from the shared filter atom', () => {
+        renderReport({ data: [row('Matmul', 1), row('Conv2d', 2)], rawOpCodeFilterList: ['Matmul'] });
+
+        expect(recordEvent).not.toHaveBeenCalled();
     });
 });

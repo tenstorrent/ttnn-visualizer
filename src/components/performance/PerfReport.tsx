@@ -27,6 +27,9 @@ import { ColumnKeys, Columns } from '../../definitions/PerfTable';
 import { TypedPerfTableRow } from '../../model/PerfTable';
 import { Signpost } from '../../model/Signpost';
 import { calcHighDispatchOps } from '../../functions/perfFunctions';
+import { recordPerfTableOptionToggled } from '../../functions/surfaceEvents';
+import { FilterSurface, PerfTableOption } from '../../definitions/EventLogEvent';
+import useRecordFilterUsed from '../../hooks/useRecordFilterUsed';
 import SearchField from '../SearchField';
 import PerfTable from './PerfTable';
 import {
@@ -151,6 +154,7 @@ const PerformanceReport = ({
     const [hiliteHighDispatch, setHiliteHighDispatch] = useState(false);
     const [selectedTabId, setSelectedTabId] = useState<TabId>(INITIAL_TAB_ID);
     const [useNormalisedData, setUseNormalisedData] = useState(true);
+    const recordOpCodeFilterUsed = useRecordFilterUsed(FilterSurface.PERF_OP_CODE);
     const filterableColumnKeys = useMemo(
         () => Columns.filter((column) => column.filterable).map((column) => column.key),
         [],
@@ -511,14 +515,20 @@ const PerformanceReport = ({
                         <ButtonGroup className='switch-group'>
                             <Switch
                                 label='Hide host ops'
-                                onChange={() => setHideHostOps(!hideHostOps)}
+                                onChange={() => {
+                                    setHideHostOps(!hideHostOps);
+                                    recordPerfTableOptionToggled(PerfTableOption.HIDE_HOST_OPS);
+                                }}
                                 checked={hideHostOps}
                                 className='option-switch'
                             />
 
                             <Switch
                                 label='Merge device rows'
-                                onChange={() => setMergeDevices(!mergeDevices)}
+                                onChange={() => {
+                                    setMergeDevices(!mergeDevices);
+                                    recordPerfTableOptionToggled(PerfTableOption.MERGE_DEVICES);
+                                }}
                                 checked={mergeDevices}
                                 className='option-switch'
                             />
@@ -529,7 +539,10 @@ const PerformanceReport = ({
                             >
                                 <Switch
                                     label='Tracing mode'
-                                    onChange={() => setTracingMode(!tracingMode)}
+                                    onChange={() => {
+                                        setTracingMode(!tracingMode);
+                                        recordPerfTableOptionToggled(PerfTableOption.TRACING_MODE);
+                                    }}
                                     checked={tracingMode}
                                     className='option-switch'
                                 />
@@ -565,7 +578,10 @@ const PerformanceReport = ({
                     >
                         <ButtonGroup className='select-group'>
                             <SearchField
-                                onQueryChanged={(value) => updateColumnFilter(ColumnKeys.OpCode, value)}
+                                onQueryChanged={(value) => {
+                                    updateColumnFilter(ColumnKeys.OpCode, value);
+                                    recordOpCodeFilterUsed(value !== '');
+                                }}
                                 placeholder='Filter by operation name'
                                 searchQuery={filters?.op_code || ''}
                             />
@@ -575,7 +591,12 @@ const PerformanceReport = ({
                                 options={rawOpCodeOptions}
                                 placeholder='Select Op Codes...'
                                 values={activeRawOpCodeFilterList}
-                                updateHandler={setActiveRawOpCodeFilterList}
+                                updateHandler={(update) => {
+                                    setActiveRawOpCodeFilterList(update);
+                                    // Every call is a click on an option, which either adds a
+                                    // code or removes one from a filter already in use.
+                                    recordOpCodeFilterUsed(true);
+                                }}
                             />
                         </ButtonGroup>
                     </FormGroup>
@@ -639,7 +660,10 @@ const PerformanceReport = ({
                             <ButtonGroup className='switch-group'>
                                 <Switch
                                     label='Matmul optimization analysis'
-                                    onChange={() => setProvideMatmulAdvice(!provideMatmulAdvice)}
+                                    onChange={() => {
+                                        setProvideMatmulAdvice(!provideMatmulAdvice);
+                                        recordPerfTableOptionToggled(PerfTableOption.MATMUL_ADVICE);
+                                    }}
                                     checked={provideMatmulAdvice}
                                     className='option-switch'
                                     disabled={isStackedView}
@@ -647,7 +671,10 @@ const PerformanceReport = ({
 
                                 <Switch
                                     label='Highlight high dispatch ops'
-                                    onChange={() => setHiliteHighDispatch(!hiliteHighDispatch)}
+                                    onChange={() => {
+                                        setHiliteHighDispatch(!hiliteHighDispatch);
+                                        recordPerfTableOptionToggled(PerfTableOption.HIGHLIGHT_HIGH_DISPATCH);
+                                    }}
                                     checked={hiliteHighDispatch}
                                     className='option-switch'
                                     disabled={isStackedView}
@@ -660,7 +687,10 @@ const PerformanceReport = ({
                                     <Switch
                                         label='Normalise data'
                                         disabled={!activeComparisonReportList || isStackedView}
-                                        onChange={() => setUseNormalisedData(!useNormalisedData)}
+                                        onChange={() => {
+                                            setUseNormalisedData(!useNormalisedData);
+                                            recordPerfTableOptionToggled(PerfTableOption.NORMALISE_DATA);
+                                        }}
                                         checked={useNormalisedData}
                                         className='option-switch'
                                     />
