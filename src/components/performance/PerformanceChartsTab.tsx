@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useAtomValue } from 'jotai';
 import PerfChartFilter from './PerfChartFilter';
 import PerfCharts from './PerfCharts';
@@ -11,6 +11,8 @@ import NonFilterablePerfCharts from './NonFilterablePerfCharts';
 import { Marker } from '../../definitions/PerfTable';
 import { TypedPerfTableRow } from '../../model/PerfTable';
 import { buildChartIndexEntries } from '../../functions/buildChartIndexEntries';
+import { getPerfChartForChartId, recordPerfChartViewed } from '../../functions/surfaceEvents';
+import { PerfChartLabel } from '../../definitions/EventLogEvent';
 import { useActiveSection } from '../../hooks/useActiveSection';
 import { usePrefilterPerfTableByOpCode } from '../../hooks/usePrefilterPerfTableByOpCode';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
@@ -72,6 +74,20 @@ const PerformanceChartsTab = ({
     const chartIndexIds = useMemo(() => chartIndexEntries.map((entry) => entry.id), [chartIndexEntries]);
     const activeId = useActiveSection(chartIndexIds, PERF_CHARTS_NAV_OFFSET_PX);
     const prefilterPerfTableByOpCode = usePrefilterPerfTableByOpCode();
+
+    // Once per chart per mount, and this tab mounts only while it is the selected one, so a
+    // count means the chart was in view on a visit to the Charts tab. The first chart counts
+    // on arrival: it is what the tab opens on.
+    const recordedChartsRef = useRef<Set<PerfChartLabel>>(new Set());
+
+    useEffect(() => {
+        const chart = activeId ? getPerfChartForChartId(activeId) : null;
+
+        if (chart && !recordedChartsRef.current.has(chart)) {
+            recordedChartsRef.current.add(chart);
+            recordPerfChartViewed(chart);
+        }
+    }, [activeId]);
 
     return (
         <div className='charts-container'>
