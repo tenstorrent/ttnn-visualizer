@@ -11,6 +11,7 @@ import LocalFolderPicker from '../report-selection/LocalFolderPicker';
 import { ReportFolder } from '../../definitions/Reports';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import { formatSyncedReportName } from '../../functions/reportRank';
+import { recordPerfComparisonUsed } from '../../functions/surfaceEvents';
 import { TEST_IDS } from '../../definitions/TestIds';
 
 interface ComparisonReportSelectorProps {
@@ -55,6 +56,7 @@ const ComparisonReportSelector = ({
                         updatedReports[reportIndex] = folder.reportName;
 
                         setComparisonReportList(updatedReports);
+                        recordPerfComparisonUsed(updatedReports.length);
                     }}
                 />
 
