@@ -10,10 +10,14 @@ busy timesteps, and the single-flight build lock under concurrency. Also the
 readers `noc_congestion` uses, which must never write beside the trace (#2156).
 """
 
+import json
 import os
+import random
 import sqlite3
+import sys
 import threading
 import time
+import tracemalloc
 from pathlib import Path
 
 import orjson
@@ -33,8 +37,10 @@ from ttnn_visualizer.npe_index import (
     looks_like_trace,
     read_summary,
     read_window,
+    streamed_link_demand,
     trace_link_demand,
     trace_size,
+    trace_text,
     truncate,
 )
 from ttnn_visualizer.tests.npe_fixtures import execute, listing
@@ -914,3 +920,352 @@ def test_indexed_link_demand_never_recreates_a_sidecar_removed_after_its_check(
         with indexed_link_demand(Path(npe_path)):
             pass
     assert not db_path.exists()
+
+
+def _read_through(rows):
+    """Every field of a link-demand read, its timesteps read through first."""
+    steps = list(rows.timesteps)
+    return (
+        steps,
+        rows.common_info,
+        rows.transfer_count,
+        rows.unreadable_timesteps,
+        rows.truncated,
+    )
+
+
+def _streamed(text: str):
+    """The streamed read of a trace's JSON, given as the tool gives it: its bytes."""
+    return streamed_link_demand(trace_text(text.encode("utf-8", "surrogatepass")))
+
+
+_STREAMED_TRACES = {
+    "every-field": {
+        "common_info": {"arch": "blackhole", "cycles_per_timestep": 128},
+        "noc_transfers": [{"id": 0}, {"id": 0}, {"id": "1"}, {"id": 2.0}, 7, {}],
+        "timestep_data": [
+            {"start_cycle": 0, "end_cycle": 9, "link_demand": [[0, 0, 0, "E", 1.5]]},
+            {"start_cycle": 9, "end_cycle": 18},
+            7,
+            None,
+        ],
+        "zones": [{"name": "z", "nested": [[1, 2], {"a": []}]}],
+    },
+    "steps-first": {
+        "timestep_data": [{"link_demand": []}],
+        "common_info": {"arch": "wormhole_b0"},
+        "noc_transfers": [{"id": 3}],
+    },
+    "empty-lists": {"timestep_data": [], "noc_transfers": [], "zones": []},
+    "common-info-not-an-object": {"common_info": [1], "timestep_data": []},
+    "common-info-null": {"common_info": None, "timestep_data": []},
+    "transfers-not-a-list": {"noc_transfers": {"id": 1}, "timestep_data": []},
+    # orjson keeps the last of two members, as the read must.
+    "repeated-members": {"common_info": {"arch": "a"}, "timestep_data": []},
+    "unicode": {"common_info": {"name": "é€😀"}, "timestep_data": [{"x": " "}]},
+}
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        '{"noc_transfers": [{"id": 1}], "noc_transfers": null, "timestep_data": []}',
+        '{"common_info": {"a": 1}, "common_info": [], "timestep_data": []}',
+        '{"common_info": {"a": 1}, "common_info": 7, "timestep_data": []}',
+    ],
+)
+def test_a_member_named_twice_reads_as_its_last(text):
+    assert _read_through(_streamed(text)) == _read_through(
+        trace_link_demand(orjson.loads(text))
+    )
+
+
+def _with_repeats(text: str) -> str:
+    return text.replace(
+        '"timestep_data"',
+        '"noc_transfers":[{"id":9}],"common_info":{"arch":"b"},'
+        '"noc_transfers":[{"id":1},{"id":2}],"timestep_data"',
+        1,
+    )
+
+
+@pytest.mark.parametrize("indent", [None, orjson.OPT_INDENT_2])
+@pytest.mark.parametrize("name", sorted(_STREAMED_TRACES))
+def test_a_streamed_read_answers_as_the_whole_parse_does(name, indent):
+    """#2275"""
+    text = orjson.dumps(_STREAMED_TRACES[name], option=indent).decode()
+    if name == "repeated-members":
+        text = _with_repeats(text)
+
+    assert _read_through(_streamed(text)) == _read_through(
+        trace_link_demand(orjson.loads(text))
+    )
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "{}",
+        '{"timestep_data": {}}',
+        '{"timestep_data": null}',
+        '{"common_info": {}}',
+        "[]",
+        '[{"timestep_data": []}, [1]]',
+        '"timestep_data"',
+    ],
+)
+def test_a_streamed_read_refuses_what_holds_no_timestep_data_list(text):
+    with pytest.raises(ValueError, match="no timestep_data list"):
+        _read_through(_streamed(text))
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        '{"timestep_data": [],}',
+        '{"timestep_data": [1,]}',
+        '{"timestep_data": [1}',
+        '{"timestep_data": []',
+        '{"timestep_data": []} x',
+        '{"timestep_data": [NaN]}',
+        '{"timestep_data": [{"a": 1e400}]}',
+        '{"timestep_data": [{"a": "\\ud800"}]}',
+        '{"timestep_data": [1 2]}',
+        '{"timestep_data" []}',
+        "{timestep_data: []}",
+        # Not an object, so read through to be refused as the whole parse refuses it.
+        "",
+        "  ",
+        "[1,",
+        "[1] x",
+        "[[1}]",
+        '\ufeff{"timestep_data": []}',
+    ],
+)
+def test_a_streamed_read_refuses_what_orjson_refuses(text):
+    with pytest.raises(orjson.JSONDecodeError):
+        orjson.loads(text)
+    with pytest.raises(json.JSONDecodeError):
+        _read_through(_streamed(text))
+
+
+def test_a_streamed_read_refuses_timestep_data_named_twice():
+    """orjson keeps the second, and the first has already been read."""
+    with pytest.raises(ValueError, match="names timestep_data twice"):
+        _read_through(_streamed('{"timestep_data": [], "timestep_data": []}'))
+
+
+def test_a_streamed_read_holds_one_timestep_at_a_time():
+    """A timestep is handed on before the next is read, so a bad second one is found
+    only after the first has been."""
+    rows = _streamed('{"timestep_data": [{"start_cycle": 0}, NaN]}')
+
+    assert next(rows.timesteps) == (0, None, [])
+    with pytest.raises(RuntimeError, match="read the timesteps through"):
+        rows.unreadable_timesteps
+    with pytest.raises(json.JSONDecodeError):
+        next(rows.timesteps)
+
+
+def test_a_refusal_is_placed_where_the_whole_parse_places_it():
+    text = '{"common_info": {}, "timestep_data": [{"start_cycle": 0}, {"x": NaN}]}'
+    with pytest.raises(orjson.JSONDecodeError) as whole:
+        orjson.loads(text)
+
+    with pytest.raises(json.JSONDecodeError) as streamed:
+        _read_through(_streamed(text))
+
+    assert (streamed.value.msg, streamed.value.pos) == (
+        whole.value.msg,
+        whole.value.pos,
+    )
+
+
+def test_a_traces_text_takes_a_byte_a_character():
+    """Read as UTF-8, one character past Latin-1 would make the whole text two or four
+    bytes a character, and every parity test would still pass. #2275"""
+    body = orjson.dumps({"common_info": {"name": "é€😀"}, "timestep_data": []})
+    body += b" " * 10_000
+
+    assert sys.getsizeof(trace_text(body)) < len(body) + 200
+
+
+def _many_timesteps(count: int) -> str:
+    step = {
+        "start_cycle": 0,
+        "end_cycle": 9,
+        "link_demand": [[0, 0, 0, "NOC0_EAST", 12.5], [0, 0, 1, "NOC1_WEST", 7.25]],
+        "noc": {"NOC0": {"avg_link_demand": 1.5, "max_link_demand": 12.5}},
+    }
+    return trace_text(
+        orjson.dumps({"common_info": {}, "timestep_data": [step] * count})
+    )
+
+
+def test_a_streamed_read_holds_a_fraction_of_its_text_at_its_peak():
+    """Bounded memory is what #2275 asks for: a read that kept the steps it handed on,
+    or built the whole object, would hold several times the text."""
+    text = _many_timesteps(32_000)
+    assert len(text) > 4_000_000
+
+    tracemalloc.start()
+    try:
+        before = tracemalloc.get_traced_memory()[0]
+        rows = streamed_link_demand(text)
+        for _ in rows.timesteps:
+            pass
+        peak = tracemalloc.get_traced_memory()[1] - before
+    finally:
+        tracemalloc.stop()
+
+    assert peak < 0.5 * len(text)
+
+
+def _random_json(chooser, depth):
+    """A value of any JSON kind, nested at most `depth` deep."""
+    kind = chooser.randrange(7 if depth else 4)
+    if kind == 0:
+        return chooser.choice([None, True, False])
+    if kind == 1:
+        return chooser.choice([0, -1, 7, 2**63, -(2**63), 1.5, -0.0, 1e300])
+    if kind == 2:
+        return chooser.choice(["", "x", "é", "😀", '"', "\\", "\n", "\u2028"])
+    if kind == 3:
+        return {"start_cycle": chooser.randrange(9), "link_demand": []}
+    if kind in (4, 5):
+        return [_random_json(chooser, depth - 1) for _ in range(chooser.randrange(4))]
+    return {
+        chooser.choice(["a", "id", "noc", "start_cycle", "end_cycle", "link_demand"]): (
+            _random_json(chooser, depth - 1)
+        )
+        for _ in range(chooser.randrange(4))
+    }
+
+
+def _random_trace_text(chooser):
+    """A trace's text with its top-level members in any order, some repeated."""
+    names = ["common_info", "noc_transfers", "zones", "chips", "other", "timestep_data"]
+    members = []
+    for name in chooser.sample(names, chooser.randrange(1, len(names) + 1)):
+        for _ in range(1 if name == "timestep_data" else chooser.randrange(1, 3)):
+            value = [_random_json(chooser, 2) for _ in range(chooser.randrange(5))]
+            if chooser.randrange(4) == 0 and name != "timestep_data":
+                value = _random_json(chooser, 2)
+            members.append(f"{json.dumps(name)}:{orjson.dumps(value).decode()}")
+    space = chooser.choice(["", " ", "\n  "])
+    return "{" + space + ("," + space).join(members) + space + "}"
+
+
+@pytest.mark.parametrize("seed", range(40))
+def test_a_streamed_read_answers_as_the_whole_parse_does_on_random_traces(seed):
+    chooser = random.Random(seed)
+    for _ in range(10):
+        text = _random_trace_text(chooser)
+        try:
+            expected = _read_through(trace_link_demand(orjson.loads(text)))
+        except ValueError as refusal:
+            with pytest.raises(type(refusal)):
+                _read_through(_streamed(text))
+            continue
+        assert _read_through(_streamed(text)) == expected, text
+
+
+def test_a_streamed_read_answers_as_the_whole_parse_does_whatever_its_spacing():
+    """Space before a colon, around commas, tabs, carriage returns, and before the
+    trace's own object. #2275"""
+    text = (
+        '\r\n\t {"common_info" :\t{"arch" : "blackhole"} ,\r\n "noc_transfers"\n:\n'
+        '[ {"id" : 1} ,\t{"id":2} ] , "timestep_data" : [ {"start_cycle" : 0 ,'
+        ' "end_cycle" :9 , "link_demand" : [ [ 0 , 0 , 0 , "E" , 1.5 ] ,\r\n'
+        '[0,0,1,"W",2] ] } \t,\r\n 7 , [ ] ] }\n'
+    )
+
+    assert _read_through(_streamed(text)) == _read_through(
+        trace_link_demand(orjson.loads(text))
+    )
+
+
+# Bytes JSON gives a meaning to, and some it never allows.
+_CORRUPTING_BYTES = b'{}[],:" \t\\-+.0123456789eEtfnu\x00\x7f\x80\xc3\xff'
+
+
+@pytest.mark.parametrize("seed", range(40))
+def test_a_trace_cut_or_with_a_byte_changed_is_read_as_the_whole_parse_reads_it(seed):
+    """Both reads refuse it, or both answer it alike. #2275"""
+    chooser = random.Random(seed)
+    for _ in range(10):
+        body = _random_trace_text(chooser).encode("utf-8", "surrogatepass")
+        at = chooser.randrange(len(body))
+        if chooser.randrange(2):
+            body = body[:at]
+        else:
+            byte = bytes([chooser.choice(_CORRUPTING_BYTES)])
+            body = body[:at] + byte + body[at + 1 :]
+        try:
+            expected = _read_through(trace_link_demand(orjson.loads(body)))
+        except ValueError:
+            with pytest.raises(ValueError):
+                _read_through(streamed_link_demand(trace_text(body)))
+            continue
+        assert _read_through(streamed_link_demand(trace_text(body))) == expected, body
+
+
+def test_orjson_reads_as_deep_as_the_streamed_read_does():
+    """`MAX_JSON_DEPTH`, and the refusal past it, are orjson's own: an orjson that
+    changed either would move the two reads apart. #2275"""
+    depth = npe_index.MAX_JSON_DEPTH
+    orjson.loads("[" * depth + "]" * depth)
+    with pytest.raises(orjson.JSONDecodeError) as refused:
+        orjson.loads("[" * (depth + 1) + "]" * (depth + 1))
+
+    assert refused.value.msg == npe_index._ORJSON_TOO_DEEP
+
+
+def _nested_in(where: str, depth: int) -> str:
+    """A trace whose arrays and objects nest `depth` deep in all, deepest at `where`."""
+    if where == "timestep":
+        inner = "[" * (depth - 3) + "]" * (depth - 3)
+        return '{"timestep_data": [{"start_cycle": 0, "deep": ' + inner + "}]}"
+    inner = "[" * (depth - 2) + "]" * (depth - 2)
+    if where == "element":
+        return '{"timestep_data": [], "zones": [' + inner + "]}"
+    # A member the read drops, so comparing reads does not recurse that deep itself.
+    return '{"timestep_data": [], "other": {"deep": ' + inner + "}}"
+
+
+def _from_frames_deep(frames: int, read):
+    return read() if frames == 0 else _from_frames_deep(frames - 1, read)
+
+
+@pytest.mark.parametrize("frames", [0, 700], ids=["shallow-caller", "deep-caller"])
+@pytest.mark.parametrize("past", [0, 1], ids=["at-orjsons-depth", "one-deeper"])
+@pytest.mark.parametrize("where", ["element", "member", "timestep"])
+def test_a_streamed_read_refuses_the_depth_the_whole_parse_refuses(where, past, frames):
+    """Whatever the caller's stack: before Python 3.12 the stdlib scanner that finds a
+    value's end recursed against the caller's limit, and refused nesting ~1,000 deep
+    that the whole parse reads. #2275"""
+    text = _nested_in(where, npe_index.MAX_JSON_DEPTH + past)
+    limit = sys.getrecursionlimit()
+
+    def streamed():
+        return _read_through(_streamed(text))
+
+    if past:
+        with pytest.raises(orjson.JSONDecodeError, match="depth limit exceeded"):
+            orjson.loads(text)
+        with pytest.raises(npe_index.NestsTooDeep):
+            _from_frames_deep(frames, streamed)
+    else:
+        expected = _read_through(trace_link_demand(orjson.loads(text)))
+        assert _from_frames_deep(frames, streamed) == expected
+    assert sys.getrecursionlimit() == limit
+
+
+def test_a_streamed_read_refuses_nesting_far_past_any_parse():
+    """Past even the stdlib scanner's reach, still refused as too deep. #2275"""
+    text = '{"timestep_data": [' + "[" * 100_000 + "]" * 100_000 + "]}"
+    limit = sys.getrecursionlimit()
+
+    with pytest.raises(npe_index.NestsTooDeep, match="more than 1,024"):
+        _read_through(_streamed(text))
+    assert sys.getrecursionlimit() == limit

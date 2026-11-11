@@ -459,8 +459,11 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "These are tt-npe's simulation, in device cycles, not a measurement. "
                 "The first call reads the whole trace, which takes seconds on a large "
                 "one and refuses one past "
-                f"{noc_congestion.MAX_TRACE_JSON_BYTES:,} bytes of JSON; later calls "
-                "answer from that read, with a caveat if the trace has changed since."
+                f"{noc_congestion.MAX_TRACE_JSON_BYTES:,} bytes of JSON; one past "
+                f"{noc_congestion.MAX_INLINE_TRACE_JSON_BYTES:,} is read in a process of "
+                "its own, which adds about half a second and holds about twice the JSON "
+                "while it reads. Later calls answer from that read, with a caveat if the "
+                "trace has changed since."
             ),
             "schema": {
                 "type": "object",

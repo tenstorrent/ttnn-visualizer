@@ -802,15 +802,28 @@ index of it when that index is built and current, and from the trace itself othe
 tool never builds the index, so it writes nothing beside the trace. The visualizer builds
 its index beside the copy it opens, which for an upload is its own copy under its report
 data directory, so an `npe_path` naming that copy reuses the index, in a fraction of the
-time and memory a parse takes. Otherwise the first call on a handle parses the whole
-trace: a trace of tens of thousands of timesteps and millions of link rows takes seconds
-to tens of seconds and several GB at its peak, as building the visualizer's index does,
-and the server process can keep much of that memory afterwards. A trace whose JSON passes
-1 GiB, summed over every zstd frame, or a `.zst` file itself past that size, is refused
-rather than parsed, and so is a `.zst` with a frame that does not declare its size. Later
-calls answer from the first read, and so does every handle on the same unchanged file. A
-handle stays with the trace it first read: if the file changes or goes away afterwards,
-its answers say so in their caveat, and a fresh `load_report` reads the new one.
+time and memory a parse takes. Otherwise the first call on a handle reads the trace itself
+a timestep at a time: a trace of tens of thousands of timesteps and millions of link rows
+takes seconds to tens of seconds and about twice its JSON's size at its peak, against
+several times that for building the visualizer's index
+([#2302](https://github.com/tenstorrent/ttnn-visualizer/issues/2302)). That bound assumes
+the trace's bulk is spread over its timesteps, as tt-npe writes it: each value is read
+whole, so a single timestep or `common_info` holding most of the trace costs more than a
+whole parse ([#2320](https://github.com/tenstorrent/ttnn-visualizer/issues/2320)). A trace
+past 64 MiB of JSON is read in a process of its own, so that memory goes back to the
+system when the read ends rather than staying with the server; starting it adds about half
+a second ([#2319](https://github.com/tenstorrent/ttnn-visualizer/issues/2319)), and it
+ends with the server if the server is stopped mid-read. That process imports the calling
+script again, so a script that calls the tool on such a trace needs its top level under
+`if __name__ == "__main__":`. A trace whose JSON passes 1 GiB, summed over every zstd
+frame, or a `.zst` file itself past that size, is refused rather than read, and so is a
+`.zst` with a frame that does not declare its size. A trace nested more than 1,024 arrays
+and objects deep is refused, as the visualizer's own parse refuses it, and so is one that
+names `timestep_data` twice, whose first list has been read by the time the second is
+found. Later calls answer from the first read, and so does every handle on the same
+unchanged file. A handle stays with the trace it first read: if the file changes or goes
+away afterwards, its answers say so in their caveat, and a fresh `load_report` reads the
+new one.
 
 **A performance row and a memory report operation are linked by order, not by a shared id.**
 Neither report records the other's id, so when a handle is loaded with both, the tools
