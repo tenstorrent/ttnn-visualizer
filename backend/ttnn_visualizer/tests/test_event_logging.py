@@ -1776,3 +1776,18 @@ def test_record_events_writes_nothing_when_recording_is_disabled(
         is False
     )
     assert read_event_log_lines(event_log_directory) == []
+
+
+def test_mlir_file_formats_are_exactly_the_accepted_extensions():
+    """A newly accepted extension must gain a format, or every load of it reads ``other``.
+
+    Nothing else would notice: ``other`` is a valid value, so the drift stays silent.
+    """
+    from ttnn_visualizer.event_logging import MlirFileFormat
+    from ttnn_visualizer.mlir import MLIR_SERVER_ACCEPTED_EXTENSIONS
+
+    assert {
+        f".{member.value}"
+        for member in MlirFileFormat
+        if member is not MlirFileFormat.OTHER
+    } == set(MLIR_SERVER_ACCEPTED_EXTENSIONS)

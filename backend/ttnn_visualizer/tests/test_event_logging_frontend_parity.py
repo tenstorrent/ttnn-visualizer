@@ -32,8 +32,16 @@ from ttnn_visualizer.event_logging import (
     EVENT_FIELD,
     MAX_EVENT_LOG_BATCH_EVENTS,
     SERVER_EVENT_DETAIL_FIELDS,
+    ComparisonReportCountBucket,
+    DrilldownTarget,
     EventLogEvent,
     EventLogView,
+    FilterSurface,
+    MlirFileFormat,
+    NpeMode,
+    PerfChart,
+    PerfTableOption,
+    RemoteConnectionTestResult,
     ReportKind,
     ReportLoadFailureReason,
     ReportSource,
@@ -64,7 +72,20 @@ _PAIRED_ENUMS: Dict[str, Type[Enum]] = {
     "ReportSource": ReportSource,
     "ReportLoadFailureReason": ReportLoadFailureReason,
     "EventLogView": EventLogView,
+    "PerfChart": PerfChart,
+    "PerfTableOption": PerfTableOption,
+    "ComparisonReportCountBucket": ComparisonReportCountBucket,
+    "NpeMode": NpeMode,
+    "MlirFileFormat": MlirFileFormat,
+    "DrilldownTarget": DrilldownTarget,
+    "FilterSurface": FilterSurface,
+    "RemoteConnectionTestResult": RemoteConnectionTestResult,
 }
+
+# How a payload branch spells an event that carries no details. A bare `{}` type is what
+# `@typescript-eslint/no-empty-object-type` rejects, so the TS copy says it this way, and
+# it posts as `details: {}`.
+_EMPTY_DETAILS_TYPE = "Record<string, never>"
 
 
 def _read(path: Path) -> str:
@@ -117,13 +138,20 @@ def _enum_values(source: str, name: str) -> Set[str]:
 
 
 def _payload_detail_keys(source: str, event: EventLogEvent) -> Set[str]:
-    """The keys of the `details` object in the `EventLogEventPayload` branch for one event."""
+    """The keys of the `details` object in the `EventLogEventPayload` branch for one event.
+
+    A branch typed ``details: Record<string, never>`` declares no keys.
+    """
     branch = _require_match(
-        rf"event:\s*EventLogEvent\.{event.name};\s*\n?\s*details:\s*{{(.*?)}}",
+        rf"event:\s*EventLogEvent\.{event.name};\s*\n?\s*details:\s*"
+        rf"(?:{{(.*?)}}|{re.escape(_EMPTY_DETAILS_TYPE)})",
         source,
         re.DOTALL,
         f"No EventLogEventPayload branch for {event.name}",
     )
+
+    if branch.group(1) is None:
+        return set()
 
     return set(re.findall(r"(\w+)\s*:", branch.group(1)))
 

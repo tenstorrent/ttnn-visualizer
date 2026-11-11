@@ -66,7 +66,7 @@ Under `SERVER_MODE`, create `/data/usage/disabled` instead. The marker applies t
 Ordinary event lines contain these common fields:
 
 - `ts`: the UTC time at which the server wrote the event, in `YYYY-MM-DDTHH:MM:SSZ` form. Frontend events are buffered, so this can be later than the interaction.
-- `event`: one of `app_start`, `report_loaded`, `report_load_failed`, `view_opened`, `view_engaged`, or `mcp_tool_called`.
+- `event`: one of `app_start`, `report_loaded`, `report_load_failed`, `view_opened`, `view_engaged`, `mcp_tool_called`, `perf_chart_viewed`, `perf_table_option_toggled`, `perf_comparison_used`, `npe_playback_started`, `npe_mode_changed`, `mlir_file_loaded`, `mlir_split_view_used`, `drilldown_opened`, `filter_used`, or `remote_connection_test`.
 - `schema_version`: the log format version, currently `1`.
 - `run_id`: a random `8`-character identifier generated for each backend launch and shared by its server workers. It is not persisted between launches and is never exported, either by the local metrics projection or by a hosted collector. Hosted browser-session identity comes from the containing directory, not this field.
 
@@ -136,6 +136,87 @@ Recorded by `ttnn-visualizer-mcp` when a registered tool reaches its handler, no
 - `outcome`: `ok`, `refused`, `error`.
 
 `refused` is a tool declining a well-formed call it cannot answer (unknown handle, argument out of range). `error` is an unexpected failure the server did not anticipate.
+
+### Per-surface events
+
+The events below record what is used inside the Performance, NPE and MLIR views, and across them. Each fires once per deliberate action, from the control itself. Restoring persisted state, a reset by the application, a re-click on the option already selected, and anything continuous such as dragging or scrubbing record nothing. Each answers feature value or health (Q4 and Q5 in #1819). Read every count against the matching `report_loaded` count: a view nobody opens because nobody loaded that kind of report is not evidence that the feature is unwanted.
+
+### `perf_chart_viewed`
+
+Recorded the first time each performance chart becomes the chart in view, per visit to the Charts tab. Every chart renders on one scrolling page, so this means the chart was scrolled or jumped to, not that it was studied. The first chart counts on opening the tab.
+
+- `chart`: `op_duration_histogram`, `op_count_vs_runtime`, `core_count_kernel_runtime`, `kernel_duration_vs_core_count`, `matmul_core_count_utilization`, `matmul_device_time`, `matmul_kernel_duration_utilization`, `matmul_utilization_vs_kernel_duration`, `conv_core_count_utilization`, `conv_device_time`, `conv_kernel_duration_utilization`, `conv_utilization_vs_kernel_duration`, `operation_types`.
+
+The matmul and conv charts show a placeholder when the report has no such operations, and still count when scrolled to.
+
+### `perf_table_option_toggled`
+
+Recorded when a switch above the performance table is flipped. The direction is not recorded.
+
+- `option`: `hide_host_ops`, `merge_devices`, `tracing_mode`, `matmul_advice`, `highlight_high_dispatch`, `normalise_data`.
+
+`normalise_data` can only be flipped while comparison reports are selected.
+
+### `perf_comparison_used`
+
+Recorded each time a comparison report is added or replaced in the Performance view. Removing one records nothing. Comparison is unavailable under `SERVER_MODE`, so hosted logs never contain this event.
+
+- `report_count_bucket`: `one`, `two`, `three_or_more`.
+
+The bucket counts comparison reports besides the active one, after the change.
+
+### `npe_playback_started`
+
+Recorded when NPE timeline playback is started from the play or 2x button. Switching speed during playback, stepping, and dragging the timeline record nothing. It has no event-specific fields.
+
+### `npe_mode_changed`
+
+Recorded when an NPE view control is switched. The value names the state chosen.
+
+- `mode`: `congestion`, `transfers`, `noc0`, `noc1`, `all_nocs`, `fabric_events`, `local_events`, `alt_congestion_colours`, `timesteps_scale`, `cycles_scale`, `zones`.
+
+`zones` is opening the zones panel. `alt_congestion_colours` is recorded whichever way the switch is flipped, and never for the saved preference applied at load.
+
+### `mlir_file_loaded`
+
+Recorded once per file shown in the MLIR view after an upload, beside `report_loaded`.
+
+- `format`: `pb`, `pbtxt`, `graphdef`, `tflite`, `json`, `pt2`, `mlir`, `mlirbc`, `other`.
+
+The format is the extension of the uploaded file's name, and the name itself is never recorded. The view is unavailable under `SERVER_MODE`, and released builds load every format through the MLIR server.
+
+### `mlir_split_view_used`
+
+Recorded when the MLIR split view is opened, either from its button or by viewing two files at once. It has no event-specific fields.
+
+### `drilldown_opened`
+
+Recorded when a detail surface is opened.
+
+- `target`: `tensor_details`, `buffer_details`, `stack_trace`, `source_file`.
+
+  - `tensor_details`: the tensor details drawer in the performance table, or a tensor's per-core allocation view.
+  - `buffer_details`: a buffer or tensor focused in a memory view, including through a "Buffer details" link. Reloading a page reached through that link records it again.
+  - `stack_trace`: a stack trace expanded, or an operation's error details opened.
+  - `source_file`: a source file opened from a stack trace.
+
+Operation details are not a target: `view_opened` already counts them with `view` set to `operation_details`.
+
+### `filter_used`
+
+Recorded the first time a filter's query becomes non-empty, per visit to the list or graph. The query text is never recorded.
+
+- `surface`: `operations`, `tensors`, `perf_op_code`, `mlir_op`.
+
+In the MLIR split view each pane has its own filter, so one visit can record `mlir_op` twice.
+
+### `remote_connection_test`
+
+Recorded when a remote connection test in the connection dialog finishes. Form errors caught before a request is sent are not tests and record nothing. Remote sync is unavailable under `SERVER_MODE`, so hosted logs never contain this event. Host, user and path are never recorded.
+
+- `result`: `success`, `auth_failed`, `host_key_rejected`, `unreachable`, `no_reports_found`, `report_path_failed`, `other`.
+
+`report_path_failed` means SSH connected but a configured report path is missing, not a directory, or unreadable. `no_reports_found` means the paths exist but hold no reports.
 
 ## Information that is not recorded
 

@@ -165,6 +165,14 @@ DEPLOYMENT_MODE_FIELD = "deployment_mode"
 LAUNCH_MODE_FIELD = "launch_mode"
 OS_FIELD = "os"
 PYTHON_VERSION_FIELD = "python_version"
+CHART_FIELD = "chart"
+OPTION_FIELD = "option"
+REPORT_COUNT_BUCKET_FIELD = "report_count_bucket"
+MODE_FIELD = "mode"
+FORMAT_FIELD = "format"
+TARGET_FIELD = "target"
+SURFACE_FIELD = "surface"
+RESULT_FIELD = "result"
 
 # The wire shape of one posted event. ``EVENT_FIELD`` doubles as its name on the wire and
 # so is not restated; ``DETAILS_FIELD`` has no log equivalent, since details are flattened
@@ -235,6 +243,16 @@ class EventLogEvent(str, Enum):
     VIEW_OPENED = "view_opened"
     VIEW_ENGAGED = "view_engaged"
     MCP_TOOL_CALLED = "mcp_tool_called"
+    PERF_CHART_VIEWED = "perf_chart_viewed"
+    PERF_TABLE_OPTION_TOGGLED = "perf_table_option_toggled"
+    PERF_COMPARISON_USED = "perf_comparison_used"
+    NPE_PLAYBACK_STARTED = "npe_playback_started"
+    NPE_MODE_CHANGED = "npe_mode_changed"
+    MLIR_FILE_LOADED = "mlir_file_loaded"
+    MLIR_SPLIT_VIEW_USED = "mlir_split_view_used"
+    DRILLDOWN_OPENED = "drilldown_opened"
+    FILTER_USED = "filter_used"
+    REMOTE_CONNECTION_TEST = "remote_connection_test"
 
 
 class DeploymentMode(str, Enum):
@@ -320,9 +338,9 @@ class EventLogView(str, Enum):
     and ``BUFFERS`` deliberately differ in name from their paths (``/graphtree``,
     ``/buffer-summary``) because the enum names the surface, not the URL.
 
-    ``OPERATION_DETAILS`` is a real route and is owned by ``view_opened``. A future
-    ``drilldown_opened`` event must exclude it, or one navigation would be counted
-    as two different actions. It counts once per operation viewed rather than once
+    ``OPERATION_DETAILS`` is a real route and is owned by ``view_opened``, which is why
+    ``DrilldownTarget`` leaves it out: one navigation would otherwise be counted as two
+    different actions. It counts once per operation viewed rather than once
     per visit to the surface, so its total is not comparable to the other ten and
     should be read per-session or deduplicated.
     """
@@ -353,6 +371,149 @@ class McpToolOutcome(str, Enum):
     ERROR = "error"
 
 
+class PerfChart(str, Enum):
+    """The performance charts, for ``perf_chart_viewed`` (Q4: which charts to keep).
+
+    One member per ``PerfChartId`` in ``src/definitions/PerformanceCharts.ts``, without
+    its ``perf-chart-`` DOM prefix so the exported label does not move with markup. Every
+    chart renders on one scrolling page, so an event means the chart was scrolled or
+    jumped to, counted once per chart per visit to the Charts tab — not that it was read.
+    """
+
+    OP_DURATION_HISTOGRAM = "op_duration_histogram"
+    OP_COUNT_VS_RUNTIME = "op_count_vs_runtime"
+    CORE_COUNT_KERNEL_RUNTIME = "core_count_kernel_runtime"
+    KERNEL_DURATION_VS_CORE_COUNT = "kernel_duration_vs_core_count"
+    MATMUL_CORE_COUNT_UTILIZATION = "matmul_core_count_utilization"
+    MATMUL_DEVICE_TIME = "matmul_device_time"
+    MATMUL_KERNEL_DURATION_UTILIZATION = "matmul_kernel_duration_utilization"
+    MATMUL_UTILIZATION_VS_KERNEL_DURATION = "matmul_utilization_vs_kernel_duration"
+    CONV_CORE_COUNT_UTILIZATION = "conv_core_count_utilization"
+    CONV_DEVICE_TIME = "conv_device_time"
+    CONV_KERNEL_DURATION_UTILIZATION = "conv_kernel_duration_utilization"
+    CONV_UTILIZATION_VS_KERNEL_DURATION = "conv_utilization_vs_kernel_duration"
+    OPERATION_TYPES = "operation_types"
+
+
+class PerfTableOption(str, Enum):
+    """The performance table's switches, for ``perf_table_option_toggled`` (Q4).
+
+    One vocabulary for both kinds of switch: the first three are shared atoms, the rest
+    component state. Recorded from the switch's own handler only, never from the effect
+    that forces ``normalise_data`` off without comparison reports. Direction is not
+    recorded: the question is whether a switch is used, not how it is left.
+    """
+
+    HIDE_HOST_OPS = "hide_host_ops"
+    MERGE_DEVICES = "merge_devices"
+    TRACING_MODE = "tracing_mode"
+    MATMUL_ADVICE = "matmul_advice"
+    HIGHLIGHT_HIGH_DISPATCH = "highlight_high_dispatch"
+    NORMALISE_DATA = "normalise_data"
+
+
+class ComparisonReportCountBucket(str, Enum):
+    """How many reports a comparison holds besides the active one, for ``perf_comparison_used``.
+
+    Bucketed rather than counted, as every size here is. Comparison is unavailable under
+    ``SERVER_MODE``, so hosted logs never carry this event.
+    """
+
+    ONE = "one"
+    TWO = "two"
+    THREE_OR_MORE = "three_or_more"
+
+
+class NpeMode(str, Enum):
+    """The NPE view control a user switched to, for ``npe_mode_changed`` (Q4).
+
+    Names the state chosen, so one label read answers which modes are picked. Recorded on
+    discrete control changes only — never per frame, per scrub tick, or from the effects
+    that reset a filter or restore the persisted colour preference. ``zones`` is opening
+    the zones panel.
+    """
+
+    CONGESTION = "congestion"
+    TRANSFERS = "transfers"
+    NOC0 = "noc0"
+    NOC1 = "noc1"
+    ALL_NOCS = "all_nocs"
+    FABRIC_EVENTS = "fabric_events"
+    LOCAL_EVENTS = "local_events"
+    ALT_CONGESTION_COLOURS = "alt_congestion_colours"
+    TIMESTEPS_SCALE = "timesteps_scale"
+    CYCLES_SCALE = "cycles_scale"
+    ZONES = "zones"
+
+
+class MlirFileFormat(str, Enum):
+    """The extension of a loaded MLIR input, for ``mlir_file_loaded`` (Q3, Q4).
+
+    The members other than ``OTHER`` are exactly ``MLIR_SERVER_ACCEPTED_EXTENSIONS`` in
+    ``mlir.py``, without the dot; a test pins the two together. Taken from the uploaded
+    file's name, never the converted graph's, which is always ``.json``. There is no
+    server-versus-browser detail: the browser-only JSON loader exists in development
+    builds alone, so released builds always load through a server.
+    """
+
+    PB = "pb"
+    PBTXT = "pbtxt"
+    GRAPHDEF = "graphdef"
+    TFLITE = "tflite"
+    JSON = "json"
+    PT2 = "pt2"
+    MLIR = "mlir"
+    MLIRBC = "mlirbc"
+    OTHER = "other"
+
+
+class DrilldownTarget(str, Enum):
+    """The detail surface a user opened, for ``drilldown_opened`` (Q4: depth of use).
+
+    ``operation_details`` is absent on purpose: it is a route, and ``view_opened`` owns it.
+    ``buffer_details`` counts each buffer focus, which a reload re-records once when it
+    restores a "Buffer details" navigation from history.
+    """
+
+    TENSOR_DETAILS = "tensor_details"
+    BUFFER_DETAILS = "buffer_details"
+    STACK_TRACE = "stack_trace"
+    SOURCE_FILE = "source_file"
+
+
+class FilterSurface(str, Enum):
+    """A list or graph whose filter was used, for ``filter_used`` (Q4).
+
+    The event is the boolean: it fires on the first non-empty query per mount of the
+    surface, and the query itself is never recorded. In the MLIR split view each pane
+    has its own filter, so one sitting can record ``mlir_op`` twice.
+    """
+
+    OPERATIONS = "operations"
+    TENSORS = "tensors"
+    PERF_OP_CODE = "perf_op_code"
+    MLIR_OP = "mlir_op"
+
+
+class RemoteConnectionTestResult(str, Enum):
+    """How a remote connection test ended, for ``remote_connection_test`` (Q5).
+
+    ``host_key_rejected`` and ``report_path_failed`` are split out of ``auth_failed`` and
+    ``other`` because they are the likeliest first-connection failures and need
+    different fixes. ``report_path_failed`` means SSH succeeded but a configured path is
+    missing, not a directory, or unreadable. Remote sync is local-only, so hosted logs
+    never carry this event. Host, user and path are never recorded.
+    """
+
+    SUCCESS = "success"
+    AUTH_FAILED = "auth_failed"
+    HOST_KEY_REJECTED = "host_key_rejected"
+    UNREACHABLE = "unreachable"
+    NO_REPORTS_FOUND = "no_reports_found"
+    REPORT_PATH_FAILED = "report_path_failed"
+    OTHER = "other"
+
+
 # Closed vocabularies for detail fields that are enums. Client-posted fields are
 # validated against this map; server-written fields use it so the docs page and
 # ``_SAFE_VALUE_PATTERN`` checks have one source. `version` and `python_version`
@@ -367,6 +528,14 @@ _DETAIL_FIELD_ENUMS: Mapping[str, Type[Enum]] = {
     OS_FIELD: OperatingSystem,
     TOOL_FIELD: McpToolName,
     OUTCOME_FIELD: McpToolOutcome,
+    CHART_FIELD: PerfChart,
+    OPTION_FIELD: PerfTableOption,
+    REPORT_COUNT_BUCKET_FIELD: ComparisonReportCountBucket,
+    MODE_FIELD: NpeMode,
+    FORMAT_FIELD: MlirFileFormat,
+    TARGET_FIELD: DrilldownTarget,
+    SURFACE_FIELD: FilterSurface,
+    RESULT_FIELD: RemoteConnectionTestResult,
 }
 
 # What a client may post, and the exact detail fields each event carries. Exported so
@@ -382,6 +551,17 @@ CLIENT_EVENT_DETAIL_FIELDS: Mapping[EventLogEvent, Tuple[str, ...]] = {
     EventLogEvent.REPORT_LOAD_FAILED: (KIND_FIELD, REASON_CLASS_FIELD),
     EventLogEvent.VIEW_OPENED: (VIEW_FIELD,),
     EventLogEvent.VIEW_ENGAGED: (VIEW_FIELD,),
+    EventLogEvent.PERF_CHART_VIEWED: (CHART_FIELD,),
+    EventLogEvent.PERF_TABLE_OPTION_TOGGLED: (OPTION_FIELD,),
+    EventLogEvent.PERF_COMPARISON_USED: (REPORT_COUNT_BUCKET_FIELD,),
+    # No details: the event itself is the whole answer. Posted with `details: {}`.
+    EventLogEvent.NPE_PLAYBACK_STARTED: (),
+    EventLogEvent.NPE_MODE_CHANGED: (MODE_FIELD,),
+    EventLogEvent.MLIR_FILE_LOADED: (FORMAT_FIELD,),
+    EventLogEvent.MLIR_SPLIT_VIEW_USED: (),
+    EventLogEvent.DRILLDOWN_OPENED: (TARGET_FIELD,),
+    EventLogEvent.FILTER_USED: (SURFACE_FIELD,),
+    EventLogEvent.REMOTE_CONNECTION_TEST: (RESULT_FIELD,),
 }
 SERVER_EVENT_DETAIL_FIELDS: Mapping[EventLogEvent, Tuple[str, ...]] = {
     EventLogEvent.APP_START: (
