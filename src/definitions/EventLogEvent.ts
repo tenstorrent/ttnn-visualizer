@@ -30,6 +30,16 @@ export enum EventLogEvent {
     // Unknown names and malformed calls are not counted. The HTTP route refuses it
     // for the same reason as `app_start`: a page able to post tool use could forge Q4.
     MCP_TOOL_CALLED = 'mcp_tool_called',
+    PERF_CHART_VIEWED = 'perf_chart_viewed',
+    PERF_TABLE_OPTION_TOGGLED = 'perf_table_option_toggled',
+    PERF_COMPARISON_USED = 'perf_comparison_used',
+    NPE_PLAYBACK_STARTED = 'npe_playback_started',
+    NPE_MODE_CHANGED = 'npe_mode_changed',
+    MLIR_FILE_LOADED = 'mlir_file_loaded',
+    MLIR_SPLIT_VIEW_USED = 'mlir_split_view_used',
+    DRILLDOWN_OPENED = 'drilldown_opened',
+    FILTER_USED = 'filter_used',
+    REMOTE_CONNECTION_TEST = 'remote_connection_test',
 }
 
 export enum ReportKind {
@@ -68,8 +78,8 @@ export enum ReportLoadFailureReason {
  * `styleguide` is excluded and stays excluded: counting a development surface would
  * pollute reach.
  *
- * `OPERATION_DETAILS` is owned by `view_opened`. A future `drilldown_opened` event must
- * exclude it, or one navigation would be counted as two different actions. It counts
+ * `OPERATION_DETAILS` is owned by `view_opened`, which is why `DrilldownTarget` leaves
+ * it out: one navigation would otherwise be counted as two different actions. It counts
  * once per operation viewed rather than once per visit to the surface, so its total is
  * not comparable to the other ten and should be read per-session or deduplicated.
  */
@@ -87,6 +97,99 @@ export enum EventLogView {
     MCP = 'mcp',
 }
 
+// The vocabularies below serve the per-surface events from #1837. What each one counts,
+// and the caveats for reading it, live on its Python twin in `event_logging.py` and in
+// `docs/src/event-logging.md`.
+
+/**
+ * One member per `PerfChartId`: the DOM id without its `perf-chart-` prefix, in snake_case,
+ * so the exported label does not move with markup. Named apart from the `PerfChart`
+ * component, which renders a chart rather than labelling one.
+ */
+export enum PerfChartLabel {
+    OP_DURATION_HISTOGRAM = 'op_duration_histogram',
+    OP_COUNT_VS_RUNTIME = 'op_count_vs_runtime',
+    CORE_COUNT_KERNEL_RUNTIME = 'core_count_kernel_runtime',
+    KERNEL_DURATION_VS_CORE_COUNT = 'kernel_duration_vs_core_count',
+    MATMUL_CORE_COUNT_UTILIZATION = 'matmul_core_count_utilization',
+    MATMUL_DEVICE_TIME = 'matmul_device_time',
+    MATMUL_KERNEL_DURATION_UTILIZATION = 'matmul_kernel_duration_utilization',
+    MATMUL_UTILIZATION_VS_KERNEL_DURATION = 'matmul_utilization_vs_kernel_duration',
+    CONV_CORE_COUNT_UTILIZATION = 'conv_core_count_utilization',
+    CONV_DEVICE_TIME = 'conv_device_time',
+    CONV_KERNEL_DURATION_UTILIZATION = 'conv_kernel_duration_utilization',
+    CONV_UTILIZATION_VS_KERNEL_DURATION = 'conv_utilization_vs_kernel_duration',
+    OPERATION_TYPES = 'operation_types',
+}
+
+export enum PerfTableOption {
+    HIDE_HOST_OPS = 'hide_host_ops',
+    MERGE_DEVICES = 'merge_devices',
+    TRACING_MODE = 'tracing_mode',
+    MATMUL_ADVICE = 'matmul_advice',
+    HIGHLIGHT_HIGH_DISPATCH = 'highlight_high_dispatch',
+    NORMALISE_DATA = 'normalise_data',
+}
+
+export enum ComparisonReportCountBucket {
+    ONE = 'one',
+    TWO = 'two',
+    THREE_OR_MORE = 'three_or_more',
+}
+
+export enum NpeMode {
+    CONGESTION = 'congestion',
+    TRANSFERS = 'transfers',
+    NOC0 = 'noc0',
+    NOC1 = 'noc1',
+    ALL_NOCS = 'all_nocs',
+    FABRIC_EVENTS = 'fabric_events',
+    LOCAL_EVENTS = 'local_events',
+    ALL_EVENTS = 'all_events',
+    ALT_CONGESTION_COLOURS = 'alt_congestion_colours',
+    TIMESTEPS_SCALE = 'timesteps_scale',
+    CYCLES_SCALE = 'cycles_scale',
+    ZONES = 'zones',
+}
+
+// Every member but `OTHER` is an extension in `MLIR_SERVER_ACCEPTED_EXTENSIONS`, without the dot.
+export enum MlirFileFormat {
+    PB = 'pb',
+    PBTXT = 'pbtxt',
+    GRAPHDEF = 'graphdef',
+    TFLITE = 'tflite',
+    JSON = 'json',
+    PT2 = 'pt2',
+    MLIR = 'mlir',
+    MLIRBC = 'mlirbc',
+    OTHER = 'other',
+}
+
+// `operation_details` is absent on purpose: it is a route, and `view_opened` owns it.
+export enum DrilldownTarget {
+    TENSOR_DETAILS = 'tensor_details',
+    BUFFER_DETAILS = 'buffer_details',
+    STACK_TRACE = 'stack_trace',
+    SOURCE_FILE = 'source_file',
+}
+
+export enum FilterSurface {
+    OPERATIONS = 'operations',
+    TENSORS = 'tensors',
+    PERF_OP_CODE = 'perf_op_code',
+    MLIR_OP = 'mlir_op',
+}
+
+export enum RemoteConnectionTestResult {
+    SUCCESS = 'success',
+    AUTH_FAILED = 'auth_failed',
+    HOST_KEY_REJECTED = 'host_key_rejected',
+    UNREACHABLE = 'unreachable',
+    NO_REPORTS_FOUND = 'no_reports_found',
+    REPORT_PATH_FAILED = 'report_path_failed',
+    OTHER = 'other',
+}
+
 /**
  * One event as it goes over the wire.
  *
@@ -95,8 +198,12 @@ export enum EventLogView {
  * compares the detail keys as a set, so a missing key fails identically to an unknown one
  * and takes the whole batch with it.
  *
- * `reason_class` is snake_case because it is a wire field, not a TS property — renaming
- * it to camelCase would break every `report_load_failed` post.
+ * `reason_class` and `report_count_bucket` are snake_case because they are wire fields, not
+ * TS properties — renaming either to camelCase would break every post that carries it.
+ *
+ * An event with no details is typed `Record<string, never>` and posts `details: {}`: the
+ * server still requires the key, and `@typescript-eslint/no-empty-object-type` rejects a
+ * bare `{}` type.
  */
 export type EventLogEventPayload =
     | { event: EventLogEvent.REPORT_LOADED; details: { kind: ReportKind; source: ReportSource } }
@@ -105,4 +212,17 @@ export type EventLogEventPayload =
           details: { kind: ReportKind; reason_class: ReportLoadFailureReason };
       }
     | { event: EventLogEvent.VIEW_OPENED; details: { view: EventLogView } }
-    | { event: EventLogEvent.VIEW_ENGAGED; details: { view: EventLogView } };
+    | { event: EventLogEvent.VIEW_ENGAGED; details: { view: EventLogView } }
+    | { event: EventLogEvent.PERF_CHART_VIEWED; details: { perf_chart: PerfChartLabel } }
+    | { event: EventLogEvent.PERF_TABLE_OPTION_TOGGLED; details: { perf_table_option: PerfTableOption } }
+    | {
+          event: EventLogEvent.PERF_COMPARISON_USED;
+          details: { report_count_bucket: ComparisonReportCountBucket };
+      }
+    | { event: EventLogEvent.NPE_PLAYBACK_STARTED; details: Record<string, never> }
+    | { event: EventLogEvent.NPE_MODE_CHANGED; details: { npe_mode: NpeMode } }
+    | { event: EventLogEvent.MLIR_FILE_LOADED; details: { mlir_format: MlirFileFormat } }
+    | { event: EventLogEvent.MLIR_SPLIT_VIEW_USED; details: Record<string, never> }
+    | { event: EventLogEvent.DRILLDOWN_OPENED; details: { drilldown_target: DrilldownTarget } }
+    | { event: EventLogEvent.FILTER_USED; details: { filter_surface: FilterSurface } }
+    | { event: EventLogEvent.REMOTE_CONNECTION_TEST; details: { connection_test_result: RemoteConnectionTestResult } };

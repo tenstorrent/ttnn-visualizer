@@ -38,8 +38,10 @@ from ttnn_visualizer.event_logging import (
     UNKNOWN_VALUE,
     DeploymentMode,
     EventLogEvent,
+    EventLogEventRejected,
     EventLogView,
     LaunchMode,
+    MlirFileFormat,
     ReportKind,
     ReportLoadFailureReason,
     get_application_version,
@@ -51,7 +53,9 @@ from ttnn_visualizer.event_logging import (
     record_app_start,
     record_event,
     record_events,
+    validate_client_event,
 )
+from ttnn_visualizer.mlir import MLIR_SERVER_ACCEPTED_EXTENSIONS
 from ttnn_visualizer.settings import DefaultConfig
 from ttnn_visualizer.tests.event_log_readers import (
     parse_event_log_line,
@@ -1776,3 +1780,44 @@ def test_record_events_writes_nothing_when_recording_is_disabled(
         is False
     )
     assert read_event_log_lines(event_log_directory) == []
+
+
+def test_mlir_file_formats_are_exactly_the_accepted_extensions():
+    """A newly accepted extension must gain a format, or every load of it reads ``other``.
+
+    Nothing else would notice: ``other`` is a valid value, so the drift stays silent.
+    """
+    assert {
+        f".{member.value}"
+        for member in MlirFileFormat
+        if member is not MlirFileFormat.OTHER
+    } == set(MLIR_SERVER_ACCEPTED_EXTENSIONS)
+
+
+@pytest.mark.parametrize(
+    "details",
+    [
+        pytest.param({"npe_mode": "zones"}, id="a_stray_detail"),
+        pytest.param(None, id="details_absent"),
+        pytest.param("zones", id="details_not_an_object"),
+    ],
+)
+def test_an_event_without_details_says_so_however_it_is_refused(details):
+    """Neither rejection may describe the expected details as an empty list."""
+    entry = {"event": EventLogEvent.NPE_PLAYBACK_STARTED.value}
+    if details is not None:
+        entry["details"] = details
+
+    with pytest.raises(
+        EventLogEventRejected,
+        match=r"^Event npe_playback_started takes no details: send an empty details object$",
+    ):
+        validate_client_event(entry)
+
+
+def test_an_event_with_details_still_lists_them_when_refused():
+    with pytest.raises(
+        EventLogEventRejected,
+        match=r"^Event view_opened needs a details object with: view$",
+    ):
+        validate_client_event({"event": EventLogEvent.VIEW_OPENED.value})

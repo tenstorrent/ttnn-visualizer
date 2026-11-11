@@ -1099,6 +1099,98 @@ _PRIVACY_REVIEWED_ATTRIBUTES: dict[str, dict[str, frozenset[str] | str]] = {
     },
     "ttnn_visualizer_view_opened_total": {"view": _REVIEWED_VIEWS},
     "ttnn_visualizer_view_engaged_total": {"view": _REVIEWED_VIEWS},
+    "ttnn_visualizer_perf_chart_viewed_total": {
+        "perf_chart": frozenset(
+            {
+                "op_duration_histogram",
+                "op_count_vs_runtime",
+                "core_count_kernel_runtime",
+                "kernel_duration_vs_core_count",
+                "matmul_core_count_utilization",
+                "matmul_device_time",
+                "matmul_kernel_duration_utilization",
+                "matmul_utilization_vs_kernel_duration",
+                "conv_core_count_utilization",
+                "conv_device_time",
+                "conv_kernel_duration_utilization",
+                "conv_utilization_vs_kernel_duration",
+                "operation_types",
+            }
+        ),
+    },
+    "ttnn_visualizer_perf_table_option_toggled_total": {
+        "perf_table_option": frozenset(
+            {
+                "hide_host_ops",
+                "merge_devices",
+                "tracing_mode",
+                "matmul_advice",
+                "highlight_high_dispatch",
+                "normalise_data",
+            }
+        ),
+    },
+    "ttnn_visualizer_perf_comparison_used_total": {
+        "report_count_bucket": frozenset({"one", "two", "three_or_more"}),
+    },
+    "ttnn_visualizer_npe_playback_started_total": {},
+    "ttnn_visualizer_npe_mode_changed_total": {
+        "npe_mode": frozenset(
+            {
+                "congestion",
+                "transfers",
+                "noc0",
+                "noc1",
+                "all_nocs",
+                "fabric_events",
+                "local_events",
+                "all_events",
+                "alt_congestion_colours",
+                "timesteps_scale",
+                "cycles_scale",
+                "zones",
+            }
+        ),
+    },
+    "ttnn_visualizer_mlir_file_loaded_total": {
+        "mlir_format": frozenset(
+            {
+                "pb",
+                "pbtxt",
+                "graphdef",
+                "tflite",
+                "json",
+                "pt2",
+                "mlir",
+                "mlirbc",
+                "other",
+            }
+        ),
+    },
+    "ttnn_visualizer_mlir_split_view_used_total": {},
+    "ttnn_visualizer_drilldown_opened_total": {
+        "drilldown_target": frozenset(
+            {"tensor_details", "buffer_details", "stack_trace", "source_file"}
+        ),
+    },
+    "ttnn_visualizer_filter_used_total": {
+        "filter_surface": frozenset(
+            {"operations", "tensors", "perf_op_code", "mlir_op"}
+        ),
+    },
+    "ttnn_visualizer_remote_connection_test_total": {
+        "connection_test_result": frozenset(
+            {
+                "success",
+                "auth_failed",
+                "host_key_rejected",
+                "unreachable",
+                "no_reports_found",
+                "report_path_failed",
+                "other",
+            }
+        ),
+    },
 }
 
 
