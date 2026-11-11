@@ -117,3 +117,27 @@ def test_report_without_an_errors_table_has_no_errors(client, make_report):
     instance_id = make_report(_OPERATIONS, schema_sql=SCHEMA_V2 + "DROP TABLE errors;")
 
     assert _errors(client, instance_id) == []
+
+
+def test_errors_row_carries_every_field_the_client_reads(client, make_report):
+    """
+    Pin the whole ``/api/errors`` row, not a subset of it.
+
+    The client reads it as ``ReportError`` in ``src/model/APIData.ts``. A field
+    renamed, dropped or added on ``ErrorRecord`` would otherwise pass every other
+    test here. #1867
+    """
+    instance_id = make_report(_OPERATIONS + _error(2, "ttnn.conv2d"))
+
+    assert _errors(client, instance_id) == [
+        {
+            "operation_id": 2,
+            "operation_name": "ttnn.conv2d",
+            "error_type": "RuntimeError",
+            "error_message": "boom",
+            "stack_trace": "trace",
+            "timestamp": "t",
+            "rank": 0,
+            "attached": True,
+        }
+    ]
