@@ -10,9 +10,10 @@
 @use '../definitions/variables' as variables;
 
 // Bottom-left chrome — zoom controls, minimap, perf legend — on one baseline.
-// The origin and margin are React Flow's own; the width below is authored onto
-// `.react-flow__minimap` rather than assumed, so the legend's offset cannot drift
-// on a library bump that changes the default.
+// The origin is the graph's own (`$reactflow-panel-origin-left`); only the
+// margin is React Flow's. The width below is authored onto `.react-flow__minimap`
+// rather than assumed, so the legend's offset cannot drift on a library bump
+// that changes the default.
 $chrome-dock-bottom: 8px;
 $panel-margin: 15px;
 $minimap-margin-left: 56px;

@@ -3,17 +3,22 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { readdirSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { CompiledRule, getCompiledRules, getCompiledStylesheet, getStylesheet } from './helpers/stylesheets';
+import { CompiledRule, getCompiledRules, getCompiledStylesheet } from './helpers/compiledStylesheets';
+import { getStylesheet } from './helpers/stylesheets';
 
 // React Flow puts `.react-flow*` classes on every flow instance, so a rule that
-// starts its selector with one styles every graph in the app. Each view scopes
+// names one without a view root styles every graph in the app. Each view scopes
 // its rules under its own root; only the shared theme is app-wide. #1899
 const SHARED_THEME = 'src/scss/_reactFlow.scss';
 const MLIR_SHEET = 'src/scss/components/MLIRViewReactFlow.scss';
 const OP_GRAPH_SHEET = 'src/scss/components/OperationGraphReactFlow.scss';
-const SCANNED_DIRECTORIES = ['src/scss', 'src/components'];
+const APP_ENTRY = 'src/index.scss';
+
+const OP_GRAPH_ROOT = '.operation-graph-react-flow';
+const MLIR_ROOT = ':where(.mlir-view-pane)';
+const VIEW_ROOTS = [OP_GRAPH_ROOT, MLIR_ROOT];
 
 const CONTROLS_THEME_VARIABLES = [
     '--xy-controls-button-color',
@@ -21,13 +26,14 @@ const CONTROLS_THEME_VARIABLES = [
     '--xy-controls-button-background-color-hover',
 ];
 
+// Partials too: `index.scss` loads them app-wide.
 const getScssFiles = (directory: string): string[] =>
     readdirSync(resolve(process.cwd(), directory), { withFileTypes: true }).flatMap((entry) => {
         const path = join(directory, entry.name);
         if (entry.isDirectory()) {
             return getScssFiles(path);
         }
-        return entry.name.endsWith('.scss') && !entry.name.startsWith('_') ? [path] : [];
+        return entry.name.endsWith('.scss') ? [path] : [];
     });
 
 const getSelectors = (rules: CompiledRule[]): string[] => rules.flatMap((rule) => rule.selectors);
@@ -36,32 +42,54 @@ const getSelectors = (rules: CompiledRule[]): string[] => rules.flatMap((rule) =
 // `.react-flow__node.selected > .label`.
 const getFirstCompound = (selector: string): string => selector.split(/\s*[\s>+~]\s*/)[0];
 
+// A React Flow class, such as `.react-flow` or `.react-flow__node`. The dot
+// keeps out app classes that end in `-react-flow`.
+const REACT_FLOW_CLASS = /\.react-flow/;
+
+const opensWithRoot = (selector: string, root: string): boolean => {
+    const firstCompound = getFirstCompound(selector);
+    return firstCompound.startsWith(root) && !/^[\w-]/.test(firstCompound.slice(root.length));
+};
+
+// An app-owned `mlir-` class in the same compound as the React Flow class,
+// e.g. `.mlir-group-handle-port.react-flow__handle`.
+const isAnchoredOnMlirClass = (selector: string): boolean => {
+    const firstCompound = getFirstCompound(selector);
+    return /^\.mlir-/.test(firstCompound) && REACT_FLOW_CLASS.test(firstCompound);
+};
+
 const PANEL_BOTTOM_LEFT = /\.react-flow__panel\.bottom\.left\b/;
 
 describe('React Flow stylesheet scoping', () => {
-    it('keeps every view stylesheet off an unscoped React Flow selector', () => {
-        const files = SCANNED_DIRECTORIES.flatMap(getScssFiles);
+    it('opens every React Flow selector with a view root, apart from the shared theme', () => {
+        const themeSelectors = new Set(getSelectors(getCompiledRules(getCompiledStylesheet(SHARED_THEME))));
+        const files = [APP_ENTRY, ...getScssFiles('src/scss')];
         expect(files).toContain(MLIR_SHEET);
+        expect(files).toContain(SHARED_THEME);
 
         const offenders = files.flatMap((file) =>
             getSelectors(getCompiledRules(getCompiledStylesheet(file)))
-                .filter((selector) => getFirstCompound(selector).startsWith('.react-flow'))
-                .map((selector) => `${relative('.', file)}: ${selector}`),
+                .filter((selector) => REACT_FLOW_CLASS.test(selector))
+                .filter(
+                    (selector) =>
+                        !themeSelectors.has(selector) &&
+                        !VIEW_ROOTS.some((root) => opensWithRoot(selector, root)) &&
+                        !isAnchoredOnMlirClass(selector),
+                )
+                .map((selector) => `${file}: ${selector}`),
         );
 
         expect(offenders).toEqual([]);
     });
 
-    it('scopes every React Flow selector in the MLIR sheet to the MLIR page', () => {
+    it('scopes every React Flow selector in the MLIR sheet to the MLIR view pane', () => {
         const reactFlowSelectors = getSelectors(getCompiledRules(getCompiledStylesheet(MLIR_SHEET))).filter(
-            (selector) => selector.includes('react-flow'),
+            (selector) => REACT_FLOW_CLASS.test(selector),
         );
         expect(reactFlowSelectors.length).toBeGreaterThan(0);
 
-        // A selector anchored on an app-owned `mlir-` class is already scoped,
-        // e.g. `.mlir-group-handle-port.react-flow__handle`.
         const unscoped = reactFlowSelectors.filter(
-            (selector) => !selector.startsWith(':where(.mlir-page) ') && !/^\.mlir-/.test(getFirstCompound(selector)),
+            (selector) => !selector.startsWith(`${MLIR_ROOT} `) && !isAnchoredOnMlirClass(selector),
         );
         expect(unscoped).toEqual([]);
     });
@@ -71,17 +99,18 @@ describe('React Flow stylesheet scoping', () => {
             rule.selectors.some((selector) => PANEL_BOTTOM_LEFT.test(selector)),
         );
         expect(dockRules.flatMap((rule) => rule.selectors)).toEqual([
-            '.operation-graph-react-flow .react-flow__panel.bottom.left',
+            `${OP_GRAPH_ROOT} .react-flow__panel.bottom.left`,
         ]);
-        expect(dockRules[0].body).toMatch(/\bleft:\s*12px;/);
+        // Anchored on a declaration boundary, so `margin-left: 12px` does not count.
+        expect(dockRules[0].body).toMatch(/(?:^|[;{\s])left:\s*12px;/);
         expect(dockRules[0].body).toMatch(/margin-bottom:\s*\d+px;/);
     });
 
-    it('confines the MLIR bottom-left panel offsets to the MLIR page', () => {
+    it('confines the MLIR bottom-left panel offsets to the MLIR view pane', () => {
         const panelSelectors = getSelectors(getCompiledRules(getCompiledStylesheet(MLIR_SHEET))).filter((selector) =>
             PANEL_BOTTOM_LEFT.test(selector),
         );
-        expect(panelSelectors).toEqual([':where(.mlir-page) .react-flow .react-flow__panel.bottom.left']);
+        expect(panelSelectors).toEqual([`${MLIR_ROOT} .react-flow .react-flow__panel.bottom.left`]);
     });
 
     it('themes the shared Controls from the app-wide partial, below the props tier', () => {
@@ -90,10 +119,11 @@ describe('React Flow stylesheet scoping', () => {
 
         const { body } = rules[0];
         CONTROLS_THEME_VARIABLES.forEach((variable) => expect(body).toMatch(new RegExp(`${variable}:`)));
-        // The `-props` tier is React Flow's own for component props; setting it
-        // here would stop a `<Controls>` prop from overriding the theme.
+        // React Flow reads `-props` before the unsuffixed variable, so a `-props`
+        // value here would inherit down and shadow a view's own override nearer
+        // the Controls.
         expect(body).not.toContain('-props');
 
-        expect(getStylesheet('src/index.scss')).toMatch(/^@use 'scss\/reactFlow';$/m);
+        expect(getStylesheet(APP_ENTRY)).toMatch(/^@use 'scss\/reactFlow';$/m);
     });
 });

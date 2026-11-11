@@ -9,7 +9,8 @@
 // size — belongs in each view's own sheet, nested under its root class, so one
 // view's chrome never moves another's. #1899
 //
-// The unsuffixed tier, not `-props`, so React Flow component props still win.
+// Unsuffixed, not `-props`: React Flow reads `-props` first, so a `-props`
+// value on `.react-flow` would shadow each view's own override below it.
 .react-flow {
     --xy-controls-button-color: #{$tt-grey-2};
     --xy-controls-button-color-hover: #{$tt-grey-2};
