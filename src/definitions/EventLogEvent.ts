@@ -97,15 +97,16 @@ export enum EventLogView {
     MCP = 'mcp',
 }
 
-/**
- * The vocabularies below serve the per-surface events from #1837. What each one counts,
- * and the caveats for reading it, live on its Python twin in `event_logging.py` and in
- * `docs/src/event-logging.md`.
- */
+// The vocabularies below serve the per-surface events from #1837. What each one counts,
+// and the caveats for reading it, live on its Python twin in `event_logging.py` and in
+// `docs/src/event-logging.md`.
 
-// The `PerfChartId` members without their `perf-chart-` DOM prefix, so the exported label
-// does not move with markup.
-export enum PerfChart {
+/**
+ * One member per `PerfChartId`: the DOM id without its `perf-chart-` prefix, in snake_case,
+ * so the exported label does not move with markup. Named apart from the `PerfChart`
+ * component, which renders a chart rather than labelling one.
+ */
+export enum PerfChartLabel {
     OP_DURATION_HISTOGRAM = 'op_duration_histogram',
     OP_COUNT_VS_RUNTIME = 'op_count_vs_runtime',
     CORE_COUNT_KERNEL_RUNTIME = 'core_count_kernel_runtime',
@@ -144,6 +145,7 @@ export enum NpeMode {
     ALL_NOCS = 'all_nocs',
     FABRIC_EVENTS = 'fabric_events',
     LOCAL_EVENTS = 'local_events',
+    ALL_EVENTS = 'all_events',
     ALT_CONGESTION_COLOURS = 'alt_congestion_colours',
     TIMESTEPS_SCALE = 'timesteps_scale',
     CYCLES_SCALE = 'cycles_scale',
@@ -211,16 +213,16 @@ export type EventLogEventPayload =
       }
     | { event: EventLogEvent.VIEW_OPENED; details: { view: EventLogView } }
     | { event: EventLogEvent.VIEW_ENGAGED; details: { view: EventLogView } }
-    | { event: EventLogEvent.PERF_CHART_VIEWED; details: { chart: PerfChart } }
-    | { event: EventLogEvent.PERF_TABLE_OPTION_TOGGLED; details: { option: PerfTableOption } }
+    | { event: EventLogEvent.PERF_CHART_VIEWED; details: { perf_chart: PerfChartLabel } }
+    | { event: EventLogEvent.PERF_TABLE_OPTION_TOGGLED; details: { perf_table_option: PerfTableOption } }
     | {
           event: EventLogEvent.PERF_COMPARISON_USED;
           details: { report_count_bucket: ComparisonReportCountBucket };
       }
     | { event: EventLogEvent.NPE_PLAYBACK_STARTED; details: Record<string, never> }
-    | { event: EventLogEvent.NPE_MODE_CHANGED; details: { mode: NpeMode } }
-    | { event: EventLogEvent.MLIR_FILE_LOADED; details: { format: MlirFileFormat } }
+    | { event: EventLogEvent.NPE_MODE_CHANGED; details: { npe_mode: NpeMode } }
+    | { event: EventLogEvent.MLIR_FILE_LOADED; details: { mlir_format: MlirFileFormat } }
     | { event: EventLogEvent.MLIR_SPLIT_VIEW_USED; details: Record<string, never> }
-    | { event: EventLogEvent.DRILLDOWN_OPENED; details: { target: DrilldownTarget } }
-    | { event: EventLogEvent.FILTER_USED; details: { surface: FilterSurface } }
-    | { event: EventLogEvent.REMOTE_CONNECTION_TEST; details: { result: RemoteConnectionTestResult } };
+    | { event: EventLogEvent.DRILLDOWN_OPENED; details: { drilldown_target: DrilldownTarget } }
+    | { event: EventLogEvent.FILTER_USED; details: { filter_surface: FilterSurface } }
+    | { event: EventLogEvent.REMOTE_CONNECTION_TEST; details: { connection_test_result: RemoteConnectionTestResult } };

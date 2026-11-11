@@ -165,14 +165,14 @@ DEPLOYMENT_MODE_FIELD = "deployment_mode"
 LAUNCH_MODE_FIELD = "launch_mode"
 OS_FIELD = "os"
 PYTHON_VERSION_FIELD = "python_version"
-CHART_FIELD = "chart"
-OPTION_FIELD = "option"
+PERF_CHART_FIELD = "perf_chart"
+PERF_TABLE_OPTION_FIELD = "perf_table_option"
 REPORT_COUNT_BUCKET_FIELD = "report_count_bucket"
-MODE_FIELD = "mode"
-FORMAT_FIELD = "format"
-TARGET_FIELD = "target"
-SURFACE_FIELD = "surface"
-RESULT_FIELD = "result"
+NPE_MODE_FIELD = "npe_mode"
+MLIR_FORMAT_FIELD = "mlir_format"
+DRILLDOWN_TARGET_FIELD = "drilldown_target"
+FILTER_SURFACE_FIELD = "filter_surface"
+CONNECTION_TEST_RESULT_FIELD = "connection_test_result"
 
 # The wire shape of one posted event. ``EVENT_FIELD`` doubles as its name on the wire and
 # so is not restated; ``DETAILS_FIELD`` has no log equivalent, since details are flattened
@@ -371,11 +371,12 @@ class McpToolOutcome(str, Enum):
     ERROR = "error"
 
 
-class PerfChart(str, Enum):
+class PerfChartLabel(str, Enum):
     """The performance charts, for ``perf_chart_viewed`` (Q4: which charts to keep).
 
-    One member per ``PerfChartId`` in ``src/definitions/PerformanceCharts.ts``, without
-    its ``perf-chart-`` DOM prefix so the exported label does not move with markup. Every
+    One member per ``PerfChartId`` in ``src/definitions/PerformanceCharts.ts``: the DOM id
+    without its ``perf-chart-`` prefix, in snake_case, so the exported label does not move
+    with markup. Every
     chart renders on one scrolling page, so an event means the chart was scrolled or
     jumped to, counted once per chart per visit to the Charts tab — not that it was read.
     """
@@ -415,8 +416,9 @@ class PerfTableOption(str, Enum):
 class ComparisonReportCountBucket(str, Enum):
     """How many reports a comparison holds besides the active one, for ``perf_comparison_used``.
 
-    Bucketed rather than counted, as every size here is. Comparison is unavailable under
-    ``SERVER_MODE``, so hosted logs never carry this event.
+    Answers whether comparison is worth its complexity (Q4). Bucketed rather than counted,
+    as every size here is. Comparison is unavailable under ``SERVER_MODE``, so the
+    application never records this event there; the endpoint does not refuse it.
     """
 
     ONE = "one"
@@ -427,10 +429,13 @@ class ComparisonReportCountBucket(str, Enum):
 class NpeMode(str, Enum):
     """The NPE view control a user switched to, for ``npe_mode_changed`` (Q4).
 
-    Names the state chosen, so one label read answers which modes are picked. Recorded on
-    discrete control changes only — never per frame, per scrub tick, or from the effects
-    that reset a filter or restore the persisted colour preference. ``zones`` is opening
-    the zones panel.
+    Names the state chosen, so one label read answers which modes are picked. For the NoC
+    and event filters that is the filter state the switch leads to: each is three-state,
+    so each has a member for "both" (``all_nocs``, ``all_events``). The exception is
+    ``alt_congestion_colours``, the one two-state switch, which names the switch flipped
+    and is recorded in either direction. Recorded on discrete control changes only —
+    never per frame, per scrub tick, or from the effects that reset a filter or restore
+    the persisted colour preference. ``zones`` is opening the zones panel.
     """
 
     CONGESTION = "congestion"
@@ -440,6 +445,7 @@ class NpeMode(str, Enum):
     ALL_NOCS = "all_nocs"
     FABRIC_EVENTS = "fabric_events"
     LOCAL_EVENTS = "local_events"
+    ALL_EVENTS = "all_events"
     ALT_CONGESTION_COLOURS = "alt_congestion_colours"
     TIMESTEPS_SCALE = "timesteps_scale"
     CYCLES_SCALE = "cycles_scale"
@@ -501,8 +507,9 @@ class RemoteConnectionTestResult(str, Enum):
     ``host_key_rejected`` and ``report_path_failed`` are split out of ``auth_failed`` and
     ``other`` because they are the likeliest first-connection failures and need
     different fixes. ``report_path_failed`` means SSH succeeded but a configured path is
-    missing, not a directory, or unreadable. Remote sync is local-only, so hosted logs
-    never carry this event. Host, user and path are never recorded.
+    missing, not a directory, or unreadable. Remote sync is local-only, so the application
+    never records this event under ``SERVER_MODE``; the endpoint does not refuse it. Host,
+    user and path are never recorded.
     """
 
     SUCCESS = "success"
@@ -528,14 +535,14 @@ _DETAIL_FIELD_ENUMS: Mapping[str, Type[Enum]] = {
     OS_FIELD: OperatingSystem,
     TOOL_FIELD: McpToolName,
     OUTCOME_FIELD: McpToolOutcome,
-    CHART_FIELD: PerfChart,
-    OPTION_FIELD: PerfTableOption,
+    PERF_CHART_FIELD: PerfChartLabel,
+    PERF_TABLE_OPTION_FIELD: PerfTableOption,
     REPORT_COUNT_BUCKET_FIELD: ComparisonReportCountBucket,
-    MODE_FIELD: NpeMode,
-    FORMAT_FIELD: MlirFileFormat,
-    TARGET_FIELD: DrilldownTarget,
-    SURFACE_FIELD: FilterSurface,
-    RESULT_FIELD: RemoteConnectionTestResult,
+    NPE_MODE_FIELD: NpeMode,
+    MLIR_FORMAT_FIELD: MlirFileFormat,
+    DRILLDOWN_TARGET_FIELD: DrilldownTarget,
+    FILTER_SURFACE_FIELD: FilterSurface,
+    CONNECTION_TEST_RESULT_FIELD: RemoteConnectionTestResult,
 }
 
 # What a client may post, and the exact detail fields each event carries. Exported so
@@ -551,17 +558,19 @@ CLIENT_EVENT_DETAIL_FIELDS: Mapping[EventLogEvent, Tuple[str, ...]] = {
     EventLogEvent.REPORT_LOAD_FAILED: (KIND_FIELD, REASON_CLASS_FIELD),
     EventLogEvent.VIEW_OPENED: (VIEW_FIELD,),
     EventLogEvent.VIEW_ENGAGED: (VIEW_FIELD,),
-    EventLogEvent.PERF_CHART_VIEWED: (CHART_FIELD,),
-    EventLogEvent.PERF_TABLE_OPTION_TOGGLED: (OPTION_FIELD,),
+    EventLogEvent.PERF_CHART_VIEWED: (PERF_CHART_FIELD,),
+    EventLogEvent.PERF_TABLE_OPTION_TOGGLED: (PERF_TABLE_OPTION_FIELD,),
     EventLogEvent.PERF_COMPARISON_USED: (REPORT_COUNT_BUCKET_FIELD,),
-    # No details: the event itself is the whole answer. Posted with `details: {}`.
+    # No details: the event itself is the whole answer (Q4: is playback used). Posted
+    # with `details: {}`.
     EventLogEvent.NPE_PLAYBACK_STARTED: (),
-    EventLogEvent.NPE_MODE_CHANGED: (MODE_FIELD,),
-    EventLogEvent.MLIR_FILE_LOADED: (FORMAT_FIELD,),
+    EventLogEvent.NPE_MODE_CHANGED: (NPE_MODE_FIELD,),
+    EventLogEvent.MLIR_FILE_LOADED: (MLIR_FORMAT_FIELD,),
+    # Q4: is the split view used. No details, like playback.
     EventLogEvent.MLIR_SPLIT_VIEW_USED: (),
-    EventLogEvent.DRILLDOWN_OPENED: (TARGET_FIELD,),
-    EventLogEvent.FILTER_USED: (SURFACE_FIELD,),
-    EventLogEvent.REMOTE_CONNECTION_TEST: (RESULT_FIELD,),
+    EventLogEvent.DRILLDOWN_OPENED: (DRILLDOWN_TARGET_FIELD,),
+    EventLogEvent.FILTER_USED: (FILTER_SURFACE_FIELD,),
+    EventLogEvent.REMOTE_CONNECTION_TEST: (CONNECTION_TEST_RESULT_FIELD,),
 }
 SERVER_EVENT_DETAIL_FIELDS: Mapping[EventLogEvent, Tuple[str, ...]] = {
     EventLogEvent.APP_START: (
@@ -1495,6 +1504,8 @@ def validate_client_event(entry: Any) -> Tuple[EventLogEvent, Dict[str, Enum]]:
     # also what refuses `ts`, `schema_version`, `run_id` and `count` as details: the
     # server owns those fields and none of them appears in any expected tuple.
     if set(details) != set(expected):
+        if not expected:
+            raise EventLogEventRejected(f"Event {event.value} takes no details")
         raise EventLogEventRejected(
             f"Event {event.value} expects exactly these details: {', '.join(expected)}"
         )

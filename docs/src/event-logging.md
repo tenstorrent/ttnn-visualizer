@@ -137,29 +137,27 @@ Recorded by `ttnn-visualizer-mcp` when a registered tool reaches its handler, no
 
 `refused` is a tool declining a well-formed call it cannot answer (unknown handle, argument out of range). `error` is an unexpected failure the server did not anticipate.
 
-### Per-surface events
-
-The events below record what is used inside the Performance, NPE and MLIR views, and across them. Each fires once per deliberate action, from the control itself. Restoring persisted state, a reset by the application, a re-click on the option already selected, and anything continuous such as dragging or scrubbing record nothing. Each answers feature value or health (Q4 and Q5 in #1819). Read every count against the matching `report_loaded` count: a view nobody opens because nobody loaded that kind of report is not evidence that the feature is unwanted.
+**Per-surface events.** The events below record what is used inside the Performance, NPE and MLIR views, and across them. Each section names the #1819 question it answers. Most fire once per deliberate action, from the control itself: restoring persisted state, a reset by the application, a re-click on the option already selected, and anything continuous such as dragging or scrubbing record nothing. Two are tied to what is shown rather than to a control, and say so in their sections: `perf_chart_viewed` follows the scroll position, and `drilldown_opened` with `buffer_details` is recorded again when a reload restores the navigation that opened it. Read every count against the matching `report_loaded` count: a view nobody opens because nobody loaded that kind of report is not evidence that the feature is unwanted.
 
 ### `perf_chart_viewed`
 
-Recorded the first time each performance chart becomes the chart in view, per visit to the Charts tab. Every chart renders on one scrolling page, so this means the chart was scrolled or jumped to, not that it was studied. The first chart counts on opening the tab.
+Recorded the first time each performance chart becomes the chart in view, per visit to the Charts tab. It answers which charts to keep (Q4). Every chart renders on one scrolling page, so this means the chart was scrolled or jumped to, not that it was studied. The first chart counts on opening the tab.
 
-- `chart`: `op_duration_histogram`, `op_count_vs_runtime`, `core_count_kernel_runtime`, `kernel_duration_vs_core_count`, `matmul_core_count_utilization`, `matmul_device_time`, `matmul_kernel_duration_utilization`, `matmul_utilization_vs_kernel_duration`, `conv_core_count_utilization`, `conv_device_time`, `conv_kernel_duration_utilization`, `conv_utilization_vs_kernel_duration`, `operation_types`.
+- `perf_chart`: `op_duration_histogram`, `op_count_vs_runtime`, `core_count_kernel_runtime`, `kernel_duration_vs_core_count`, `matmul_core_count_utilization`, `matmul_device_time`, `matmul_kernel_duration_utilization`, `matmul_utilization_vs_kernel_duration`, `conv_core_count_utilization`, `conv_device_time`, `conv_kernel_duration_utilization`, `conv_utilization_vs_kernel_duration`, `operation_types`.
 
 The matmul and conv charts show a placeholder when the report has no such operations, and still count when scrolled to.
 
 ### `perf_table_option_toggled`
 
-Recorded when a switch above the performance table is flipped. The direction is not recorded.
+Recorded when a switch above the performance table is flipped. It answers which table options are used (Q4). The direction is not recorded.
 
-- `option`: `hide_host_ops`, `merge_devices`, `tracing_mode`, `matmul_advice`, `highlight_high_dispatch`, `normalise_data`.
+- `perf_table_option`: `hide_host_ops`, `merge_devices`, `tracing_mode`, `matmul_advice`, `highlight_high_dispatch`, `normalise_data`.
 
 `normalise_data` can only be flipped while comparison reports are selected.
 
 ### `perf_comparison_used`
 
-Recorded each time a comparison report is added or replaced in the Performance view. Removing one records nothing. Comparison is unavailable under `SERVER_MODE`, so hosted logs never contain this event.
+Recorded each time a comparison report is added or replaced in the Performance view. It answers whether comparison is worth its complexity (Q4). Removing one records nothing. Comparison is unavailable under `SERVER_MODE`, so the application never records this event there.
 
 - `report_count_bucket`: `one`, `two`, `three_or_more`.
 
@@ -167,33 +165,33 @@ The bucket counts comparison reports besides the active one, after the change.
 
 ### `npe_playback_started`
 
-Recorded when NPE timeline playback is started from the play or 2x button. Switching speed during playback, stepping, and dragging the timeline record nothing. It has no event-specific fields.
+Recorded when NPE timeline playback is started from the play or 2x button. It answers whether playback is used (Q4). Switching speed during playback, stepping, and dragging the timeline record nothing. It has no event-specific fields.
 
 ### `npe_mode_changed`
 
-Recorded when an NPE view control is switched. The value names the state chosen.
+Recorded when an NPE view control is switched. It answers which NPE modes are used (Q4). The value names the state chosen; for the NoC and event filters, that is the filter state the switch leads to.
 
-- `mode`: `congestion`, `transfers`, `noc0`, `noc1`, `all_nocs`, `fabric_events`, `local_events`, `alt_congestion_colours`, `timesteps_scale`, `cycles_scale`, `zones`.
+- `npe_mode`: `congestion`, `transfers`, `noc0`, `noc1`, `all_nocs`, `fabric_events`, `local_events`, `all_events`, `alt_congestion_colours`, `timesteps_scale`, `cycles_scale`, `zones`.
 
-`zones` is opening the zones panel. `alt_congestion_colours` is recorded whichever way the switch is flipped, and never for the saved preference applied at load.
+`fabric_events` and `local_events` mean only that kind of event is shown, and `all_events` that both are. `zones` is opening the zones panel. `alt_congestion_colours` is the one two-state switch, so it names the switch flipped and is recorded whichever way it goes, never for the saved preference applied at load.
 
 ### `mlir_file_loaded`
 
-Recorded once per file shown in the MLIR view after an upload, beside `report_loaded`.
+Recorded once per file shown in the MLIR view after an upload, beside `report_loaded`. It answers which inputs the beta is used with (Q3 and Q4).
 
-- `format`: `pb`, `pbtxt`, `graphdef`, `tflite`, `json`, `pt2`, `mlir`, `mlirbc`, `other`.
+- `mlir_format`: `pb`, `pbtxt`, `graphdef`, `tflite`, `json`, `pt2`, `mlir`, `mlirbc`, `other`.
 
-The format is the extension of the uploaded file's name, and the name itself is never recorded. The view is unavailable under `SERVER_MODE`, and released builds load every format through the MLIR server.
+The format is the extension of the uploaded file's name, and the name itself is never recorded. The view is unavailable under `SERVER_MODE`, so the application never records this event there, and released builds load every format through the MLIR server.
 
 ### `mlir_split_view_used`
 
-Recorded when the MLIR split view is opened, either from its button or by viewing two files at once. It has no event-specific fields.
+Recorded when the MLIR split view is opened, either from its button or by viewing two files at once. It answers whether the split view is used (Q4). It has no event-specific fields.
 
 ### `drilldown_opened`
 
-Recorded when a detail surface is opened.
+Recorded when a detail surface is opened. It answers how deep use goes (Q4).
 
-- `target`: `tensor_details`, `buffer_details`, `stack_trace`, `source_file`.
+- `drilldown_target`: `tensor_details`, `buffer_details`, `stack_trace`, `source_file`.
 
   - `tensor_details`: the tensor details drawer in the performance table, or a tensor's per-core allocation view.
   - `buffer_details`: a buffer or tensor focused in a memory view, including through a "Buffer details" link. Reloading a page reached through that link records it again.
@@ -204,17 +202,17 @@ Operation details are not a target: `view_opened` already counts them with `view
 
 ### `filter_used`
 
-Recorded the first time a filter's query becomes non-empty, per visit to the list or graph. The query text is never recorded.
+Recorded the first time a filter's query becomes non-empty, per visit to the list or graph. It answers which filters are used (Q4). The query text is never recorded.
 
-- `surface`: `operations`, `tensors`, `perf_op_code`, `mlir_op`.
+- `filter_surface`: `operations`, `tensors`, `perf_op_code`, `mlir_op`.
 
 In the MLIR split view each pane has its own filter, so one visit can record `mlir_op` twice.
 
 ### `remote_connection_test`
 
-Recorded when a remote connection test in the connection dialog finishes. Form errors caught before a request is sent are not tests and record nothing. Remote sync is unavailable under `SERVER_MODE`, so hosted logs never contain this event. Host, user and path are never recorded.
+Recorded when a remote connection test in the connection dialog finishes. It answers how often SSH sync works, and how it fails (Q5). Form errors caught before a request is sent are not tests and record nothing. Remote sync is unavailable under `SERVER_MODE`, so the application never records this event there. Host, user and path are never recorded.
 
-- `result`: `success`, `auth_failed`, `host_key_rejected`, `unreachable`, `no_reports_found`, `report_path_failed`, `other`.
+- `connection_test_result`: `success`, `auth_failed`, `host_key_rejected`, `unreachable`, `no_reports_found`, `report_path_failed`, `other`.
 
 `report_path_failed` means SSH connected but a configured report path is missing, not a directory, or unreadable. `no_reports_found` means the paths exist but hold no reports.
 
@@ -257,7 +255,7 @@ The projection exports one `_total` counter per event name with only that event'
 
 The exported shape is a privacy control, not plumbing: it is what keeps a behavioural trace on the machine. Any change to it (metric names, attribute keys or values, resource attributes) needs a privacy re-review, not only a code review. `test_payload_matches_the_privacy_reviewed_golden_output` pins the full payload for a fixed log. `_PRIVACY_REVIEWED_ATTRIBUTES` in the same file writes out every metric's attribute keys and closed vocabularies; `test_the_event_schema_matches_the_privacy_reviewed_shape` fails when the event schema drifts from it, and `test_exported_attributes_are_only_schema_fields_and_machine_id` checks the exported payload against it. A schema change therefore has to edit that literal, and a change that edits it or the golden output is a change to the shape.
 
-Some limits are accepted rather than fixed. Deleting a user account, or its `~/.ttnn-visualizer/usage/` directory, stops that series rather than lowering a total, so it goes stale instead of reading as a reset; removing stale series is the receiving side's job. Deleting `collection.json` and enabling collection again generates a new `machine_id`, so one home directory can appear as several identities over time. Machines sharing one NFS-mounted home share one identity and one log, so they report as a single series. A copied home directory, such as a migrated account, a VM or container image built after collection was enabled, or synced dotfiles, keeps the `machine_id` but starts a separate log; the copies then push independent totals under one series, and each drop between them reads as a counter reset that inflates `increase()` and `rate()`. Reach counts are therefore an upper bound on home directories, not on people: a shared login merges several people into one identity.
+Some limits are accepted rather than fixed. Deleting a user account, or its `~/.ttnn-visualizer/usage/` directory, stops that series rather than lowering a total, so it goes stale instead of reading as a reset; removing stale series is the receiving side's job. Deleting `collection.json` and enabling collection again generates a new `machine_id`, so one home directory can appear as several identities over time. Machines sharing one NFS-mounted home share one identity and one log, so they report as a single series. A copied home directory, such as a migrated account, a VM or container image built after collection was enabled, or synced dotfiles, keeps the `machine_id` but starts a separate log; the copies then push independent totals under one series, and each drop between them reads as a counter reset that inflates `increase()` and `rate()`. Reach counts are therefore an upper bound on home directories, not on people: a shared login merges several people into one identity. Versions also skew: a batch of frontend events is accepted or refused whole, so a newer page posting to an older backend, such as a stale tab or a hosted rolling deploy, loses every batch carrying an event that backend does not know, including the familiar events in it. An older version reading a newer log counts unknown events as parse errors, so two installed versions sharing one home push alternating `ttnn_visualizer_usage_collector_parse_errors_total` values.
 
 The pushes come from the `ttnn-visualizer` launcher, not the gunicorn workers, so one exporter serves any number of workers. Under `--daemon` the launcher exits as soon as gunicorn detaches, so both of its pushes happen at launch; usage from a daemon session is only sent by the next launch with collection enabled. The final push on exit is limited to a few seconds, and is skipped if an earlier push is still in flight, so a slow endpoint cannot hold up shutdown. Any local process can append to the event log and so inflate the counts. Treat per-machine counts as indicative rather than trustworthy.
 

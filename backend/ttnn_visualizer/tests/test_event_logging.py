@@ -38,8 +38,10 @@ from ttnn_visualizer.event_logging import (
     UNKNOWN_VALUE,
     DeploymentMode,
     EventLogEvent,
+    EventLogEventRejected,
     EventLogView,
     LaunchMode,
+    MlirFileFormat,
     ReportKind,
     ReportLoadFailureReason,
     get_application_version,
@@ -51,7 +53,9 @@ from ttnn_visualizer.event_logging import (
     record_app_start,
     record_event,
     record_events,
+    validate_client_event,
 )
+from ttnn_visualizer.mlir import MLIR_SERVER_ACCEPTED_EXTENSIONS
 from ttnn_visualizer.settings import DefaultConfig
 from ttnn_visualizer.tests.event_log_readers import (
     parse_event_log_line,
@@ -1783,11 +1787,21 @@ def test_mlir_file_formats_are_exactly_the_accepted_extensions():
 
     Nothing else would notice: ``other`` is a valid value, so the drift stays silent.
     """
-    from ttnn_visualizer.event_logging import MlirFileFormat
-    from ttnn_visualizer.mlir import MLIR_SERVER_ACCEPTED_EXTENSIONS
-
     assert {
         f".{member.value}"
         for member in MlirFileFormat
         if member is not MlirFileFormat.OTHER
     } == set(MLIR_SERVER_ACCEPTED_EXTENSIONS)
+
+
+def test_an_event_without_details_says_so_when_given_one():
+    """The expected-keys message would otherwise end in an empty list."""
+    with pytest.raises(
+        EventLogEventRejected, match=r"npe_playback_started takes no details$"
+    ):
+        validate_client_event(
+            {
+                "event": EventLogEvent.NPE_PLAYBACK_STARTED.value,
+                "details": {"npe_mode": "zones"},
+            }
+        )

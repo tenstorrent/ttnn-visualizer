@@ -9,7 +9,7 @@ import {
     FilterSurface,
     MlirFileFormat,
     NpeMode,
-    PerfChart,
+    PerfChartLabel,
     PerfTableOption,
     RemoteConnectionTestResult,
 } from '../definitions/EventLogEvent';
@@ -19,26 +19,36 @@ import recordEvent from './recordEvent';
 /**
  * Recorders for the per-surface usage events (#1837).
  *
- * Call these from the handler of a deliberate user action, never from an effect on state:
- * several of the states involved are persisted or written by code, and an effect would
- * count a load or a reset as use. None may run per frame, per render or per row.
+ * Call a control-driven event's recorder from the handler of the deliberate action, never
+ * from an effect on state: several of the states involved are persisted or written by
+ * code, and an effect would count a load or a reset as use. Two events are tied to what is
+ * shown rather than to a control, and are the only exceptions:
+ *
+ * - `perf_chart_viewed` follows the scroll position, so it is recorded from an effect on
+ *   the Charts tab's active section, once per chart per visit.
+ * - `drilldown_opened` with `buffer_details` is recorded wherever a buffer is focused,
+ *   which includes the navigation a "Buffer details" link starts, so a reload that
+ *   restores that navigation records it again.
+ *
+ * Follow one of those only for an event that is likewise about what is shown, and say so
+ * in its docs section. None may run per frame, per render or per row.
  */
 
 // Exhaustive, so a new chart fails type-checking until it is given an exported label.
-const PERF_CHART_BY_CHART_ID: Readonly<Record<PerfChartId, PerfChart>> = Object.freeze({
-    [PerfChartId.OpDurationHistogram]: PerfChart.OP_DURATION_HISTOGRAM,
-    [PerfChartId.OpCountVsRuntime]: PerfChart.OP_COUNT_VS_RUNTIME,
-    [PerfChartId.CoreCountKernelRuntime]: PerfChart.CORE_COUNT_KERNEL_RUNTIME,
-    [PerfChartId.KernelDurationVsCoreCount]: PerfChart.KERNEL_DURATION_VS_CORE_COUNT,
-    [PerfChartId.MatmulCoreCountUtilization]: PerfChart.MATMUL_CORE_COUNT_UTILIZATION,
-    [PerfChartId.MatmulDeviceTime]: PerfChart.MATMUL_DEVICE_TIME,
-    [PerfChartId.MatmulKernelDurationUtilization]: PerfChart.MATMUL_KERNEL_DURATION_UTILIZATION,
-    [PerfChartId.MatmulUtilizationVsKernelDuration]: PerfChart.MATMUL_UTILIZATION_VS_KERNEL_DURATION,
-    [PerfChartId.ConvCoreCountUtilization]: PerfChart.CONV_CORE_COUNT_UTILIZATION,
-    [PerfChartId.ConvDeviceTime]: PerfChart.CONV_DEVICE_TIME,
-    [PerfChartId.ConvKernelDurationUtilization]: PerfChart.CONV_KERNEL_DURATION_UTILIZATION,
-    [PerfChartId.ConvUtilizationVsKernelDuration]: PerfChart.CONV_UTILIZATION_VS_KERNEL_DURATION,
-    [PerfChartId.OperationTypes]: PerfChart.OPERATION_TYPES,
+const PERF_CHART_BY_CHART_ID: Readonly<Record<PerfChartId, PerfChartLabel>> = Object.freeze({
+    [PerfChartId.OpDurationHistogram]: PerfChartLabel.OP_DURATION_HISTOGRAM,
+    [PerfChartId.OpCountVsRuntime]: PerfChartLabel.OP_COUNT_VS_RUNTIME,
+    [PerfChartId.CoreCountKernelRuntime]: PerfChartLabel.CORE_COUNT_KERNEL_RUNTIME,
+    [PerfChartId.KernelDurationVsCoreCount]: PerfChartLabel.KERNEL_DURATION_VS_CORE_COUNT,
+    [PerfChartId.MatmulCoreCountUtilization]: PerfChartLabel.MATMUL_CORE_COUNT_UTILIZATION,
+    [PerfChartId.MatmulDeviceTime]: PerfChartLabel.MATMUL_DEVICE_TIME,
+    [PerfChartId.MatmulKernelDurationUtilization]: PerfChartLabel.MATMUL_KERNEL_DURATION_UTILIZATION,
+    [PerfChartId.MatmulUtilizationVsKernelDuration]: PerfChartLabel.MATMUL_UTILIZATION_VS_KERNEL_DURATION,
+    [PerfChartId.ConvCoreCountUtilization]: PerfChartLabel.CONV_CORE_COUNT_UTILIZATION,
+    [PerfChartId.ConvDeviceTime]: PerfChartLabel.CONV_DEVICE_TIME,
+    [PerfChartId.ConvKernelDurationUtilization]: PerfChartLabel.CONV_KERNEL_DURATION_UTILIZATION,
+    [PerfChartId.ConvUtilizationVsKernelDuration]: PerfChartLabel.CONV_UTILIZATION_VS_KERNEL_DURATION,
+    [PerfChartId.OperationTypes]: PerfChartLabel.OPERATION_TYPES,
 });
 
 const PERF_CHART_IDS = new Set<string>(Object.values(PerfChartId));
@@ -59,25 +69,32 @@ const TWO_COMPARISON_REPORTS = 2;
  * Operation Types renders one section per report, with an `-active` or `-comparison-<n>`
  * suffix (`getOperationTypesChartId`), so it is matched by prefix rather than exactly.
  */
-export function getPerfChartForChartId(chartId: string): PerfChart | null {
+export function getPerfChartForChartId(chartId: string): PerfChartLabel | null {
     if (PERF_CHART_IDS.has(chartId)) {
         return PERF_CHART_BY_CHART_ID[chartId as PerfChartId];
     }
 
     if (chartId.startsWith(`${PerfChartId.OperationTypes}-`)) {
-        return PerfChart.OPERATION_TYPES;
+        return PerfChartLabel.OPERATION_TYPES;
     }
 
     return null;
 }
 
-/** Comparison reports besides the active one, bucketed so no raw count is ever recorded. */
-export function getComparisonReportCountBucket(reportCount: number): ComparisonReportCountBucket {
-    if (reportCount <= ONE_COMPARISON_REPORT) {
+/**
+ * A comparison's size, bucketed so no raw count is ever recorded, or `null` when there is no
+ * comparison to count: an empty one is not a use.
+ */
+export function getComparisonReportCountBucket(comparisonReportCount: number): ComparisonReportCountBucket | null {
+    if (comparisonReportCount < ONE_COMPARISON_REPORT) {
+        return null;
+    }
+
+    if (comparisonReportCount === ONE_COMPARISON_REPORT) {
         return ComparisonReportCountBucket.ONE;
     }
 
-    if (reportCount === TWO_COMPARISON_REPORTS) {
+    if (comparisonReportCount === TWO_COMPARISON_REPORTS) {
         return ComparisonReportCountBucket.TWO;
     }
 
@@ -100,19 +117,23 @@ export function getMlirFileFormat(filename: string): MlirFileFormat {
     return MLIR_FILE_FORMAT_BY_EXTENSION.get(filename.slice(extensionStart).toLowerCase()) ?? MlirFileFormat.OTHER;
 }
 
-export function recordPerfChartViewed(chart: PerfChart): void {
-    recordEvent({ event: EventLogEvent.PERF_CHART_VIEWED, details: { chart } });
+export function recordPerfChartViewed(chart: PerfChartLabel): void {
+    recordEvent({ event: EventLogEvent.PERF_CHART_VIEWED, details: { perf_chart: chart } });
 }
 
 export function recordPerfTableOptionToggled(option: PerfTableOption): void {
-    recordEvent({ event: EventLogEvent.PERF_TABLE_OPTION_TOGGLED, details: { option } });
+    recordEvent({ event: EventLogEvent.PERF_TABLE_OPTION_TOGGLED, details: { perf_table_option: option } });
 }
 
-export function recordPerfComparisonUsed(reportCount: number): void {
-    recordEvent({
-        event: EventLogEvent.PERF_COMPARISON_USED,
-        details: { report_count_bucket: getComparisonReportCountBucket(reportCount) },
-    });
+/** Records nothing for an empty comparison, which `getComparisonReportCountBucket` refuses. */
+export function recordPerfComparisonUsed(comparisonReportCount: number): void {
+    const bucket = getComparisonReportCountBucket(comparisonReportCount);
+
+    if (bucket === null) {
+        return;
+    }
+
+    recordEvent({ event: EventLogEvent.PERF_COMPARISON_USED, details: { report_count_bucket: bucket } });
 }
 
 export function recordNpePlaybackStarted(): void {
@@ -120,11 +141,11 @@ export function recordNpePlaybackStarted(): void {
 }
 
 export function recordNpeModeChanged(mode: NpeMode): void {
-    recordEvent({ event: EventLogEvent.NPE_MODE_CHANGED, details: { mode } });
+    recordEvent({ event: EventLogEvent.NPE_MODE_CHANGED, details: { npe_mode: mode } });
 }
 
 export function recordMlirFileLoaded(filename: string): void {
-    recordEvent({ event: EventLogEvent.MLIR_FILE_LOADED, details: { format: getMlirFileFormat(filename) } });
+    recordEvent({ event: EventLogEvent.MLIR_FILE_LOADED, details: { mlir_format: getMlirFileFormat(filename) } });
 }
 
 export function recordMlirSplitViewUsed(): void {
@@ -132,13 +153,13 @@ export function recordMlirSplitViewUsed(): void {
 }
 
 export function recordDrilldownOpened(target: DrilldownTarget): void {
-    recordEvent({ event: EventLogEvent.DRILLDOWN_OPENED, details: { target } });
+    recordEvent({ event: EventLogEvent.DRILLDOWN_OPENED, details: { drilldown_target: target } });
 }
 
 export function recordFilterUsed(surface: FilterSurface): void {
-    recordEvent({ event: EventLogEvent.FILTER_USED, details: { surface } });
+    recordEvent({ event: EventLogEvent.FILTER_USED, details: { filter_surface: surface } });
 }
 
 export function recordRemoteConnectionTest(result: RemoteConnectionTestResult): void {
-    recordEvent({ event: EventLogEvent.REMOTE_CONNECTION_TEST, details: { result } });
+    recordEvent({ event: EventLogEvent.REMOTE_CONNECTION_TEST, details: { connection_test_result: result } });
 }

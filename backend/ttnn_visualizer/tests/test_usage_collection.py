@@ -1100,7 +1100,7 @@ _PRIVACY_REVIEWED_ATTRIBUTES: dict[str, dict[str, frozenset[str] | str]] = {
     "ttnn_visualizer_view_opened_total": {"view": _REVIEWED_VIEWS},
     "ttnn_visualizer_view_engaged_total": {"view": _REVIEWED_VIEWS},
     "ttnn_visualizer_perf_chart_viewed_total": {
-        "chart": frozenset(
+        "perf_chart": frozenset(
             {
                 "op_duration_histogram",
                 "op_count_vs_runtime",
@@ -1119,7 +1119,7 @@ _PRIVACY_REVIEWED_ATTRIBUTES: dict[str, dict[str, frozenset[str] | str]] = {
         ),
     },
     "ttnn_visualizer_perf_table_option_toggled_total": {
-        "option": frozenset(
+        "perf_table_option": frozenset(
             {
                 "hide_host_ops",
                 "merge_devices",
@@ -1135,7 +1135,7 @@ _PRIVACY_REVIEWED_ATTRIBUTES: dict[str, dict[str, frozenset[str] | str]] = {
     },
     "ttnn_visualizer_npe_playback_started_total": {},
     "ttnn_visualizer_npe_mode_changed_total": {
-        "mode": frozenset(
+        "npe_mode": frozenset(
             {
                 "congestion",
                 "transfers",
@@ -1144,6 +1144,7 @@ _PRIVACY_REVIEWED_ATTRIBUTES: dict[str, dict[str, frozenset[str] | str]] = {
                 "all_nocs",
                 "fabric_events",
                 "local_events",
+                "all_events",
                 "alt_congestion_colours",
                 "timesteps_scale",
                 "cycles_scale",
@@ -1152,7 +1153,7 @@ _PRIVACY_REVIEWED_ATTRIBUTES: dict[str, dict[str, frozenset[str] | str]] = {
         ),
     },
     "ttnn_visualizer_mlir_file_loaded_total": {
-        "format": frozenset(
+        "mlir_format": frozenset(
             {
                 "pb",
                 "pbtxt",
@@ -1168,15 +1169,17 @@ _PRIVACY_REVIEWED_ATTRIBUTES: dict[str, dict[str, frozenset[str] | str]] = {
     },
     "ttnn_visualizer_mlir_split_view_used_total": {},
     "ttnn_visualizer_drilldown_opened_total": {
-        "target": frozenset(
+        "drilldown_target": frozenset(
             {"tensor_details", "buffer_details", "stack_trace", "source_file"}
         ),
     },
     "ttnn_visualizer_filter_used_total": {
-        "surface": frozenset({"operations", "tensors", "perf_op_code", "mlir_op"}),
+        "filter_surface": frozenset(
+            {"operations", "tensors", "perf_op_code", "mlir_op"}
+        ),
     },
     "ttnn_visualizer_remote_connection_test_total": {
-        "result": frozenset(
+        "connection_test_result": frozenset(
             {
                 "success",
                 "auth_failed",
