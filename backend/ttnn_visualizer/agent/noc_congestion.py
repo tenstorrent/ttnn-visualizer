@@ -21,7 +21,7 @@ from typing import Dict, List, Optional, Tuple
 import orjson
 import zstd
 from ttnn_visualizer import npe_index
-from ttnn_visualizer.agent.bounds import MAX_LIMIT, bounded
+from ttnn_visualizer.agent.bounds import MAX_LIMIT, bounded, name_fits
 from ttnn_visualizer.agent.cells import finite_number, whole_number
 from ttnn_visualizer.agent.handles import CacheVariant, ReportRegistry, read_once
 from ttnn_visualizer.agent.report_diff import as_answered
@@ -30,9 +30,9 @@ from ttnn_visualizer.file_source import FileSource
 
 # Demand past a link's whole bandwidth: asked of it, but more than it could carry.
 CONGESTED_PERCENT = 100.0
-# Longer than any link or NoC name tt-npe writes; a longer one is the trace's text.
+# In bytes, past any link or NoC name tt-npe writes; a longer one is the trace's text.
 MAX_LINK_NAME_LENGTH = 32
-# Longer than any architecture, device or model name tt-npe writes.
+# In bytes, past any architecture, device or model name tt-npe writes.
 MAX_LABEL_LENGTH = 64
 # tt-npe models two NoCs; more in a trace's run summary are its text, not a NoC.
 MAX_NOCS = 4
@@ -156,7 +156,7 @@ def _link(device: object, y: object, x: object, name: object) -> Optional[Link]:
         and type(y) is int
         and type(x) is int
         and type(name) is str
-        and len(name) <= MAX_LINK_NAME_LENGTH
+        and name_fits(name, MAX_LINK_NAME_LENGTH)
     ):
         return device, y, x, name
     return None
@@ -408,7 +408,9 @@ def _pinned_read(
 
 
 def _label(value: object) -> Optional[str]:
-    return value if isinstance(value, str) and len(value) <= MAX_LABEL_LENGTH else None
+    if isinstance(value, str) and name_fits(value, MAX_LABEL_LENGTH):
+        return value
+    return None
 
 
 def _figure(value: object) -> Optional[float]:
@@ -442,7 +444,7 @@ def _run(info: Dict[str, object]) -> Dict[str, object]:
             for name, figures in sorted(
                 (name, figures)
                 for name, figures in nocs.items()
-                if isinstance(figures, dict) and len(name) <= MAX_LINK_NAME_LENGTH
+                if isinstance(figures, dict) and name_fits(name, MAX_LINK_NAME_LENGTH)
             )[:MAX_NOCS]
         }
     return run
@@ -468,7 +470,7 @@ def _caveats(read: _NocRead, path: Path, changed: bool) -> List[str]:
     if read.unreadable_entries:
         caveats.append(
             f"{read.unreadable_entries} link demand entries were not a link's "
-            f"coordinates, a name of at most {MAX_LINK_NAME_LENGTH} characters and a "
+            f"coordinates, a name of at most {MAX_LINK_NAME_LENGTH} bytes and a "
             "non-negative number, and were left out."
         )
     if read.entries_past_link_limit:

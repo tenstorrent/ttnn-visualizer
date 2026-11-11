@@ -1364,7 +1364,9 @@ class TestTopOps:
         registry = self._registry(tmp_path)
         name = "S" * (tools.MAX_SIGNPOST_NAME_LENGTH + 1)
         with patch.object(tools, "_generate_canonical_report") as generate:
-            with pytest.raises(ValueError, match=f"{argument} is 257 characters"):
+            with pytest.raises(
+                ValueError, match=f"{argument} is 257 bytes as an answer writes it"
+            ):
                 tools.top_ops(registry, "report-1", **{argument: name})
 
         generate.assert_not_called()
