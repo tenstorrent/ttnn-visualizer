@@ -126,6 +126,25 @@ describe('MLIR route split-view wiring', () => {
     });
 });
 
+// `MLIRViewReactFlow.scss` scopes every React Flow rule under `.mlir-page`, so
+// a graph mounted outside it renders with none of its minimap, panel or node
+// styles, and nothing else fails. #1899
+describe('MLIR route style scope', () => {
+    it('mounts the single graph inside `.mlir-page`', () => {
+        mockUseMlir.mockReturnValue({ data: null, isLoading: false, error: undefined });
+        renderRoute(sampleData);
+
+        expect(screen.getByTestId('mlir-single-graph').closest('.mlir-page')).not.toBeNull();
+    });
+
+    it('mounts the split view inside `.mlir-page`', () => {
+        mockUseMlir.mockReturnValue({ data: null, isLoading: false, error: undefined });
+        renderRoute(sampleData, peerData);
+
+        expect(screen.getByTestId('mlir-split-view').closest('.mlir-page')).not.toBeNull();
+    });
+});
+
 describe('MLIR route loader collapse', () => {
     it('keeps the loader open with no toggle on the initial (no-graph) screen', () => {
         mockUseMlir.mockReturnValue({ data: null, isLoading: false, error: undefined });
