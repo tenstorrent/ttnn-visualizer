@@ -41,7 +41,8 @@ MAX_LINK_NAME_LENGTH = 32
 MAX_LABEL_LENGTH = 64
 # tt-npe models two NoCs; more in a trace's run summary are its text, not a NoC.
 MAX_NOCS = 4
-# Past every local trace (904 MB of JSON); reading one costs about twice its size.
+# Past every local trace (904 MB of JSON); reading one costs about twice its size when
+# its bulk is spread over its timesteps (#2320).
 MAX_TRACE_JSON_BYTES = 1 << 30
 # A trace whose JSON is past this is read in a process of its own, whose memory goes back
 # to the system when it ends; the server's own allocator would keep much of it. #2275
@@ -288,13 +289,18 @@ def _summed(  # noqa: C901
 def _past_limit(npe_path: Path, size: str) -> ValueError:
     return ValueError(
         f"{npe_path.name} holds {size} bytes of JSON, past the "
-        f"{MAX_TRACE_JSON_BYTES:,} this tool reads, about twice that in memory; "
-        "open it in the app, whose index this tool then reads"
+        f"{MAX_TRACE_JSON_BYTES:,} this tool reads, about twice that in memory if "
+        "its bulk is spread over its timesteps; open it in the app, whose index this "
+        "tool then reads"
     )
 
 
 def _unreadable(npe_path: Path, reason: object) -> ValueError:
     return ValueError(f"{npe_path.name} is not a readable tt-npe trace: {reason}")
+
+
+def _too_deep(npe_path: Path) -> ValueError:
+    return _unreadable(npe_path, "it nests too deep")
 
 
 def _trace_json(npe_path: Path, compressed: bool) -> bytes:
@@ -352,8 +358,8 @@ def _from_trace(npe_path: Path) -> _NocRead:
         return _summed(npe_index.streamed_link_demand(text))
     except json.JSONDecodeError as error:
         raise _unreadable(npe_path, error) from None
-    except RecursionError:
-        raise _unreadable(npe_path, "it nests too deep") from None
+    except npe_index.NestsTooDeep:
+        raise _too_deep(npe_path) from None
     except ValueError as error:
         raise ValueError(f"{npe_path.name}: {error}") from None
 
@@ -361,11 +367,15 @@ def _from_trace(npe_path: Path) -> _NocRead:
 def _reader_setup() -> None:
     """Keep a reading process off stdout, which carries the server's messages, and end
     it with the server: a pool's worker outlives a killed parent, holding the read."""
+    # Spawn imports `__main__` and this module before this runs, on the server's
+    # stdout, so neither may print at import.
     try:
         quiet = sys.stderr.fileno()
     except (AttributeError, OSError, ValueError):
         quiet = os.open(os.devnull, os.O_WRONLY)
     os.dup2(quiet, 1)
+    # Room to send back a read whose `common_info` nests as deep as orjson reads.
+    sys.setrecursionlimit(sys.getrecursionlimit() + npe_index.RECURSION_HEADROOM)
     parent = multiprocessing.parent_process()
     if parent is not None:
         threading.Thread(
@@ -403,7 +413,7 @@ def _read_trace(npe_path: Path) -> _NocRead:
             return reader.submit(_from_trace, npe_path).result()
         except RecursionError:
             # Sending the read back nests as deep as its `common_info` does.
-            raise _unreadable(npe_path, "it nests too deep") from None
+            raise _too_deep(npe_path) from None
         except BrokenProcessPool:
             # Not a refusal, which would be kept: what ended the process may pass.
             raise RuntimeError(

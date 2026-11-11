@@ -23,6 +23,7 @@ import logging
 import os
 import re
 import sqlite3
+import sys
 import tempfile
 import threading
 from pathlib import Path
@@ -169,7 +170,11 @@ def load_npe_object(npe_path: Path) -> dict:
 
 def parse_trace(data: bytes, compressed: bool) -> dict:
     """A trace's bytes as `load_npe_object` reads them: zstd frames, or JSON."""
-    return orjson.loads(zstd.uncompress(data) if compressed else data)
+    if compressed:
+        # Rebound, so the compressed bytes are freed before the parse; from Python 3.11
+        # only, as 3.10 keeps the caller's reference to them until the call returns.
+        data = zstd.uncompress(data)
+    return orjson.loads(data)
 
 
 ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
@@ -601,6 +606,22 @@ _JSON_SPACE = re.compile(r"[ \t\n\r]*")
 # Finds where a value ends; orjson then reads it, so each value reads as `parse_trace`
 # would read it, and a refusal falls where its refusal would.
 _VALUE_END = json.JSONDecoder()
+# orjson reads arrays and objects nested this deep and refuses deeper; so does the
+# streamed read, whatever its caller's stack, so every read of a trace agrees.
+MAX_JSON_DEPTH = 1024
+# Before Python 3.12 the stdlib scanner's recursion counts against the interpreter's
+# limit, part of which the caller's own frames have used.
+RECURSION_HEADROOM = MAX_JSON_DEPTH + 64
+_ORJSON_TOO_DEEP = "depth limit exceeded"
+
+
+class NestsTooDeep(ValueError):
+    """Arrays and objects nested past `MAX_JSON_DEPTH`, which the whole parse refuses."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            f"it nests more than {MAX_JSON_DEPTH:,} arrays and objects deep"
+        )
 
 
 class StreamedLinkDemand:
@@ -638,7 +659,7 @@ class StreamedLinkDemand:
         at = _space(text, 0)
         if not text.startswith("{", at):
             # Read through first: what the whole parse cannot read is refused as such.
-            _at_end(text, _past_value(text, at))
+            _at_end(text, _past_value(text, at, 0))
             raise ValueError(_NOT_A_TRACE)
         at = _space(text, at + 1)
         steps_read = False
@@ -648,12 +669,12 @@ class StreamedLinkDemand:
                 # orjson keeps the last of two, and the first has already been read.
                 raise ValueError("it names timestep_data twice")
             if text.startswith("[", at):
-                values = _Elements(text, at)
+                values = _Elements(text, at, 1)
                 steps_read = steps_read or key == "timestep_data"
                 yield from self._array(key, values)
                 at = values.end
             else:
-                value, at = _value(text, at)
+                value, at = _value(text, at, 1)
                 self._take(key, value)
             at = _after_member(text, at, "}")
         _at_end(text, at + 1)
@@ -681,14 +702,15 @@ class StreamedLinkDemand:
         if key == "common_info":
             self._common_info = _common_info_of(value)
         elif key == "noc_transfers":
-            self._transfer_count = 0
+            self._transfer_count = _transfer_count(value)
 
 
 class _Elements:
-    """Each element of the array at `at`, read by orjson; `end` is past it once read."""
+    """Each element of the array at `at`, inside `depth` arrays and objects, read by
+    orjson; `end` is past it once read."""
 
-    def __init__(self, text: str, at: int) -> None:
-        self.text, self.at, self.end = text, at, at
+    def __init__(self, text: str, at: int, depth: int) -> None:
+        self.text, self.at, self.end, self.depth = text, at, at, depth
 
     def __iter__(self) -> Iterator[object]:
         text = self.text
@@ -697,7 +719,7 @@ class _Elements:
             self.end = at + 1
             return
         while True:
-            value, at = _value(text, at)
+            value, at = _value(text, at, self.depth + 1)
             yield value
             at = _after_member(text, at, "]")
             if text.startswith("]", at):
@@ -709,25 +731,40 @@ def _space(text: str, at: int) -> int:
     return cast(re.Match, _JSON_SPACE.match(text, at)).end()
 
 
-def _value(text: str, at: int) -> Tuple[object, int]:
-    """orjson's read of the value at `at`, and where it ends."""
-    # Only the end: the scanner's object is let go before orjson builds its own.
-    end = _VALUE_END.raw_decode(text, at)[1]
+def _value(text: str, at: int, depth: int) -> Tuple[object, int]:
+    """orjson's read of the value at `at`, inside `depth` arrays and objects, and where
+    it ends."""
+    limit = sys.getrecursionlimit()
+    sys.setrecursionlimit(limit + RECURSION_HEADROOM)
     try:
-        return orjson.loads(text[at:end].encode("latin-1")), end
+        # Only the end: the scanner's object is let go before orjson builds its own.
+        end = _VALUE_END.raw_decode(text, at)[1]
+    except RecursionError:
+        raise NestsTooDeep() from None
+    finally:
+        sys.setrecursionlimit(limit)
+    # Wrapped as deep as it sits, so orjson's depth limit is the whole parse's.
+    wrapped = b"[" * depth + text[at:end].encode("latin-1") + b"]" * depth
+    try:
+        value = orjson.loads(wrapped)
     except orjson.JSONDecodeError as error:
+        if error.msg == _ORJSON_TOO_DEEP:
+            raise NestsTooDeep() from None
         # Where in the trace, as the whole parse would say, not where in the value.
-        raise json.JSONDecodeError(error.msg, text, at + error.pos) from None
+        raise json.JSONDecodeError(error.msg, text, at + error.pos - depth) from None
+    for _ in range(depth):
+        value = cast(list, value)[0]
+    return value, end
 
 
-def _past_value(text: str, at: int) -> int:
+def _past_value(text: str, at: int, depth: int) -> int:
     """Past the value at `at`, read as `_value` reads it, an array an element at a time."""
     if text.startswith("[", at):
-        values = _Elements(text, at)
+        values = _Elements(text, at, depth)
         for _ in values:
             pass
         return values.end
-    return _value(text, at)[1]
+    return _value(text, at, depth)[1]
 
 
 def _at_end(text: str, at: int) -> None:
@@ -741,7 +778,7 @@ def _key(text: str, at: int) -> Tuple[str, int]:
     """The member name at `at` as orjson reads it, and where its value starts."""
     if not text.startswith('"', at):
         _refuse(text, at, "Expecting property name enclosed in double quotes")
-    key, at = _value(text, at)
+    key, at = _value(text, at, 1)
     at = _space(text, at)
     if not text.startswith(":", at):
         _refuse(text, at, "Expecting ':' delimiter")
