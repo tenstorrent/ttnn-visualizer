@@ -209,10 +209,13 @@ def test_the_detailed_row_cap_the_page_states_is_the_enforced_one():
 
 
 def test_the_signpost_name_limit_the_page_states_is_the_enforced_one():
-    """The page states the limit as a number, so nothing else ties it to the code."""
+    """The page states the limit as a number, so nothing else ties it to the code:
+    once for `load_report`'s list and once for a range's refusal."""
     page = " ".join(_read(_AGENT_DOCS).split())
+    stated = f"name longer than {tools.MAX_SIGNPOST_NAME_LENGTH} bytes as an answer"
 
-    assert f"a name longer than {tools.MAX_SIGNPOST_NAME_LENGTH} bytes" in page
+    assert f"A {stated} writes it, which a range cannot take" in page
+    assert f"or a {stated} writes it" in page
 
 
 def test_the_zone_tools_name_bounds_the_page_states_are_the_enforced_ones():
