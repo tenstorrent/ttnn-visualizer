@@ -591,19 +591,27 @@ class TestReportFacts:
                 modern_row(1, 1, 1, "BRISC", 10, "MATMUL", "ZONE_END"),
             ],
         )
-        log.write_text(log.read_text().replace("wormhole_b0", "a" * 60_000, 1))
-        registry = ReportRegistry()
 
-        loaded = load_report(registry, performance_path=str(tmp_path))
-        timings = tools.zone_timings(registry, loaded["handle"])
-        intervals = tools.zone_intervals(registry, loaded["handle"], "MATMUL")
+        def answers():
+            registry = ReportRegistry()
+            loaded = load_report(registry, performance_path=str(tmp_path))
+            return (
+                loaded,
+                tools.zone_timings(registry, loaded["handle"]),
+                tools.zone_intervals(registry, loaded["handle"], "MATMUL"),
+            )
+
+        real_loaded, real_timings, _ = answers()
+        log.write_text(log.read_text().replace("wormhole_b0", "a" * 60_000, 1))
+        loaded, timings, intervals = answers()
 
         assert "ARCH" not in loaded["capture"]
         assert "device_log" not in loaded["arch"]
         assert timings["arch"] is None
         assert intervals["arch"] is None
-        assert len(json.dumps(loaded)) < 10_000
-        assert len(json.dumps(timings)) < 2_000
+        # No bigger than the same log's answers with its real architecture.
+        assert len(json.dumps(loaded)) <= len(json.dumps(real_loaded))
+        assert len(json.dumps(timings)) <= len(json.dumps(real_timings))
 
     def test_a_profiler_only_report_takes_its_arch_from_the_descriptor(self, tmp_path):
         """The database records no architecture, and `capture` is the device log's."""
