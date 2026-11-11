@@ -159,6 +159,8 @@ const adjustedShade = (colour: string, lightness: string) =>
 const DEFAULT_BUTTON_HOVER = adjustedShade('$tt-grey-2', '-5%');
 const MINIMAL_BUTTON_HOVER = adjustedShade('$tt-grey-2', '5%');
 const NOT_PRESSED = ':where(:not(:active, .bp6-active))';
+const NOT_DISABLED_OR_PRESSED = ':where(:not(:disabled, .bp6-disabled, :active, .bp6-active))';
+const SPINNER_HEAD = '.bp6-button-spinner .bp6-spinner-head';
 
 // [token, value], set on :root because Blueprint declares the intent tokens there
 const ROOT_TOKENS: [string, string][] = [
@@ -265,11 +267,7 @@ const OVERRIDDEN_VALUES: [string, string, string][] = [
         'background-color',
         DEFAULT_BUTTON_HOVER,
     ],
-    [
-        '.bp6-dark .bp6-html-select select:where(:not(:disabled, .bp6-disabled, :active, .bp6-active)):hover',
-        'background-color',
-        DEFAULT_BUTTON_HOVER,
-    ],
+    [`.bp6-dark .bp6-html-select select${NOT_DISABLED_OR_PRESSED}:hover`, 'background-color', DEFAULT_BUTTON_HOVER],
     ['.bp6-dark .bp6-file-upload-input:where(:not(:active)):hover::after', 'background-color', DEFAULT_BUTTON_HOVER],
     [`.bp6-dark .bp6-button.bp6-minimal${NOT_PRESSED}:hover`, 'background-color', MINIMAL_BUTTON_HOVER],
     [`.bp6-dark .bp6-button.bp6-outlined${NOT_PRESSED}:hover`, 'background-color', MINIMAL_BUTTON_HOVER],
@@ -278,7 +276,28 @@ const OVERRIDDEN_VALUES: [string, string, string][] = [
         'background-color',
         MINIMAL_BUTTON_HOVER,
     ],
-    [`.bp6-dark .bp6-html-select.bp6-minimal select${NOT_PRESSED}:hover`, 'background-color', MINIMAL_BUTTON_HOVER],
+    [
+        `.bp6-dark .bp6-button-group.bp6-outlined .bp6-button${NOT_PRESSED}:hover`,
+        'background-color',
+        MINIMAL_BUTTON_HOVER,
+    ],
+    // Disabled minimal selects are left out: Blueprint has no :hover rule for them that would win by specificity
+    [
+        `.bp6-dark .bp6-html-select.bp6-minimal select${NOT_DISABLED_OR_PRESSED}:hover`,
+        'background-color',
+        MINIMAL_BUTTON_HOVER,
+    ],
+    [
+        `.bp6-dark .bp6-select.bp6-minimal select${NOT_DISABLED_OR_PRESSED}:hover`,
+        'background-color',
+        MINIMAL_BUTTON_HOVER,
+    ],
+    [`.bp6-dark .bp6-button:not([class*=bp6-intent-]) ${SPINNER_HEAD}`, 'stroke', '#3eb7de'],
+    [`.bp6-dark .bp6-button[class*=bp6-intent-] ${SPINNER_HEAD}`, 'stroke', '#3eb7de'],
+    [`.bp6-dark .bp6-button.bp6-minimal.bp6-intent-success ${SPINNER_HEAD}`, 'stroke', '#32a467'],
+    [`.bp6-dark .bp6-button.bp6-outlined.bp6-intent-primary ${SPINNER_HEAD}`, 'stroke', '#bcb3f7'],
+    [`.bp6-dark .bp6-button-group.bp6-minimal .bp6-button.bp6-intent-warning ${SPINNER_HEAD}`, 'stroke', '#f6bc42'],
+    [`.bp6-dark .bp6-button-group.bp6-outlined .bp6-button.bp6-intent-danger ${SPINNER_HEAD}`, 'stroke', '#fa512e'],
     ['.bp6-dark .bp6-input-group .bp6-icon', 'color', '#fff'],
     ['.bp6-dark .bp6-form-group.bp6-intent-primary .bp6-form-helper-text', 'color', '#bcb3f7'],
     ['.bp6-dark .bp6-form-group.bp6-intent-warning .bp6-form-helper-text', 'color', '#f6bc42'],
@@ -290,6 +309,11 @@ const OVERRIDDEN_VALUES: [string, string, string][] = [
         '.bp6-control:hover input:checked ~ .bp6-control-indicator',
         'background-color',
         adjustedShade('$tt-teal-accent', '-3%'),
+    ],
+    [
+        '.bp6-dark .bp6-control input:not(:disabled):active:checked ~ .bp6-control-indicator',
+        'background-color',
+        adjustedShade('$tt-teal-accent', '-6%'),
     ],
     ['.bp6-dark .bp6-control.bp6-switch input:checked ~ .bp6-control-indicator', 'background', '#3eb7de'],
     ['.bp6-dark .bp6-progress-bar', 'background', '#0d4d62'],

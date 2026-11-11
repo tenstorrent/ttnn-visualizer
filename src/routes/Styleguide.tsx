@@ -65,14 +65,17 @@ const INTENTS = [
     { intent: Intent.DANGER, label: 'Danger', icon: IconNames.ISSUE },
 ] as const;
 
-// Disabled rows sit under their enabled variant so a theme change to either is easy to compare
+// Disabled and loading rows sit under their enabled variant so a theme change to any of them is easy to compare
 const BUTTON_ROWS = [
-    { label: 'Default', variant: ButtonVariant.SOLID, disabled: false },
-    { label: 'Default disabled', variant: ButtonVariant.SOLID, disabled: true },
-    { label: 'Outlined', variant: ButtonVariant.OUTLINED, disabled: false },
-    { label: 'Outlined disabled', variant: ButtonVariant.OUTLINED, disabled: true },
-    { label: 'Minimal', variant: ButtonVariant.MINIMAL, disabled: false },
-    { label: 'Minimal disabled', variant: ButtonVariant.MINIMAL, disabled: true },
+    { label: 'Default', variant: ButtonVariant.SOLID, disabled: false, loading: false },
+    { label: 'Default disabled', variant: ButtonVariant.SOLID, disabled: true, loading: false },
+    { label: 'Default loading', variant: ButtonVariant.SOLID, disabled: false, loading: true },
+    { label: 'Outlined', variant: ButtonVariant.OUTLINED, disabled: false, loading: false },
+    { label: 'Outlined disabled', variant: ButtonVariant.OUTLINED, disabled: true, loading: false },
+    { label: 'Outlined loading', variant: ButtonVariant.OUTLINED, disabled: false, loading: true },
+    { label: 'Minimal', variant: ButtonVariant.MINIMAL, disabled: false, loading: false },
+    { label: 'Minimal disabled', variant: ButtonVariant.MINIMAL, disabled: true, loading: false },
+    { label: 'Minimal loading', variant: ButtonVariant.MINIMAL, disabled: false, loading: true },
 ] as const;
 
 const TAG_ROWS = [
@@ -458,7 +461,7 @@ export default function Styleguide() {
                 </thead>
 
                 <tbody>
-                    {BUTTON_ROWS.map(({ label, variant, disabled }) => (
+                    {BUTTON_ROWS.map(({ label, variant, disabled, loading }) => (
                         <tr key={label}>
                             <th>{label}</th>
                             {INTENTS.map(({ intent, icon }) => (
@@ -468,6 +471,7 @@ export default function Styleguide() {
                                         intent={intent}
                                         variant={variant}
                                         disabled={disabled}
+                                        loading={loading}
                                     >
                                         Your text here
                                     </Button>
