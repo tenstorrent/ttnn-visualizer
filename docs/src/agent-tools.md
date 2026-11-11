@@ -689,8 +689,13 @@ the zone, so they measure occupancy rather than wall-clock duration. A core is c
 device — the captures we test against span 8 and 32 PCIe slots, and coordinates alone
 repeat on each — so a zone can report thousands of cores on a multi-device run. Durations
 need the device log's `type` column to pair zone starts with ends; a capture without it
-reports occurrence counts only, and a capture that stopped mid-zone reports how many starts
-and ends failed to pair so a partial total does not read as a complete one. The first call
+reports occurrence counts only, and a capture that stopped mid-zone reports how many
+starts and ends failed to pair so a partial total does not read as a complete one. A row
+whose slot, core, run or cycle count is not a whole number or does not fit a 64-bit
+integer, or whose cycle count is negative, is left out and counted in a caveat.
+`zone_intervals` and `core_spread` apply the same rule, each counting only the rows it
+would have used. The rule is about negative cells, not totals: a zone whose end was
+recorded before its start still pairs, and its `total_cycles` is negative. The first call
 on a handle reads the device log once, and later calls answer from that read, with the
 clock it was read at.
 
