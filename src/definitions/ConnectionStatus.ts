@@ -12,6 +12,14 @@ export enum ConnectionTestStates {
     WARNING,
 }
 
+// Keep in sync with `RemoteConnectionFailureReason` in backend/ttnn_visualizer/enums.py;
+// test_remote_connection_reason.py pins the two together.
+export enum RemoteConnectionFailureReason {
+    AUTH_FAILED = 'auth_failed',
+    HOST_KEY_REJECTED = 'host_key_rejected',
+    UNREACHABLE = 'unreachable',
+}
+
 export interface ConnectionStatus {
     status: ConnectionTestStates;
     message: string;
@@ -22,4 +30,9 @@ export interface ConnectionStatus {
      * the save gate and every exhaustive icon/intent map stay as they are.
      */
     hostKey?: HostKeyStatus | null;
+    /**
+     * Why the connection failed, so nothing has to parse `message`, which is written for
+     * people and names the host. Absent for a failure that fits no class.
+     */
+    reason?: RemoteConnectionFailureReason | null;
 }

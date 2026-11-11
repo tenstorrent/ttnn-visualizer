@@ -12,7 +12,11 @@ from typing import Any, List, Optional, Tuple
 from pydantic import BaseModel, Field, ValidationError, field_validator
 from sqlalchemy import JSON, Column, Integer, String
 from sqlalchemy.ext.mutable import MutableDict
-from ttnn_visualizer.enums import ConnectionTestStates, HostKeyIssue
+from ttnn_visualizer.enums import (
+    ConnectionTestStates,
+    HostKeyIssue,
+    RemoteConnectionFailureReason,
+)
 from ttnn_visualizer.extensions import db
 from ttnn_visualizer.utils import (
     SerializeableDataclass,
@@ -601,17 +605,18 @@ def connection_status(
     message: str,
     detail: Optional[str] = None,
     host_key: Optional["HostKeyStatus"] = None,
+    reason: Optional[RemoteConnectionFailureReason] = None,
 ) -> StatusMessage:
-    """One status line for a connection test, widened only when a host key rides along.
+    """One status line for a connection test, widened only when a verdict rides along.
 
     The narrowing matters: ``StatusMessage`` is also the NPE upload response and is
-    spread into every MLIR upload entry, so a ``hostKey`` field on it would change two
-    responses this has nothing to do with.
+    spread into every MLIR upload entry, so a ``hostKey`` or ``reason`` field on it would
+    change two responses this has nothing to do with.
     """
-    if host_key is None:
+    if host_key is None and reason is None:
         return StatusMessage(status=status, message=message, detail=detail)
     return ConnectionStatusMessage(
-        status=status, message=message, detail=detail, hostKey=host_key
+        status=status, message=message, detail=detail, hostKey=host_key, reason=reason
     )
 
 
@@ -622,6 +627,7 @@ def connection_status_from_exception(error) -> StatusMessage:
         error.message,
         getattr(error, "detail", None),
         getattr(error, "host_key", None),
+        getattr(error, "reason", None),
     )
 
 
@@ -634,6 +640,9 @@ class ConnectionStatusMessage(StatusMessage):
     """
 
     hostKey: Optional[HostKeyStatus] = None
+    # Why the connection failed, so the client never parses ``message``. Absent for a
+    # failure that fits no class and for every line that did not fail.
+    reason: Optional[RemoteConnectionFailureReason] = None
 
 
 class HostKeyTarget(SerializeableModel):

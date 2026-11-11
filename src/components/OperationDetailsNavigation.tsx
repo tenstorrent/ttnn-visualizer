@@ -25,6 +25,8 @@ import { LoadingSpinnerSizes } from '../definitions/LoadingSpinner';
 import Overlay from './Overlay';
 import StackTrace from './operation-details/StackTrace';
 import { StackTraceLanguage } from '../definitions/StackTrace';
+import { recordDrilldownOpened } from '../functions/surfaceEvents';
+import { DrilldownTarget } from '../definitions/EventLogEvent';
 
 enum TAB_IDS {
     ERROR = 'ERROR',
@@ -154,7 +156,10 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
                             <Button
                                 icon={IconNames.ERROR}
                                 intent={Intent.DANGER}
-                                onClick={() => setErrorIsOpen(true)}
+                                onClick={() => {
+                                    setErrorIsOpen(true);
+                                    recordDrilldownOpened(DrilldownTarget.STACK_TRACE);
+                                }}
                                 variant={ButtonVariant.MINIMAL}
                                 text='View operation error'
                             />

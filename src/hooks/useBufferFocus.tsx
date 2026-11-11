@@ -10,6 +10,8 @@ import { getBufferColor, getTensorColor } from '../functions/colorGenerator';
 import isValidNumber from '../functions/isValidNumber';
 import ToastTensorMessage, { ToastDeselectButton } from '../components/operation-details/ToastTensorMessage';
 import { activeToastAtom, selectedAddressAtom, selectedBufferColourAtom, selectedTensorIdAtom } from '../store/app';
+import { recordDrilldownOpened } from '../functions/surfaceEvents';
+import { DrilldownTarget } from '../definitions/EventLogEvent';
 
 /** Clears the buffer focus and its toast, through setters alone, so a caller needn't subscribe to it. */
 export const useResetBufferFocus = () => {
@@ -79,6 +81,10 @@ const useBufferFocus = () => {
             setActiveToast(toastInstance);
             setSelectedAddress(address ?? null);
             setSelectedTensorId(tensorId ?? null);
+            // Every caller is a click, or the "Buffer details" navigation that one started,
+            // so this is the single point for the drill-down. A reload that restores that
+            // navigation from history records it again.
+            recordDrilldownOpened(DrilldownTarget.BUFFER_DETAILS);
         },
         [
             activeToast,

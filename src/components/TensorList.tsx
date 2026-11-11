@@ -38,6 +38,8 @@ import ListItem from './ListItem';
 import LoadingSpinner from './LoadingSpinner';
 import MultiSelectField from './MultiSelectField';
 import SearchField from './SearchField';
+import useRecordFilterUsed from '../hooks/useRecordFilterUsed';
+import { FilterSurface } from '../definitions/EventLogEvent';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 39; // Estimated size of each element in px
@@ -56,6 +58,7 @@ const TensorList = () => {
     const [shouldSortBySize, setShouldSortBySize] = useAtom(shouldSortBySizeAtom);
     const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
     const [filterQuery, setFilterQuery] = useAtom(tensorListFilterAtom);
+    const recordListFilterUsed = useRecordFilterUsed(FilterSurface.TENSORS);
     const [expandedItems, setExpandedItems] = useState<number[]>([]);
 
     const location = useLocation();
@@ -284,7 +287,10 @@ const TensorList = () => {
                 <SearchField
                     placeholder='Filter tensors'
                     searchQuery={filterQuery}
-                    onQueryChanged={(value) => setFilterQuery(value)}
+                    onQueryChanged={(value) => {
+                        setFilterQuery(value);
+                        recordListFilterUsed(value !== '');
+                    }}
                 />
 
                 <MultiSelectField<Tensor, 'buffer_type'>

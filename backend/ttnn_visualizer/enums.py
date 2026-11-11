@@ -35,6 +35,21 @@ class HostKeyIssue(str, enum.Enum):
     REVOKED = "revoked"
 
 
+# Keep in sync with src/definitions/ConnectionStatus.ts
+class RemoteConnectionFailureReason(str, enum.Enum):
+    """Why a remote connection test failed, for a status line to carry without its message.
+
+    Messages are written for people and carry the host, so nothing reading a result may
+    parse them; this is the machine-readable half. Absent means the failure has no class
+    here: an unexpected SSH error, or a problem with one configured path rather than the
+    connection. A timeout counts as ``UNREACHABLE``: the host never answered.
+    """
+
+    AUTH_FAILED = "auth_failed"
+    HOST_KEY_REJECTED = "host_key_rejected"
+    UNREACHABLE = "unreachable"
+
+
 class StackSourceOrigin(str, enum.Enum):
     DATABASE = "database"
     PATH = "path"

@@ -4,7 +4,7 @@
 
 import axios, { HttpStatusCode } from 'axios';
 import { useCallback } from 'react';
-import { ConnectionTestStates } from '../definitions/ConnectionStatus';
+import getConnectionTestPrecheckFailure from '../functions/getConnectionTestPrecheckFailure';
 import Endpoints from '../definitions/Endpoints';
 import { FileTransferSource } from '../definitions/FileTransferSource';
 import { MountRemoteFolder, RemoteConnection, RemoteFolder } from '../model/RemoteConnection';
@@ -28,14 +28,6 @@ interface StackSourceReadResponse {
     resolved_path?: string | null;
 }
 
-const FAILED_NO_CONNECTION = {
-    status: ConnectionTestStates.FAILED,
-    message: 'No connection provided',
-};
-const FAILED_NO_PATH = {
-    status: ConnectionTestStates.FAILED,
-    message: 'Please provide at least one folder path.',
-};
 export const LOCAL_STORAGE_KEY_CONNECTIONS = 'remoteConnections';
 export const LOCAL_STORAGE_KEY_SELECTED = 'selectedConnection';
 
@@ -96,12 +88,10 @@ const useRemoteConnection = () => {
     const { getAppConfig, setAppConfig, deleteAppConfig } = useAppConfig();
 
     const testConnection = async (connection: Partial<RemoteConnection>) => {
-        if (!connection.host || !connection.port) {
-            return [FAILED_NO_CONNECTION];
-        }
+        const precheckFailure = getConnectionTestPrecheckFailure(connection);
 
-        if (!connection.profilerPath && !connection.performancePath) {
-            return [FAILED_NO_PATH];
+        if (precheckFailure) {
+            return [precheckFailure];
         }
 
         const { data: connectionTestStates } = await axiosInstance.post(`${Endpoints.REMOTE}/test`, connection);
