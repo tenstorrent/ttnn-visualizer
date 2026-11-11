@@ -23,6 +23,8 @@ import MemoryTag from '../MemoryTag';
 import useBufferFocus from '../../hooks/useBufferFocus';
 import { showHexAtom } from '../../store/app';
 import { isAddressRangeOutOfL1Zoom } from '../../functions/isAddressRangeVisibleInL1Zoom';
+import { recordDrilldownOpened } from '../../functions/surfaceEvents';
+import { DrilldownTarget } from '../../definitions/EventLogEvent';
 
 export interface TensorDetailsComponentProps {
     tensor: Tensor;
@@ -178,7 +180,10 @@ const TensorDetailsComponent = ({
                         text='Tensor allocation per core'
                         icon={IconNames.FLOW_LINEAR}
                         intent={Intent.PRIMARY}
-                        onClick={() => setOverlayOpen(true)}
+                        onClick={() => {
+                            setOverlayOpen(true);
+                            recordDrilldownOpened(DrilldownTarget.TENSOR_DETAILS);
+                        }}
                         endIcon={IconNames.OPEN_APPLICATION}
                     />
                 )}

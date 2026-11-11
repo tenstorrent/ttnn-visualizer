@@ -3,10 +3,15 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import StackTrace from '../src/components/operation-details/StackTrace';
 import { StackTraceLanguage } from '../src/definitions/StackTrace';
+import { DrilldownTarget, EventLogEvent } from '../src/definitions/EventLogEvent';
+
+const { recordEvent } = vi.hoisted(() => ({ recordEvent: vi.fn() }));
+
+vi.mock('../src/functions/recordEvent', () => ({ default: recordEvent }));
 
 const renderStackTrace = (stackTrace: string) =>
     render(
@@ -16,6 +21,10 @@ const renderStackTrace = (stackTrace: string) =>
             hideSourceButton
         />,
     );
+
+beforeEach(() => {
+    recordEvent.mockClear();
+});
 
 afterEach(cleanup);
 
@@ -30,5 +39,40 @@ describe('StackTrace expand toggle', () => {
         renderStackTrace('line 1\nline 2\nline 3');
 
         expect(screen.getByRole('button', { name: /expand/i })).toBeInTheDocument();
+    });
+});
+
+describe('StackTrace drill-down event', () => {
+    const stackTraceOpened = {
+        event: EventLogEvent.DRILLDOWN_OPENED,
+        details: { drilldown_target: DrilldownTarget.STACK_TRACE },
+    };
+
+    beforeEach(() => {
+        // Collapsing scrolls the trace back into view, which jsdom does not implement.
+        Element.prototype.scrollIntoView = vi.fn();
+    });
+
+    it('records each expansion and never a collapse', () => {
+        renderStackTrace('line 1\nline 2\nline 3');
+
+        fireEvent.click(screen.getByRole('button', { name: /expand/i }));
+        fireEvent.click(screen.getByRole('button', { name: /collapse/i }));
+        fireEvent.click(screen.getByRole('button', { name: /expand/i }));
+
+        expect(recordEvent.mock.calls).toEqual([[stackTraceOpened], [stackTraceOpened]]);
+    });
+
+    it('records nothing for a trace shown expanded from the start', () => {
+        render(
+            <StackTrace
+                stackTrace={'line 1\nline 2\nline 3'}
+                language={StackTraceLanguage.CPP}
+                isInitiallyExpanded
+                hideSourceButton
+            />,
+        );
+
+        expect(recordEvent).not.toHaveBeenCalled();
     });
 });

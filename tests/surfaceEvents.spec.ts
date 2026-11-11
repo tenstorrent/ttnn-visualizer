@@ -15,12 +15,18 @@ import {
     RemoteConnectionTestResult,
 } from '../src/definitions/EventLogEvent';
 import { MLIR_SERVER_ACCEPTED_EXTENSIONS } from '../src/definitions/MlirServer';
+import {
+    ConnectionStatus,
+    ConnectionTestStates,
+    RemoteConnectionFailureReason,
+} from '../src/definitions/ConnectionStatus';
 import { PerfChartId } from '../src/definitions/PerformanceCharts';
 import { getOperationTypesChartId } from '../src/functions/buildChartIndexEntries';
 import {
     getComparisonReportCountBucket,
     getMlirFileFormat,
     getPerfChartForChartId,
+    getRemoteConnectionTestResult,
     recordDrilldownOpened,
     recordFilterUsed,
     recordMlirFileLoaded,
@@ -93,6 +99,50 @@ describe('getMlirFileFormat', () => {
         ['trailing.', MlirFileFormat.OTHER],
     ])('reads %s as %s', (filename, format) => {
         expect(getMlirFileFormat(filename)).toBe(format);
+    });
+});
+
+describe('getRemoteConnectionTestResult', () => {
+    const line = (status: ConnectionTestStates, reason?: RemoteConnectionFailureReason): ConnectionStatus => ({
+        status,
+        message: 'written for people, never read here',
+        ...(reason ? { reason } : {}),
+    });
+    const { OK, FAILED, WARNING } = ConnectionTestStates;
+
+    it.each<[string, ConnectionStatus[], RemoteConnectionTestResult]>([
+        ['every line passing', [line(OK), line(OK), line(OK)], RemoteConnectionTestResult.SUCCESS],
+        [
+            'rejected credentials',
+            [line(FAILED, RemoteConnectionFailureReason.AUTH_FAILED)],
+            RemoteConnectionTestResult.AUTH_FAILED,
+        ],
+        [
+            'an untrusted host key',
+            [line(FAILED, RemoteConnectionFailureReason.HOST_KEY_REJECTED)],
+            RemoteConnectionTestResult.HOST_KEY_REJECTED,
+        ],
+        [
+            'an unreachable host',
+            [line(FAILED, RemoteConnectionFailureReason.UNREACHABLE)],
+            RemoteConnectionTestResult.UNREACHABLE,
+        ],
+        ['a path holding no reports', [line(OK), line(WARNING)], RemoteConnectionTestResult.NO_REPORTS_FOUND],
+        ['a path that failed', [line(OK), line(FAILED)], RemoteConnectionTestResult.REPORT_PATH_FAILED],
+        [
+            'a failed path beside an empty one',
+            [line(OK), line(WARNING), line(FAILED)],
+            RemoteConnectionTestResult.REPORT_PATH_FAILED,
+        ],
+        ['an unclassified SSH failure', [line(FAILED), line(FAILED)], RemoteConnectionTestResult.OTHER],
+        ['no lines at all', [], RemoteConnectionTestResult.OTHER],
+        [
+            'a reason a newer server sent',
+            [{ ...line(FAILED), reason: 'cosmic_rays' as RemoteConnectionFailureReason }],
+            RemoteConnectionTestResult.OTHER,
+        ],
+    ])('classifies %s', (_case, statuses, result) => {
+        expect(getRemoteConnectionTestResult(statuses)).toBe(result);
     });
 });
 

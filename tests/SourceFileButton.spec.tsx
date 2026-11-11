@@ -12,6 +12,11 @@ import { StackSourceOrigin, StackTraceLanguage } from '../src/definitions/StackT
 import { profilerReportLocationAtom } from '../src/store/app';
 import { MOCK_FULL_GIT_SHA, MOCK_HTTP_GIT_URL, MOCK_SHORT_GIT_SHA } from './helpers/gitFixtures';
 import { TestProviders } from './helpers/TestProviders';
+import { DrilldownTarget, EventLogEvent } from '../src/definitions/EventLogEvent';
+
+const { recordEvent } = vi.hoisted(() => ({ recordEvent: vi.fn() }));
+
+vi.mock('../src/functions/recordEvent', () => ({ default: recordEvent }));
 
 const isSourceFileAvailable = vi.fn();
 const readRemoteFile = vi.fn();
@@ -173,5 +178,28 @@ describe('SourceFileButton', () => {
         fireEvent.mouseEnter(screen.getByRole('button', { name: 'Source' }));
 
         expect(await screen.findByText('No file path found for this stack trace')).toBeInTheDocument();
+    });
+});
+
+describe('SourceFileButton drill-down event', () => {
+    it('records opening the source file once it is shown', async () => {
+        renderButton();
+
+        await openSourceOverlay();
+
+        expect(recordEvent).toHaveBeenCalledExactlyOnceWith({
+            event: EventLogEvent.DRILLDOWN_OPENED,
+            details: { drilldown_target: DrilldownTarget.SOURCE_FILE },
+        });
+    });
+
+    it('records nothing when the source is unavailable', async () => {
+        isSourceFileAvailable.mockResolvedValue({ available: false, source: null });
+        renderButton();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Source' }));
+
+        await waitFor(() => expect(isSourceFileAvailable).toHaveBeenCalled());
+        expect(recordEvent).not.toHaveBeenCalled();
     });
 });

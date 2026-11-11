@@ -9,7 +9,11 @@ from http import HTTPStatus
 from pathlib import Path
 from typing import List, NoReturn, Optional, Union
 
-from ttnn_visualizer.enums import ConnectionTestStates, HostKeyIssue
+from ttnn_visualizer.enums import (
+    ConnectionTestStates,
+    HostKeyIssue,
+    RemoteConnectionFailureReason,
+)
 from ttnn_visualizer.exceptions import (
     AuthenticationException,
     AuthenticationFailedException,
@@ -315,6 +319,7 @@ class SSHClient:
                 message=user_message,
                 status=ConnectionTestStates.FAILED,
                 detail=raw_error,
+                reason=RemoteConnectionFailureReason.UNREACHABLE,
             )
         except SSHException as ssh_err:
             # Add debug logging to understand what we're getting
@@ -333,6 +338,7 @@ class SSHClient:
                     message=timeout_message,
                     status=ConnectionTestStates.FAILED,
                     detail=raw_error,
+                    reason=RemoteConnectionFailureReason.UNREACHABLE,
                 )
             else:
                 # This should match the original SSHException handling:

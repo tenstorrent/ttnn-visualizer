@@ -6,7 +6,11 @@ from http import HTTPStatus
 from typing import TYPE_CHECKING, Optional
 
 from flask import jsonify
-from ttnn_visualizer.enums import ConnectionTestStates, HostKeyIssue
+from ttnn_visualizer.enums import (
+    ConnectionTestStates,
+    HostKeyIssue,
+    RemoteConnectionFailureReason,
+)
 
 if TYPE_CHECKING:
     # Only for the annotation: importing models at runtime would make every module
@@ -60,12 +64,16 @@ class RemoteConnectionException(Exception):
         http_status_code: Optional[HTTPStatus] = None,
         detail: Optional[str] = None,
         sync_method: Optional[str] = None,
+        reason: Optional[RemoteConnectionFailureReason] = None,
     ):
         super().__init__(message)
         self.message = message
         self.status = status
         self.detail = detail
         self._http_status_code = http_status_code
+        # The failure's class for a connection test's status line, so a reader never
+        # has to parse ``message``. ``None`` when it fits no class.
+        self.reason = reason
         # Transport actually used for the failed run, when known (sftp/scp).
         # Lets callers report the real method instead of re-reading the
         # process-global fallback cache, which can be stale for this run.
@@ -114,6 +122,7 @@ class AuthenticationFailedException(RemoteConnectionException):
             status=status,
             http_status_code=HTTPStatus.UNPROCESSABLE_ENTITY,  # 422
             detail=detail,
+            reason=RemoteConnectionFailureReason.AUTH_FAILED,
         )
 
 
@@ -138,6 +147,7 @@ class HostKeyVerificationFailedException(RemoteConnectionException):
             status=status,
             http_status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
             detail=detail,
+            reason=RemoteConnectionFailureReason.HOST_KEY_REJECTED,
         )
         self.host_key = host_key
 

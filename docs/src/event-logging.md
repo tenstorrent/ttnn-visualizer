@@ -214,7 +214,7 @@ Recorded when a remote connection test in the connection dialog finishes. It ans
 
 - `connection_test_result`: `success`, `auth_failed`, `host_key_rejected`, `unreachable`, `no_reports_found`, `report_path_failed`, `other`.
 
-`report_path_failed` means SSH connected but a configured report path is missing, not a directory, or unreadable. `no_reports_found` means the paths exist but hold no reports.
+`unreachable` includes a host that did not answer before the test timed out. `report_path_failed` means SSH connected but a configured report path is missing, not a directory, or unreadable. `no_reports_found` means the paths exist but hold no reports. `other` is a failure the server does not classify, or a request that failed before the server answered.
 
 ## Information that is not recorded
 

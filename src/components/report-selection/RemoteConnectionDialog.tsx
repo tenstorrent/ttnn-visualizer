@@ -18,6 +18,7 @@ import { AxiosError } from 'axios';
 import { useState } from 'react';
 import { ConnectionNameSubject, SAVE_BLOCKED_TOOLTIP, getNameFieldLabel } from '../../definitions/ConnectionDialog';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
+import { getRemoteConnectionTestResult, recordRemoteConnectionTest } from '../../functions/surfaceEvents';
 import {
     MULTIHOST_CHECKBOX_LABEL,
     MULTIHOST_GROUP_LABEL,
@@ -47,6 +48,7 @@ import getServerConfig from '../../functions/getServerConfig';
 import getSshConfigHostPrefill from '../../functions/getSshConfigHostPrefill';
 import isConnectionSaveable from '../../functions/isConnectionSaveable';
 import useRemoteConnection from '../../hooks/useRemote';
+import getConnectionTestPrecheckFailure from '../../functions/getConnectionTestPrecheckFailure';
 import useHostKey, { HostKeyTarget } from '../../hooks/useHostKey';
 import useSshConfigHostChoice from '../../hooks/useSshConfigHostChoice';
 import ConnectionTestResults from './ConnectionTestResults';
@@ -162,9 +164,19 @@ const RemoteConnectionDialog = ({
 
         setConnectionTests(tests);
 
+        // A form error caught before sending is not a test of the connection.
+        const isSentToServer = getConnectionTestPrecheckFailure(connection) === null;
+        const settleConnectionTests = (statuses: ConnectionStatus[]) => {
+            setConnectionTests(statuses);
+
+            if (isSentToServer) {
+                recordRemoteConnectionTest(getRemoteConnectionTestResult(statuses));
+            }
+        };
+
         try {
             const statuses = await testConnection(connection);
-            setConnectionTests(statuses);
+            settleConnectionTests(statuses);
         } catch (err) {
             // Check if this is an axios error with response data (e.g., HTTP 422 for auth failures)
             const axiosError = err as AxiosError;
@@ -172,10 +184,10 @@ const RemoteConnectionDialog = ({
             // `{ error: … }` instead, which would otherwise reach `.map` as a non-array.
             if (Array.isArray(axiosError.response?.data)) {
                 // Use the actual API response data which contains proper messages and details
-                setConnectionTests(axiosError.response.data as ConnectionStatus[]);
+                settleConnectionTests(axiosError.response.data as ConnectionStatus[]);
             } else {
                 const detail = getResponseError(err);
-                setConnectionTests([{ ...FAILED_CONNECTION, detail }, FAILED_MEMORY_REPORT_PATH]);
+                settleConnectionTests([{ ...FAILED_CONNECTION, detail }, FAILED_MEMORY_REPORT_PATH]);
             }
         } finally {
             setIsTestingconnection(false);

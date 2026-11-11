@@ -8,7 +8,7 @@ from functools import wraps
 from typing import Any, Callable
 
 from flask import abort, request, session
-from ttnn_visualizer.enums import ConnectionTestStates
+from ttnn_visualizer.enums import ConnectionTestStates, RemoteConnectionFailureReason
 from ttnn_visualizer.exceptions import (
     AuthenticationException,
     AuthenticationFailedException,
@@ -116,15 +116,19 @@ def remote_exception_handler(func):
             raise RemoteConnectionException(
                 status=ConnectionTestStates.FAILED,
                 message=user_message,
+                reason=RemoteConnectionFailureReason.UNREACHABLE,
             )
 
         except IOError as err:
             message = f"Error opening remote folder: {str(err)}"
+            reason = None
             if "Name or service not known" in str(err):
                 message = f"Unable to connect to {connection.host} - check hostname"
+                reason = RemoteConnectionFailureReason.UNREACHABLE
             raise RemoteConnectionException(
                 status=ConnectionTestStates.FAILED,
                 message=message,
+                reason=reason,
             )
         except SSHException as err:
             if str(err) == "No existing session":

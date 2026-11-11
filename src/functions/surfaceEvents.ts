@@ -14,6 +14,7 @@ import {
     RemoteConnectionTestResult,
 } from '../definitions/EventLogEvent';
 import { PerfChartId } from '../definitions/PerformanceCharts';
+import { ConnectionStatus, ConnectionTestStates, RemoteConnectionFailureReason } from '../definitions/ConnectionStatus';
 import recordEvent from './recordEvent';
 
 /**
@@ -115,6 +116,48 @@ export function getMlirFileFormat(filename: string): MlirFileFormat {
     }
 
     return MLIR_FILE_FORMAT_BY_EXTENSION.get(filename.slice(extensionStart).toLowerCase()) ?? MlirFileFormat.OTHER;
+}
+
+const REMOTE_CONNECTION_TEST_RESULT_BY_REASON: Readonly<
+    Record<RemoteConnectionFailureReason, RemoteConnectionTestResult>
+> = Object.freeze({
+    [RemoteConnectionFailureReason.AUTH_FAILED]: RemoteConnectionTestResult.AUTH_FAILED,
+    [RemoteConnectionFailureReason.HOST_KEY_REJECTED]: RemoteConnectionTestResult.HOST_KEY_REJECTED,
+    [RemoteConnectionFailureReason.UNREACHABLE]: RemoteConnectionTestResult.UNREACHABLE,
+});
+
+/**
+ * The outcome of a remote connection test, from its status lines alone — never their
+ * messages, which name the host. The first line is the SSH connection; each later one is a
+ * configured report path.
+ *
+ * In order: a classified failure; SSH up but a path failed; a path with no reports (the
+ * only line the server marks `WARNING`); everything OK; anything else is `OTHER`.
+ */
+export function getRemoteConnectionTestResult(statuses: readonly ConnectionStatus[]): RemoteConnectionTestResult {
+    const classified = statuses.find((line) => line.reason);
+
+    if (classified?.reason) {
+        return REMOTE_CONNECTION_TEST_RESULT_BY_REASON[classified.reason] ?? RemoteConnectionTestResult.OTHER;
+    }
+
+    const [connectionLine, ...pathLines] = statuses;
+
+    if (connectionLine?.status === ConnectionTestStates.OK) {
+        if (pathLines.some((line) => line.status === ConnectionTestStates.FAILED)) {
+            return RemoteConnectionTestResult.REPORT_PATH_FAILED;
+        }
+
+        if (pathLines.some((line) => line.status === ConnectionTestStates.WARNING)) {
+            return RemoteConnectionTestResult.NO_REPORTS_FOUND;
+        }
+
+        if (pathLines.every((line) => line.status === ConnectionTestStates.OK)) {
+            return RemoteConnectionTestResult.SUCCESS;
+        }
+    }
+
+    return RemoteConnectionTestResult.OTHER;
 }
 
 export function recordPerfChartViewed(chart: PerfChartLabel): void {

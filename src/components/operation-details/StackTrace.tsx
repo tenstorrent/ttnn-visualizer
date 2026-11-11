@@ -11,6 +11,8 @@ import { StackTraceLanguage } from '../../definitions/StackTrace';
 import hljs from '../../functions/highlightSource';
 import { getStackTraceFilePath, getStackTraceLineNumber } from '../../functions/stackTraceSource';
 import SourceFileButton from './SourceFileButton';
+import { recordDrilldownOpened } from '../../functions/surfaceEvents';
+import { DrilldownTarget } from '../../definitions/EventLogEvent';
 
 interface StackTraceProps {
     title?: string;
@@ -65,6 +67,12 @@ function StackTrace({
 
     const handleToggleStackTrace = () => {
         setIsExpanded(!isExpanded);
+
+        // Expanding only: collapsing a trace is not a drill-down, and one shown expanded
+        // from the start was never opened.
+        if (!isExpanded) {
+            recordDrilldownOpened(DrilldownTarget.STACK_TRACE);
+        }
 
         if (isExpanded && scrollElementRef?.current && !isTopOfElementInViewport(scrollElementRef.current)) {
             scrollElementRef?.current?.scrollIntoView();
