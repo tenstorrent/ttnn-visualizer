@@ -4,6 +4,7 @@
 
 import sqlite3
 import tempfile
+from http import HTTPStatus
 from pathlib import Path
 
 from ttnn_visualizer.extensions import db
@@ -102,5 +103,5 @@ def test_report_metadata_empty_table_returns_empty_object(client, make_report):
     response = client.get(
         "/api/report-metadata", query_string={"instanceId": instance_id}
     )
-    assert response.status_code == 200
+    assert response.status_code == HTTPStatus.OK
     assert response.get_json() == {}

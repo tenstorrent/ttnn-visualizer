@@ -141,3 +141,25 @@ def test_errors_row_carries_every_field_the_client_reads(client, make_report):
             "attached": True,
         }
     ]
+
+
+def test_operation_error_carries_every_field_the_client_reads(client, make_report):
+    """
+    Pin the whole error nested under an operation, in both list and detail.
+
+    The client reads it as ``OperationError`` in ``src/model/APIData.ts``, and
+    ``ErrorRecord.to_nested_dict`` leaves out the operation's own id and name.
+    The ``rank`` here is the default for a schema without that column; a real
+    rank column is covered in ``test_rank_query_param.py``. #1867
+    """
+    instance_id = make_report(_OPERATIONS + _error(2, "ttnn.conv2d"))
+    expected = {
+        "error_type": "RuntimeError",
+        "error_message": "boom",
+        "stack_trace": "trace",
+        "timestamp": "t",
+        "rank": 0,
+    }
+
+    assert _operations(client, instance_id)[2]["error"] == expected
+    assert _operation(client, instance_id, 2)["error"] == expected
