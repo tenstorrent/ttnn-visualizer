@@ -143,6 +143,8 @@ const addedDeclarationSelectors = (token: string) => {
 const DARK_BORDER_SHADOW = 'inset 0 0 0 1px rgba(255, 255, 255, 0.2)';
 const DARK_DROP_SHADOW = 'rgba(17, 20, 24, 0.4)';
 const DARK_FOCUS_RING = 'rgba(138, 187, 255, 0.752)';
+const DARK_SHADOW_3 = `${DARK_BORDER_SHADOW}, 0 2px 4px ${DARK_DROP_SHADOW}, 0 8px 24px ${DARK_DROP_SHADOW}`;
+const ICON_ONLY_MARGIN = '0 calc(-1 * (var(--bp-surface-spacing) * 7.5 - var(--bp-surface-spacing) * 4) * 0.5)';
 const DARK_INPUT_BOX_SHADOW = `${DARK_BORDER_SHADOW}, inset 0 -1px 1px 0 rgba(255, 255, 255, 0.3)`;
 const DARK_INPUT_FOCUS_SHADOW = `inset 0 0 0 1px ${DARK_FOCUS_RING}, 0 0 0 1px ${DARK_FOCUS_RING}`;
 
@@ -190,7 +192,7 @@ const DARK_TOKENS: [string, string][] = [
     ['--bp-surface-shadow-0', DARK_BORDER_SHADOW],
     ['--bp-surface-shadow-1', `${DARK_BORDER_SHADOW}, 0 1px 1px ${DARK_DROP_SHADOW}`],
     ['--bp-surface-shadow-2', `${DARK_BORDER_SHADOW}, 0 1px 1px ${DARK_DROP_SHADOW}, 0 2px 6px ${DARK_DROP_SHADOW}`],
-    ['--bp-surface-shadow-3', `${DARK_BORDER_SHADOW}, 0 2px 4px ${DARK_DROP_SHADOW}, 0 8px 24px ${DARK_DROP_SHADOW}`],
+    ['--bp-surface-shadow-3', DARK_SHADOW_3],
     [
         '--bp-surface-shadow-4',
         `${DARK_BORDER_SHADOW}, 0 4px 8px ${DARK_DROP_SHADOW}, 0 18px 46px 6px ${DARK_DROP_SHADOW}`,
@@ -268,6 +270,8 @@ const OVERRIDDEN_VALUES: [string, string, string][] = [
         DEFAULT_BUTTON_HOVER,
     ],
     [`.bp6-dark .bp6-html-select select${NOT_DISABLED_OR_PRESSED}:hover`, 'background-color', DEFAULT_BUTTON_HOVER],
+    ['.bp6-dark .bp6-select select', 'background-color', '#343434'],
+    [`.bp6-dark .bp6-select select${NOT_DISABLED_OR_PRESSED}:hover`, 'background-color', DEFAULT_BUTTON_HOVER],
     ['.bp6-dark .bp6-file-upload-input:where(:not(:active)):hover::after', 'background-color', DEFAULT_BUTTON_HOVER],
     [`.bp6-dark .bp6-button.bp6-minimal${NOT_PRESSED}:hover`, 'background-color', MINIMAL_BUTTON_HOVER],
     [`.bp6-dark .bp6-button.bp6-outlined${NOT_PRESSED}:hover`, 'background-color', MINIMAL_BUTTON_HOVER],
@@ -323,22 +327,60 @@ const OVERRIDDEN_VALUES: [string, string, string][] = [
     ['.bp6-dark .bp6-navbar', 'box-shadow', 'none'],
     ['.bp6-tooltip.bp6-intent-danger .bp6-popover-content', 'background', '#fa512e'],
     ['.bp6-dark .bp6-callout.bp6-intent-danger', 'color', '#fa512e'],
-    [
-        '.bp6-dark .bp6-dialog',
-        'box-shadow',
-        `${DARK_BORDER_SHADOW}, 0 2px 4px ${DARK_DROP_SHADOW}, 0 8px 24px ${DARK_DROP_SHADOW}`,
-    ],
+    ['.bp6-dark .bp6-dialog', 'box-shadow', DARK_SHADOW_3],
+    // Popovers add Blueprint's own border to the Sass level 3 shadow
+    ['.bp6-dark .bp6-popover', 'box-shadow', `0 0 0 1px hsl(215, 3%, 38%), ${DARK_SHADOW_3}`],
     [
         '.bp6-dark .bp6-button.bp6-minimal.bp6-intent-warning:hover',
         'background-color',
         'color-mix(in oklch, #f6bc42 20%, transparent)',
     ],
     // Blueprint 6.7+ only matches an icon that is a direct child, so an icon wrapped in a Tooltip target lost this
-    [
-        '.bp6-button .bp6-icon:first-child:last-child',
-        'margin',
-        '0 calc(-1 * (var(--bp-surface-spacing) * 7.5 - var(--bp-surface-spacing) * 4) * 0.5)',
-    ],
+    ['.bp6-button .bp6-icon:first-child:last-child', 'margin', ICON_ONLY_MARGIN],
+    ['.bp6-button .bp6-spinner + .bp6-icon:last-child', 'margin', ICON_ONLY_MARGIN],
+];
+
+// [selector, property, token] for a rule that should draw from each token we set. Checking only that Blueprint reads a
+// token somewhere would pass if the rule it was set for stopped reading it.
+const TOKEN_CONSUMERS: [string, string, string][] = [
+    ...(['primary', 'success', 'warning', 'danger'] as const).flatMap((intent): [string, string, string][] => [
+        [
+            `.bp6-button.bp6-intent-${intent}`,
+            'background-color',
+            intent === 'warning' ? '--bp6-button-warning-rest' : `--bp-intent-${intent}-rest`,
+        ],
+        [`.bp6-button.bp6-intent-${intent}:hover`, 'background-color', `--bp-intent-${intent}-hover`],
+        [`.bp6-button.bp6-intent-${intent}:active`, 'background-color', `--bp-intent-${intent}-active`],
+        [`.bp6-button.bp6-intent-${intent}`, 'color', `--bp-intent-${intent}-foreground`],
+    ]),
+    ['.bp6-tag.bp6-intent-warning', 'background', '--bp-intent-warning-rest'],
+    ['.bp6-button:not([class*=bp6-intent-])', 'color', '--bp-typography-color-default-rest'],
+    ['.bp6-dark .bp6-button:not([class*=bp6-intent-]):disabled', 'color', '--bp-typography-color-default-disabled'],
+    ['.bp6-dark .bp6-card', 'box-shadow', '--bp-surface-shadow-0'],
+    ...[1, 2, 3, 4].map((level): [string, string, string] => [
+        `.bp6-dark .bp6-elevation-${level}`,
+        'box-shadow',
+        `--bp-surface-shadow-${level}`,
+    ]),
+];
+
+// [selector, property] for Blueprint's disabled and pressed rules. Our :where overrides leave disabled and pressed
+// controls alone only because these more specific rules win over them; if a release dropped one, our hover grey or
+// intent ring would land on that state, which the value checks above cannot see.
+const STOCK_STATE_RULES: [string, string][] = [
+    ['.bp6-dark .bp6-button:not([class*=bp6-intent-]):disabled', 'background-color'],
+    ['.bp6-dark .bp6-button:not([class*=bp6-intent-]):active', 'background-color'],
+    ['.bp6-dark .bp6-button.bp6-minimal:disabled:hover', 'background'],
+    ['.bp6-dark .bp6-button.bp6-outlined:disabled:hover', 'background'],
+    ['.bp6-dark .bp6-button-group.bp6-minimal .bp6-button:disabled:hover', 'background'],
+    ['.bp6-dark .bp6-button-group.bp6-outlined .bp6-button:disabled:hover', 'background'],
+    ['.bp6-dark .bp6-html-select select:disabled', 'background-color'],
+    ['.bp6-dark .bp6-html-select select:active', 'background-color'],
+    ['.bp6-dark .bp6-file-upload-input:active::after', 'background-color'],
+    ...(['primary', 'success', 'warning', 'danger'] as const).map((intent): [string, string] => [
+        `.bp6-dark .bp6-input.bp6-intent-${intent}:disabled`,
+        'box-shadow',
+    ]),
 ];
 
 // [selector, property] for entries our configured maps copy from Blueprint's own, which would otherwise stay at their
@@ -408,8 +450,16 @@ describe('Blueprint theme', () => {
         expect(stockBlueprintCss).toMatch(new RegExp(`var\\(${token}[,)]`));
     });
 
+    it.each(TOKEN_CONSUMERS)('%s %s draws from %s', (selector, property, token) => {
+        expect(winningValue(selector, property)).toMatch(new RegExp(`var\\(${token}[,)]`));
+    });
+
     it.each(OVERRIDDEN_VALUES)('%s keeps its %s', (selector, property, expected) => {
         expect(winningValue(selector, property)).toBe(expected);
+    });
+
+    it.each(STOCK_STATE_RULES)('Blueprint still styles %s %s', (selector, property) => {
+        expect(stockWinningValue(selector, property)).toBeDefined();
     });
 
     it.each(COPIED_FROM_BLUEPRINT)('%s %s still matches Blueprint', (selector, property) => {
