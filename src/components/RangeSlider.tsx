@@ -2,11 +2,11 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Button, InputGroup, RangeSlider, Size, Tooltip } from '@blueprintjs/core';
+import { Button, InputGroup, NumberRange, RangeSlider, Size, Tooltip } from '@blueprintjs/core';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { IconNames } from '@blueprintjs/icons';
 import { useLocation } from 'react-router';
-import { useEffect, useState } from 'react';
+import { startTransition, useCallback, useEffect, useMemo, useState } from 'react';
 import { HttpStatusCode } from 'axios';
 import {
     activePerformanceReportAtom,
@@ -39,6 +39,7 @@ import { ToastType } from '../definitions/ToastType';
 import getResponseError from '../functions/getResponseError';
 import { clampSelectionToRange } from '../functions/perfRangeSelection';
 import { PERFORMANCE_LOAD_FAILED } from '../definitions/Performance';
+import useTransitionalRange from '../hooks/useTransitionalRange';
 
 const RANGE_STEP = 25;
 
@@ -71,6 +72,66 @@ function Range() {
     const perfMin = perfRange?.[0];
     const perfMax = perfRange?.[1];
 
+    // The flag is set with the range, inside the same transition, so the sync effects below never
+    // see a user change paired with the previous range.
+    const commitPerformanceRange = useCallback(
+        (value: NumberRange) => {
+            setSelectedPerformanceRange(value);
+            setIsUserPerfChange(true);
+        },
+        [setSelectedPerformanceRange],
+    );
+    const commitOperationRange = useCallback(
+        (value: NumberRange) => {
+            setSelectedOperationRange(value);
+            setIsUserOpChange(true);
+        },
+        [setSelectedOperationRange],
+    );
+    const performanceSlider = useTransitionalRange(selectedPerformanceRange, commitPerformanceRange, perfRange);
+    const operationSlider = useTransitionalRange(selectedOperationRange, commitOperationRange, operationRange);
+
+    // Exact-match lookups for the sync effects, which run on every committed drag step. The first
+    // occurrence wins, as `Array.find` did. An op whose perf id is unknown keeps its `undefined`
+    // entry, so the forward lookup still falls through to the nearest match as before.
+    const perfIdByOpId = useMemo(() => {
+        const map = new Map<number, string | undefined>();
+
+        for (const { opId, perfId } of opIdsMap) {
+            if (!map.has(opId)) {
+                map.set(opId, perfId);
+            }
+        }
+
+        return map;
+    }, [opIdsMap]);
+    const opIdByPerfId = useMemo(() => {
+        const map = new Map<number, number>();
+
+        for (const { opId, perfId } of opIdsMap) {
+            const key = Number(perfId);
+
+            if (!Number.isNaN(key) && !map.has(key)) {
+                map.set(key, opId);
+            }
+        }
+
+        return map;
+    }, [opIdsMap]);
+
+    const operationById = useMemo(() => indexFirstById(operations, (operation) => operation.id), [operations]);
+    const perfRowById = useMemo(() => indexFirstById(perfData?.report, (row) => parseInt(row.id, 10)), [perfData]);
+    const renderOperationLabel = useCallback(
+        (id: number, options?: { isHandleTooltip: boolean }) =>
+            getOperationLabel(id, operationById, options?.isHandleTooltip),
+        [operationById],
+    );
+    const renderPerformanceLabel = useCallback(
+        (id: number, options?: { isHandleTooltip: boolean }) =>
+            getPerformanceLabel(id, perfRowById, options?.isHandleTooltip),
+        [perfRowById],
+    );
+
     const isOperationDetails = location.pathname.includes(`${ROUTES.OPERATIONS}/`);
     const isPerformanceRoute = location.pathname === ROUTES.PERFORMANCE;
     const shouldDisableOpRange = isOperationDetails || isPerformanceRoute;
@@ -99,7 +160,7 @@ function Range() {
             const [rangeMin, rangeMax] = perfRange;
             // Try to find matching perfIds for the selected operation range
             const matchMin =
-                opIdsMap.find((op) => selectedOperationRange[0] === op.opId)?.perfId ??
+                perfIdByOpId.get(selectedOperationRange[0]) ??
                 opIdsMap.reduce((prev, curr) =>
                     Math.abs((curr.opId ?? 0) - selectedOperationRange[0]) <
                     Math.abs((prev.opId ?? 0) - selectedOperationRange[0])
@@ -107,7 +168,7 @@ function Range() {
                         : prev,
                 ).perfId;
             const matchMax =
-                opIdsMap.find((op) => selectedOperationRange[1] === op.opId)?.perfId ??
+                perfIdByOpId.get(selectedOperationRange[1]) ??
                 opIdsMap.reduce((prev, curr) =>
                     Math.abs((curr.opId ?? 0) - selectedOperationRange[1]) <
                     Math.abs((prev.opId ?? 0) - selectedOperationRange[1])
@@ -124,7 +185,10 @@ function Range() {
                     ? rangeMax
                     : selectedPerformanceRange[1]);
 
-            setSelectedPerformanceRange(clampSelectionToRange(updatedMin, updatedMax, rangeMin, rangeMax));
+            // A transition, like the drag that triggered it, so a linked tick stays interruptible
+            startTransition(() =>
+                setSelectedPerformanceRange(clampSelectionToRange(updatedMin, updatedMax, rangeMin, rangeMax)),
+            );
             queueMicrotask(() => {
                 setIsUserOpChange(false);
             });
@@ -150,7 +214,7 @@ function Range() {
             const [opRangeMin, opRangeMax] = operationRange;
             // Try to find matching opIds for the selected performance range
             const matchMin =
-                opIdsMap.find((op) => selectedPerformanceRange[0] === Number(op.perfId))?.opId ??
+                opIdByPerfId.get(selectedPerformanceRange[0]) ??
                 opIdsMap.reduce((prev, curr) =>
                     Math.abs(Number(curr.perfId) - selectedPerformanceRange[0]) <
                     Math.abs(Number(prev.perfId) - selectedPerformanceRange[0])
@@ -158,7 +222,7 @@ function Range() {
                         : prev,
                 ).opId;
             const matchMax =
-                opIdsMap.find((op) => selectedPerformanceRange[1] === Number(op.perfId))?.opId ??
+                opIdByPerfId.get(selectedPerformanceRange[1]) ??
                 opIdsMap.reduce((prev, curr) =>
                     Math.abs(Number(curr.perfId) - selectedPerformanceRange[1]) <
                     Math.abs(Number(prev.perfId) - selectedPerformanceRange[1])
@@ -177,7 +241,7 @@ function Range() {
                     ? opRangeMax
                     : selectedOperationRange[1]);
 
-            setSelectedOperationRange([updatedMin, updatedMax]);
+            startTransition(() => setSelectedOperationRange([updatedMin, updatedMax]));
             queueMicrotask(() => {
                 setIsUserPerfChange(false);
             });
@@ -224,7 +288,7 @@ function Range() {
                     <div className='inputs'>
                         <div className='group'>
                             <InputGroup
-                                value={selectedPerformanceRange[0].toString()}
+                                value={(performanceSlider.value ?? selectedPerformanceRange)[0].toString()}
                                 onValueChange={(value) => {
                                     setSelectedPerformanceRange([
                                         parseInt(value, 10) || perfMin!,
@@ -238,7 +302,7 @@ function Range() {
                                 aria-label='Performance min value'
                             />
                             <InputGroup
-                                value={selectedPerformanceRange[1].toString()}
+                                value={(performanceSlider.value ?? selectedPerformanceRange)[1].toString()}
                                 onValueChange={(value) => {
                                     setSelectedPerformanceRange([
                                         selectedPerformanceRange[0],
@@ -258,18 +322,14 @@ function Range() {
                     {perfMin && perfMax && selectedPerformanceRange && (
                         <RemountOnResize className='slider-container'>
                             <RangeSlider
-                                value={selectedPerformanceRange}
-                                onChange={(value) => {
-                                    setSelectedPerformanceRange(value);
-                                    setIsUserPerfChange(true);
-                                }}
+                                value={performanceSlider.value ?? selectedPerformanceRange}
+                                onChange={performanceSlider.onChange}
+                                onRelease={performanceSlider.onRelease}
                                 min={perfMin}
                                 max={perfMax}
                                 labelStepSize={getStepSize(perfMax)}
                                 disabled={!isPerformanceRoute || !!comparisonReportList}
-                                labelRenderer={(id, options) =>
-                                    getPerformanceLabel(id, perfData?.report, options?.isHandleTooltip)
-                                }
+                                labelRenderer={renderPerformanceLabel}
                                 handleHtmlProps={{
                                     start: { 'aria-label': 'Performance min range handle' },
                                     end: { 'aria-label': 'Performance max range handle' },
@@ -300,7 +360,7 @@ function Range() {
                     <div className='inputs'>
                         <div className='group'>
                             <InputGroup
-                                value={selectedOperationRange[0].toString()}
+                                value={(operationSlider.value ?? selectedOperationRange)[0].toString()}
                                 onValueChange={(value) => {
                                     setSelectedOperationRange([
                                         // `operationRange` can be null while a selection from the
@@ -317,7 +377,7 @@ function Range() {
                                 aria-label='Operation min value'
                             />
                             <InputGroup
-                                value={selectedOperationRange[1].toString()}
+                                value={(operationSlider.value ?? selectedOperationRange)[1].toString()}
                                 onValueChange={(value) => {
                                     setSelectedOperationRange([
                                         selectedOperationRange[0],
@@ -337,16 +397,14 @@ function Range() {
                 {opMin && opMax && selectedOperationRange && (
                     <RemountOnResize className='slider-container'>
                         <RangeSlider
-                            value={selectedOperationRange}
-                            onChange={(value) => {
-                                setSelectedOperationRange(value);
-                                setIsUserOpChange(true);
-                            }}
+                            value={operationSlider.value ?? selectedOperationRange}
+                            onChange={operationSlider.onChange}
+                            onRelease={operationSlider.onRelease}
                             min={opMin}
                             max={opMax}
                             labelStepSize={getStepSize(opMax)}
                             disabled={shouldDisableOpRange}
-                            labelRenderer={(id, options) => getOperationLabel(id, operations, options?.isHandleTooltip)}
+                            labelRenderer={renderOperationLabel}
                             handleHtmlProps={{
                                 start: { 'aria-label': 'Operation min range handle' },
                                 end: { 'aria-label': 'Operation max range handle' },
@@ -374,18 +432,37 @@ function Range() {
     );
 }
 
+// The first item per id wins, so a label matches what `Array.find` used to return
+const indexFirstById = <T,>(items: T[] | undefined, getId: (item: T) => number): Map<number, T> => {
+    const map = new Map<number, T>();
+
+    for (const item of items ?? []) {
+        const id = getId(item);
+
+        if (!map.has(id)) {
+            map.set(id, item);
+        }
+    }
+
+    return map;
+};
+
 const getStepSize = (max: number) => (RANGE_STEP > max ? 1 : Math.ceil(max / RANGE_STEP));
 
-const getOperationLabel = (selectedId: number, operations?: OperationDescription[], isTooltip?: boolean): string => {
-    const matchingOperation = operations?.find((operation) => operation.id === selectedId);
+const getOperationLabel = (
+    selectedId: number,
+    operationById: Map<number, OperationDescription>,
+    isTooltip?: boolean,
+): string => {
+    const matchingOperation = operationById.get(selectedId);
 
     return matchingOperation && isTooltip
         ? `${matchingOperation.id}\xA0${matchingOperation.name}`
         : selectedId.toString();
 };
 
-const getPerformanceLabel = (selectedId: number, data?: PerfTableRow[], isTooltip?: boolean): string => {
-    const matchingRow = data?.find((r) => parseInt(r.id, 10) === selectedId);
+const getPerformanceLabel = (selectedId: number, rowById: Map<number, PerfTableRow>, isTooltip?: boolean): string => {
+    const matchingRow = rowById.get(selectedId);
 
     return matchingRow && isTooltip ? `${matchingRow.id}\xA0${matchingRow.raw_op_code}` : selectedId.toString();
 };

@@ -4,6 +4,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router';
+import { useAtomValue } from 'jotai';
 import { Helmet } from 'react-helmet-async';
 import { Theme, ToastContainer, ToastPosition } from 'react-toastify';
 import 'styles/components/ToastOverrides.scss';
@@ -13,6 +14,8 @@ import ServerModeBanner from './ServerModeBanner';
 import { BounceIn } from './toastTransition';
 import ROUTES from '../definitions/Routes';
 import FooterInfobar from './FooterInfobar';
+import ChromeErrorBoundary from './ChromeErrorBoundary';
+import { activePerformanceReportAtom, activeProfilerReportAtom } from '../store/app';
 import ReportLinkRecorder from './ReportLinkRecorder';
 import ClusterRenderer from './cluster/ClusterRenderer';
 import { ModalAwareOutlet } from '../libs/ModalAwareOutlet';
@@ -31,6 +34,10 @@ function Layout() {
     const location = useLocation();
     const isTopologyOpen = isModalOpen(location, ROUTES.CLUSTER);
     const viewContainerRef = useRef<HTMLElement>(null);
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+    // Switching either report retries a footer that failed to render
+    const footerResetKey = `${activeProfilerReport?.path ?? ''}|${activePerformanceReport?.path ?? ''}`;
 
     // Starts the event-log flush lifecycle; it records nothing on its own. Here rather than at
     // module scope so importing the sender has no side effect, and so the listeners are
@@ -79,7 +86,9 @@ function Layout() {
                 </main>
             </div>
 
-            <FooterInfobar />
+            <ChromeErrorBoundary resetKey={footerResetKey}>
+                <FooterInfobar />
+            </ChromeErrorBoundary>
 
             <ReportLinkRecorder />
 
