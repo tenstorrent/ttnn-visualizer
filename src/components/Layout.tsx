@@ -16,6 +16,7 @@ import ROUTES from '../definitions/Routes';
 import FooterInfobar from './FooterInfobar';
 import ChromeErrorBoundary from './ChromeErrorBoundary';
 import { activePerformanceReportAtom, activeProfilerReportAtom } from '../store/app';
+import { getFolderReportId } from '../functions/reportLinks';
 import ReportLinkRecorder from './ReportLinkRecorder';
 import ClusterRenderer from './cluster/ClusterRenderer';
 import { ModalAwareOutlet } from '../libs/ModalAwareOutlet';
@@ -30,14 +31,24 @@ import { clearReportLinkError, getReportLinkError } from '../libs/openReportFrom
 import { createToast } from '../functions/createToastNotification';
 import { ToastType } from '../definitions/ToastType';
 
+// Reads the report atoms here rather than in `Layout`, so a report switch re-renders only the footer
+function BoundedFooterInfobar() {
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+    // Switching either report retries a footer that failed to render
+    const resetKey = `${getFolderReportId(activeProfilerReport) ?? ''}|${getFolderReportId(activePerformanceReport) ?? ''}`;
+
+    return (
+        <ChromeErrorBoundary resetKey={resetKey}>
+            <FooterInfobar />
+        </ChromeErrorBoundary>
+    );
+}
+
 function Layout() {
     const location = useLocation();
     const isTopologyOpen = isModalOpen(location, ROUTES.CLUSTER);
     const viewContainerRef = useRef<HTMLElement>(null);
-    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
-    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
-    // Switching either report retries a footer that failed to render
-    const footerResetKey = `${activeProfilerReport?.path ?? ''}|${activePerformanceReport?.path ?? ''}`;
 
     // Starts the event-log flush lifecycle; it records nothing on its own. Here rather than at
     // module scope so importing the sender has no side effect, and so the listeners are
@@ -86,9 +97,7 @@ function Layout() {
                 </main>
             </div>
 
-            <ChromeErrorBoundary resetKey={footerResetKey}>
-                <FooterInfobar />
-            </ChromeErrorBoundary>
+            <BoundedFooterInfobar />
 
             <ReportLinkRecorder />
 

@@ -7,7 +7,7 @@ import { Component, ReactNode } from 'react';
 interface ChromeErrorBoundaryProps {
     children: ReactNode;
     // A change retries the children, so a fault tied to one report does not hide them for the session
-    resetKey: string | null;
+    resetKey: string;
 }
 
 interface ChromeErrorBoundaryState {
