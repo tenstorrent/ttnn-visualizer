@@ -16,6 +16,7 @@ import MlGraph from '../components/mlir/MLIRViewReactFlow';
 import MlirSplitView, { type MlirSplitReport } from '../components/mlir/MlirSplitView';
 import MlirProcessingStatus from '../components/MlirProcessingStatus';
 import { useMlir } from '../hooks/useAPI';
+import { recordMlirSplitViewUsed } from '../functions/surfaceEvents';
 import 'styles/components/MlirPage.scss';
 
 const MLIR = () => {
@@ -123,7 +124,10 @@ const MLIR = () => {
                         variant={ButtonVariant.MINIMAL}
                         icon={IconNames.PANEL_STATS}
                         text='Split view'
-                        onClick={() => setManualSplitView(true)}
+                        onClick={() => {
+                            setManualSplitView(true);
+                            recordMlirSplitViewUsed();
+                        }}
                     />
                 </div>
             </div>

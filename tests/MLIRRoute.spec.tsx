@@ -8,13 +8,15 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { Provider, createStore } from 'jotai';
 import type { GraphBundle } from '../src/model/MLIRJsonModel';
 import { mlirLoadedReportsAtom, mlirSplitViewEpochAtom } from '../src/store/app';
+import { EventLogEvent } from '../src/definitions/EventLogEvent';
 
 // Route wiring only: stub the heavy leaves (graph view, split view, loader) so
 // the test can assert the split-view and loader-collapse toggles mount/unmount
 // the right subtree.
-const { mockUseMlir } = vi.hoisted(() => ({ mockUseMlir: vi.fn() }));
+const { mockUseMlir, recordEvent } = vi.hoisted(() => ({ mockUseMlir: vi.fn(), recordEvent: vi.fn() }));
 
 vi.mock('react-helmet-async', () => ({ Helmet: () => null }));
+vi.mock('../src/functions/recordEvent', () => ({ default: recordEvent }));
 vi.mock('../src/functions/getServerConfig', () => ({ default: () => null }));
 vi.mock('../src/hooks/useAPI', () => ({ useMlir: () => mockUseMlir() }));
 vi.mock('../src/components/mlir/MlirJsonFileLoader', () => ({
@@ -123,6 +125,29 @@ describe('MLIR route split-view wiring', () => {
 
         expect(screen.getByTestId('mlir-processing')).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Split view' })).not.toBeInTheDocument();
+    });
+});
+
+describe('MLIR route usage events', () => {
+    const splitViewUsed = { event: EventLogEvent.MLIR_SPLIT_VIEW_USED, details: {} };
+
+    it('records the split view each time its button opens it', () => {
+        mockUseMlir.mockReturnValue({ data: null, isLoading: false, error: undefined });
+        renderRoute(sampleData);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Split view' }));
+        fireEvent.click(screen.getByRole('button', { name: 'close split' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Split view' }));
+
+        expect(recordEvent.mock.calls).toEqual([[splitViewUsed], [splitViewUsed]]);
+    });
+
+    it('leaves a split opened by viewing two files to the overlay, which records it', () => {
+        mockUseMlir.mockReturnValue({ data: null, isLoading: false, error: undefined });
+        renderRoute(sampleData, peerData);
+
+        expect(screen.getByTestId('mlir-split-view')).toBeInTheDocument();
+        expect(recordEvent).not.toHaveBeenCalled();
     });
 });
 

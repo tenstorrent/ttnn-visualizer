@@ -35,6 +35,7 @@ import {
     recordReportLoadFailed,
     recordReportLoaded,
 } from '../../functions/reportLoadEvents';
+import { recordMlirFileLoaded, recordMlirSplitViewUsed } from '../../functions/surfaceEvents';
 import 'styles/components/MlirFileResultsOverlay.scss';
 
 const MAX_MLIR_FILE_SELECTION = 2;
@@ -276,7 +277,16 @@ const MlirFileResultsOverlay = () => {
         }
 
         setMlirLoadedReports(loadedReports);
-        selectedResults.forEach(() => recordReportLoaded(ReportKind.MLIR, ReportSource.UPLOAD));
+        selectedResults.forEach((result) => {
+            recordReportLoaded(ReportKind.MLIR, ReportSource.UPLOAD);
+            // The uploaded name, not `result.name`: that is the converted graph's, always JSON.
+            recordMlirFileLoaded(result.filename);
+        });
+
+        // Viewing two files opens the split view itself, without its button.
+        if (comparison) {
+            recordMlirSplitViewUsed();
+        }
 
         const toastDetail = comparison ? `${primary.filename} / ${comparison.filename}` : primary.filename;
         createToastNotification('MLIR', toastDetail, ToastType.SUCCESS);
