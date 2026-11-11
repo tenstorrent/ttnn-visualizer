@@ -1451,6 +1451,19 @@ def record_event(
         )
 
 
+def _describe_expected_details(
+    event: EventLogEvent, expected: Tuple[str, ...], lead: str
+) -> str:
+    """What a rejected event should have carried, without echoing what it did carry.
+
+    One place for both rejections, so an event with no details never gets a message
+    that ends in an empty list: it still needs a details object, just an empty one.
+    """
+    if not expected:
+        return f"Event {event.value} takes no details: send an empty details object"
+    return f"Event {event.value} {lead}: {', '.join(expected)}"
+
+
 def validate_client_event(entry: Any) -> Tuple[EventLogEvent, Dict[str, Enum]]:
     """Resolve one posted event object against the schema, or refuse it outright.
 
@@ -1497,17 +1510,15 @@ def validate_client_event(entry: Any) -> Tuple[EventLogEvent, Dict[str, Enum]]:
 
     if not isinstance(details, dict):
         raise EventLogEventRejected(
-            f"Event {event.value} needs a details object with: {', '.join(expected)}"
+            _describe_expected_details(event, expected, "needs a details object with")
         )
 
     # Exact match, so an unknown key and a missing one are the same failure. This is
     # also what refuses `ts`, `schema_version`, `run_id` and `count` as details: the
     # server owns those fields and none of them appears in any expected tuple.
     if set(details) != set(expected):
-        if not expected:
-            raise EventLogEventRejected(f"Event {event.value} takes no details")
         raise EventLogEventRejected(
-            f"Event {event.value} expects exactly these details: {', '.join(expected)}"
+            _describe_expected_details(event, expected, "expects exactly these details")
         )
 
     resolved: Dict[str, Enum] = {}
