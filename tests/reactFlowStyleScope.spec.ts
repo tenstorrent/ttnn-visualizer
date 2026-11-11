@@ -60,26 +60,42 @@ const isAnchoredOnMlirClass = (selector: string): boolean => {
 
 const PANEL_BOTTOM_LEFT = /\.react-flow__panel\.bottom\.left\b/;
 
+// A blank line, a line comment or an `@use`: everything the app entry may hold.
+const APP_ENTRY_LINE = /^(?:\/\/.*|@use '[^']+';)?$/;
+
 describe('React Flow stylesheet scoping', () => {
-    it('opens every React Flow selector with a view root, apart from the shared theme', () => {
-        const themeSelectors = new Set(getSelectors(getCompiledRules(getCompiledStylesheet(SHARED_THEME))));
-        const files = [APP_ENTRY, ...getScssFiles('src/scss')];
+    // The theme is exempt by path, not by selector, so a bare `.react-flow`
+    // rule in any other sheet still fails.
+    it('opens every React Flow selector with a view root, outside the shared theme', () => {
+        const files = getScssFiles('src/scss');
         expect(files).toContain(MLIR_SHEET);
         expect(files).toContain(SHARED_THEME);
 
-        const offenders = files.flatMap((file) =>
-            getSelectors(getCompiledRules(getCompiledStylesheet(file)))
-                .filter((selector) => REACT_FLOW_CLASS.test(selector))
-                .filter(
-                    (selector) =>
-                        !themeSelectors.has(selector) &&
-                        !VIEW_ROOTS.some((root) => opensWithRoot(selector, root)) &&
-                        !isAnchoredOnMlirClass(selector),
-                )
-                .map((selector) => `${file}: ${selector}`),
-        );
+        const offenders = files
+            .filter((file) => file !== SHARED_THEME)
+            .flatMap((file) =>
+                getSelectors(getCompiledRules(getCompiledStylesheet(file)))
+                    .filter((selector) => REACT_FLOW_CLASS.test(selector))
+                    .filter(
+                        (selector) =>
+                            !VIEW_ROOTS.some((root) => opensWithRoot(selector, root)) &&
+                            !isAnchoredOnMlirClass(selector),
+                    )
+                    .map((selector) => `${file}: ${selector}`),
+            );
 
         expect(offenders).toEqual([]);
+    });
+
+    // The app entry compiles the theme in, so it is not scanned above. It may
+    // only load sheets, each of which is scanned on its own.
+    it('adds no rules of its own in the app entry', () => {
+        const extraLines = getStylesheet(APP_ENTRY)
+            .split('\n')
+            .map((line) => line.trim())
+            .filter((line) => !APP_ENTRY_LINE.test(line));
+
+        expect(extraLines).toEqual([]);
     });
 
     it('scopes every React Flow selector in the MLIR sheet to the MLIR view pane', () => {
