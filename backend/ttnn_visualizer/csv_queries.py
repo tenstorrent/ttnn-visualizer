@@ -897,11 +897,20 @@ class DeviceLogMeta(NamedTuple):
     max_cores: Optional[int] = None
 
 
+# Twice the longest first-line name or value tt-metal writes, a 32-character RUN_ID, so a
+# field it adds still reads while a crafted one cannot fill an answer. #2256
+MAX_CAPTURE_FIELD_CHARS = 64
+# Four times the fields tt-metal writes, for the same reason. The patterns below read
+# past it, so a clock or ARCH after the cap reaches only the tools that use them. #2292
+MAX_CAPTURE_FIELDS = 16
 # Searched for anywhere on the line, so a missing comma or a leading BOM still reads. A
 # number of ten digits or more is no count, rather than an int too long to parse.
-_META_ARCHITECTURE = re.compile(r"ARCH:\s*([\w\d_]+)")
 _META_FREQUENCY = re.compile(r"CHIP_FREQ\[MHz\]:\s*(\d{1,9})(?!\d)")
 _META_MAX_CORES = re.compile(r"Max Compute Cores:\s*(\d{1,9})(?!\d)")
+# Read whole or not at all: not from `MY_ARCH:`, nor the start of a name past the bound.
+_META_ARCHITECTURE = re.compile(
+    rf"(?<!\w)ARCH:\s*(\w{{1,{MAX_CAPTURE_FIELD_CHARS}}})(?![^\s,])"
+)
 # The meta reads only the first line, and a log with no newline must not be read whole.
 _META_LINE_LIMIT = 65536
 
@@ -1112,7 +1121,11 @@ class DeviceLogProfilerQueries:
     def read_capture_metadata(cls, instance: Instance) -> Dict[str, str]:
         """The `ARCH: …, CHIP_FREQ[MHz]: …` line every device log opens with.
 
-        `__enter__` skips it (`offset=1`) because pandas would read it as a
+        A field whose name or value is over `MAX_CAPTURE_FIELD_CHARS` characters, and
+        any after the first `MAX_CAPTURE_FIELDS` names, is left out, so a key the line
+        holds can be missing here.
+
+        `__enter__` skips the line (`offset=1`) because pandas would read it as a
         header, so the only way to the clock is to read the line directly — and
         without the clock a cycle count cannot be turned into a duration.
 
@@ -1133,8 +1146,12 @@ class DeviceLogProfilerQueries:
         metadata: Dict[str, str] = {}
         for field in first_line.split(","):
             key, separator, value = field.partition(":")
-            if separator:
-                metadata[key.strip()] = value.strip()
+            key, value = key.strip(), value.strip()
+            if not separator or max(len(key), len(value)) > MAX_CAPTURE_FIELD_CHARS:
+                continue
+            metadata[key] = value
+            if len(metadata) == MAX_CAPTURE_FIELDS:
+                break
         return metadata
 
     def _zone_phase(self, purpose: str) -> Tuple[Optional[str], str, str]:

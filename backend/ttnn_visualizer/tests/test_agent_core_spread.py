@@ -12,13 +12,17 @@ choose its zones among them. #2173
 """
 
 import json
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 import pytest
 from ttnn_visualizer import csv_queries
 from ttnn_visualizer.agent import server, tools
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
-from ttnn_visualizer.csv_queries import DeviceLogProfilerQueries, SpanRequest
+from ttnn_visualizer.csv_queries import (
+    DeviceLogProfilerQueries,
+    SpanRequest,
+    parse_device_meta,
+)
 from ttnn_visualizer.event_logging import McpToolOutcome
 from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.models import Instance
@@ -872,6 +876,35 @@ def test_a_log_missing_a_zone_column_is_refused_with_its_name(tmp_path):
             queries.query_core_spans({SpanRequest((RUN, 0))})
 
 
+_LONGEST_NAME = "a" * csv_queries.MAX_CAPTURE_FIELD_CHARS
+_TOO_LONG_NAME = "a" * (csv_queries.MAX_CAPTURE_FIELD_CHARS + 1)
+_FIELDS_TO_THE_CAP = ", ".join(
+    f"F{index}: {index}" for index in range(csv_queries.MAX_CAPTURE_FIELDS)
+)
+_READ_APART = pytest.mark.xfail(strict=True, reason="#2292")
+
+# A first line and the architecture every reader should name in it, `ANY` where #2292 is
+# still to choose; `_READ_APART` marks the lines the split and the pattern disagree on.
+FIRST_LINES = [
+    pytest.param(f"ARCH: {_LONGEST_NAME}-x", None, id="bounded-prefix"),
+    pytest.param(f"ARCH: {_TOO_LONG_NAME}, MY_ARCH: evil", None, id="later-field"),
+    pytest.param(
+        f"ARCH: {_TOO_LONG_NAME}, ARCH: wormhole_b0", "wormhole_b0", id="later-arch"
+    ),
+    pytest.param("MY_ARCH: evil", None, id="name-ending-in-arch"),
+    pytest.param("ARCH: wormhole_b0", "wormhole_b0", id="real"),
+    pytest.param("ARCH: wormhole-b0", ANY, id="hyphen", marks=_READ_APART),
+    pytest.param("ARCH: wormhole b0", ANY, id="space", marks=_READ_APART),
+    pytest.param("ARCH: a, ARCH: b", ANY, id="repeated", marks=_READ_APART),
+    pytest.param("FOO: ARCH: evil", None, id="inside-a-value", marks=_READ_APART),
+    pytest.param("﻿ARCH: wormhole_b0", "wormhole_b0", id="bom", marks=_READ_APART),
+    pytest.param(
+        f"{_FIELDS_TO_THE_CAP}, ARCH: evil", None, id="past-cap", marks=_READ_APART
+    ),
+    pytest.param("ARCH: ", None, id="empty", marks=_READ_APART),
+]
+
+
 class TestCaptureMetadata:
     """`read_capture_metadata` reads one bounded first line, never the whole file."""
 
@@ -880,26 +913,165 @@ class TestCaptureMetadata:
         path.write_bytes(first_line + b"\n" + MODERN_HEADER.encode() + b"\n")
         return Instance(instance_id="pytest", performance_path=str(tmp_path))
 
+    def _read(self, tmp_path, first_line: str | bytes):
+        if isinstance(first_line, str):
+            first_line = first_line.encode()
+        return DeviceLogProfilerQueries.read_capture_metadata(
+            self._instance(tmp_path, first_line)
+        )
+
     def test_a_first_line_past_the_limit_is_read_up_to_it(self, tmp_path):
         line = PREAMBLE.encode() + b"," + b"x" * (2 * csv_queries._META_LINE_LIMIT)
 
-        metadata = DeviceLogProfilerQueries.read_capture_metadata(
-            self._instance(tmp_path, line)
-        )
-
-        assert metadata["CHIP_FREQ[MHz]"] == "1000"
+        assert self._read(tmp_path, line)["CHIP_FREQ[MHz]"] == "1000"
 
     def test_a_cut_through_a_multibyte_character_reads_as_no_metadata(self, tmp_path):
         # One ASCII byte then two-byte characters: the limit, an even byte count,
         # falls in the middle of one.
         line = b"A" + "\u00e9".encode() * csv_queries._META_LINE_LIMIT
 
-        assert (
-            DeviceLogProfilerQueries.read_capture_metadata(
-                self._instance(tmp_path, line)
-            )
-            == {}
+        assert self._read(tmp_path, line) == {}
+
+    @pytest.mark.parametrize("extra, kept", [(0, True), (1, False)])
+    @pytest.mark.parametrize("side", ["name", "value"])
+    def test_a_field_is_kept_up_to_the_bound_and_left_out_past_it(
+        self, tmp_path, side, extra, kept
+    ):
+        """Measured stripped, as the field is kept, against the ARCH pattern's bound."""
+        text = "a" * (csv_queries.MAX_CAPTURE_FIELD_CHARS + extra)
+        name, value = (text, "v") if side == "name" else ("K", text)
+
+        metadata = self._read(tmp_path, f"CHIP_FREQ[MHz]: 1000,  {name} :  {value} ")
+
+        assert (metadata.get(name) == value) is kept
+
+    def test_the_longest_real_first_line_reads_whole(self, tmp_path):
+        """A 2026 capture's four fields, its RUN_ID the longest value seen."""
+        line = (
+            "ARCH: wormhole_b0, CHIP_FREQ[MHz]: 1000, Max Compute Cores: 64, "
+            "RUN_ID: e4f3b5ca429bbb18e8fb771ad33e8ee2"
         )
+
+        assert self._read(tmp_path, line) == {
+            "ARCH": "wormhole_b0",
+            "CHIP_FREQ[MHz]": "1000",
+            "Max Compute Cores": "64",
+            "RUN_ID": "e4f3b5ca429bbb18e8fb771ad33e8ee2",
+        }
+
+    def test_a_dropped_field_leaves_its_neighbours_intact(self, tmp_path):
+        """A crafted first line must not fill load_report's answer, nor cost it the
+        fields around the one left out. #2256"""
+        too_long = csv_queries.MAX_CAPTURE_FIELD_CHARS + 1
+        line = (
+            f"F0: 0, ARCH: {'a' * too_long}, CHIP_FREQ[MHz]: 1000, "
+            f"{'k' * too_long}: v, Max Compute Cores: 64"
+        )
+
+        assert self._read(tmp_path, line) == {
+            "F0": "0",
+            "CHIP_FREQ[MHz]": "1000",
+            "Max Compute Cores": "64",
+        }
+
+    def test_fields_past_the_cap_are_left_out(self, tmp_path):
+        count = csv_queries.MAX_CAPTURE_FIELDS
+        line = ", ".join(f"F{index}: {index}" for index in range(count + 5))
+
+        assert list(self._read(tmp_path, line)) == [
+            f"F{index}" for index in range(count)
+        ]
+
+    def test_skipped_fields_do_not_count_towards_the_cap(self, tmp_path):
+        """Counting raw fields instead would push the clock out."""
+        too_long = "k" * (csv_queries.MAX_CAPTURE_FIELD_CHARS + 1)
+        skipped = [
+            f"{too_long}{index}: v"
+            for index in range(csv_queries.MAX_CAPTURE_FIELDS + 4)
+        ]
+
+        metadata = self._read(tmp_path, ", ".join([*skipped, "CHIP_FREQ[MHz]: 1000"]))
+
+        assert metadata == {"CHIP_FREQ[MHz]": "1000"}
+
+    def test_a_repeated_name_counts_once_and_keeps_its_last_value(self, tmp_path):
+        """Counting each repeat would push the clock out. The pattern reads the first
+        value instead. #2292"""
+        repeats = csv_queries.MAX_CAPTURE_FIELDS + 4
+        fields = [f"F0: {index}" for index in range(repeats)]
+
+        metadata = self._read(tmp_path, ", ".join([*fields, "CHIP_FREQ[MHz]: 1000"]))
+
+        assert metadata == {"F0": str(repeats - 1), "CHIP_FREQ[MHz]": "1000"}
+
+    @pytest.mark.parametrize("line, architecture", FIRST_LINES)
+    def test_the_split_and_the_pattern_agree_on_the_bound(
+        self, tmp_path, line, architecture
+    ):
+        """`load_report` and `zone_timings` read the split, every other tool and the
+        route the pattern. They agree at the field bound; the lines they still read
+        apart are pinned to #2292."""
+        split = self._read(tmp_path, line).get("ARCH")
+
+        assert split == parse_device_meta(line).architecture
+        assert split == architecture
+
+
+def _every_tool(tmp_path, first_line):
+    """`load_report`, `zone_timings`, `zone_intervals`, `core_spread` and the meta
+    route's reader, on one log that opens with `first_line`."""
+    path = write_device_log(tmp_path, MODERN_HEADER, THREE_CORES)
+    path.write_text("\n".join([first_line, *path.read_text().splitlines()[1:]]) + "\n")
+    registry = ReportRegistry()
+    loaded = load_report(registry, performance_path=str(tmp_path))
+    handle = loaded["handle"]
+    with patch.object(
+        tools, "_generate_canonical_report", return_value=_perf_report([_op()])
+    ):
+        spread = tools.core_spread(registry, handle, perf_id="1")
+    return (
+        loaded,
+        tools.zone_timings(registry, handle),
+        tools.zone_intervals(registry, handle, "BRISC-KERNEL"),
+        spread,
+        DeviceLogProfilerQueries.read_device_meta(registry.get(handle)),
+    )
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        pytest.param(line.values[0], id=line.id, marks=line.marks)
+        for line in FIRST_LINES
+        if line.values[1] is None
+    ],
+)
+def test_a_crafted_architecture_reads_as_none_in_every_tool(tmp_path, line):
+    """Each once read a name `capture` left out, so the tools named two architectures."""
+    loaded, timings, intervals, spread, meta = _every_tool(
+        tmp_path, f"{line}, CHIP_FREQ[MHz]: 1000"
+    )
+
+    assert "device_log" not in loaded["arch"]
+    assert timings["arch"] is None
+    assert intervals["arch"] is None
+    assert spread["arch"] is None
+    assert spread["clock_mhz"] == 1000
+    # What the app's device-log meta route serves.
+    assert meta is not None and meta.architecture is None
+
+
+@pytest.mark.xfail(strict=True, reason="#2292")
+def test_a_clock_past_the_field_cap_reads_alike_in_every_tool(tmp_path):
+    """The split stops at the cap and the pattern reads on, so `zone_timings` loses
+    the clock that `core_spread`, `zone_intervals` and the inventory keep."""
+    loaded, timings, intervals, spread, _ = _every_tool(
+        tmp_path, f"{_FIELDS_TO_THE_CAP}, CHIP_FREQ[MHz]: 1000"
+    )
+    timed = "zone_intervals" in loaded["answerable"]
+
+    assert timings["clock_mhz"] == spread["clock_mhz"] == intervals["clock_mhz"] == 1000
+    assert timed is (timings["clock_mhz"] is not None)
 
 
 class TestInventory:
