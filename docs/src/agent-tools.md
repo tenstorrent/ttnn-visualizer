@@ -695,8 +695,9 @@ that a second start replaced before its end counts as unpaired. A row whose slot
 run or cycle count is not a whole number or does not fit a 64-bit integer, or whose cycle
 count is negative, is left out and counted in a caveat. `zone_intervals` and
 `core_spread` apply the same rule, each counting only the rows it would have used. The
-first call on a handle reads the device log once, and later calls answer from that read,
-with the clock it was read at.
+rule is about negative cells, not totals: a zone whose end was recorded before its start
+still pairs, and its `total_cycles` is negative. The first call on a handle reads the
+device log once, and later calls answer from that read, with the clock it was read at.
 
 `core_spread` reads each operation on one device only, never pooling devices, since each
 runs its own clock. A performance row's global call count is the device log's `run host ID`

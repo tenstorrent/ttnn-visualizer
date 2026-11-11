@@ -556,6 +556,11 @@ def _whole_number_rows(
     return whole, readable
 
 
+def _zone_names(chunk: pd.DataFrame) -> pd.Series:
+    """Each row's zone name as every zone read compares it."""
+    return chunk["zone name"].astype(str).str.strip()
+
+
 @dataclass(slots=True)
 class _ZoneOnTimeline:
     """One zone's starts on one RISC timeline, as far as the log has read."""
@@ -623,6 +628,17 @@ class ZoneIntervals:
     # The zone's own starts left out for either reason, which a refusal reports.
     malformed_starts: int
     untracked_starts: int
+
+
+@dataclass(frozen=True)
+class ZoneSummary:
+    """What `query_zone_summary` read: one row per zone and RISC, and what the log
+    held."""
+
+    zones: List[Dict[str, object]]
+    pairing: Dict[str, int]
+    # Rows that `_whole_number_rows` left out.
+    malformed: int
 
 
 def _unmatched_starts(open_starts: int, replaced_starts: int) -> int:
@@ -1478,9 +1494,7 @@ class DeviceLogProfilerQueries:
         meta = cls.read_device_meta(instance)
         return meta.frequency if meta is not None and meta.frequency else None
 
-    def query_zone_summary(
-        self,
-    ) -> Tuple[List[Dict[str, object]], Dict[str, int], int]:
+    def query_zone_summary(self) -> ZoneSummary:
         """Aggregate the whole log into one row per (zone, RISC).
 
         The two existing zone queries both need you to already know the zone you
@@ -1501,9 +1515,9 @@ class DeviceLogProfilerQueries:
         captures in `reports/` span 32 and 8 slots, so coordinates alone collide
         across devices and one device's start would close against another's end.
 
-        Returns the summary, a count of what did not pair, and how many rows
-        `_whole_number_rows` left out. A truncated capture leaves starts open,
-        which is invisible in a total that reports only what matched.
+        Returns a `ZoneSummary`: the rows, a count of what did not pair, and how
+        many rows `_whole_number_rows` left out. A truncated capture leaves starts
+        open, which is invisible in a total that reports only what matched.
         """
         phase_column, start_token, end_token = self._zone_phase("summarised by zone")
 
@@ -1519,12 +1533,14 @@ class DeviceLogProfilerQueries:
         # No `_inexact_as_floats` guard, which keeps the all-zones interval pass equal to
         # its one-zone reads: no other read has to agree with this one.
         for chunk in self._zone_chunks(columns):
-            names = chunk["zone name"].astype(str).str.strip()
+            names = _zone_names(chunk)
             named = (names != "") & (names != "nan")
             # Read as the other zone queries read them, so all three apply the same rule;
             # each counts the rows it would have used. #2258
             chunk, readable = _whole_number_rows(
-                chunk[named].assign(**{"zone name": names[named]}),
+                (chunk if named.all() else chunk[named]).assign(
+                    **{"zone name": names[named]}
+                ),
                 self._WHOLE_NUMBER_COLUMNS,
                 non_negative=self._NON_NEGATIVE_COLUMNS,
             )
@@ -1554,6 +1570,7 @@ class DeviceLogProfilerQueries:
                     continue
 
                 occurrences[zone_key] += 1
+                # TODO(#2312): an end recorded before its start still totals negative.
                 cycle_totals[zone_key] += cycles - start
 
         summary = []
@@ -1587,8 +1604,11 @@ class DeviceLogProfilerQueries:
             reverse=True,
         )
 
-        pairing = pairer.pairing(self.DEVICE_LOG_FILE)
-        return summary, pairing, malformed
+        return ZoneSummary(
+            zones=summary,
+            pairing=pairer.pairing(self.DEVICE_LOG_FILE),
+            malformed=malformed,
+        )
 
     def query_core_spans(self, requests: Set[SpanRequest]) -> CoreSpans:
         """Each core's kernel zones for the given perf rows' runs and windows.
@@ -1641,12 +1661,7 @@ class DeviceLogProfilerQueries:
             chunk = chunk[chunk["run host ID"].isin(run_ids)]
             # BRISC-, NCRISC- and TRISC-KERNEL: the firmware zones wrap them, and
             # tt-metal's per-core figures read the kernels.
-            chunk = chunk[
-                chunk["zone name"]
-                .astype(str)
-                .str.strip()
-                .str.endswith(KERNEL_ZONE_SUFFIX)
-            ]
+            chunk = chunk[_zone_names(chunk).str.endswith(KERNEL_ZONE_SUFFIX)]
             whole, readable = _whole_number_rows(
                 chunk,
                 self._WHOLE_NUMBER_COLUMNS,
@@ -1745,7 +1760,7 @@ class DeviceLogProfilerQueries:
 
         for chunk in self._zone_chunks(columns):
             rows_read += len(chunk)
-            names = chunk["zone name"].astype(str).str.strip()
+            names = _zone_names(chunk)
             phases = chunk[phase_column].astype(str).str.strip()
             starts = phases == start_token
             starts_or_ends = starts | (phases == end_token)
