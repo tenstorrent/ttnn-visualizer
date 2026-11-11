@@ -22,15 +22,25 @@ import {
 } from '../src/store/app';
 import { GraphBundle, MlirFileResult } from '../src/model/MLIRJsonModel';
 import { MlirServerConnection } from '../src/model/MlirServer';
-import { ReportKind, ReportLoadFailureReason, ReportSource } from '../src/definitions/EventLogEvent';
+import {
+    EventLogEvent,
+    MlirFileFormat,
+    ReportKind,
+    ReportLoadFailureReason,
+    ReportSource,
+} from '../src/definitions/EventLogEvent';
 
 const setActiveMlir = vi.fn();
 const uploadMlirFileToServer = vi.fn();
-const { createToastNotification, recordReportLoaded, recordReportLoadFailed } = vi.hoisted(() => ({
+const { createToastNotification, recordEvent, recordReportLoaded, recordReportLoadFailed } = vi.hoisted(() => ({
     createToastNotification: vi.fn(),
+    recordEvent: vi.fn(),
     recordReportLoaded: vi.fn(),
     recordReportLoadFailed: vi.fn(),
 }));
+
+// Only the per-surface events reach this: the report-load recorders are spied on below.
+vi.mock('../src/functions/recordEvent', () => ({ default: recordEvent }));
 
 vi.mock('../src/hooks/useMlirRemote', () => ({
     default: () => ({ setActiveMlir, uploadMlirFileToServer }),
@@ -584,6 +594,76 @@ describe('MlirFileResultsOverlay', () => {
             expect(retryButtons[0]).toBeEnabled();
             expect(retryButtons[1]).toBeEnabled();
         });
+    });
+});
+
+describe('MlirFileResultsOverlay usage events', () => {
+    const fileLoaded = (format: MlirFileFormat) => ({
+        event: EventLogEvent.MLIR_FILE_LOADED,
+        details: { mlir_format: format },
+    });
+    const splitViewUsed = { event: EventLogEvent.MLIR_SPLIT_VIEW_USED, details: {} };
+
+    it('records the format of the uploaded file, not of its converted graph', async () => {
+        renderOverlay([
+            {
+                filename: 'resnet.tflite',
+                host: 'worker-01',
+                name: 'resnet',
+                status: ConnectionTestStates.OK,
+                graph: GRAPH,
+                persisted: true,
+            },
+        ]);
+
+        fireEvent.click(screen.getByText('resnet.tflite'));
+        fireEvent.click(screen.getByRole('button', { name: /view/i }));
+
+        await waitFor(() => expect(recordEvent).toHaveBeenCalled());
+        expect(recordEvent.mock.calls).toEqual([[fileLoaded(MlirFileFormat.TFLITE)]]);
+        expect(JSON.stringify(recordEvent.mock.calls)).not.toContain('resnet');
+    });
+
+    it('records both formats and the split view when two files are viewed together', async () => {
+        renderOverlay([
+            {
+                filename: 'a.mlirbc',
+                host: 'worker-01',
+                name: 'a',
+                status: ConnectionTestStates.OK,
+                graph: GRAPH,
+                persisted: true,
+            },
+            {
+                filename: 'b.pt2',
+                host: 'worker-01',
+                name: 'b',
+                status: ConnectionTestStates.OK,
+                graph: GRAPH,
+                persisted: true,
+            },
+        ]);
+
+        fireEvent.click(screen.getByText('a.mlirbc'));
+        fireEvent.click(screen.getByText('b.pt2'));
+        fireEvent.click(screen.getByRole('button', { name: /view/i }));
+
+        await waitFor(() => expect(recordEvent).toHaveBeenCalledTimes(3));
+        expect(recordEvent.mock.calls).toEqual([
+            [fileLoaded(MlirFileFormat.MLIRBC)],
+            [fileLoaded(MlirFileFormat.PT2)],
+            [splitViewUsed],
+        ]);
+    });
+
+    it('records nothing for files that are only listed', () => {
+        renderOverlay([
+            { filename: 'a.mlir', name: 'a', status: ConnectionTestStates.OK, graph: GRAPH, persisted: true },
+        ]);
+
+        fireEvent.click(screen.getByText('a.mlir'));
+
+        expect(recordEvent).not.toHaveBeenCalled();
     });
 });
 

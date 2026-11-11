@@ -61,6 +61,8 @@ import MlirNodeColorLegend from './MlirNodeColorLegend';
 import { collectLocationLines, collectShapeLines } from './mlirNodeBodySummary';
 import { createMoveGroupBatcher } from './mlirMoveGroupBatch';
 import { getNamespaceSegments } from './mlirGraphHelpers';
+import useRecordFilterUsed from '../../hooks/useRecordFilterUsed';
+import { FilterSurface } from '../../definitions/EventLogEvent';
 
 const FILTER_DIM_OPACITY = 0.18;
 // Debounce the applied filter query so the memo chain (filterMatchInfo →
@@ -429,6 +431,7 @@ const MlGraphInner = ({ data, detailsCollapsible = false }: ViewProps) => {
     // feedback; `appliedFilterQuery` is what the memo chain reads and lags
     // by `FILTER_DEBOUNCE_MS` on non-empty queries.
     const [filterQuery, setFilterQuery] = useState('');
+    const recordOpFilterUsed = useRecordFilterUsed(FilterSurface.MLIR_OP);
     const [appliedFilterQuery, setAppliedFilterQuery] = useState('');
     const [filterMode, setFilterMode] = useState<GraphFilterMode>(() => {
         const stored = sessionStorage.getItem(FILTER_MODE_STORAGE_KEY);
@@ -503,13 +506,18 @@ const MlGraphInner = ({ data, detailsCollapsible = false }: ViewProps) => {
     // Reset the prev/next cursor with the query; clearing also applies
     // instantly so Escape / clear feels responsive. Non-empty updates flow
     // through the debounce effect below.
-    const handleQueryChange = useCallback((next: string) => {
-        setFilterQuery(next);
-        setCurrentMatchIndex(null);
-        if (next === '') {
-            setAppliedFilterQuery('');
-        }
-    }, []);
+    const handleQueryChange = useCallback(
+        (next: string) => {
+            setFilterQuery(next);
+            setCurrentMatchIndex(null);
+            if (next === '') {
+                setAppliedFilterQuery('');
+            }
+            // Each split-view pane has its own filter, so a visit can record this twice.
+            recordOpFilterUsed(next !== '');
+        },
+        [recordOpFilterUsed],
+    );
 
     // Match set differs across modes, so reset the cursor on toggle.
     const handleModeChange = useCallback((next: GraphFilterMode) => {
