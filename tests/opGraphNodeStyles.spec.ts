@@ -2,23 +2,14 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { getRuleBody, getStylesheet } from './helpers/stylesheets';
 
 // Asserted against the stylesheet text because jsdom does not compile SCSS, so
-// a rendered node carries the class but none of its declarations. Anchored on
-// the cwd rather than `import.meta.url`, which jsdom serves over http.
-const STYLESHEET = readFileSync(resolve(process.cwd(), 'src/scss/components/OperationGraphReactFlow.scss'), {
-    encoding: 'utf8',
-});
+// a rendered node carries the class but none of its declarations.
+const STYLESHEET = getStylesheet('src/scss/components/OperationGraphReactFlow.scss');
 
-const ruleBody = (selector: string): string => {
-    const start = STYLESHEET.indexOf(selector);
-    expect(start, `${selector} not found`).toBeGreaterThan(-1);
-    const open = STYLESHEET.indexOf('{', start);
-    return STYLESHEET.slice(open + 1, STYLESHEET.indexOf('}', open));
-};
+const ruleBody = (selector: string): string => getRuleBody(STYLESHEET, selector);
 
 describe('op graph selected node styling', () => {
     it('draws selection as a ring in the dedicated selection colour', () => {
