@@ -376,9 +376,9 @@ class PerfChartLabel(str, Enum):
 
     One member per ``PerfChartId`` in ``src/definitions/PerformanceCharts.ts``: the DOM id
     without its ``perf-chart-`` prefix, in snake_case, so the exported label does not move
-    with markup. Every
-    chart renders on one scrolling page, so an event means the chart was scrolled or
-    jumped to, counted once per chart per visit to the Charts tab — not that it was read.
+    with markup. Every chart renders on one scrolling page, so an event means the chart
+    was scrolled or jumped to, counted once per chart per visit to the Charts tab — not
+    that it was read.
     """
 
     OP_DURATION_HISTOGRAM = "op_duration_histogram"
