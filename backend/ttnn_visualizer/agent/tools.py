@@ -69,6 +69,7 @@ from ttnn_visualizer.csv_queries import (
     ZoneIntervalPass,
     ZoneIntervals,
     ZoneRepeats,
+    ZoneSummary,
     check_signpost_range,
     interval_statistics,
     read_signposts,
@@ -813,10 +814,7 @@ class _ZoneTimingsRead:
     """`zone_timings`' read of the device log, kept per handle with the clock and
     architecture its first line named then. #2248"""
 
-    summary: List[Dict[str, object]]
-    pairing: Dict[str, int]
-    # Rows `_whole_number_rows` left out.
-    malformed: int
+    summary: ZoneSummary
     arch: Optional[str]
     clock_mhz: Optional[float]
 
@@ -825,11 +823,9 @@ def _zone_timings_read(registry: ReportRegistry, handle: str) -> _ZoneTimingsRea
     def read(instance: Instance) -> _ZoneTimingsRead:
         metadata = DeviceLogProfilerQueries.read_capture_metadata(instance)
         with DeviceLogProfilerQueries(instance, stream=True) as queries:
-            summary, pairing, malformed = queries.query_zone_summary()
+            summary = queries.query_zone_summary()
         return _ZoneTimingsRead(
             summary,
-            pairing,
-            malformed,
             # As `zone_intervals` and `core_spread` read it, so the tools cannot differ.
             _log_architecture(instance),
             finite_number(metadata.get("CHIP_FREQ[MHz]")),
@@ -846,10 +842,10 @@ def zone_timings(
     count = bounded(limit)
     with _as_refusal():
         read = _zone_timings_read(registry, handle)
-    summary, pairing, clock_mhz = read.summary, read.pairing, read.clock_mhz
+    summary, clock_mhz = read.summary, read.clock_mhz
     # Filtered whole, so the limit counts only entries whose names can be shown.
     listed, too_long = _shown_and_dropped(
-        summary,
+        summary.zones,
         lambda entry: _name_shown(cast(str, entry["zone"]), MAX_ZONE_NAME_LENGTH)
         and _risc_shown(cast(str, entry["risc"])),
         count,
@@ -890,10 +886,9 @@ def zone_timings(
     }
     if too_long:
         result["zones_unlisted_too_long"] = too_long
-    caveats = [
-        _pairing_caveat(pairing, "these totals"),
-        _unreadable_rows_caveat(read.malformed),
-    ]
+    caveats = [_pairing_caveat(summary.pairing, "these totals")]
+    if summary.malformed:
+        caveats.append(_unreadable_rows_caveat(summary.malformed))
     caveat = " ".join(filter(None, caveats))
     if caveat:
         result["caveat"] = caveat
@@ -1149,15 +1144,14 @@ def _pairing_caveat(pairing: Dict[str, int], figures: str) -> Optional[str]:
     return caveat
 
 
-def _unreadable_rows_caveat(malformed: int) -> Optional[str]:
-    """Say how many rows a zone read left out as unreadable, in the one wording every
-    zone tool gives it."""
-    if not malformed:
-        return None
-    return (
-        f"{malformed} rows have a slot, core, run or cycle count "
-        f"{UNREADABLE_NUMBER_REASON}, and were left out."
-    )
+# The cells a zone read leaves a row out for, as its caveat and refusal name them.
+_UNREADABLE_CELLS = f"a slot, core, run or cycle count {UNREADABLE_NUMBER_REASON}"
+
+
+def _unreadable_rows_caveat(malformed: int) -> str:
+    """Say how many rows a zone read left out as unreadable, in the words
+    `zone_timings` and `zone_intervals` share."""
+    return f"{malformed} rows have {_UNREADABLE_CELLS}, and were left out."
 
 
 CORE_SPREAD_NOTE = (
@@ -1592,8 +1586,8 @@ def _unreadable_zone(zone: str, read: ZoneIntervals) -> str:
     return (
         f"{zone!r} starts {read.zone_starts[zone]} times in "
         f"{DeviceLogProfilerQueries.DEVICE_LOG_FILE}, but none could be read: "
-        f"{read.malformed_starts} have a slot, core, run or cycle count "
-        f"{UNREADABLE_NUMBER_REASON}, and {read.untracked_starts} lie on core-RISC timelines "
+        f"{read.malformed_starts} have {_UNREADABLE_CELLS}, and "
+        f"{read.untracked_starts} lie on core-RISC timelines "
         f"past the {MAX_ZONE_TIMELINES} followed at once"
     )
 
@@ -1803,9 +1797,8 @@ def _zone_interval_caveats(zone: str, read: ZoneIntervals, recurring: int) -> Li
             "them in their run. tt-metal writes each RISC's markers in time order, so "
             "this log was written some other way, and those intervals are left out."
         )
-    unreadable = _unreadable_rows_caveat(read.malformed)
-    if unreadable:
-        caveats.append(unreadable)
+    if read.malformed:
+        caveats.append(_unreadable_rows_caveat(read.malformed))
     if read.untracked:
         caveats.append(
             f"{read.untracked} rows belong to core-RISC timelines past the "
