@@ -612,7 +612,8 @@ MAX_JSON_DEPTH = 1024
 # Before Python 3.12 the stdlib scanner's recursion counts against the interpreter's
 # limit, part of which the caller's own frames have used.
 RECURSION_HEADROOM = MAX_JSON_DEPTH + 64
-_ORJSON_TOO_DEEP = "depth limit exceeded"
+# orjson 3.13 and later, then the locked 3.11 and earlier.
+_ORJSON_TOO_DEEP = ("depth limit exceeded", "array and object recursion depth exceeded")
 
 
 class NestsTooDeep(ValueError):
@@ -748,7 +749,7 @@ def _value(text: str, at: int, depth: int) -> Tuple[object, int]:
     try:
         value = orjson.loads(wrapped)
     except orjson.JSONDecodeError as error:
-        if error.msg == _ORJSON_TOO_DEEP:
+        if error.msg in _ORJSON_TOO_DEEP:
             raise NestsTooDeep() from None
         # Where in the trace, as the whole parse would say, not where in the value.
         raise json.JSONDecodeError(error.msg, text, at + error.pos - depth) from None
