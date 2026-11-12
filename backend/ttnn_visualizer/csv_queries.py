@@ -2790,6 +2790,7 @@ def check_signpost_range(
 
     positions_by_name = signposts.positions_by_name
 
+    # The app's refusal; `agent.tools.check_range` refuses an agent's unknown name first.
     def occurrences(name: str) -> List[int]:
         if name in positions_by_name:
             return positions_by_name[name]

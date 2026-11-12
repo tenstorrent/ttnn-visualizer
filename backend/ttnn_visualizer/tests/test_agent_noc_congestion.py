@@ -71,7 +71,7 @@ COMMON_INFO = {
 
 ROWS_CAVEAT = (
     "{} link demand entries were not a link's coordinates, a name of at most 32 "
-    "characters and a non-negative number, and were left out."
+    "bytes and a non-negative number, and were left out."
 )
 TIMESTEPS_CAVEAT = (
     "{} timesteps were not a timestep's object or held no list of link demand, and "

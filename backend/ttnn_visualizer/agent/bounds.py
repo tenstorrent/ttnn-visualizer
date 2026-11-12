@@ -10,9 +10,14 @@ limit schema, so a second copy would eventually promise one cap and enforce anot
 #2012 The graph guard is shared because the link and the failure tools read the same
 column. The text cuts are shared so that an op code is cut the same way wherever a tool
 shows one, as are the other texts that go through them; #2290 tracks the rest. #2208
+A bound that leaves out or refuses a name counts its `answer_size`, the bytes an
+answer's budget counts. #2255 Those are the answer's bytes: the stdio wrapper writes
+non-ASCII as escapes, so a name can take up to three times as many on the wire.
 """
 
 import hashlib
+import json
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Dict, Iterable, Optional
 
 if TYPE_CHECKING:
@@ -117,6 +122,35 @@ def shown_in_text(text: str, limit: int) -> str:
     return f"{text[:limit]}... ({len(text)} characters)"
 
 
+def answer_size(name: str) -> int:
+    """The bytes a name takes in an answer: UTF-8, with JSON's escapes and the wire's
+    escape of a lone surrogate, so a control character is six and a wide one four."""
+    encoded = json.dumps(name, ensure_ascii=False).encode("utf-8", "backslashreplace")
+    return len(encoded) - 2
+
+
+def name_fits(name: str, limit: int) -> bool:
+    """Whether a name takes at most `limit` bytes of an answer; one longer than that in
+    characters never does, so it is not encoded."""
+    return len(name) <= limit and _encoded_fits(name, limit)
+
+
+# So a name a trace repeats on every row, kept or left out, is encoded once; only names
+# within a bound in characters reach it, so its entries stay small.
+@lru_cache(maxsize=1024)
+def _encoded_fits(name: str, limit: int) -> bool:
+    return answer_size(name) <= limit
+
+
+def require_name_fits(label: str, kind: str, name: str, limit: int) -> None:
+    """Refuse the argument `label`, naming a `kind`, when it is past `limit` bytes."""
+    if not name_fits(name, limit):
+        raise ValueError(
+            f"{label} is {answer_size(name)} bytes as an answer writes it; a {kind} "
+            f"name is at most {limit} bytes"
+        )
+
+
 def normalised_choice(value: Optional[str]) -> Optional[str]:
     """A choice as `require_choice` compares it: trimmed and upper-cased, None if blank."""
     return (value.strip().upper() or None) if isinstance(value, str) else value
@@ -138,12 +172,15 @@ __all__ = [
     "MAX_DETAILED_LIMIT",
     "MAX_LIMIT",
     "MAX_OP_CODE_CHARS",
+    "answer_size",
     "bounded",
     "cut_op_code",
     "cut_text",
     "ensure_graph_readable",
+    "name_fits",
     "normalised_choice",
     "require_choice",
+    "require_name_fits",
     "shown_in_text",
     "shown_op_code",
 ]
