@@ -1406,9 +1406,7 @@ class TestSignatures:
         assert "record tensor sizes differently" in result["caveat"]
         assert (result["new"], result["missing"]) == ([], [])
 
-    def test_an_unreadable_csv_is_refused_for_signatures_too(
-        self, tmp_path, event_log_directory
-    ):
+    def test_an_unreadable_csv_is_refused_for_signatures_too(self, tmp_path):
         """As it is when matching by op code: the agent's to fix, not a crash."""
         registry = self._registry(tmp_path, smoke_rows(), smoke_rows())
         csv_path = tmp_path / "after" / "ops_perf_results.csv"
@@ -1696,10 +1694,6 @@ class TestSignatureKeys:
 
 
 class TestAnswerBudget:
-    @pytest.fixture(autouse=True)
-    def _never_touch_the_real_event_log(self, event_log_directory):
-        """Any tools/call reaches the recorder; none may write outside tmp_path."""
-
     @pytest.mark.parametrize("match", sorted(report_diff.DIFF_MATCHES))
     def test_every_list_full_fits_the_budget(self, tmp_path, match):
         """Every list at its cap, every change partly measured, op codes as long as a
@@ -1802,9 +1796,7 @@ class TestSchema:
         for side in ("repeats_a", "repeats_b"):
             assert properties[side]["maxItems"] == report_diff.MAX_CAPTURES_PER_SIDE - 1
 
-    def test_thresholds_reach_the_tool_by_the_names_the_schema_gives(
-        self, tmp_path, event_log_directory
-    ):
+    def test_thresholds_reach_the_tool_by_the_names_the_schema_gives(self, tmp_path):
         """A rename on one side of the schema and the tool's arguments fails here."""
         with patch.object(
             tools,
@@ -1837,9 +1829,7 @@ class TestSchema:
             "min_delta_unit": "us",
         }
 
-    def test_a_malformed_argument_comes_back_as_a_refusal(
-        self, tmp_path, event_log_directory
-    ):
+    def test_a_malformed_argument_comes_back_as_a_refusal(self, tmp_path):
         response = server.handle_message(
             {
                 "jsonrpc": "2.0",

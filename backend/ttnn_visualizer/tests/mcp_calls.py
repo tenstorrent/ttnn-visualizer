@@ -27,5 +27,5 @@ def tool_call(
             server._tool_table(registry),
         )
     assert response is not None
-    assert record.called, f"{name} recorded no usage event"
+    assert record.called, f"{name} answered without recording a usage event"
     return response["result"], record.call_args.kwargs["outcome"]

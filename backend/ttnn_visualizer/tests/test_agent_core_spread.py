@@ -968,10 +968,6 @@ class TestInventory:
 
 
 class TestThroughTheServer:
-    @pytest.fixture(autouse=True)
-    def _never_touch_the_real_event_log(self, event_log_directory):
-        """Every tools/call reaches the recorder; none may write outside tmp_path."""
-
     def _call(self, tmp_path, log_rows, arguments, header=MODERN_HEADER):
         registry = ReportRegistry()
         write_device_log(tmp_path, header, log_rows)
