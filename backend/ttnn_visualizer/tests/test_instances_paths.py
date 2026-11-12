@@ -2,11 +2,14 @@
 #
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-"""Regression tests for mixed local/remote active_report path resolution (issue #1359)."""
+"""Regression tests for how an instance resolves, names and checks its report paths."""
 
 import logging
+import os
 from pathlib import Path
 
+import pytest
+from ttnn_visualizer.exceptions import InvalidProfilerPath, InvalidReportPath
 from ttnn_visualizer.extensions import db
 from ttnn_visualizer.instances import (
     KEY_MLIR_LOCATION,
@@ -15,6 +18,7 @@ from ttnn_visualizer.instances import (
     KEY_PERFORMANCE_NAME,
     KEY_PROFILER_LOCATION,
     KEY_PROFILER_NAME,
+    create_instance_from_local_paths,
     update_existing_instance,
 )
 from ttnn_visualizer.models import (
@@ -203,3 +207,35 @@ def test_a_report_directly_under_the_root_is_still_named():
     assert _report_name(Path("/report")) == "report"
     assert _report_name(Path("/work/generated/ttnn/reports/bge_m3")) == "bge_m3"
     assert _report_name(None) == ""
+
+
+@pytest.fixture
+def unreadable_dir(tmp_path):
+    """A report folder whose parent can't be searched, as `chmod 000` leaves it."""
+    locked = tmp_path / "locked"
+    report = locked / "report"
+    report.mkdir(parents=True)
+    locked.chmod(0)
+    try:
+        if os.access(report, os.F_OK):
+            pytest.skip("this user reaches a folder whatever its parent's mode")
+        yield report
+    finally:
+        locked.chmod(0o755)
+
+
+@pytest.mark.parametrize(
+    ("key", "error"),
+    [("profiler_path", InvalidReportPath), ("performance_path", InvalidProfilerPath)],
+)
+def test_a_path_it_cannot_read_is_refused_rather_than_raised(
+    app, unreadable_dir, key, error
+):
+    """`main()` exits cleanly on these; a `PermissionError` was a traceback."""
+    paths = {"profiler_path": None, "performance_path": None, key: str(unreadable_dir)}
+
+    with app.app_context():
+        with pytest.raises(error):
+            create_instance_from_local_paths(**paths)
+
+        assert InstanceTable.query.count() == 0
