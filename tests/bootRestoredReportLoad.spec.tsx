@@ -15,6 +15,7 @@ import { minimalValidNpeData, npeWindow, summary } from './helpers/npeFixtures';
 import { noSshConfigResult } from './helpers/sshConfigFixtures';
 import mockProfilerFolderList from './data/mockProfilerFolderList.json';
 import mockPerformanceReportFolders from './data/mockPerformanceReportFolders.json';
+import FooterInfobar from '../src/components/FooterInfobar';
 import ProtectedRoute from '../src/components/ProtectedRoute';
 import Home from '../src/routes/Home';
 import NPE from '../src/routes/NPE';
@@ -87,6 +88,11 @@ vi.mock('../src/hooks/useAPI', async () => {
         useReportFolderList: () => ({ data: mockProfilerFolderList }),
         usePerfFolderList: () => ({ data: mockPerformanceReportFolders }),
         useGetClusterDescription: () => ({ data: null }),
+        // The footer's data hooks: its range slider is where a failed performance report is handled.
+        useGetLatestAppVersion: () => ({ data: undefined, isPending: false, isError: false }),
+        useOperationsList: () => ({ data: undefined }),
+        useGetDeviceOperationListPerf: () => [],
+        useOperationListRange: () => null,
         useReportMetadata: () => mockUseReportMetadata(),
         // The Performance route's data hooks, settled so only the report itself can fail.
         usePerformanceReport: (name: string | null) => mockUsePerformanceReport(name),
@@ -120,6 +126,9 @@ vi.mock('../src/hooks/useAllocationFailures', () => ({
 }));
 
 vi.mock('../src/hooks/useDramFallbacks', () => ({ useDramFallbacks: () => new Map() }));
+
+// The footer's report-link badge reads linked-report data and records nothing.
+vi.mock('../src/components/ReportLinkStatus', () => ({ default: () => null }));
 
 vi.mock('../src/components/npe/NPEViewComponent', () => ({
     default: () => <div data-testid={TEST_IDS.NPE_VIEW} />,
@@ -169,12 +178,18 @@ const makeInstance = (location: ReportLocation, profiler: string, performance: s
 // The shape create_instance_from_local_paths stores for --memory-report-path and
 // --performance-path: folder basenames with no *_location, so neither selector claims the
 // restored report and both pickers render empty, unlike the makeInstance cases.
+// Pinned as served by test_it_returns_the_instance_the_browser_opens_on in
+// backend/ttnn_visualizer/tests/test_instance_local_paths.py.
 const makeCliPreloadInstance = (profiler: string, performance: string) => ({
     active_report: {
         profiler_name: profiler,
+        profiler_location: null,
         performance_name: performance,
+        performance_location: null,
         npe_name: null,
+        npe_location: null,
         mlir_name: null,
+        mlir_location: null,
     },
     remote_profiler_folder: null,
 });
@@ -238,6 +253,9 @@ const renderRestored = (path: string) =>
                         element={<Performance />}
                     />
                 </Routes>
+                {/* Layout's footer keeps the range slider mounted while a report is active, and
+                    that slider handles a failed performance report on every route. */}
+                <FooterInfobar />
             </ProtectedRoute>
         </TestProviders>,
     );
@@ -422,9 +440,11 @@ describe('boot-restored memory and performance reports that fail to load', () =>
 
             await waitForRestoredReports();
             expect(await screen.findByText('Unable to load performance data')).toBeInTheDocument();
+            // The footer's handler, which then unloads the report, so the hook's last call is null.
+            expect(await screen.findByText(/^Error loading report: /)).toBeInTheDocument();
             await settle();
 
-            expect(mockUsePerformanceReport).toHaveBeenLastCalledWith(RESTORED_PERFORMANCE.path);
+            expect(mockUsePerformanceReport).toHaveBeenCalledWith(RESTORED_PERFORMANCE.path);
             expectNothingRecorded();
         },
     );

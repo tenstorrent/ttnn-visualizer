@@ -191,10 +191,15 @@ def test_a_hosted_app_opens_no_report_by_path(client, report_dirs):
 class TestCreateInstanceFromLocalPaths:
     """The instance `ttnn-visualizer --memory-report-path` and this endpoint both store.
 
-    `tests/bootRestoredReportLoad.spec.tsx` restores exactly this shape to pin that a
+    `tests/bootRestoredReportLoad.spec.tsx` restores the served form of this shape
+    (`TestCliPreload.test_it_returns_the_instance_the_browser_opens_on`) to pin that a
     preloaded report records no load event. Its report selectors branch on the location
     keys, so a location added here would leave that case testing a shape the app no
     longer stores.
+
+    The missing locations are also why picking another report undoes this one (#2119).
+    Whoever fixes that should update the spec's fixture with it: the shape is pinned
+    here as current behaviour, not as a contract.
     """
 
     def test_it_names_the_folders_and_stores_no_location(self, app, report_dirs):
@@ -256,15 +261,17 @@ class TestCliPreload:
     """`ttnn-visualizer --memory-report-path` / `--performance-path` before serving."""
 
     @pytest.fixture(autouse=True)
-    def _use_the_test_app(self, app):
-        with patch("ttnn_visualizer.app.create_app", return_value=app):
-            yield
+    def create_app(self, app):
+        with patch("ttnn_visualizer.app.create_app", return_value=app) as create_app:
+            yield create_app
 
-    def test_without_either_flag_it_makes_no_instance(self, app):
+    def test_without_either_flag_it_makes_no_instance(self, app, create_app):
+        """Nor builds an app: that runs migrations, delaying every plain launch."""
         before = _instance_count(app)
 
         assert _create_preloaded_instance(parse_args([])) is None
         assert _instance_count(app) == before
+        create_app.assert_not_called()
 
     def test_it_returns_the_instance_the_browser_opens_on(self, client, report_dirs):
         profiler, performance = report_dirs
@@ -279,9 +286,18 @@ class TestCliPreload:
 
         instance_id = _create_preloaded_instance(args)
 
-        assert (
-            _instance(client, instance_id)["active_report"]["profiler_name"] == "bge_m3"
-        )
+        # The whole served shape, as `makeCliPreloadInstance` in
+        # tests/bootRestoredReportLoad.spec.tsx restores it: every location is null.
+        assert _instance(client, instance_id)["active_report"] == {
+            "profiler_name": "bge_m3",
+            "profiler_location": None,
+            "performance_name": "2026_08_19_16_47_08",
+            "performance_location": None,
+            "npe_name": None,
+            "npe_location": None,
+            "mlir_name": None,
+            "mlir_location": None,
+        }
 
     @pytest.mark.parametrize(
         ("flag", "message"),
