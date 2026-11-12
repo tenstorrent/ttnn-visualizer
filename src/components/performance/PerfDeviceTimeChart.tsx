@@ -12,6 +12,7 @@ import PerfChart from './PerfChart';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import getPlotLabel from '../../functions/getPlotLabel';
 import { getAxisUpperRange } from '../../functions/perfFunctions';
+import { getMaxValue } from '../../functions/numericExtent';
 import { getPrimaryDataColours, getSecondaryDataColours } from '../../definitions/PerformancePlotColours';
 
 interface PerfDeviceTimeChartProps {
@@ -59,10 +60,10 @@ function PerfDeviceTimeChart({ datasets = [], chartId }: PerfDeviceTimeChartProp
     // Memoized because PerfChart derives the Plotly layout from it, and a fresh object redraws
     // the chart — and re-reads the chart chrome from the stylesheet — on every render.
     const configuration = useMemo<PlotConfiguration>(() => {
-        const maxDeviceTime = Math.max(
-            ...datasets.flatMap((data) => data.map((row) => (row.device_time ? row.device_time * 1000 : 0))),
+        const maxDeviceTime = getMaxValue(
+            datasets.flatMap((data) => data.map((row) => (row.device_time ? row.device_time * 1000 : 0))),
         ); // Convert microseconds to nanoseconds
-        const maxIdealTime = Math.max(...datasets.flatMap((data) => data.map((row) => row.pm_ideal_ns ?? 0)));
+        const maxIdealTime = getMaxValue(datasets.flatMap((data) => data.map((row) => row.pm_ideal_ns ?? 0)));
 
         return {
             margin: PERF_CHART_WIDE_LEFT_MARGIN,
