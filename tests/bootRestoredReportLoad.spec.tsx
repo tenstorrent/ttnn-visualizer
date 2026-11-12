@@ -5,6 +5,7 @@
 import '@testing-library/jest-dom/vitest';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { AxiosError, HttpStatusCode } from 'axios';
+import { useAtomValue } from 'jotai';
 import { Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TestProviders } from './helpers/TestProviders';
@@ -23,6 +24,7 @@ import { TEST_IDS } from '../src/definitions/TestIds';
 import { ReportKind, ReportSource } from '../src/definitions/EventLogEvent';
 import { ReportLocation } from '../src/definitions/Reports';
 import { RemoteConnection, RemoteFolder } from '../src/model/RemoteConnection';
+import { activePerformanceReportAtom, activeProfilerReportAtom } from '../src/store/app';
 import {
     LOCAL_STORAGE_KEY_CONNECTIONS,
     LOCAL_STORAGE_KEY_SELECTED,
@@ -34,9 +36,8 @@ import {
 // cases in useRestoreInstance.spec, these mount the real report-selection surface (Home's
 // local and remote selectors, the NPE route and its windowed view) behind ProtectedRoute,
 // so recording moved into a broad active-report or loaded-data effect anywhere in that
-// tree fails here.
-// A launch with --memory-report-path or --performance-path reaches the frontend as the same
-// instance.active_report, so these cases also stand for CLI preload.
+// tree fails here. A launch with --memory-report-path or --performance-path restores
+// through the same hook, but with no report location, so it has a case of its own.
 
 const h = vi.hoisted(() => ({
     serverMode: false as boolean,
@@ -142,6 +143,29 @@ const makeInstance = (location: ReportLocation, profiler: string, performance: s
     remote_profiler_folder: null,
 });
 
+// The shape create_instance_from_local_paths stores for --memory-report-path and
+// --performance-path: folder basenames with no *_location, so neither selector claims the
+// restored report and both pickers render empty, unlike the makeInstance cases.
+const makeCliPreloadInstance = (profiler: string, performance: string) => ({
+    active_report: {
+        profiler_name: profiler,
+        performance_name: performance,
+        npe_name: null,
+        mlir_name: null,
+    },
+    remote_profiler_folder: null,
+});
+
+// The pickers render nothing for a location-less restore, so read the atoms directly to
+// prove restoration ran before asserting it recorded nothing.
+const ACTIVE_REPORTS_PROBE_ID = 'active-reports-probe';
+const ActiveReportsProbe = () => {
+    const profiler = useAtomValue(activeProfilerReportAtom);
+    const performance = useAtomValue(activePerformanceReportAtom);
+
+    return <div data-testid={ACTIVE_REPORTS_PROBE_ID}>{`${profiler?.path ?? ''}|${performance?.path ?? ''}`}</div>;
+};
+
 const seedRemoteConnection = () => {
     window.localStorage.setItem(LOCAL_STORAGE_KEY_CONNECTIONS, JSON.stringify([REMOTE_CONNECTION]));
     window.localStorage.setItem(LOCAL_STORAGE_KEY_SELECTED, JSON.stringify(REMOTE_CONNECTION));
@@ -153,6 +177,7 @@ const renderRestored = (path: string) =>
     render(
         <TestProviders initialEntries={[path]}>
             <ProtectedRoute>
+                <ActiveReportsProbe />
                 <Routes>
                     <Route
                         path='/'
@@ -245,6 +270,22 @@ describe('boot-restored reports on Home', () => {
                 ]),
             );
         });
+        await settle();
+
+        expectNothingRecorded();
+    });
+
+    it('records no load when reports preloaded from the CLI are restored', async () => {
+        h.instance = makeCliPreloadInstance(RESTORED_PROFILER.path, RESTORED_PERFORMANCE.path);
+
+        renderRestored(ROUTES.HOME);
+
+        await waitFor(() =>
+            expect(screen.getByTestId(ACTIVE_REPORTS_PROBE_ID)).toHaveTextContent(
+                `${RESTORED_PROFILER.path}|${RESTORED_PERFORMANCE.path}`,
+            ),
+        );
+        expect(await screen.findAllByText('Memory report')).not.toHaveLength(0);
         await settle();
 
         expectNothingRecorded();
