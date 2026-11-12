@@ -4,6 +4,7 @@
 
 import sqlite3
 import tempfile
+from http import HTTPStatus
 from pathlib import Path
 
 from ttnn_visualizer.extensions import db
@@ -93,3 +94,14 @@ def test_report_metadata_returns_metadata_on_success(app, client):
         assert data["git_sha"] == "abcdef0123456789"
     finally:
         Path(db_path).unlink(missing_ok=True)
+
+
+def test_report_metadata_empty_table_returns_empty_object(client, make_report):
+    """A present but empty report_metadata table is 200 and {}, not 422. #1867"""
+    instance_id = make_report()
+
+    response = client.get(
+        "/api/report-metadata", query_string={"instanceId": instance_id}
+    )
+    assert response.status_code == HTTPStatus.OK
+    assert response.get_json() == {}
