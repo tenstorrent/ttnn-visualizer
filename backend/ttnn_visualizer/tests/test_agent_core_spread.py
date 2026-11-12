@@ -525,11 +525,20 @@ class TestUnreadableCells:
             pytest.param(
                 _zone(0, "-1e30", 1, "BRISC", 0, 9000), 2, id="core-below-int64"
             ),
+            pytest.param(_zone("0.5", 4, 1, "BRISC", 0, 9000), 2, id="slot-not-whole"),
+            pytest.param(_zone(0, "4.5", 1, "BRISC", 0, 9000), 2, id="core-not-whole"),
+            pytest.param(
+                _zone(0, 4, "1.5", "BRISC", 0, 9000), 2, id="core-y-not-whole"
+            ),
+            pytest.param(
+                _zone(0, 4, 1, "BRISC", 0, "9000.5"), 1, id="cycles-not-whole"
+            ),
         ],
     )
     def test_a_row_with_a_cell_that_cannot_be_read_is_left_out(
         self, tmp_path, bad, rows
     ):
+        """The one test that holds the reason's wording; the rest interpolate it."""
         result = _spread(tmp_path, THREE_CORES + bad, [_op()], perf_id="1")
 
         op = result["ops"][0]
@@ -538,9 +547,20 @@ class TestUnreadableCells:
         assert op["core_span"]["max_us"] == 3.0
         assert result["caveat"].startswith(
             f"{rows} kernel rows of these operations' call counts have a slot, core or "
-            "cycle count that is not a number or does not fit a 64-bit integer, or a "
-            "negative cycle count, and were left out"
+            "cycle count that is not a whole number or does not fit a 64-bit integer, "
+            "or a negative cycle count, and were left out"
         )
+
+    def test_a_whole_number_written_as_a_float_is_kept(self, tmp_path):
+        """A core written "4.0" makes its column floats, and is still core 4."""
+        rows = [*THREE_CORES, *_zone(0, "4.0", 1, "BRISC", 0, 9000)]
+
+        result = _spread(tmp_path, rows, [_op(cores="4")], perf_id="1")
+
+        op = result["ops"][0]
+        assert op["cores_in_log"] == 4
+        assert op["slowest_cores"][0] == {"x": 4, "y": 1, "span_us": 9.0}
+        assert "left out" not in result.get("caveat", "")
 
     def test_large_whole_numbers_are_kept(self, tmp_path):
         """An int64 column keeps its top value, which as a float rounds up to 2**63."""
