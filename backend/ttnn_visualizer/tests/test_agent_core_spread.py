@@ -391,6 +391,24 @@ class TestRefusals:
         with pytest.raises(ValueError, match="has changed since it was first read"):
             tools.core_spread(registry, handle, limit=1)
 
+    def test_a_handle_loaded_before_its_csv_pins_the_first_one_core_spread_finds(
+        self, tmp_path
+    ):
+        """`core_spread` checks the capture itself, so its miss must keep no pin
+        either. #2227"""
+        write_device_log(tmp_path, MODERN_HEADER, THREE_CORES)
+        registry = ReportRegistry()
+        handle = load_report(registry, performance_path=str(tmp_path))["handle"]
+        with pytest.raises(FileNotFoundError):
+            tools.core_spread(registry, handle, limit=1)
+
+        write_ops_perf(tmp_path, smoke_rows())
+        tools.core_spread(registry, handle, limit=1)
+        write_ops_perf(tmp_path, smoke_rows()[:-1])
+
+        with pytest.raises(ValueError, match="has changed since it was first read"):
+            tools.core_spread(registry, handle, limit=1)
+
     def test_a_log_without_phases_has_no_durations_to_spread(self, tmp_path):
         rows = ["0,1,1,BRISC,10,1000,0,1024,BRISC-KERNEL,1,brisc.cc"]
 
