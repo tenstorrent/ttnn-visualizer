@@ -641,6 +641,11 @@ class ZoneSummary:
     malformed: int
 
 
+def _unmatched_starts(open_starts: int, replaced_starts: int) -> int:
+    """Starts that never ended: those still open, and those a second start replaced."""
+    return open_starts + replaced_starts
+
+
 def _pairing_counts(
     unmatched_starts: int = 0, unmatched_ends: int = 0, dropped_starts: int = 0
 ) -> Dict[str, int]:
@@ -673,24 +678,28 @@ class _ZonePairer:
         self.open_starts: Dict[tuple, int] = {}
         self.unpaired_ends = 0
         self.dropped_starts = 0
+        # Starts that a second start under their key replaced before they ended. #2249
+        self.replaced_starts = 0
         # What each count is also kept by, so a caller can read the counts of some
         # keys' groups alone -- one operation's run, say -- rather than the log's.
         self.group = group
         self.unpaired_ends_by: Counter = Counter()
         self.dropped_starts_by: Counter = Counter()
+        self.replaced_starts_by: Counter = Counter()
 
     def offer(self, key: tuple, phase: str, cycles: Union[int, float]) -> Optional[int]:
         """Take one row; return its start's cycles when the row is an end that paired."""
         if phase == self.start_token:
-            if (
-                len(self.open_starts) >= MAX_OPEN_ZONE_STARTS
-                and key not in self.open_starts
-            ):
+            if key in self.open_starts:
+                self.replaced_starts += 1
+                if self.group is not None:
+                    self.replaced_starts_by[self.group(key)] += 1
+            elif len(self.open_starts) >= MAX_OPEN_ZONE_STARTS:
                 self.dropped_starts += 1
                 if self.group is not None:
                     self.dropped_starts_by[self.group(key)] += 1
-            else:
-                self.open_starts[key] = int(cycles)
+                return None
+            self.open_starts[key] = int(cycles)
             return None
         if phase != self.end_token:
             return None
@@ -706,11 +715,14 @@ class _ZonePairer:
         assert self.group is not None, "constructed without a group"
         open_starts = Counter(self.group(key) for key in self.open_starts)
         groups = (
-            set(open_starts) | set(self.unpaired_ends_by) | set(self.dropped_starts_by)
+            set(open_starts)
+            | set(self.replaced_starts_by)
+            | set(self.unpaired_ends_by)
+            | set(self.dropped_starts_by)
         )
         return {
             group: _pairing_counts(
-                open_starts[group],
+                _unmatched_starts(open_starts[group], self.replaced_starts_by[group]),
                 self.unpaired_ends_by[group],
                 self.dropped_starts_by[group],
             )
@@ -726,7 +738,9 @@ class _ZonePairer:
         cannot see that from the figures themselves.
         """
         pairing = _pairing_counts(
-            len(self.open_starts), self.unpaired_ends, self.dropped_starts
+            _unmatched_starts(len(self.open_starts), self.replaced_starts),
+            self.unpaired_ends,
+            self.dropped_starts,
         )
         if any(pairing.values()):
             logger.info(
@@ -754,7 +768,6 @@ class _ZoneReader:
         self.timelines: Dict[RiscTimeline, _ZoneOnTimeline] = {}
         self.across_flush = 0
         self.out_of_order = 0
-        self.displaced = 0
         self.kept_intervals = 0
 
     def take(
@@ -762,13 +775,9 @@ class _ZoneReader:
     ) -> None:
         """One of the zone's rows, in ``run`` on ``timeline``."""
         key = (timeline, run.run_id if self.firmware else run.seq)
-        if phase != self.start_token:
-            self.pairer.offer(key, phase, cycles)
-            return
-        # The pairer keeps one open start a key, so a start replaced unended would
-        # otherwise go uncounted.
-        self.displaced += key in self.pairer.open_starts
         self.pairer.offer(key, phase, cycles)
+        if phase != self.start_token:
+            return
         state = self.timelines.get(timeline)
         if state is None:
             state = self.timelines[timeline] = _ZoneOnTimeline(
@@ -838,7 +847,6 @@ class ZoneIntervalPass:
                 timeline: state.repeats for timeline, state in reader.timelines.items()
             }
             pairing = reader.pairer.pairing(DeviceLogProfilerQueries.DEVICE_LOG_FILE)
-            pairing["unmatched_starts"] += reader.displaced
             across_flush, out_of_order = reader.across_flush, reader.out_of_order
         return ZoneIntervals(
             timelines=timelines,
