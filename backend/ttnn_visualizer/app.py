@@ -746,6 +746,33 @@ def _config_after_cli_env(args: argparse.Namespace) -> DefaultConfig:
     return Config()
 
 
+def _create_preloaded_instance(args: argparse.Namespace) -> Optional[str]:
+    """The instance ``--memory-report-path`` / ``--performance-path`` open the browser on.
+
+    Split out of ``main()`` so the exit message for each bad path can be asserted without
+    a launch. ``create_instance_from_local_paths`` raises ``InvalidReportPath`` for the
+    memory report and ``InvalidProfilerPath`` for the performance report, names easy to
+    swap. Returns ``None`` when neither flag is given.
+    """
+    if not (args.memory_report_path or args.performance_path):
+        return None
+
+    # This needs DB access, so a temporary app is created; workers will create their own.
+    app = create_app()
+    with app.app_context():
+        try:
+            session = create_instance_from_local_paths(
+                profiler_path=args.memory_report_path,
+                performance_path=args.performance_path,
+            )
+        except InvalidReportPath:
+            sys.exit(f"❌ Invalid memory report path: {args.memory_report_path}")
+        except InvalidProfilerPath:
+            sys.exit(f"❌ Invalid performance path: {args.performance_path}")
+
+        return session.instance_id
+
+
 def main():
 
     run_command = sys.argv[0].split("/")
@@ -763,8 +790,6 @@ def main():
     # Priority: CLI args > env vars > auto-detection (in settings.py)
     config = _config_after_cli_env(args)
     _validate_startup_requirements(config.to_dict())
-
-    instance_id = None
 
     # Display mode information first (using config only, no DB needed)
     if args.tt_metal_home:
@@ -801,24 +826,7 @@ def main():
 
     display_mode_info_without_db(config)
 
-    # If profiler/performance paths are provided, create an instance
-    # This requires DB access, so we create the app temporarily
-    if args.memory_report_path or args.performance_path:
-        app = create_app()
-        with app.app_context():
-            try:
-                session = create_instance_from_local_paths(
-                    profiler_path=args.memory_report_path,
-                    performance_path=args.performance_path,
-                )
-                instance_id = session.instance_id
-            except InvalidReportPath:
-                sys.exit(f"❌ Invalid memory report path: {args.memory_report_path}")
-            except InvalidProfilerPath:
-                sys.exit(f"❌ Invalid performance path: {args.performance_path}")
-
-        # Clean up this temporary app - workers will create their own
-        del app
+    instance_id = _create_preloaded_instance(args)
 
     reload_requested = _is_dev_debug_requested()
     if config.PRINT_ENV:

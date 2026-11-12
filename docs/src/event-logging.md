@@ -92,7 +92,7 @@ Recorded by the server once during a successful local launch.
 
 ### `report_loaded`
 
-Recorded after a report is loaded successfully.
+Recorded after a report is loaded successfully. Restoring the active report when the page is reloaded records no `report_loaded`. Neither does opening a report by path: the first page load after launching with `--memory-report-path` or `--performance-path`, or following a link from the agent tools. So counts are reports chosen inside the visualizer, not report sessions.
 
 - `kind`: `profiler` (the memory report), `performance`, `npe`, `mlir`, `cluster_descriptor`.
 - `source`: `upload`, `remote_sync`, `local_tt_metal`, `demo`.
@@ -107,7 +107,7 @@ Before 0.107.0, hosted event logs tagged every report picked from the hosted rep
 
 ### `report_load_failed`
 
-Recorded after a report cannot be loaded.
+Recorded after a report cannot be loaded. A report restored when the page is reloaded, or opened by path with `--memory-report-path`, `--performance-path` or a link from the agent tools, records no failure even if it fails to load. So counts are failures among reports chosen inside the visualizer, not failed report sessions. Not every such failure is recorded either: a memory report chosen inside the visualizer whose version is unsupported records `report_loaded` and no failure.
 
 - `kind`: `profiler` (the memory report), `performance`, `npe`, `mlir`, `cluster_descriptor`.
 - `reason_class`: `unsupported_version`, `missing_file`, `parse_error`, `too_large`, `permission`, `other`.
