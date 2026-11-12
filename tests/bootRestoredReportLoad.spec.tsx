@@ -18,11 +18,14 @@ import mockPerformanceReportFolders from './data/mockPerformanceReportFolders.js
 import ProtectedRoute from '../src/components/ProtectedRoute';
 import Home from '../src/routes/Home';
 import NPE from '../src/routes/NPE';
+import Performance from '../src/routes/Performance';
+import { L1PressureStatus } from '../src/model/L1Pressure';
 import ROUTES, { ROUTE_PATTERNS } from '../src/definitions/Routes';
 import Endpoints from '../src/definitions/Endpoints';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { ReportKind, ReportSource } from '../src/definitions/EventLogEvent';
 import { ReportLocation } from '../src/definitions/Reports';
+import { TARGET_DB_VERSION_MAX } from '../src/definitions/Versions';
 import { RemoteConnection, RemoteFolder } from '../src/model/RemoteConnection';
 import { activePerformanceReportAtom, activeProfilerReportAtom } from '../src/store/app';
 import {
@@ -34,10 +37,11 @@ import {
 
 // Boot restoration must not count as a user-initiated report load. Unlike the hook-level
 // cases in useRestoreInstance.spec, these mount the real report-selection surface (Home's
-// local and remote selectors, the NPE route and its windowed view) behind ProtectedRoute,
-// so recording moved into a broad active-report or loaded-data effect anywhere in that
-// tree fails here. A launch with --memory-report-path or --performance-path restores
-// through the same hook, but with no report location, so it has a case of its own.
+// local and remote selectors, the Performance route, the NPE route and its windowed view)
+// behind ProtectedRoute, so recording moved into a broad active-report or loaded-data
+// effect anywhere in that tree fails here. A launch with --memory-report-path or
+// --performance-path restores through the same hook, but with no report location, so it
+// has cases of its own.
 
 const h = vi.hoisted(() => ({
     serverMode: false as boolean,
@@ -51,6 +55,8 @@ const {
     mockAxiosPost,
     mockUseNpe,
     mockUseNpeSummary,
+    mockUseReportMetadata,
+    mockUsePerformanceReport,
     useSshConfigHostsMock,
 } = vi.hoisted(() => ({
     recordReportLoaded: vi.fn(),
@@ -59,6 +65,8 @@ const {
     mockAxiosPost: vi.fn(),
     mockUseNpe: vi.fn(),
     mockUseNpeSummary: vi.fn(),
+    mockUseReportMetadata: vi.fn(),
+    mockUsePerformanceReport: vi.fn(),
     useSshConfigHostsMock: vi.fn(),
 }));
 
@@ -79,7 +87,16 @@ vi.mock('../src/hooks/useAPI', async () => {
         useReportFolderList: () => ({ data: mockProfilerFolderList }),
         usePerfFolderList: () => ({ data: mockPerformanceReportFolders }),
         useGetClusterDescription: () => ({ data: null }),
-        useReportMetadata: () => ({ data: undefined, error: null }),
+        useReportMetadata: () => mockUseReportMetadata(),
+        // The Performance route's data hooks, settled so only the report itself can fail.
+        usePerformanceReport: (name: string | null) => mockUsePerformanceReport(name),
+        usePerformanceComparisonReport: () => ({ data: undefined }),
+        usePerformanceRange: () => null,
+        useOpToPerfIdFiltered: () => [],
+        useOpToPerfIdForPerfTable: () => [],
+        useL1PressureByOperation: () => ({ status: L1PressureStatus.Unavailable, data: null }),
+        usePerfMeta: () => ({ data: undefined, isLoading: false }),
+        usePerfMetas: () => [],
         useNpe: (fileName: string | null) => mockUseNpe(fileName),
         useNPETimelineFile: () => ({ data: undefined, isLoading: false, error: null }),
         useNpeSummary: (fileName: string | null) => mockUseNpeSummary(fileName),
@@ -97,6 +114,12 @@ vi.mock('../src/libs/axiosInstance', () => ({
 }));
 
 vi.mock('../src/hooks/useSshConfigHosts', () => ({ default: useSshConfigHostsMock }));
+
+vi.mock('../src/hooks/useAllocationFailures', () => ({
+    useAllocationFailures: () => ({ listings: [], allocationFailureByOpId: new Map() }),
+}));
+
+vi.mock('../src/hooks/useDramFallbacks', () => ({ useDramFallbacks: () => new Map() }));
 
 vi.mock('../src/components/npe/NPEViewComponent', () => ({
     default: () => <div data-testid={TEST_IDS.NPE_VIEW} />,
@@ -187,6 +210,10 @@ const renderRestored = (path: string) =>
                         path={ROUTE_PATTERNS.NPE}
                         element={<NPE />}
                     />
+                    <Route
+                        path={ROUTES.PERFORMANCE}
+                        element={<Performance />}
+                    />
                 </Routes>
             </ProtectedRoute>
         </TestProviders>,
@@ -222,6 +249,8 @@ beforeEach(() => {
     mockUpdateInstance.mockResolvedValue({});
     mockUseNpe.mockImplementation(settledNpe);
     mockUseNpeSummary.mockImplementation(settledNpeSummary);
+    mockUseReportMetadata.mockReturnValue({ data: undefined, error: null });
+    mockUsePerformanceReport.mockReturnValue({ data: undefined, isLoading: true, error: null });
     mockAxiosPost.mockImplementation((endpoint: string) => {
         if (endpoint === Endpoints.REMOTE_LOCAL_PROFILER_REPORTS) {
             return Promise.resolve({ status: 200, data: [REMOTE_PROFILER] });
@@ -307,6 +336,91 @@ describe('boot-restored reports on Home', () => {
         expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.PROFILER, ReportSource.LOCAL_TT_METAL);
         expect(recordReportLoadFailed).not.toHaveBeenCalled();
     });
+});
+
+// Each failure runs on both instance shapes a restore can carry: one picked from Home (with
+// a location) and one preloaded from the CLI (without), since the selectors branch on it.
+const RESTORED_SHAPES = [
+    {
+        shape: 'selected',
+        instance: () => makeInstance(ReportLocation.LOCAL, RESTORED_PROFILER.path, RESTORED_PERFORMANCE.path),
+    },
+    {
+        shape: 'CLI-preloaded',
+        instance: () => makeCliPreloadInstance(RESTORED_PROFILER.path, RESTORED_PERFORMANCE.path),
+    },
+];
+
+const waitForRestoredReports = () =>
+    waitFor(() =>
+        expect(screen.getByTestId(ACTIVE_REPORTS_PROBE_ID)).toHaveTextContent(
+            `${RESTORED_PROFILER.path}|${RESTORED_PERFORMANCE.path}`,
+        ),
+    );
+
+describe('boot-restored memory and performance reports that fail to load', () => {
+    it.each(RESTORED_SHAPES)(
+        'records no failure when the $shape memory report metadata fails to load',
+        async ({ instance }) => {
+            h.instance = instance();
+            mockUseReportMetadata.mockReturnValue({
+                data: undefined,
+                error: makeHttpError(HttpStatusCode.NotFound, 'missing report'),
+            });
+
+            renderRestored(ROUTES.HOME);
+
+            await waitForRestoredReports();
+            expect(await screen.findAllByText('Memory report')).not.toHaveLength(0);
+            await settle();
+
+            expectNothingRecorded();
+        },
+    );
+
+    it.each(RESTORED_SHAPES)(
+        'records no failure when the $shape memory report has an unsupported version',
+        async ({ instance }) => {
+            h.instance = instance();
+            mockUseReportMetadata.mockReturnValue({
+                data: { version: { major: TARGET_DB_VERSION_MAX + 1, minor: 0, patch: 0 } },
+                error: null,
+            });
+
+            renderRestored(ROUTES.HOME);
+
+            await waitForRestoredReports();
+            await waitFor(() =>
+                expect(
+                    screen.getAllByTestId(TEST_IDS.TOAST_FILENAME).map((toastFileName) => toastFileName.textContent),
+                ).toContainEqual(expect.stringContaining(`v${TARGET_DB_VERSION_MAX + 1}.0.0`)),
+            );
+            await settle();
+
+            expectNothingRecorded();
+        },
+    );
+
+    it.each(RESTORED_SHAPES)(
+        'records no failure when the $shape performance report cannot be parsed',
+        async ({ instance }) => {
+            h.instance = instance();
+            mockUsePerformanceReport.mockReturnValue({
+                data: undefined,
+                isLoading: false,
+                error: makeHttpError(HttpStatusCode.UnprocessableEntity, 'unsupported format'),
+            });
+
+            renderRestored(ROUTES.PERFORMANCE);
+
+            await waitForRestoredReports();
+            expect(await screen.findByText('Unable to load performance data')).toBeInTheDocument();
+            await settle();
+
+            expect(mockUsePerformanceReport).toHaveBeenLastCalledWith(RESTORED_PERFORMANCE.path);
+            expectNothingRecorded();
+        },
+    );
 });
 
 // Both paths render the same NPEViewComponent stub, so each case also pins which data
