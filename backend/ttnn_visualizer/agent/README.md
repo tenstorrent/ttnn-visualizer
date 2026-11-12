@@ -68,7 +68,10 @@ printf '%s\n' \
 
 **`stdout` is protocol.** Logs go to stderr, and `tools._generate_canonical_report`
 captures `tt_perf_report`'s own printing — it prints progress and temp paths, which would
-land mid-frame and corrupt the stream.
+land mid-frame and corrupt the stream. The usage exporter runs `curl` in the same
+process when aggregate collection is opted in, and `usage_metrics._post_with_curl`
+captures its output for the same reason; `test_mcp_stdout_is_only_protocol_while_exporting`
+guards it.
 
 **Report cells are strings.** `device_time` arrives as `"16.478"` and `cores` as `"110"`,
 so everything numeric goes through `cells.finite_number` rather than being compared
