@@ -18,7 +18,11 @@ from typing import Dict, Set
 
 import pytest
 from ttnn_visualizer.agent import report_diff, server, tools
-from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_LIMIT
+from ttnn_visualizer.agent.bounds import (
+    MAX_DETAILED_LIMIT,
+    MAX_LIMIT,
+    MAX_OP_CODE_CHARS,
+)
 from ttnn_visualizer.agent.handles import MAX_SCOPED_DIFF_TOTALS, ReportRegistry
 from ttnn_visualizer.agent.perf_detail import DetailGroup
 from ttnn_visualizer.csv_queries import (
@@ -260,6 +264,8 @@ def test_the_diff_figures_the_page_states_are_the_enforced_ones():
     assert f"up to {report_diff.MAX_CAPTURES_PER_SIDE} captures a side" in page
     assert f"for up to {MAX_SCOPED_DIFF_TOTALS} captures and ranges" in page
     assert f"past {report_diff.MAX_SIGNATURE_CHARS} characters is cut" in page
+    assert f"An op code past {MAX_OP_CODE_CHARS} characters is cut" in page
+    assert f"An op code longer than {MAX_OP_CODE_CHARS} characters" in page
     assert f"{report_diff.DEFAULT_MIN_PERCENT:g}% unless asked" in page
     assert (
         f"{min_deltas['device_time']} µs for device time and op-to-op gap, "

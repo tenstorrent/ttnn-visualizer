@@ -312,6 +312,9 @@ _CYCLES_COLUMN = "time[cycles since reset]"
 # Signpost names a refusal lists. A capture can emit one per layer or iteration;
 # the list is there to show a typo its neighbours, not to inventory the report.
 MAX_LISTED_SIGNPOSTS = 20
+# A name past this is counted rather than listed: it is the capture's text, and longer
+# than any name the agent's tools take as a bound. #2208
+MAX_LISTED_SIGNPOST_CHARS = 256
 
 # Rows per chunk when filtering a file rather than holding it. Large enough that
 # the per-chunk overhead stays negligible, small enough that a ~288 MB capture
@@ -2774,12 +2777,21 @@ def check_signpost_range(
         if name in positions_by_name:
             return positions_by_name[name]
         names = [str(entry["op_code"]) for entry in signposts.listing()]
-        listed = ", ".join(repr(known) for known in names[:MAX_LISTED_SIGNPOSTS])
-        if len(names) > MAX_LISTED_SIGNPOSTS:
-            listed += f" and {len(names) - MAX_LISTED_SIGNPOSTS} more"
-        raise InvalidSignpostRange(
-            f"no signpost named {name!r} in this report; it holds {listed}"
+        shown = [known for known in names if len(known) <= MAX_LISTED_SIGNPOST_CHARS]
+        listed = ", ".join(repr(known) for known in shown[:MAX_LISTED_SIGNPOSTS])
+        refusal = f"no signpost named {name!r} in this report; " + (
+            f"it holds {listed}"
+            if listed
+            else "none of its signpost names is short enough to list"
         )
+        if len(shown) > MAX_LISTED_SIGNPOSTS:
+            refusal += f" and {len(shown) - MAX_LISTED_SIGNPOSTS} more"
+        if len(names) > len(shown):
+            refusal += (
+                f"; {len(names) - len(shown)} more have names past "
+                f"{MAX_LISTED_SIGNPOST_CHARS} characters, which are not listed"
+            )
+        raise InvalidSignpostRange(refusal)
 
     start = occurrences(start_signpost)[0] if start_signpost else None
     if not end_signpost:

@@ -35,6 +35,7 @@ from ttnn_visualizer.agent.bounds import (
     MAX_LIMIT,
     GraphTooLargeError,
     bounded,
+    cut_text,
     ensure_graph_readable,
     normalised_choice,
     require_choice,
@@ -187,19 +188,6 @@ LATE_DEALLOCATIONS_NOTE = (
 )
 
 
-def _truncated(
-    field: str, text: Optional[str], cap: int = MAX_ERROR_TEXT_CHARS
-) -> Dict[str, object]:
-    if not text:
-        return {field: text}
-    if len(text) <= cap:
-        return {field: text}
-    return {
-        field: text[:cap],
-        f"{field}_full_length": len(text),
-    }
-
-
 def _error_records(
     queries: DatabaseQueries, scope: RankScope, operation_id: Optional[int] = None
 ) -> List[ErrorRecord]:
@@ -269,7 +257,7 @@ def _allocation_fields(message: Optional[str]) -> Dict[str, object]:
     shown = dict(failure)
     core_range = failure.get("core_range")
     if isinstance(core_range, str):
-        shown.update(_truncated("core_range", core_range))
+        shown.update(cut_text("core_range", core_range, MAX_ERROR_TEXT_CHARS))
     return {
         "allocation_failure": shown,
         "diagnosis": allocation_failures.diagnose(failure),
@@ -284,8 +272,8 @@ def _error_entry(
     entry: Dict[str, object] = {
         "error_type": error.error_type,
         "timestamp": error.timestamp,
-        **_truncated("error_message", error.error_message),
-        **_truncated("stack_trace", error.stack_trace),
+        **cut_text("error_message", error.error_message, MAX_ERROR_TEXT_CHARS),
+        **cut_text("stack_trace", error.stack_trace, MAX_ERROR_TEXT_CHARS),
     }
     if graph is not None:
         failed = failed_device_operation_names(graph)
@@ -871,12 +859,7 @@ def _call_site_entry(site: Optional[Dict[str, object]]) -> Optional[Dict[str, ob
         return None
     entry: Dict[str, object] = {}
     for field in ("file", "line", "function", "code"):
-        value = site[field]
-        entry.update(
-            _truncated(field, value, MAX_CALL_SITE_TEXT_CHARS)
-            if isinstance(value, str)
-            else {field: value}
-        )
+        entry.update(cut_text(field, site[field], MAX_CALL_SITE_TEXT_CHARS))
     return entry
 
 
@@ -945,7 +928,7 @@ def _hold_entry(report: LateDeallocationReport, hold: late.Hold) -> Dict[str, ob
         "held_from_operation_id": hold.first_operation_id,
         "held_until_operation_id": hold.last_operation_id,
         "last_use_operation_id": hold.last_use_operation_id,
-        **_truncated(
+        **cut_text(
             "last_use_operation_name",
             report.names.get(hold.last_use_operation_id),
             MAX_OPERATION_NAME_CHARS,
