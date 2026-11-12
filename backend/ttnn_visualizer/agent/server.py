@@ -376,7 +376,9 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
             "description": (
                 "Per-zone, per-RISC totals from profile_log_device.csv: what the "
                 "hardware actually spent, by firmware and kernel phase. Cycles are "
-                "summed across cores, so they are occupancy rather than elapsed time."
+                "summed across cores, so they are occupancy rather than elapsed time. "
+                "The first call on a handle reads the whole device log; later calls "
+                "answer from that read."
             ),
             "schema": {
                 "type": "object",
@@ -395,7 +397,11 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "start or new run host ID, so dispatch between runs is never an "
                 "interval. Says when a RISC's zones filled the device profiler's L1 "
                 f"buffer, which holds {L1_ZONE_MARKER_CAPACITY // 2} zones between "
-                "flushes."
+                "flushes. The first call on a handle reads the whole device log for "
+                "every zone; later calls, for any zone and refusals included, answer "
+                "from that read, except on a log one pass cannot hold or for a zone "
+                "also named on rows that neither start nor end one, which each call "
+                "reads alone."
             ),
             "schema": {
                 "type": "object",
