@@ -23,6 +23,7 @@ import subprocess
 import sys
 import threading
 import time
+from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -2227,7 +2228,7 @@ class TestZoneSummary:
         write_device_log(tmp_path, MODERN_HEADER, ZONED_ROWS)
 
         with DeviceLogProfilerQueries(instance, stream=True) as queries:
-            summary, _pairing = queries.query_zone_summary()
+            summary = queries.query_zone_summary().zones
 
         by_zone = {entry["zone"]: entry for entry in summary}
         # 400 cycles on core (1,1) plus 100 on core (2,1).
@@ -2249,11 +2250,53 @@ class TestZoneSummary:
         instance = Instance(instance_id="pytest", performance_path=str(tmp_path))
 
         with DeviceLogProfilerQueries(instance, stream=True) as queries:
-            summary, _pairing = queries.query_zone_summary()
+            summary = queries.query_zone_summary().zones
 
         by_zone = {entry["zone"]: entry for entry in summary}
         assert by_zone["MATMUL"]["total_cycles"] == 500
         assert by_zone["MATMUL"]["occurrences"] == 2
+
+    @pytest.mark.parametrize(
+        "extra, malformed",
+        [
+            pytest.param([], 0, id="every-row-readable"),
+            pytest.param(
+                [modern_row(1, 1, 1, "BRISC", "x", "MATMUL", "ZONE_START")],
+                1,
+                id="one-unreadable-row",
+            ),
+        ],
+    )
+    def test_the_count_of_rows_left_out_is_returned(self, tmp_path, extra, malformed):
+        write_device_log(tmp_path, MODERN_HEADER, [*ZONED_ROWS, *extra])
+        instance = Instance(instance_id="pytest", performance_path=str(tmp_path))
+
+        with DeviceLogProfilerQueries(instance, stream=True) as queries:
+            assert queries.query_zone_summary().malformed == malformed
+
+    def test_floats_past_2_53_are_summed_without_a_guard(self, tmp_path):
+        """A blank cell makes the chunk's cycles floats; unlike the all-zones interval
+        pass, this read has nothing to agree with, so it sums rather than refuses."""
+        top = 2**53
+        write_device_log(
+            tmp_path,
+            MODERN_HEADER,
+            [
+                modern_row(1, 1, 1, "BRISC", "", "MATMUL", "ZONE_START"),
+                modern_row(1, 1, 1, "BRISC", top, "MATMUL", "ZONE_START"),
+                modern_row(1, 1, 1, "BRISC", top + 4, "MATMUL", "ZONE_END"),
+            ],
+        )
+        instance = Instance(instance_id="pytest", performance_path=str(tmp_path))
+
+        with DeviceLogProfilerQueries(instance, stream=True) as queries:
+            read = queries.query_zone_summary()
+
+        assert read.malformed == 1
+        assert not any(read.pairing.values())
+        assert [(zone["occurrences"], zone["total_cycles"]) for zone in read.zones] == [
+            (1, 4)
+        ]
 
     def test_a_core_is_scoped_to_its_device(self, tmp_path):
         """`(core_x, core_y)` repeats on every PCIe slot.
@@ -2268,7 +2311,7 @@ class TestZoneSummary:
         instance = Instance(instance_id="pytest", performance_path=str(tmp_path))
 
         with DeviceLogProfilerQueries(instance, stream=True) as queries:
-            summary, _pairing = queries.query_zone_summary()
+            summary = queries.query_zone_summary().zones
 
         assert summary[0]["cores"] == 2
         assert summary[0]["occurrences"] == 2
@@ -2289,14 +2332,14 @@ class TestZoneSummary:
         instance = Instance(instance_id="pytest", performance_path=str(tmp_path))
 
         with DeviceLogProfilerQueries(instance, stream=True) as queries:
-            summary, pairing = queries.query_zone_summary()
+            read = queries.query_zone_summary()
 
-        assert pairing == {
+        assert read.pairing == {
             "unmatched_starts": 1,
             "unmatched_ends": 1,
             "dropped_starts": 0,
         }
-        assert summary[0]["occurrences"] == 1
+        assert read.zones[0]["occurrences"] == 1
 
     def test_a_capture_missing_a_column_this_query_reads_is_refused(self, tmp_path):
         """Refused here rather than by widening `REQUIRED_DEVICE_LOG_COLUMNS`.
@@ -2318,7 +2361,7 @@ class TestZoneSummary:
         instance = Instance(instance_id="pytest", performance_path=str(tmp_path))
 
         with DeviceLogProfilerQueries(instance, stream=True) as queries:
-            summary, _pairing = queries.query_zone_summary()
+            summary = queries.query_zone_summary().zones
 
         assert summary[0]["occurrences"] == 2
         assert summary[0]["total_cycles"] is None
@@ -2354,6 +2397,27 @@ def _zone_log(tmp_path, zones):
 
 def _zone_timings(tmp_path, zones, **arguments):
     return tools.zone_timings(_zone_log(tmp_path, zones), "report-1", **arguments)
+
+
+@contextmanager
+def _counting_zone_summary():
+    """`query_zone_summary` as it is, with its calls counted on the mock yielded."""
+    with patch.object(
+        DeviceLogProfilerQueries,
+        "query_zone_summary",
+        autospec=True,
+        side_effect=DeviceLogProfilerQueries.query_zone_summary,
+    ) as summary:
+        yield summary
+
+
+def _rows_left_out(rows: int) -> str:
+    """The caveat `zone_timings` and `zone_intervals` give rows they left out, built
+    from the reason it quotes; one test pins it word for word."""
+    return (
+        f"{rows} rows have a slot, core, run or cycle count "
+        f"{csv_queries.UNREADABLE_NUMBER_REASON}, and were left out."
+    )
 
 
 class TestZoneTimingsTool:
@@ -2457,24 +2521,294 @@ class TestZoneTimingsTool:
         assert "occupancy" in result["note"]
 
 
+class TestZoneTimingsUnreadableCells:
+    """Left out and counted, as `zone_intervals` and `core_spread` count them. #2258"""
+
+    @staticmethod
+    def _answer(tmp_path, rows):
+        paired = [
+            modern_row(0, 1, 1, "BRISC", 100, "MATMUL", "ZONE_START"),
+            modern_row(0, 1, 1, "BRISC", 400, "MATMUL", "ZONE_END"),
+        ]
+        write_device_log(tmp_path, MODERN_HEADER, [*paired, *rows])
+        registry = ReportRegistry()
+        load_report(registry, performance_path=str(tmp_path))
+        return tools.zone_timings(registry, "report-1")
+
+    @pytest.mark.parametrize(
+        "bad",
+        [
+            pytest.param(
+                modern_row(0, 1, 1, "BRISC", "x", "MATMUL", "ZONE_START"),
+                id="cycles-not-a-number",
+            ),
+            pytest.param(
+                modern_row(0, 1, 1, "BRISC", "", "MATMUL", "ZONE_START"),
+                id="blank-cycles",
+            ),
+            pytest.param(
+                modern_row(0, 1, 1, "BRISC", "inf", "MATMUL", "ZONE_START"),
+                id="inf-cycles",
+            ),
+            pytest.param(
+                modern_row(0, 1, 1, "BRISC", "1e300", "MATMUL", "ZONE_END"),
+                id="cycles-past-int64",
+            ),
+            pytest.param(
+                modern_row(0, 1, 1, "BRISC", 2**63, "MATMUL", "ZONE_END"),
+                id="cycles-one-past-int64",
+            ),
+            pytest.param(
+                modern_row(0, 1, 1, "BRISC", -5, "MATMUL", "ZONE_END"),
+                id="negative-end",
+            ),
+            pytest.param(
+                modern_row(0, 1, 1, "BRISC", -5, "MATMUL", "ZONE_START"),
+                id="negative-start",
+            ),
+            pytest.param(
+                modern_row("x", 1, 1, "BRISC", 500, "MATMUL", "ZONE_START"),
+                id="slot-not-a-number",
+            ),
+            pytest.param(
+                modern_row("0.5", 1, 1, "BRISC", 500, "MATMUL", "ZONE_START"),
+                id="slot-not-whole",
+            ),
+            pytest.param(
+                modern_row(0, "1.5", 1, "BRISC", 500, "MATMUL", "ZONE_START"),
+                id="core-x-not-whole",
+            ),
+            pytest.param(
+                modern_row(0, 1, "x", "BRISC", 500, "MATMUL", "ZONE_START"),
+                id="core-y-not-a-number",
+            ),
+            pytest.param(
+                modern_row(0, 1, 1, "BRISC", 500, "MATMUL", "ZONE_START", run="x"),
+                id="run-not-a-number",
+            ),
+            pytest.param(
+                modern_row(0, 1, 1, "BRISC", "2150.5", "MATMUL", "ZONE_END"),
+                id="cycles-not-whole",
+            ),
+        ],
+    )
+    def test_a_row_with_a_cell_that_cannot_be_read_is_left_out(self, tmp_path, bad):
+        result = self._answer(tmp_path, [bad])
+
+        (zone,) = result["zones"]
+        assert (zone["occurrences"], zone["total_cycles"], zone["cores"]) == (1, 300, 1)
+        assert result["caveat"] == _rows_left_out(1)
+
+    def test_a_negative_core_is_kept(self, tmp_path):
+        """Only cycle counts must not be negative: a core's coordinates may be."""
+        result = self._answer(
+            tmp_path,
+            [
+                modern_row(0, -1, 1, "BRISC", 500, "MATMUL", "ZONE_START"),
+                modern_row(0, -1, 1, "BRISC", 700, "MATMUL", "ZONE_END"),
+            ],
+        )
+
+        (zone,) = result["zones"]
+        assert (zone["occurrences"], zone["total_cycles"], zone["cores"]) == (2, 500, 2)
+        assert "caveat" not in result
+
+    @pytest.mark.parametrize("cycles, total", [("1e300", 300), (-5, 300)])
+    def test_an_end_that_cannot_be_read_leaves_its_start_open(
+        self, tmp_path, cycles, total
+    ):
+        """Read, it would close the start: a total 301 digits long, or negative. The
+        unpaired start is said first, then the row left out."""
+        result = self._answer(
+            tmp_path,
+            [
+                modern_row(0, 1, 1, "BRISC", 500, "MATMUL", "ZONE_START"),
+                modern_row(0, 1, 1, "BRISC", cycles, "MATMUL", "ZONE_END"),
+            ],
+        )
+
+        (zone,) = result["zones"]
+        assert (zone["occurrences"], zone["total_cycles"]) == (1, total)
+        assert result["caveat"] == (
+            "1 zone starts and 0 ends did not pair, so these totals cover only the "
+            "zones that did. A capture stopped mid-run is the usual cause. "
+            + _rows_left_out(1)
+        )
+
+    def test_padded_zone_names_are_one_zone(self, tmp_path):
+        """Names are compared stripped, and a name of only spaces is no name."""
+        write_device_log(
+            tmp_path,
+            MODERN_HEADER,
+            [
+                modern_row(0, 1, 1, "BRISC", 100, " MATMUL", "ZONE_START"),
+                modern_row(0, 1, 1, "BRISC", 400, "MATMUL ", "ZONE_END"),
+                modern_row(0, 1, 1, "BRISC", "x", " ", "ZONE_START"),
+            ],
+        )
+        registry = ReportRegistry()
+        load_report(registry, performance_path=str(tmp_path))
+
+        result = tools.zone_timings(registry, "report-1")
+
+        assert [
+            (zone["zone"], zone["occurrences"], zone["total_cycles"])
+            for zone in result["zones"]
+        ] == [("MATMUL", 1, 300)]
+        assert "caveat" not in result
+
+    def test_a_row_with_no_zone_name_is_neither_a_zone_nor_unreadable(self, tmp_path):
+        """tt-metal writes timestamped data under no zone name, millions of rows."""
+        result = self._answer(
+            tmp_path, [modern_row(0, 1, 1, "BRISC", "x", "", "TS_DATA")]
+        )
+
+        assert [zone["zone"] for zone in result["zones"]] == ["MATMUL"]
+        assert "caveat" not in result
+
+    def test_a_log_without_phases_leaves_out_what_it_cannot_read_too(self, tmp_path):
+        """It counts occurrences only, but reads each row as the other zone tools do."""
+        rows = [
+            modern_row(0, 1, 1, "BRISC", 100, "MATMUL", "ZONE_START"),
+            modern_row(0, 1, 1, "BRISC", "x", "MATMUL", "ZONE_START"),
+        ]
+        write_device_log(tmp_path, *_drop_column(MODERN_HEADER, rows, "type"))
+        registry = ReportRegistry()
+        load_report(registry, performance_path=str(tmp_path))
+
+        result = tools.zone_timings(registry, "report-1")
+
+        (zone,) = result["zones"]
+        assert zone["occurrences"] == 1
+        assert result["caveat"] == _rows_left_out(1)
+
+    def test_rows_left_out_in_different_chunks_are_all_counted(
+        self, tmp_path, monkeypatch
+    ):
+        """A count reset per chunk, or a chunk the name filter empties, would lose one."""
+        write_device_log(
+            tmp_path,
+            MODERN_HEADER,
+            [
+                modern_row(0, 1, 1, "BRISC", 100, "MATMUL", "ZONE_START"),
+                modern_row(0, 1, 1, "BRISC", "x", "MATMUL", "ZONE_START"),
+                modern_row(0, 1, 1, "BRISC", 200, "", "TS_DATA"),
+                modern_row(0, 1, 1, "BRISC", "2.5", "MATMUL", "ZONE_END"),
+                modern_row(0, 1, 1, "BRISC", 400, "MATMUL", "ZONE_END"),
+            ],
+        )
+        monkeypatch.setattr(csv_queries, "CSV_CHUNK_SIZE", 1)
+        registry = ReportRegistry()
+        load_report(registry, performance_path=str(tmp_path))
+
+        result = tools.zone_timings(registry, "report-1")
+
+        (zone,) = result["zones"]
+        assert (zone["occurrences"], zone["total_cycles"]) == (1, 300)
+        assert result["caveat"] == _rows_left_out(2)
+
+    def test_a_zone_whose_every_row_is_unreadable_is_not_listed(self, tmp_path):
+        result = self._answer(
+            tmp_path, [modern_row(0, 1, 1, "NCRISC", "x", "READ", "ZONE_START")]
+        )
+
+        assert [zone["zone"] for zone in result["zones"]] == ["MATMUL"]
+        assert "zones_unlisted_too_long" not in result
+        assert result["caveat"] == _rows_left_out(1)
+
+    def test_zone_intervals_counts_the_same_unreadable_row(self, tmp_path):
+        """One wording and one rule for both tools; the nameless row neither keeps.
+        The one test that holds the wording; the rest build it from the reason."""
+        write_device_log(
+            tmp_path,
+            MODERN_HEADER,
+            [
+                modern_row(0, 1, 1, "BRISC", 50, "BRISC-KERNEL", "ZONE_START"),
+                modern_row(0, 1, 1, "BRISC", 100, "MATMUL", "ZONE_START"),
+                modern_row(0, 1, 1, "BRISC", 200, "MATMUL", "ZONE_END"),
+                modern_row(0, 1, 1, "BRISC", 300, "MATMUL", "ZONE_START"),
+                modern_row(0, 1, 1, "BRISC", 400, "MATMUL", "ZONE_END"),
+                modern_row(0, 1, 1, "BRISC", "x", "MATMUL", "ZONE_START"),
+                modern_row(0, 1, 1, "BRISC", "x", "", "TS_DATA"),
+            ],
+        )
+        registry = ReportRegistry()
+        load_report(registry, performance_path=str(tmp_path))
+
+        timings = tools.zone_timings(registry, "report-1")
+        intervals = tools.zone_intervals(registry, "report-1", "MATMUL")
+
+        unreadable = (
+            "1 rows have a slot, core, run or cycle count that is not a whole number "
+            "or does not fit a 64-bit integer, or a negative cycle count, and were "
+            "left out."
+        )
+        assert unreadable in timings["caveat"]
+        assert unreadable in intervals["caveat"]
+
+    def test_a_log_pandas_cannot_parse_is_refused(self, tmp_path):
+        """Refused, so the server counts it as one, not as a failure of the tool."""
+        with pytest.raises(ValueError, match=DeviceLogProfilerQueries.DEVICE_LOG_FILE):
+            self._answer(tmp_path, ['"unclosed,row'])
+
+    def test_the_refusal_is_kept_and_recorded_as_one(self, tmp_path):
+        """The same bytes fail the same way, so the log is read once."""
+        write_device_log(tmp_path, MODERN_HEADER, ['"unclosed,row'])
+        registry = ReportRegistry()
+        load_report(registry, performance_path=str(tmp_path))
+        with (
+            patch.object(
+                DeviceLogProfilerQueries,
+                "read_capture_metadata",
+                wraps=DeviceLogProfilerQueries.read_capture_metadata,
+            ) as read,
+            patch.object(server, "record_event") as record,
+        ):
+            responses = [
+                server.handle_message(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": index,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "zone_timings",
+                            "arguments": {"handle": "report-1"},
+                        },
+                    },
+                    server._tool_table(registry),
+                )
+                for index in range(2)
+            ]
+
+        assert all(response["result"]["isError"] for response in responses)
+        assert read.call_count == 1
+        assert record.call_args.kwargs["outcome"] is McpToolOutcome.REFUSED
+
+
 class TestZoneTimingsRead:
     """`zone_timings` reads the log once per handle. #2248"""
 
     def test_the_log_is_read_once_per_handle(self, tmp_path):
-        registry = _zone_log(tmp_path, [("MATMUL", "BRISC", 100)])
-        calls = []
-        original = DeviceLogProfilerQueries.query_zone_summary
+        """A later call answers from the first read, its count of rows left out too."""
+        write_device_log(
+            tmp_path,
+            MODERN_HEADER,
+            [
+                modern_row(1, 1, 1, "BRISC", 0, "MATMUL", "ZONE_START"),
+                modern_row(1, 1, 1, "BRISC", 100, "MATMUL", "ZONE_END"),
+                modern_row(1, 1, 1, "BRISC", "x", "MATMUL", "ZONE_START"),
+            ],
+        )
+        registry = ReportRegistry()
+        load_report(registry, performance_path=str(tmp_path))
 
-        def counted(self):
-            calls.append(self)
-            return original(self)
-
-        with patch.object(DeviceLogProfilerQueries, "query_zone_summary", counted):
+        with _counting_zone_summary() as summary:
             first = tools.zone_timings(registry, "report-1")
             second = tools.zone_timings(registry, "report-1", limit=1)
 
-        assert len(calls) == 1
+        assert summary.call_count == 1
         assert second["zones"] == first["zones"]
+        assert second["caveat"] == first["caveat"] == _rows_left_out(1)
 
     def test_a_kept_read_answers_with_the_clock_it_was_read_at(self, tmp_path):
         registry = _zone_log(tmp_path, [("MATMUL", "BRISC", 1000)])
@@ -2508,22 +2842,19 @@ class TestZoneTimingsRead:
         )
         registry = ReportRegistry()
         load_report(registry, performance_path=str(tmp_path))
-        calls = []
-        original = DeviceLogProfilerQueries.query_zone_summary
-
-        def counted(self):
-            calls.append(self)
-            return original(self)
 
         refusals = []
-        with patch.object(DeviceLogProfilerQueries, "query_zone_summary", counted):
+        with _counting_zone_summary() as summary:
             for _ in range(2):
-                with pytest.raises(DataFormatError, match="core_y") as refusal:
+                with pytest.raises(ValueError, match="core_y") as raised:
                     tools.zone_timings(registry, "report-1")
-                refusals.append(str(refusal.value))
+                refusals.append(raised.value)
 
-        assert len(calls) == 1
-        assert refusals[0] == refusals[1]
+        assert summary.call_count == 1
+        assert str(refusals[0]) == str(refusals[1])
+        assert all(
+            isinstance(refusal.__cause__, DataFormatError) for refusal in refusals
+        )
 
     def test_the_architecture_is_read_as_zone_intervals_reads_it(self, tmp_path):
         """One reader for both tools, so a first line read two ways cannot give them
@@ -2559,11 +2890,11 @@ class TestPreRenameCaptures:
         instance = Instance(instance_id="pytest", performance_path=str(tmp_path))
 
         with DeviceLogProfilerQueries(instance, stream=True) as queries:
-            summary, pairing = queries.query_zone_summary()
+            read = queries.query_zone_summary()
 
-        assert summary[0]["occurrences"] == 1
-        assert summary[0]["total_cycles"] == 700
-        assert pairing == {
+        assert read.zones[0]["occurrences"] == 1
+        assert read.zones[0]["total_cycles"] == 700
+        assert read.pairing == {
             "unmatched_starts": 0,
             "unmatched_ends": 0,
             "dropped_starts": 0,
@@ -2589,7 +2920,7 @@ class TestOpenZoneCeiling:
         instance = Instance(instance_id="pytest", performance_path=str(tmp_path))
 
         with DeviceLogProfilerQueries(instance, stream=True) as queries:
-            _summary, pairing = queries.query_zone_summary()
+            pairing = queries.query_zone_summary().pairing
 
         assert pairing["unmatched_starts"] == 2
         assert pairing["dropped_starts"] == 3

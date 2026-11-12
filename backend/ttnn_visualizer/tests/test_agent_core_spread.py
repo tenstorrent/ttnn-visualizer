@@ -28,7 +28,12 @@ from ttnn_visualizer.tests.smoke_capture import (
     smoke_rows,
     write_ops_perf,
 )
-from ttnn_visualizer.tests.test_agent_tools import UNTYPED_HEADER, _perf_report, _row
+from ttnn_visualizer.tests.test_agent_tools import (
+    UNTYPED_HEADER,
+    _perf_report,
+    _row,
+    _rows_left_out,
+)
 from ttnn_visualizer.tests.test_device_log_columns import (
     MODERN_HEADER,
     PRE_RENAME_HEADER,
@@ -550,6 +555,35 @@ class TestUnreadableCells:
             "cycle count that is not a whole number or does not fit a 64-bit integer, "
             "or a negative cycle count, and were left out"
         )
+
+    def test_zone_timings_leaves_out_and_counts_the_same_row(self, tmp_path):
+        """The docs give the three zone tools one rule; each counts what it would use."""
+        rows = [
+            *THREE_CORES,
+            modern_row(0, 4, 1, "BRISC", "x", "BRISC-KERNEL", "ZONE_START", run=RUN),
+        ]
+        registry = ReportRegistry()
+        write_device_log(tmp_path, MODERN_HEADER, rows)
+        load_report(registry, performance_path=str(tmp_path))
+        with patch.object(
+            tools, "_generate_canonical_report", return_value=_perf_report([_op()])
+        ):
+            spread = tools.core_spread(registry, "report-1", perf_id="1")
+        timings = tools.zone_timings(registry, "report-1")
+
+        assert spread["ops"][0]["cores_in_log"] == 3
+        assert spread["caveat"] == (
+            "1 kernel rows of these operations' call counts have a slot, core or cycle "
+            f"count {csv_queries.UNREADABLE_NUMBER_REASON}, and were left out, so the "
+            "figures cover only the rows that were readable."
+        )
+        kernel = next(
+            zone
+            for zone in timings["zones"]
+            if (zone["zone"], zone["risc"]) == ("BRISC-KERNEL", "BRISC")
+        )
+        assert (kernel["occurrences"], kernel["cores"]) == (3, 3)
+        assert timings["caveat"] == _rows_left_out(1)
 
     def test_a_whole_number_written_as_a_float_is_kept(self, tmp_path):
         """A core written "4.0" makes its column floats, and is still core 4."""
