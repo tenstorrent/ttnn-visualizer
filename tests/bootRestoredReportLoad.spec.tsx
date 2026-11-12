@@ -35,6 +35,8 @@ import {
 // local and remote selectors, the NPE route and its windowed view) behind ProtectedRoute,
 // so recording moved into a broad active-report or loaded-data effect anywhere in that
 // tree fails here.
+// A launch with --memory-report-path or --performance-path reaches the frontend as the same
+// instance.active_report, so these cases also stand for CLI preload.
 
 const h = vi.hoisted(() => ({
     serverMode: false as boolean,

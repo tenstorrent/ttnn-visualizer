@@ -92,7 +92,7 @@ Recorded by the server once during a successful local launch.
 
 ### `report_loaded`
 
-Recorded after a report is loaded successfully.
+Recorded after a report is loaded successfully. Restoring the active report when the page is reloaded records nothing, and neither does the first page load after launching with `--memory-report-path` or `--performance-path`, so counts are deliberate loads, not report sessions.
 
 - `kind`: `profiler` (the memory report), `performance`, `npe`, `mlir`, `cluster_descriptor`.
 - `source`: `upload`, `remote_sync`, `local_tt_metal`, `demo`.
@@ -107,7 +107,7 @@ Before 0.107.0, hosted event logs tagged every report picked from the hosted rep
 
 ### `report_load_failed`
 
-Recorded after a report cannot be loaded.
+Recorded after a report cannot be loaded. A report restored when the page is reloaded, or preloaded with `--memory-report-path` or `--performance-path`, records no failure even if it no longer loads, so counts are failed deliberate loads, not failed report sessions.
 
 - `kind`: `profiler` (the memory report), `performance`, `npe`, `mlir`, `cluster_descriptor`.
 - `reason_class`: `unsupported_version`, `missing_file`, `parse_error`, `too_large`, `permission`, `other`.
