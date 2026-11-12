@@ -189,6 +189,29 @@ const ActiveReportsProbe = () => {
     return <div data-testid={ACTIVE_REPORTS_PROBE_ID}>{`${profiler?.path ?? ''}|${performance?.path ?? ''}`}</div>;
 };
 
+const waitForRestoredReports = () =>
+    waitFor(() =>
+        expect(screen.getByTestId(ACTIVE_REPORTS_PROBE_ID)).toHaveTextContent(
+            `${RESTORED_PROFILER.path}|${RESTORED_PERFORMANCE.path}`,
+        ),
+    );
+
+// Both instance shapes a local restore can carry: one picked from Home (with a location)
+// and one preloaded from the CLI (without), since the selectors branch on it. Without a
+// location the memory picker shows LocalFolderPicker's default label, not the report.
+const RESTORED_SHAPES = [
+    {
+        shape: 'selected',
+        instance: () => makeInstance(ReportLocation.LOCAL, RESTORED_PROFILER.path, RESTORED_PERFORMANCE.path),
+        memoryPickerLabel: RESTORED_PROFILER.reportName,
+    },
+    {
+        shape: 'CLI-preloaded',
+        instance: () => makeCliPreloadInstance(RESTORED_PROFILER.path, RESTORED_PERFORMANCE.path),
+        memoryPickerLabel: 'Select a report...',
+    },
+];
+
 const seedRemoteConnection = () => {
     window.localStorage.setItem(LOCAL_STORAGE_KEY_CONNECTIONS, JSON.stringify([REMOTE_CONNECTION]));
     window.localStorage.setItem(LOCAL_STORAGE_KEY_SELECTED, JSON.stringify(REMOTE_CONNECTION));
@@ -309,54 +332,38 @@ describe('boot-restored reports on Home', () => {
 
         renderRestored(ROUTES.HOME);
 
-        await waitFor(() =>
-            expect(screen.getByTestId(ACTIVE_REPORTS_PROBE_ID)).toHaveTextContent(
-                `${RESTORED_PROFILER.path}|${RESTORED_PERFORMANCE.path}`,
-            ),
-        );
+        await waitForRestoredReports();
         expect(await screen.findAllByText('Memory report')).not.toHaveLength(0);
         await settle();
 
         expectNothingRecorded();
     });
 
-    it('still records a user selection made after restoration', async () => {
-        const nextProfiler = mockProfilerFolderList[1];
+    // The positive control for every no-load case above: after either restore shape, the
+    // next pick is still counted. Without the CLI-preloaded run, suppressing all recording
+    // would pass every CLI case, since that restore starts with both pickers empty.
+    it.each(RESTORED_SHAPES)(
+        'still records a user selection made after the $shape restore',
+        async ({ instance, memoryPickerLabel }) => {
+            const nextProfiler = mockProfilerFolderList[1];
+            h.instance = instance();
 
-        renderRestored(ROUTES.HOME);
+            renderRestored(ROUTES.HOME);
 
-        await waitFor(() => expect(getAllButtonsWithText(RESTORED_PROFILER.reportName)).toHaveLength(1));
-        await settle();
-        expectNothingRecorded();
+            await waitForRestoredReports();
+            await settle();
+            expectNothingRecorded();
 
-        await openPopover(getAllButtonsWithText(RESTORED_PROFILER.reportName)[0]);
-        (await screen.findByText(nextProfiler.reportName)).click();
+            // The memory report picker renders before the performance one.
+            await openPopover(getAllButtonsWithText(memoryPickerLabel)[0]);
+            (await screen.findByText(nextProfiler.reportName)).click();
 
-        await waitFor(() => expect(recordReportLoaded).toHaveBeenCalledTimes(1));
-        expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.PROFILER, ReportSource.LOCAL_TT_METAL);
-        expect(recordReportLoadFailed).not.toHaveBeenCalled();
-    });
-});
-
-// Each failure runs on both instance shapes a restore can carry: one picked from Home (with
-// a location) and one preloaded from the CLI (without), since the selectors branch on it.
-const RESTORED_SHAPES = [
-    {
-        shape: 'selected',
-        instance: () => makeInstance(ReportLocation.LOCAL, RESTORED_PROFILER.path, RESTORED_PERFORMANCE.path),
-    },
-    {
-        shape: 'CLI-preloaded',
-        instance: () => makeCliPreloadInstance(RESTORED_PROFILER.path, RESTORED_PERFORMANCE.path),
-    },
-];
-
-const waitForRestoredReports = () =>
-    waitFor(() =>
-        expect(screen.getByTestId(ACTIVE_REPORTS_PROBE_ID)).toHaveTextContent(
-            `${RESTORED_PROFILER.path}|${RESTORED_PERFORMANCE.path}`,
-        ),
+            await waitFor(() => expect(recordReportLoaded).toHaveBeenCalledTimes(1));
+            expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.PROFILER, ReportSource.LOCAL_TT_METAL);
+            expect(recordReportLoadFailed).not.toHaveBeenCalled();
+        },
     );
+});
 
 describe('boot-restored memory and performance reports that fail to load', () => {
     it.each(RESTORED_SHAPES)(

@@ -6,8 +6,10 @@
 
 import json
 import os
+from unittest.mock import patch
 
 import pytest
+from ttnn_visualizer.app import _create_preloaded_instance, parse_args
 from ttnn_visualizer.exceptions import InvalidProfilerPath, InvalidReportPath
 from ttnn_visualizer.instances import (
     KEY_MLIR_NAME,
@@ -239,7 +241,7 @@ class TestCreateInstanceFromLocalPaths:
     def test_it_refuses_a_path_that_is_not_a_directory(
         self, app, tmp_path, make_bad, key, error
     ):
-        """The CLI turns these into its exit message, so the exception type is the contract."""
+        """`TestCliPreload` pins the exit message the CLI turns each of these into."""
         paths = {"profiler_path": None, "performance_path": None}
         paths[key] = str(make_bad(tmp_path))
         before = _instance_count(app)
@@ -247,4 +249,54 @@ class TestCreateInstanceFromLocalPaths:
         with app.app_context(), pytest.raises(error):
             create_instance_from_local_paths(**paths)
 
+        assert _instance_count(app) == before
+
+
+class TestCliPreload:
+    """`ttnn-visualizer --memory-report-path` / `--performance-path` before serving."""
+
+    @pytest.fixture(autouse=True)
+    def _use_the_test_app(self, app):
+        with patch("ttnn_visualizer.app.create_app", return_value=app):
+            yield
+
+    def test_without_either_flag_it_makes_no_instance(self, app):
+        before = _instance_count(app)
+
+        assert _create_preloaded_instance(parse_args([])) is None
+        assert _instance_count(app) == before
+
+    def test_it_returns_the_instance_the_browser_opens_on(self, client, report_dirs):
+        profiler, performance = report_dirs
+        args = parse_args(
+            [
+                "--memory-report-path",
+                str(profiler),
+                "--performance-path",
+                str(performance),
+            ]
+        )
+
+        instance_id = _create_preloaded_instance(args)
+
+        assert (
+            _instance(client, instance_id)["active_report"]["profiler_name"] == "bge_m3"
+        )
+
+    @pytest.mark.parametrize(
+        ("flag", "message"),
+        [
+            ("--memory-report-path", "Invalid memory report path"),
+            ("--performance-path", "Invalid performance path"),
+        ],
+    )
+    def test_a_bad_path_exits_naming_its_own_flag(self, app, tmp_path, flag, message):
+        """The two exception names read swapped, so swapping the handlers is easy."""
+        missing = tmp_path / "missing"
+        before = _instance_count(app)
+
+        with pytest.raises(SystemExit) as exit_info:
+            _create_preloaded_instance(parse_args([flag, str(missing)]))
+
+        assert str(exit_info.value.code) == f"❌ {message}: {missing}"
         assert _instance_count(app) == before
