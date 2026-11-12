@@ -1274,7 +1274,10 @@ def _every_tool(tmp_path, first_line):
 @pytest.mark.parametrize(
     "line",
     [
-        pytest.param(line.values[0], id=line.id, marks=line.marks)
+        # With #2295 every tool reads an empty ARCH as none; only the readers differ.
+        pytest.param(
+            line.values[0], id=line.id, marks=() if line.id == "empty" else line.marks
+        )
         for line in FIRST_LINES
         if line.values[1] is None
     ],
