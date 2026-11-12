@@ -18,12 +18,12 @@ from unittest.mock import patch
 import pytest
 from ttnn_visualizer.agent import failures
 from ttnn_visualizer.agent import late_deallocations as late
-from ttnn_visualizer.agent import server
 from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
 from ttnn_visualizer.agent.operations import BUFFER_SIZE_UNIT
 from ttnn_visualizer.models import BufferType, Tensor
 from ttnn_visualizer.queries import DatabaseQueries
+from ttnn_visualizer.tests.mcp_calls import tool_call
 from ttnn_visualizer.tests.memory_report_db import load_memory_report
 from ttnn_visualizer.tests.test_agent_perf_detail import ANSWER_BUDGET_BYTES
 
@@ -1190,20 +1190,11 @@ class TestCaveats:
 
 class TestAnswerSize:
     def _answer(self, registry: ReportRegistry, handle: str) -> str:
-        response = server.handle_message(
-            {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "tools/call",
-                "params": {
-                    "name": "late_deallocations",
-                    "arguments": {"handle": handle, "limit": 100},
-                },
-            },
-            server._tool_table(registry),
+        result, _ = tool_call(
+            registry, "late_deallocations", {"handle": handle, "limit": 100}
         )
-        assert response is not None and not response["result"].get("isError")
-        return response["result"]["content"][0]["text"]
+        assert not result.get("isError")
+        return result["content"][0]["text"]
 
     def test_the_most_a_call_can_list_stays_inside_the_budget(self, tmp_path):
         registry, handle = _many_call_sites(
