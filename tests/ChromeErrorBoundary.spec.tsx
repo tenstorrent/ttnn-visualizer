@@ -9,7 +9,7 @@
  */
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import ChromeErrorBoundary from '../src/components/ChromeErrorBoundary';
 
@@ -22,6 +22,15 @@ function Chrome() {
 
     return <p>Footer</p>;
 }
+
+const renderFallback = (retry: () => void) => (
+    <button
+        type='button'
+        onClick={retry}
+    >
+        Retry
+    </button>
+);
 
 // React's development build re-dispatches a render error as a window `error` event, which jsdom
 // reports as uncaught even though the boundary caught it
@@ -40,11 +49,14 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
-it('renders nothing in place of failed chrome and leaves the page alone', () => {
+it('shows the fallback in place of failed chrome and leaves the page alone', () => {
     render(
         <>
             <p>Page</p>
-            <ChromeErrorBoundary resetKey='report-a'>
+            <ChromeErrorBoundary
+                resetKey='report-a'
+                fallback={renderFallback}
+            >
                 <Chrome />
             </ChromeErrorBoundary>
         </>,
@@ -52,11 +64,31 @@ it('renders nothing in place of failed chrome and leaves the page alone', () => 
 
     expect(screen.getByText('Page')).toBeInTheDocument();
     expect(screen.queryByText('Footer')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+});
+
+it('retries the chrome from the fallback', () => {
+    render(
+        <ChromeErrorBoundary
+            resetKey='report-a'
+            fallback={renderFallback}
+        >
+            <Chrome />
+        </ChromeErrorBoundary>,
+    );
+
+    state.shouldThrow = false;
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    expect(screen.getByText('Footer')).toBeInTheDocument();
 });
 
 it('retries the chrome when the reset key changes', () => {
     const { rerender } = render(
-        <ChromeErrorBoundary resetKey='report-a'>
+        <ChromeErrorBoundary
+            resetKey='report-a'
+            fallback={renderFallback}
+        >
             <Chrome />
         </ChromeErrorBoundary>,
     );
@@ -65,7 +97,10 @@ it('retries the chrome when the reset key changes', () => {
 
     state.shouldThrow = false;
     rerender(
-        <ChromeErrorBoundary resetKey='report-a'>
+        <ChromeErrorBoundary
+            resetKey='report-a'
+            fallback={renderFallback}
+        >
             <Chrome />
         </ChromeErrorBoundary>,
     );
@@ -73,7 +108,10 @@ it('retries the chrome when the reset key changes', () => {
     expect(screen.queryByText('Footer')).not.toBeInTheDocument();
 
     rerender(
-        <ChromeErrorBoundary resetKey='report-b'>
+        <ChromeErrorBoundary
+            resetKey='report-b'
+            fallback={renderFallback}
+        >
             <Chrome />
         </ChromeErrorBoundary>,
     );

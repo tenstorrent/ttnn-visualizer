@@ -6,7 +6,7 @@ import { Button, InputGroup, NumberRange, RangeSlider, Size, Tooltip } from '@bl
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { IconNames } from '@blueprintjs/icons';
 import { useLocation } from 'react-router';
-import { startTransition, useCallback, useEffect, useMemo, useState } from 'react';
+import { startTransition, useCallback, useEffect, useMemo, useRef } from 'react';
 import { HttpStatusCode } from 'axios';
 import {
     activePerformanceReportAtom,
@@ -54,8 +54,11 @@ function Range() {
     const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
     const [signpostRange, setSignpostRange] = useAtom(filterBySignpostAtom);
     const hasSignpostRange = signpostRange.some((signpost) => signpost !== null);
-    const [isUserOpChange, setIsUserOpChange] = useState(false);
-    const [isUserPerfChange, setIsUserPerfChange] = useState(false);
+    // The exact range object the user last committed on each track. A sync effect carries a change
+    // to the linked track only when the committed atom is that object, so it cannot skip a user
+    // step, whatever order a transition and its effects land in, nor echo its own linked write back.
+    const userOpRangeRef = useRef<NumberRange | null>(null);
+    const userPerfRangeRef = useRef<NumberRange | null>(null);
 
     const { data: operations } = useOperationsList();
     const { data: perfData, error: perfDataError } = usePerformanceReport(activeReportFolderName);
@@ -72,19 +75,17 @@ function Range() {
     const perfMin = perfRange?.[0];
     const perfMax = perfRange?.[1];
 
-    // The flag is set with the range, inside the same transition, so the sync effects below never
-    // see a user change paired with the previous range.
     const commitPerformanceRange = useCallback(
         (value: NumberRange) => {
+            userPerfRangeRef.current = value;
             setSelectedPerformanceRange(value);
-            setIsUserPerfChange(true);
         },
         [setSelectedPerformanceRange],
     );
     const commitOperationRange = useCallback(
         (value: NumberRange) => {
+            userOpRangeRef.current = value;
             setSelectedOperationRange(value);
-            setIsUserOpChange(true);
         },
         [setSelectedOperationRange],
     );
@@ -98,6 +99,8 @@ function Range() {
     // entry per id wins. An op with no matched perf row keeps its entry, whose `perfId` is
     // `undefined`, so the op-to-perf lookup falls through to the nearest-match reduce. That entry
     // keys `opEntryByPerfId` on `NaN`, which no selected perf id equals.
+    // `getOpIdByPerfId` in `enrichPerfRowData.ts` maps the same data with the opposite tie rule
+    // (last wins, string keys). Unifying them would move a handle or a table's linked op.
     const opEntryByOpId = useMemo(() => indexFirstById(opIdsMap, (entry) => entry.opId), [opIdsMap]);
     const opEntryByPerfId = useMemo(() => indexFirstById(opIdsMap, (entry) => Number(entry.perfId)), [opIdsMap]);
 
@@ -169,7 +172,15 @@ function Range() {
     }, [perfRange, setPerformanceRange, setSelectedPerformanceRange]);
 
     useEffect(() => {
-        if (isInSync && selectedOperationRange && perfRange && selectedPerformanceRange && isUserOpChange) {
+        if (
+            isInSync &&
+            selectedOperationRange &&
+            perfRange &&
+            selectedPerformanceRange &&
+            selectedOperationRange === userOpRangeRef.current
+        ) {
+            userOpRangeRef.current = null;
+
             const [rangeMin, rangeMax] = perfRange;
             // Try to find matching perfIds for the selected operation range
             const matchMin =
@@ -202,9 +213,6 @@ function Range() {
             startTransition(() =>
                 setSelectedPerformanceRange(clampSelectionToRange(updatedMin, updatedMax, rangeMin, rangeMax)),
             );
-            queueMicrotask(() => {
-                setIsUserOpChange(false);
-            });
         }
         // Runs only when the operation selection changes: re-running on a new mapping or perf range
         // would replay a stale user change, and the lookups only change together with `opIdsMap`
@@ -224,8 +232,9 @@ function Range() {
             operationRange &&
             perfRange &&
             selectedPerformanceRange &&
-            isUserPerfChange
+            selectedPerformanceRange === userPerfRangeRef.current
         ) {
+            userPerfRangeRef.current = null;
             const [opRangeMin, opRangeMax] = operationRange;
             // Try to find matching opIds for the selected performance range
             const matchMin =
@@ -257,9 +266,6 @@ function Range() {
                     : selectedOperationRange[1]);
 
             startTransition(() => setSelectedOperationRange([updatedMin, updatedMax]));
-            queueMicrotask(() => {
-                setIsUserPerfChange(false);
-            });
         }
         // Runs only when the performance selection changes, for the same reason as its sibling above
         // eslint-disable-next-line react-hooks/exhaustive-deps

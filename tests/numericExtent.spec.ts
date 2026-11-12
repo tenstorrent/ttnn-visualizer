@@ -10,7 +10,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { getMaxValue, getMinValue, getPerformanceIdRange } from '../src/functions/numericExtent';
+import { getMaxValue, getPerformanceIdRange } from '../src/functions/numericExtent';
 import { PerfTableRow } from '../src/model/PerfTable';
 
 const LARGE_REPORT_ROWS = 200_000;
@@ -37,19 +37,16 @@ describe('getPerformanceIdRange', () => {
     });
 });
 
-describe('getMaxValue and getMinValue', () => {
-    it('reduce input too large for a spread', () => {
+describe('getMaxValue', () => {
+    it('reduces input too large for a spread', () => {
         const values = scrambledIds(LARGE_REPORT_ROWS);
 
         expect(getMaxValue(values)).toBe(LARGE_REPORT_ROWS);
-        expect(getMinValue(values)).toBe(1);
     });
 
-    it('match the spread on empty input, NaN and null', () => {
+    it('matches the spread on empty input, NaN and null', () => {
         expect(getMaxValue([])).toBe(Math.max());
-        expect(getMinValue([])).toBe(Math.min());
         expect(getMaxValue([1, NaN, 3])).toBeNaN();
-        expect(getMinValue([1, NaN, 3])).toBeNaN();
 
         const withNull = [-2, null as unknown as number];
 

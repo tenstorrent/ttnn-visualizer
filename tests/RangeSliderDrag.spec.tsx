@@ -130,7 +130,7 @@ it('keeps the handle where it was released', async () => {
     expect(getPerformanceMinHandle()).toHaveAttribute('aria-valuenow', '3');
 });
 
-it('drops a drag in progress when the track changes', async () => {
+it('shows the new track’s selection, not the stale drag copy, when the track changes', async () => {
     const { rerender } = renderRange();
 
     const handle = await screen.findByRole('slider', { name: 'Performance min range handle' });

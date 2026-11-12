@@ -343,9 +343,13 @@ describe('Layout footer containment', () => {
         vi.restoreAllMocks();
 
         const { getDefaultStore } = await import('jotai');
-        const { activePerformanceReportAtom } = await import('../src/store/app');
+        const { activePerformanceReportAtom, operationRangeAtom, selectedOperationRangeAtom } =
+            await import('../src/store/app');
+        const store = getDefaultStore();
 
-        getDefaultStore().set(activePerformanceReportAtom, null);
+        store.set(activePerformanceReportAtom, null);
+        store.set(operationRangeAtom, null);
+        store.set(selectedOperationRangeAtom, null);
     });
 
     it('keeps the shell when the footer throws, and retries the footer on a report switch', async () => {
@@ -364,5 +368,25 @@ describe('Layout footer containment', () => {
         });
 
         expect(await screen.findByTestId('stub-footer-infobar')).toBeInTheDocument();
+    });
+
+    it('shows the failed footer, and resets the hidden range when retried from it', async () => {
+        const { default: Layout } = await import('../src/components/Layout');
+        const { getDefaultStore } = await import('jotai');
+        const { operationRangeAtom, selectedOperationRangeAtom } = await import('../src/store/app');
+        const store = getDefaultStore();
+
+        store.set(operationRangeAtom, [1, 50]);
+        store.set(selectedOperationRangeAtom, [10, 20]);
+
+        renderLayout(Layout);
+
+        expect(screen.getByRole('alert')).toHaveTextContent('The footer failed to load');
+
+        footerStub.shouldThrow = false;
+        fireEvent.click(screen.getByRole('button', { name: 'Reset range and retry' }));
+
+        expect(await screen.findByTestId('stub-footer-infobar')).toBeInTheDocument();
+        expect(store.get(selectedOperationRangeAtom)).toEqual([1, 50]);
     });
 });

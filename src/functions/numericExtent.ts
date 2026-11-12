@@ -25,23 +25,9 @@ export const getMaxValue = (values: Iterable<number>): number => {
 };
 
 /**
- * @description The smallest of `values`, for data-sized input. See `getMaxValue` for why
- * this is not `Math.min(...values)`; an empty input is `Infinity`.
- */
-export const getMinValue = (values: Iterable<number>): number => {
-    let result = Infinity;
-
-    for (const value of values) {
-        result = Math.min(result, value);
-    }
-
-    return result;
-};
-
-/**
  * @description The span of performance row ids in `report`, in one pass, or `null` for an
  * empty or missing report. The footer's range slider reads it on every route, so a throw
- * here replaces the whole app with the root error page.
+ * here takes the footer, and with it the range selection, down on every route.
  */
 export const getPerformanceIdRange = (report: PerfTableRow[] | undefined): NumberRange | null => {
     if (!report?.length) {

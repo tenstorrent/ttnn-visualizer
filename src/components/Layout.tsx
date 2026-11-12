@@ -15,6 +15,7 @@ import { BounceIn } from './toastTransition';
 import ROUTES from '../definitions/Routes';
 import FooterInfobar from './FooterInfobar';
 import ChromeErrorBoundary from './ChromeErrorBoundary';
+import FooterFallback from './FooterFallback';
 import { activePerformanceReportAtom, activeProfilerReportAtom } from '../store/app';
 import { getFolderReportId } from '../functions/reportLinks';
 import ReportLinkRecorder from './ReportLinkRecorder';
@@ -39,7 +40,10 @@ function BoundedFooterInfobar() {
     const resetKey = `${getFolderReportId(activeProfilerReport) ?? ''}|${getFolderReportId(activePerformanceReport) ?? ''}`;
 
     return (
-        <ChromeErrorBoundary resetKey={resetKey}>
+        <ChromeErrorBoundary
+            resetKey={resetKey}
+            fallback={(retry) => <FooterFallback retry={retry} />}
+        >
             <FooterInfobar />
         </ChromeErrorBoundary>
     );
