@@ -82,8 +82,9 @@ $data-padding-bottom: 20px;
 $perf-report-padding: 1rem;
 $perf-report-background: $tt-black;
 
-// Where React Flow docks its bottom-left panel. Both graph views lay their own
-// bottom-left chrome out from it, so it is owned here rather than copied into each.
+// Where both graph views dock their bottom-left React Flow panel, in place of
+// React Flow's own `left: 0`. Each lays its bottom-left chrome out from it, so it
+// is owned here rather than copied into each.
 $reactflow-panel-origin-left: 12px;
 
 // Width the connection dialogs' results block must stay inside: the Blueprint dialog

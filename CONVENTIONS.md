@@ -294,7 +294,7 @@ The Blueprint packages are pinned to `~` ranges and upgraded together. On a mino
 
 ### Stylesheet imports go through the `styles/` alias
 
-The `styles/` alias is wired up in three places that must stay in sync — `tsconfig.json`, `vite.config.ts`, and `vitest.config.ts`. Relative paths still resolve, but they drift when files move and look noisy in long import blocks.
+The `styles/` alias is wired up in four places that must stay in sync — `tsconfig.json`, `vite.config.ts`, `vitest.config.ts`, and the Sass importer in `tests/helpers/compiledStylesheets.ts`. Relative paths still resolve, but they drift when files move and look noisy in long import blocks.
 
 `src/components/SearchField.tsx`
 
