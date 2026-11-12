@@ -228,6 +228,73 @@ class TestHeldTensorsByOperation:
         assert sorted(held.held_by_operation) == [3, 4, 5]
         resolve.assert_called_once()
 
+    def test_a_buffer_back_after_leaving_a_snapshot_is_not_its_tensors(self):
+        held = _held_tensors(
+            [1, 2, 3, 4],
+            {2: {100: 64}, 3: {200: 8}, 4: {100: 64}},
+            outputs={1: [(10, 100)]},
+            consumers={10: [1]},
+        )
+
+        assert held.held_by_operation == {2: [late.HeldTensor(10, 100, 64, 1)]}
+
+    def test_an_operation_without_buffers_keeps_the_tensor_at_its_address(self):
+        held = _held_tensors(
+            [1, 2, 3, 4],
+            {2: {100: 64}, 4: {100: 64}},
+            outputs={1: [(10, 100)]},
+            consumers={10: [1]},
+        )
+
+        assert held.held_by_operation == {
+            2: [late.HeldTensor(10, 100, 64, 1)],
+            4: [late.HeldTensor(10, 100, 64, 1)],
+        }
+
+    def test_a_forgotten_tensor_named_again_at_its_address_is_held_again(self):
+        held = _held_tensors(
+            [1, 2, 3, 4, 5],
+            {1: {100: 64}, 2: {200: 8}, 3: {100: 64}, 4: {100: 64}, 5: {100: 64}},
+            inputs={3: [(10, 100)]},
+            outputs={1: [(10, 100)]},
+            consumers={10: [3]},
+        )
+
+        assert held.held_by_operation == {
+            4: [late.HeldTensor(10, 100, 64, 3)],
+            5: [late.HeldTensor(10, 100, 64, 3)],
+        }
+
+    def test_a_buffer_after_its_tensors_deallocate_is_not_its_tensors(self):
+        """The deallocate's own snapshot can still show the buffer it frees."""
+        held = _held_tensors(
+            [1, 2, 3, 4],
+            {operation_id: {100: 64} for operation_id in (2, 3, 4)},
+            inputs={3: [(10, 100)]},
+            outputs={1: [(10, 100)]},
+            consumers={10: [1, 3]},
+            names={3: "ttnn.deallocate"},
+        )
+
+        assert sorted(held.held_by_operation) == [2, 3]
+
+    def test_a_deallocate_of_a_tensor_no_longer_at_its_address_leaves_the_holder(
+        self,
+    ):
+        held = _held_tensors(
+            [1, 2, 3, 4, 5],
+            {operation_id: {100: 64} for operation_id in (2, 3, 4, 5)},
+            inputs={4: [(10, 100)]},
+            outputs={1: [(10, 100)], 2: [(11, 100)]},
+            consumers={10: [1, 4], 11: [3]},
+            names={4: "ttnn.deallocate"},
+        )
+
+        assert held.held_by_operation == {
+            4: [late.HeldTensor(11, 100, 64, 3)],
+            5: [late.HeldTensor(11, 100, 64, 3)],
+        }
+
 
 class TestRunStartCount:
     def test_an_operation_holding_nothing_ends_every_run(self):
@@ -271,7 +338,7 @@ class TestHolds:
             30,
             40,
         )
-        assert (hold.bridged, hold.attributed) == (True, True)
+        assert hold.bridged
 
     def test_only_a_hold_that_was_open_across_the_gap_is_bridged(self):
         first, second = _holds(
@@ -348,30 +415,6 @@ class TestHolds:
         )
 
         assert _span(hold) == (10, 2, 3, late.Ending.DEALLOCATED, 4)
-
-    def test_the_first_hold_after_the_last_use_is_attributed(self):
-        """Even past an operation that recorded no buffers."""
-        (hold,) = _holds([1, 2, 3], {3: [_entry(10, 1)]}, buffered=[1, 3])
-
-        assert hold.attributed
-
-    def test_a_hold_opening_after_its_buffer_left_a_snapshot_is_unattributed(self):
-        first, second = _holds([1, 2, 3, 4], {2: [_entry(10, 1)], 4: [_entry(10, 1)]})
-        (late_start,) = _holds([1, 2, 3], {3: [_entry(10, 1)]})
-
-        assert (first.attributed, second.attributed) == (True, False)
-        assert not late_start.attributed
-
-    def test_a_hold_opening_after_its_deallocate_is_unattributed(self):
-        (hold,) = _holds(
-            [1, 2, 3, 4],
-            {3: [_entry(10, 1)], 4: [_entry(10, 1)]},
-            buffered=[1, 3, 4],
-            deallocations={10: [2]},
-        )
-
-        assert not hold.attributed
-        assert _span(hold) == (10, 3, 4, late.Ending.HELD_TO_END, None)
 
 
 class TestDeallocateNames:
@@ -601,7 +644,6 @@ class TestTheAnswer:
             "run_start_count": 2,
             "hold_count": 3,
             "held_tensor_count": 3,
-            "unattributed_hold_count": 0,
             "ended": {"deallocated": 1, "freed_otherwise": 1, "held_to_end": 1},
             "byte_operations": 1000,
             "call_site_count": 2,
@@ -990,7 +1032,7 @@ class TestCaveats:
         assert result["hold_count"] == 0
         assert "records no L1 buffers under the type's number" in result["caveat"]
 
-    def test_a_hold_on_a_later_tensors_buffer_is_left_out_and_counted(self, tmp_path):
+    def test_a_later_buffer_at_a_gone_tensors_address_is_not_its_hold(self, tmp_path):
         """The buffer leaves operation 4's snapshot and a buffer at its address is back
         at 5, with nothing naming the tensor it belongs to."""
         registry, handle = _report(
@@ -1011,11 +1053,10 @@ class TestCaveats:
 
         result = failures.late_deallocations(registry, handle)
 
-        assert (result["hold_count"], result["unattributed_hold_count"]) == (1, 1)
-        assert (result["byte_operations"], result["run_start_count"]) == (100, 2)
+        assert result["hold_count"] == 1
+        assert (result["byte_operations"], result["run_start_count"]) == (100, 1)
         assert result["ended"]["freed_otherwise"] == 1
         assert [hold["held_from_operation_id"] for hold in result["top_holds"]] == [3]
-        assert "1 more holds, 70 byte_operations, are left out" in result["caveat"]
 
     def test_a_hold_across_an_operation_without_buffers_says_so(self, tmp_path):
         registry, handle = _report(
@@ -1039,8 +1080,9 @@ class TestCaveats:
             "3 of the 5." in result["caveat"]
         )
 
-    def test_only_a_listed_hold_is_counted_as_carried_on(self, tmp_path):
-        """The one hold listed spans one operation; the unattributed one is bridged."""
+    def test_a_later_tensors_buffer_is_not_carried_on(self, tmp_path):
+        """The hold spans one operation; the later buffers at its address are another
+        tensor's, across an operation that recorded none."""
         registry, handle = _report(
             tmp_path,
             _rows(
@@ -1060,8 +1102,61 @@ class TestCaveats:
 
         result = failures.late_deallocations(registry, handle)
 
-        assert (result["hold_count"], result["unattributed_hold_count"]) == (1, 1)
-        assert "carry on past operations" not in result["caveat"]
+        assert result["hold_count"] == 1
+        assert (result["byte_operations"], result["run_start_count"]) == (100, 1)
+        assert "carry on past operations" not in result.get("caveat", "")
+
+    def test_a_deallocate_row_frees_its_tensors_address(self, tmp_path):
+        """Operation 4 records no buffers, so only its name, read from the report,
+        keeps the buffer at 5 from being carried on as tensor 10's."""
+        registry, handle = _report(
+            tmp_path,
+            _rows(
+                operations=[
+                    (1, "ttnn.add"),
+                    (2, "ttnn.add"),
+                    (3, "ttnn.add"),
+                    (4, "ttnn.deallocate"),
+                    (5, "ttnn.add"),
+                ],
+                tensors=[(10, 1000)],
+                inputs=[(2, 10), (4, 10)],
+                outputs=[(1, 10)],
+                buffers=[*_snapshot(3, {1000: 100}), *_snapshot(5, {1000: 100})],
+                traces=[(2, _trace("/m/model.py", 10))],
+            ),
+        )
+
+        result = failures.late_deallocations(registry, handle)
+
+        assert result["hold_count"] == 1
+        assert result["ended"]["deallocated"] == 1
+        assert result["top_holds"][0]["held_from_operation_id"] == 3
+
+    def test_a_tensor_named_again_at_its_address_is_held_again(self, tmp_path):
+        """Tensor 10's buffer leaves operation 4's snapshot, and operation 5 names it
+        at its address again."""
+        registry, handle = _report(
+            tmp_path,
+            _rows(
+                operations=[(op, "ttnn.add") for op in range(1, 7)],
+                tensors=[(10, 1000)],
+                inputs=[(2, 10)],
+                outputs=[(1, 10), (5, 10)],
+                buffers=[
+                    *_snapshot(3, {1000: 100}),
+                    *_snapshot(4, {9000: 1}),
+                    *_snapshot(5, {1000: 100}),
+                    *_snapshot(6, {1000: 100}),
+                ],
+                traces=[(2, _trace("/m/model.py", 10))],
+            ),
+        )
+
+        result = failures.late_deallocations(registry, handle)
+
+        assert (result["hold_count"], result["held_tensor_count"]) == (2, 1)
+        assert result["ended"]["freed_otherwise"] == 1
 
     def test_a_multi_device_report_reads_each_address_at_its_largest(self, tmp_path):
         registry, handle = _report(

@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { DEALLOCATE_OP_NAME_LIST } from '../../definitions/Deallocate';
+import { isDeallocate } from '../../definitions/Deallocate';
 import {
     type LayoutInputEdge,
     estimateBlockNodeSize,
@@ -53,8 +53,6 @@ const BLOCK_KIND_CLASS: Readonly<Record<OpGraphBlockKind, string>> = {
     [OpGraphBlockKind.LAYER]: 'op-graph-block-layer',
     [OpGraphBlockKind.WEIGHTS]: 'op-graph-block-weights',
 };
-
-const isDeallocate = (name: string): boolean => DEALLOCATE_OP_NAME_LIST.includes(name.toLowerCase());
 
 export function collectCandidateEdges(operations: OpGraphSourceOperation[]): CandidateEdge[] {
     const candidates: CandidateEdge[] = [];
