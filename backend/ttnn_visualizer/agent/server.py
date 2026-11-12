@@ -440,7 +440,10 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "never pooled across devices. Takes one perf_id, or ranks the "
                 f"costliest ops by device time, capped at {MAX_DETAILED_LIMIT}. The "
                 "first call on a handle reads the whole device log; later calls "
-                "answer from that read."
+                "answer from that read. by_risc lists the first "
+                f"{tools.MAX_LISTED_RISCS} RISCs by name, counting the rest in "
+                "by_risc_unlisted_past_cap and those whose names are too long to show "
+                "in by_risc_unlisted_too_long."
             ),
             "schema": {
                 "type": "object",

@@ -234,13 +234,18 @@ def test_the_capture_field_bounds_the_page_states_are_the_enforced_ones():
     )
 
 
-def test_the_zone_tools_name_bounds_the_page_states_are_the_enforced_ones():
-    """The page states both bounds as numbers, so nothing else ties them to the code."""
+def test_the_zone_tools_name_bounds_and_risc_cap_the_page_states_are_enforced():
+    """The page states the bounds and the cap as numbers, so nothing else ties them to
+    the code."""
     page = " ".join(_read(_AGENT_DOCS).split())
 
     assert (
         f"a zone name longer than {tools.MAX_ZONE_NAME_LENGTH} bytes or a RISC "
         f"name longer than {tools.MAX_RISC_NAME_LENGTH} bytes"
+    ) in page
+    assert (
+        f"lists at most {tools.MAX_LISTED_RISCS} RISCs an operation in `by_risc`, the "
+        "first by name, counting the rest in `by_risc_unlisted_past_cap`"
     ) in page
 
 
