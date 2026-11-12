@@ -715,6 +715,13 @@ def _answerable_device_log_columns(instance: Instance) -> Optional[frozenset]:
     return columns if problem is None else None
 
 
+# The tools that cannot answer without the performance CSV, which `_inventory` lists
+# only for a CSV tt-perf-report can read; `operation_detail` answers without its rows.
+PERF_CSV_TOOLS = frozenset(
+    {"top_ops", "op_breakdown", "program_cache", "core_spread", "critical_path"}
+)
+
+
 def _inventory(instance: Instance, perf_csv: Optional[Path]) -> Dict[str, object]:
     """What this report can actually answer.
 
@@ -732,12 +739,17 @@ def _inventory(instance: Instance, perf_csv: Optional[Path]) -> Dict[str, object
     # These tools run tt-perf-report, which needs its key columns and a data row.
     perf_csv_problem = _perf_csv_problem(perf_csv)
     perf_ready = perf_csv is not None and perf_csv_problem is None
-    record("top_ops", perf_ready)
-    record("op_breakdown", perf_ready)
+
+    def record_perf(name: str, also: bool = True) -> None:
+        # `without_performance_csv` moves only these, so no CSV gate goes unnamed.
+        assert name in PERF_CSV_TOOLS, f"{name} is gated on the CSV but not named"
+        record(name, perf_ready and also)
+
+    record_perf("top_ops")
+    record_perf("op_breakdown")
     # Older captures carry neither column, and every count would then be zero.
-    record(
-        "program_cache",
-        perf_ready and {PROGRAM_HASH_COLUMN, PROGRAM_CACHE_HIT_COLUMN} <= perf_columns,
+    record_perf(
+        "program_cache", {PROGRAM_HASH_COLUMN, PROGRAM_CACHE_HIT_COLUMN} <= perf_columns
     )
 
     profiler_path = instance.profiler_path
@@ -751,7 +763,7 @@ def _inventory(instance: Instance, perf_csv: Optional[Path]) -> Dict[str, object
     )
     record("zone_intervals", zones_timed)
     # Joins a perf row to its zones, so it needs the performance CSV as well.
-    record("core_spread", perf_ready and zones_timed)
+    record_perf("core_spread", zones_timed)
 
     # Per tool, against the tables it reads. A partial capture can answer
     # `find_operations` and none of the rest, and saying so is the whole point
@@ -761,7 +773,7 @@ def _inventory(instance: Instance, perf_csv: Optional[Path]) -> Dict[str, object
         record(tool_name, required <= tables)
     # Weighs the graph by the linked rows' device time, so it needs the graph's
     # tables, the captured graphs the link aligns, and a CSV to align them with.
-    record("critical_path", perf_ready and _CRITICAL_PATH_TABLES <= tables)
+    record_perf("critical_path", _CRITICAL_PATH_TABLES <= tables)
 
     # Only its first bytes here; the first call reads it whole and refuses it then.
     record(
@@ -784,6 +796,23 @@ def _inventory(instance: Instance, perf_csv: Optional[Path]) -> Dict[str, object
         # stays unexposed is page-level (`buffer_pages`), which is millions of rows
         # on an ordinary capture and needs a different shape than a tool response.
         "data_present_without_tools": [],
+    }
+
+
+def without_performance_csv(
+    loaded: Dict[str, object], problem: str
+) -> Dict[str, object]:
+    """`load_report`'s answer for a CSV that passes `_inventory`'s line scan but does
+    not parse: why, and the tools that need it unanswerable. #2198"""
+    kept: List[str] = []
+    moved: List[str] = []
+    for name in cast(List[str], loaded["answerable"]):
+        (moved if name in PERF_CSV_TOOLS else kept).append(name)
+    return {
+        **loaded,
+        "answerable": kept,
+        "unanswerable": [*cast(List[str], loaded["unanswerable"]), *moved],
+        "performance_csv_problem": problem,
     }
 
 
@@ -817,6 +846,9 @@ def load_report(
     ``memory_report_path`` is the preferred name for the memory report directory;
     ``profiler_path`` is its former name, still accepted. Each new argument goes after
     the ones before it, so positional callers keep binding what they did.
+
+    The answerable list is final only after ``tools.with_signposts``, which moves
+    ``PERF_CSV_TOOLS`` to unanswerable for a CSV pandas cannot parse.
     """
     memory_label, memory_path = _memory_report_argument(
         memory_report_path, profiler_path
@@ -851,9 +883,11 @@ def load_report(
 
 __all__ = [
     "OpsPerformanceQueries",
+    "PERF_CSV_TOOLS",
     "ReportRegistry",
     "UnknownHandleError",
     "load_report",
     "perf_csv_columns",
     "read_once",
+    "without_performance_csv",
 ]

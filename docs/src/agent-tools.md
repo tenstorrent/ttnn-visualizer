@@ -140,11 +140,13 @@ loaded without a `performance_path` is refused and says so. `zone_timings` is li
 `zone name`, `run host ID`, `PCIe slot`, `RISC processor type`, `core_x`, `core_y` and
 `time[cycles since reset]`), and has at least one data row. `zone_intervals` is listed only
 when `zone_timings` is, the device log marks zone starts and ends in a `type` or
-`zone phase` column, and its first line names a positive `CHIP_FREQ[MHz]`. `core_spread`
-is listed only when `zone_intervals` is and the performance CSV can be reported on.
-`top_ops`, `op_breakdown` and `program_cache` are listed only when the performance CSV can
-be reported on, and when it cannot, `performance_csv_problem` says why (`empty`,
-`no data rows`, `missing columns: …`, or that it cannot be read or decoded).
+`zone phase` column, and its first line names a positive `CHIP_FREQ[MHz]`. The five tools
+that read the performance CSV's rows, `top_ops`, `op_breakdown`, `program_cache`,
+`core_spread` and `critical_path`, are listed only when it can be reported on, and when it
+cannot, `performance_csv_problem` says why (`empty`, `no data rows`, `missing columns: …`,
+that it cannot be read or decoded, or the parse error reading its signposts gave).
+`program_cache` also needs the `PROGRAM HASH` and `PROGRAM CACHE HIT` columns,
+`core_spread` needs `zone_intervals` as well, and `critical_path` the graph, as above.
 Each database tool is checked against the tables it actually reads, so a truncated
 capture that holds `operations` but not `buffers` is reported as answering
 `find_operations` and nothing else, rather than advertising every tool and failing most
@@ -163,9 +165,12 @@ first call, which refuses one that is not a readable tt-npe trace.
   many were. Bytes as an answer writes it means UTF-8 with JSON's escapes, so a four-byte
   character counts four and a control character or a lone surrogate six; every *name* bound
   on this page counts that way. A range naming a signpost the report lacks is refused with
-  the names this list holds. When the CSV can be reported on but its signposts cannot be
-  read, `signposts_problem` says why. Loading reads the signposts, so a handle answers from
-  the CSV it was loaded on: one rewritten or superseded after that is refused, and
+  the names this list holds. A CSV whose lines look sound but that pandas cannot tokenise
+  when it reads the signposts, such as one with a quote left open, has its parse error in
+  `performance_csv_problem`, with those five tools listed as unanswerable; when it parses
+  but its signposts cannot be read, `signposts_problem` says why. Loading reads the
+  signposts, so a handle answers from the CSV it was loaded on: one rewritten or superseded
+  after that is refused, and
   `load_report` again gives a fresh handle.
 - `arch` and `device_count` are keyed by the file each was read from, since a handle's two
   reports can come from different runs. `arch.device_log` is the `ARCH` field of the device

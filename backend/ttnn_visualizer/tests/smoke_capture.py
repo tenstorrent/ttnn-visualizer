@@ -71,3 +71,10 @@ def write_ops_perf(directory: Path, rows: List[Dict[str, str]]) -> Path:
         writer.writeheader()
         writer.writerows(rows)
     return destination
+
+
+def append_unparsable_row(directory: Path) -> None:
+    """Append a row with a quote left open to the directory's `ops_perf_results.csv`:
+    its lines pass a line scan, and pandas cannot tokenise it."""
+    with (directory / "ops_perf_results.csv").open("a") as out:
+        out.write('"unclosed,row\n')

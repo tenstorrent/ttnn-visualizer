@@ -52,6 +52,7 @@ from ttnn_visualizer.agent.handles import (
     UnsharedSnapshot,
     perf_csv_columns,
     read_once,
+    without_performance_csv,
 )
 from ttnn_visualizer.csv_queries import (
     L1_ZONE_MARKER_CAPACITY,
@@ -476,7 +477,8 @@ def _listable_signposts(
 def with_signposts(
     registry: ReportRegistry, loaded: Dict[str, object]
 ) -> Dict[str, object]:
-    """`load_report`'s answer with the signposts a range can name.
+    """`load_report`'s answer with the signposts a range can name, or, for a CSV the
+    read cannot parse, with the tools that need it moved to unanswerable.
 
     Read once per capture, through the cache a range is later checked against, and
     only for a CSV `top_ops` can read. Listed as a refusal lists them, in the order
@@ -487,7 +489,11 @@ def with_signposts(
         return loaded
     try:
         resolved = _signposts(registry, str(loaded["handle"]))
-    except (DataFormatError, OSError, TypeError, ValueError) as error:
+    except DataFormatError as error:
+        # It passes the inventory's line scan but does not parse, so no tool needing it
+        # can answer.
+        return without_performance_csv(loaded, str(error))
+    except (OSError, TypeError, ValueError) as error:
         return {**loaded, "signposts_problem": str(error)}
     # A longer name cannot be passed back as a bound, and is the capture's text, not ours.
     named, usable, too_long = _listable_signposts(resolved)
