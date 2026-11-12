@@ -286,7 +286,7 @@ class TestCliPreload:
 
         instance_id = _create_preloaded_instance(args)
 
-        # The whole served shape, as `makeCliPreloadInstance` in
+        # The whole served shape, as `makeOpenedByPathInstance` in
         # tests/bootRestoredReportLoad.spec.tsx restores it: every location is null.
         assert _instance(client, instance_id)["active_report"] == {
             "profiler_name": "bge_m3",
