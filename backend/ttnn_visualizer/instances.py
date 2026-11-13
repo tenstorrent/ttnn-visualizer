@@ -3,6 +3,7 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import json
+import os
 import random
 import string
 from logging import getLogger
@@ -566,12 +567,11 @@ def create_instance_from_local_paths(profiler_path, performance_path):
     _profiler_path = Path(profiler_path) if profiler_path else None
     _performance_path = Path(performance_path) if performance_path else None
 
-    if _profiler_path and (not _profiler_path.exists() or not _profiler_path.is_dir()):
+    # os.path.isdir is False for a path it can't stat; Path.is_dir() raises before 3.14.
+    if _profiler_path and not os.path.isdir(_profiler_path):
         raise InvalidReportPath()
 
-    if _performance_path and (
-        not _performance_path.exists() or not _performance_path.is_dir()
-    ):
+    if _performance_path and not os.path.isdir(_performance_path):
         raise InvalidProfilerPath()
 
     profiler_name = _report_name(_profiler_path)
