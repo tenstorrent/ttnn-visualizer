@@ -224,18 +224,42 @@ def unreadable_dir(tmp_path):
         locked.chmod(0o755)
 
 
+@pytest.fixture(params=["missing", "a_file", "unreadable"])
+def bad_path(request, tmp_path):
+    """A path the check refuses: absent, a regular file, or unreadable."""
+    if request.param == "missing":
+        return tmp_path / "missing"
+    if request.param == "a_file":
+        path = tmp_path / "a_file"
+        path.touch()
+        return path
+    return request.getfixturevalue("unreadable_dir")
+
+
 @pytest.mark.parametrize(
     ("key", "error"),
     [("profiler_path", InvalidReportPath), ("performance_path", InvalidProfilerPath)],
 )
-def test_a_path_it_cannot_read_is_refused_rather_than_raised(
-    app, unreadable_dir, key, error
-):
-    """`main()` exits cleanly on these; a `PermissionError` was a traceback."""
-    paths = {"profiler_path": None, "performance_path": None, key: str(unreadable_dir)}
+def test_a_path_that_is_not_a_readable_folder_is_refused(app, bad_path, key, error):
+    """`main()` exits cleanly on these; an unreadable one used to be a traceback."""
+    paths = {"profiler_path": None, "performance_path": None, key: str(bad_path)}
 
     with app.app_context():
         with pytest.raises(error):
             create_instance_from_local_paths(**paths)
+
+        assert InstanceTable.query.count() == 0
+
+
+def test_a_good_memory_report_beside_a_bad_performance_path_makes_no_instance(
+    app, tmp_path, bad_path
+):
+    """Both paths are checked before the row is written."""
+    memory_report = tmp_path / "memory_report"
+    memory_report.mkdir()
+
+    with app.app_context():
+        with pytest.raises(InvalidProfilerPath):
+            create_instance_from_local_paths(str(memory_report), str(bad_path))
 
         assert InstanceTable.query.count() == 0

@@ -2783,7 +2783,9 @@ def open_local_report_paths():
             resolved["profiler_path"], resolved["performance_path"]
         )
     except (InvalidReportPath, InvalidProfilerPath):
-        return response_bad_request("A report directory went away while opening it.")
+        return response_bad_request(
+            "A report directory went away or became unreadable while opening it."
+        )
 
     return jsonify({"instance_id": instance.instance_id})
 
