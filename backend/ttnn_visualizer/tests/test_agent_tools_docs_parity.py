@@ -17,8 +17,9 @@ from pathlib import Path
 from typing import Dict, Set
 
 import pytest
-from ttnn_visualizer.agent import report_diff, server, tools
+from ttnn_visualizer.agent import op_configurations, report_diff, server, tools
 from ttnn_visualizer.agent.bounds import (
+    CUT_DIGEST_CHARS,
     MAX_DETAILED_LIMIT,
     MAX_LIMIT,
     MAX_OP_CODE_CHARS,
@@ -212,6 +213,26 @@ def test_the_detailed_row_cap_the_page_states_is_the_enforced_one():
     assert f"capped at {MAX_DETAILED_LIMIT} rather than {MAX_LIMIT}" in page
     # `subgraph_between`'s tensor list, which the docs quote as a number.
     assert f"or {MAX_DETAILED_LIMIT}, whichever is smaller" in page
+
+
+def test_the_op_configurations_caps_the_page_states_are_the_enforced_ones():
+    page = " ".join(_read(_AGENT_DOCS).split())
+
+    assert (
+        f"A listing shows up to {op_configurations.MAX_LISTED_CONFIGURATIONS} "
+        f"configurations (`limit`), each with its first "
+        f"{op_configurations.MAX_LISTED_ARGUMENTS} arguments, positional ones first, "
+        f"cut at {op_configurations.LISTED_VALUE_CHARS} characters"
+    ) in page
+    assert (
+        f"its first {op_configurations.MAX_LISTED_OPERATION_IDS} operation ids" in page
+    )
+    assert (
+        f"every argument up to {op_configurations.MAX_DETAIL_ARGUMENTS}, each cut at "
+        f"{op_configurations.DETAIL_VALUE_CHARS:,} characters, and up to {MAX_LIMIT} of "
+        "its operation ids"
+    ) in page
+    assert f"first {CUT_DIGEST_CHARS} hex digits of the SHA-256" in page
 
 
 def test_the_signpost_name_limit_the_page_states_is_the_enforced_one():
