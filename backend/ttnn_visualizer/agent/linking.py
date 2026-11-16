@@ -128,6 +128,8 @@ class OperationLink:
     matched_on: Optional[MatchedOn] = None
     operation_by_perf_id: Dict[str, int] = field(default_factory=dict)
     perf_rows_by_operation: Dict[int, List[Dict]] = field(default_factory=dict)
+    # Each linked operation's `operation_device_time`, for tools weighing every one.
+    device_time_by_operation: Dict[int, float] = field(default_factory=dict)
     # What every device-time share in `operation_detail` divides by.
     report_device_time_total: float = 0.0
     # Said beside every share, since a share assumes the ops ran one after another.
@@ -545,6 +547,11 @@ def _build_link(
         matched_on=match.matched_on,
         operation_by_perf_id=operation_by_perf_id,
         perf_rows_by_operation=perf_rows_by_operation,
+        device_time_by_operation={
+            operation_id: device_time
+            for operation_id, rows in perf_rows_by_operation.items()
+            if (device_time := operation_device_time(rows)) is not None
+        },
         unlinked=unlinked_rows(all_rows, operation_by_perf_id),
         # Every pairable row, paired or not. Operation Details (#2111) sums the same
         # rows: it fetches with host ops hidden, and a signpost's device time is blank.
@@ -659,8 +666,9 @@ def _timed_rows(rows: Sequence[Dict]) -> List[Tuple[Dict, float]]:
 def operation_device_time(rows: Sequence[Dict]) -> Optional[float]:
     """An operation's device time over every row it launched, or None if none is timed.
 
-    Summed, since an operation's device operations run one after another; both
-    `operation_detail` and `critical_path` read it here, so the two cannot disagree.
+    Summed, since an operation's device operations run one after another.
+    `operation_detail` sums the same rows, and `critical_path` and `op_configurations`
+    read it through the link's `device_time_by_operation`, so none of them disagree.
     The graph view takes the slowest row instead (`aggregatePerfByOp`), so on an
     operation launching several the agent and the view differ.
     """
@@ -709,14 +717,7 @@ def operation_detail(
             circular_buffer_limit=tools.row_limit(MAX_LIMIT, groups),
         ),
     )
-    link = operation_link(registry, handle)
-    if link.status is LinkStatus.LINKED and result.get("rank") != link.rank:
-        result["operation_link"] = OperationLink(
-            LinkStatus.UNAVAILABLE,
-            rank=link.rank,
-            reason=_rank_mismatch_reason(link.rank, result.get("rank")),
-        ).as_response()
-        return result
+    link = _link_at_rank(operation_link(registry, handle), result.get("rank"))
     if link.status is LinkStatus.LINKED:
         rows = link.perf_rows_by_operation.get(int(operation_id), [])
         empty = tools.empty_detail_fields(registry, handle, groups)
@@ -772,6 +773,19 @@ def _rank_mismatch_reason(
     )
 
 
+def _link_at_rank(
+    link: OperationLink, rank: object, subject: str = "this operation"
+) -> OperationLink:
+    """`link`, or why it is unavailable to an answer read at a rank its rows are not."""
+    if link.status is LinkStatus.LINKED and rank != link.rank:
+        return OperationLink(
+            LinkStatus.UNAVAILABLE,
+            rank=link.rank,
+            reason=_rank_mismatch_reason(link.rank, rank, subject),
+        )
+    return link
+
+
 def critical_path(
     registry: ReportRegistry,
     handle: str,
@@ -794,25 +808,18 @@ def critical_path(
         graph = operations.read_scoped_graph(registry, handle, queries, scope)
 
     kept = op_graph.kept_operation_ids(graph)
-    device_time_by_operation_id: Dict[int, float] = {}
-    for operation_id in kept:
-        device_time = operation_device_time(
-            link.perf_rows_by_operation.get(operation_id, [])
-        )
-        if device_time is not None:
-            device_time_by_operation_id[operation_id] = device_time
     # `find_critical_path` drops an edge to an operation not kept, as the app's does.
     # An operation that reads a tensor it also writes is not a cycle, since that edge
     # is not drawn.
     path = op_graph.find_critical_path(
-        sorted(kept), graph.drawn_edges, device_time_by_operation_id
+        sorted(kept), graph.drawn_edges, link.device_time_by_operation
     )
 
     cap = bounded(limit, MAX_LIMIT)
     uncosted = [
         operation_id
         for operation_id in path.operation_ids
-        if operation_id not in device_time_by_operation_id
+        if operation_id not in link.device_time_by_operation
     ]
     caveats = []
     if not kept:
@@ -851,8 +858,8 @@ def critical_path(
                 "operation_id": operation_id,
                 "name": graph.names.get(operation_id),
                 "device_time": (
-                    round(device_time_by_operation_id[operation_id], 3)
-                    if operation_id in device_time_by_operation_id
+                    round(link.device_time_by_operation[operation_id], 3)
+                    if operation_id in link.device_time_by_operation
                     else None
                 ),
             }
@@ -892,21 +899,11 @@ def op_configurations(
             scope,
             configurations.read_configurations,
         )
-    link = operation_link(registry, handle)
+    link = _link_at_rank(operation_link(registry, handle), scope.rank, "the grouping")
     device_time = None
-    if link.status is LinkStatus.LINKED and scope.rank != link.rank:
-        link = OperationLink(
-            LinkStatus.UNAVAILABLE,
-            rank=link.rank,
-            reason=_rank_mismatch_reason(link.rank, scope.rank, "the grouping"),
-        )
-    elif link.status is LinkStatus.LINKED:
+    if link.status is LinkStatus.LINKED:
         device_time = configurations.DeviceTime(
-            by_operation_id={
-                operation_id: timed
-                for operation_id, rows in link.perf_rows_by_operation.items()
-                if (timed := operation_device_time(rows)) is not None
-            },
+            by_operation_id=link.device_time_by_operation,
             report_total=link.report_device_time_total,
             unit=DEVICE_TIME_UNIT,
             projection=tools.projection(None),

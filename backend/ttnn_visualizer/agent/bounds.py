@@ -18,7 +18,7 @@ non-ASCII as escapes, so a name can take up to three times as many on the wire.
 import hashlib
 import json
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any, Dict, Iterable, Optional
+from typing import TYPE_CHECKING, Any, Dict, Iterable, Optional, Union
 
 if TYPE_CHECKING:
     from ttnn_visualizer.queries import DatabaseQueries
@@ -35,6 +35,10 @@ MAX_OP_CODE_CHARS = 256
 # 64 bits: a chance match between two texts cut alike is vanishingly unlikely, and a crafted
 # one fools only the display, since groups are kept by the whole text.
 CUT_DIGEST_CHARS = 16
+# An operation's name is cut here wherever a tool shows one.
+MAX_OPERATION_NAME_CHARS = 100
+# Enough for any number or handle list an agent means to pass.
+MAX_ECHOED_CHARS = 64
 
 
 # The captured graph a tool will read in one go. The largest real total across 85 local
@@ -92,13 +96,15 @@ def cut_text(
         f"{field}_full_length": len(text),
     }
     if digest:
-        # A lone surrogate is hashed as written rather than failing the answer.
-        encoded = (
-            text.encode("utf-8", "surrogatepass") if isinstance(text, str) else text
-        )
-        whole = hashlib.sha256(encoded).hexdigest()
-        fields[f"{field}_digest"] = whole[:CUT_DIGEST_CHARS]
+        fields[f"{field}_digest"] = short_digest(text)
     return fields
+
+
+def short_digest(text: Union[str, bytes]) -> str:
+    """The first `CUT_DIGEST_CHARS` hex digits of `text`'s SHA-256; a BLOB's bytes."""
+    # A lone surrogate is hashed as written rather than failing the answer.
+    encoded = text.encode("utf-8", "surrogatepass") if isinstance(text, str) else text
+    return hashlib.sha256(encoded).hexdigest()[:CUT_DIGEST_CHARS]
 
 
 def cut_op_code(field: str, op_code: object) -> Dict[str, object]:
@@ -120,6 +126,11 @@ def shown_in_text(text: str, limit: int) -> str:
     if len(text) <= limit:
         return text
     return f"{text[:limit]}... ({len(text)} characters)"
+
+
+def echoed(value: object) -> str:
+    """`value` as a refusal names it, cut so an argument cannot fill the answer."""
+    return shown_in_text(repr(value), MAX_ECHOED_CHARS)
 
 
 def answer_size(name: str) -> int:
@@ -170,17 +181,21 @@ __all__ = [
     "GraphTooLargeError",
     "MAX_CAPTURED_GRAPH_CHARS",
     "MAX_DETAILED_LIMIT",
+    "MAX_ECHOED_CHARS",
     "MAX_LIMIT",
+    "MAX_OPERATION_NAME_CHARS",
     "MAX_OP_CODE_CHARS",
     "answer_size",
     "bounded",
     "cut_op_code",
     "cut_text",
+    "echoed",
     "ensure_graph_readable",
     "name_fits",
     "normalised_choice",
     "require_choice",
     "require_name_fits",
+    "short_digest",
     "shown_in_text",
     "shown_op_code",
 ]

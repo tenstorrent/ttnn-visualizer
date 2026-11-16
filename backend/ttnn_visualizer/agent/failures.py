@@ -33,6 +33,7 @@ from ttnn_visualizer.agent import late_deallocations as late
 from ttnn_visualizer.agent.bounds import (
     MAX_DETAILED_LIMIT,
     MAX_LIMIT,
+    MAX_OPERATION_NAME_CHARS,
     GraphTooLargeError,
     bounded,
     cut_text,
@@ -97,9 +98,8 @@ MAX_LISTED_HOLDS = 20
 MAX_LISTED_LAST_USES = 5
 # A held tensor's producers listed; real ones have one or two.
 MAX_LISTED_PRODUCERS = 5
-# With MAX_DETAILED_LIMIT call sites, these keep a worst-case answer inside the budget.
+# With MAX_DETAILED_LIMIT call sites, this and the name cut bound the answer.
 MAX_CALL_SITE_TEXT_CHARS = 300
-MAX_OPERATION_NAME_CHARS = 100
 _MAX_SOURCE_LINE = 1 << 31
 # Ids per `stack_traces` read, inside SQLite's oldest bound of 999 parameters.
 _STACK_TRACE_IDS_PER_READ = 500

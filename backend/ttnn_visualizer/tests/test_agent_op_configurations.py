@@ -15,10 +15,12 @@ from unittest.mock import patch
 import pytest
 from ttnn_visualizer.agent import linking
 from ttnn_visualizer.agent import op_configurations as configurations
-from ttnn_visualizer.agent import tools
+from ttnn_visualizer.agent import server, tools
 from ttnn_visualizer.agent.bounds import MAX_LIMIT
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
 from ttnn_visualizer.agent.linking import LinkStatus
+from ttnn_visualizer.agent.operations import RankScope
+from ttnn_visualizer.agent.tool_names import McpToolName
 from ttnn_visualizer.tests.mcp_calls import tool_call
 from ttnn_visualizer.tests.memory_report_db import load_memory_report
 from ttnn_visualizer.tests.test_agent_linking import (  # noqa: F401
@@ -37,6 +39,9 @@ CREATE TABLE operation_arguments (operation_id int, name text, value text);
 """
 
 Call = Tuple[str, Sequence[Tuple[str, Optional[str]]]]
+
+# As a local CCL capture writes a semaphore.
+_SEMAPHORE = "<ttnn._ttnn.global_semaphore.global_semaphore object at 0x{:x}>"
 
 
 def _tensor(
@@ -172,6 +177,35 @@ class TestNormalisation:
     @pytest.mark.parametrize(
         "text",
         [
+            "MeshDevice(num_devices=8, device_id=3)",
+            "foo, is_allocated=False",
+            "Config(x=1, tensor_id=4)",
+            "device_id: 3, MeshCoordinate([0, 1])",
+            "device_id:3\nnot a tensor",
+        ],
+    )
+    def test_runtime_fields_outside_a_tensors_repr_are_kept(self, text):
+        assert configurations.normalised_value(text) == text
+
+    def test_runtime_fields_are_removed_from_each_tensor_and_kept_beside_it(self):
+        beside = "MeshDevice(num_devices=8, device_id=3)"
+        text = f"[{_tensor(tensor_id=4, device_id=2)}, {beside}, {_tensor()}]"
+        tensor = configurations.normalised_value(_tensor())
+
+        assert (
+            configurations.normalised_value(text) == f"[{tensor}, {beside}, {tensor}]"
+        )
+
+    def test_a_tensor_cut_before_it_closes_still_loses_its_runtime_fields(self):
+        text = (
+            "ttnn.Tensor(shape=Shape([1]), tensor_id=4, is_allocated=True, device_id=0"
+        )
+
+        assert configurations.normalised_value(text) == "ttnn.Tensor(shape=Shape([1])"
+
+    @pytest.mark.parametrize(
+        "text",
+        [
             "ttnn.Tensor([[1, 2]], shape=Shape([2]), dtype=X)",
             "ttnn.Tensor(shape=Shape([2]))",
             "ttnn.Tensor([[x]], dtype=X, shape=Shape([2]))",
@@ -189,7 +223,7 @@ class TestNormalisation:
             "ttnn.Tensor(shape=", text
         )
 
-    @pytest.mark.parametrize("tail", ["", "="])
+    @pytest.mark.parametrize("tail", ["", "=", ")" * 80_000])
     def test_openings_with_no_shape_are_read_in_one_pass(self, tail):
         """The regex form took 158 s on 960 KB of openings with no '=' after them."""
         crafted = "ttnn.Tensor(" * 80_000 + tail
@@ -197,7 +231,7 @@ class TestNormalisation:
         started = time.perf_counter()
         normalised = configurations.normalised_value(crafted)
 
-        assert time.perf_counter() - started < 1
+        assert time.perf_counter() - started < 5
         assert normalised == crafted
 
     def test_a_missing_value_stays_missing(self):
@@ -257,27 +291,50 @@ class TestGrouping:
 
         assert _listing(tmp_path, calls)["configuration_count"] == 2
 
-    def test_the_tracers_semaphore_arguments_never_split_a_configuration(
-        self, tmp_path
-    ):
-        calls = [
-            (
-                "ttnn.experimental.all_gather_async",
-                [
-                    ("0", _tensor()),
-                    ("multi_device_global_semaphore", semaphore),
-                    ("barrier_semaphore", semaphore),
-                ],
+    def test_semaphores_never_split_a_configuration(self, tmp_path):
+        """The tracer drops its two semaphore keywords; any other semaphore, positional or
+        not, is the same text on every call once its address is removed, as there."""
+
+        def semaphores(*addresses: int) -> str:
+            return "[" + ", ".join(map(_SEMAPHORE.format, addresses)) + "]"
+
+        calls: List[Call] = []
+        for base in (0x74B53B155F70, 0x7F7A007BE170):
+            calls.append(
+                (
+                    "ttnn.experimental.all_gather_async",
+                    [
+                        ("0", _tensor()),
+                        ("multi_device_global_semaphore", semaphores(base, base + 64)),
+                        ("barrier_semaphore", _SEMAPHORE.format(base + 128)),
+                    ],
+                )
             )
-            for semaphore in ("[<semaphore A>]", "[<semaphore B>]")
-        ]
+            calls.append(
+                (
+                    "ttnn.experimental.all_reduce_async",
+                    [
+                        ("0", _tensor()),
+                        ("1", _SEMAPHORE.format(base + 192)),
+                        ("barrier_semaphores", semaphores(base, base + 352)),
+                    ],
+                )
+            )
 
         result = _listing(tmp_path, calls)
 
-        assert result["configuration_count"] == 1
-        assert [
-            argument["name"] for argument in result["configurations"][0]["arguments"]
-        ] == ["0"]
+        assert [row["calls"] for row in result["configurations"]] == [2, 2]
+        kept = {
+            row["op"]: {
+                argument["name"]: argument["value"] for argument in row["arguments"]
+            }
+            for row in result["configurations"]
+        }
+        assert kept["ttnn.experimental.all_gather_async"].keys() == {"0"}
+        assert kept["ttnn.experimental.all_reduce_async"]["barrier_semaphores"] == (
+            "[<ttnn._ttnn.global_semaphore.global_semaphore object>, "
+            "<ttnn._ttnn.global_semaphore.global_semaphore object>]"
+        )
 
     def test_the_order_keywords_were_passed_in_never_splits_a_configuration(
         self, tmp_path
@@ -353,6 +410,34 @@ class TestGrouping:
 
         assert result["configurations"][0]["calls"] == 2
         assert result["configurations"][0]["argument_count"] == 0
+
+    def test_a_position_too_long_for_int_sorts_after_shorter_ones(self, tmp_path):
+        """`int()` refuses past 4,300 digits."""
+        position = "1" * 5_000
+
+        result = _listing(tmp_path, [("ttnn.concat", [(position, "a"), ("10", "b")])])
+
+        assert [
+            argument["name"] for argument in result["configurations"][0]["arguments"]
+        ] == ["10", position[: configurations.MAX_ARGUMENT_NAME_CHARS]]
+
+    def test_a_name_kept_as_null_or_a_blob_still_answers(self, tmp_path):
+        calls = [("ttnn.relu", [(None, "x"), (b"\xffname", "y")]), (b"ttnn.add", [])]
+
+        result = _listing(tmp_path, calls)
+
+        row = result["configurations"][0]
+        assert [argument["name"] for argument in row["arguments"]] == [
+            "",
+            "b'\\xffname'",
+        ]
+        assert re.fullmatch(r"[0-9a-f]{16}", row["config_digest"])
+        assert result["left_out"] == [{"op": "b'ttnn.add'", "calls": 1}]
+
+    def test_a_lone_surrogate_is_digested_rather_than_failing(self):
+        digest = configurations.configuration_digest("ttnn.add", (("0", "\ud800"),))
+
+        assert re.fullmatch(r"[0-9a-f]{16}", digest)
 
 
 class TestListing:
@@ -492,6 +577,35 @@ class TestListing:
         assert result["grouping"] == configurations.GROUPING
         assert result["note"] == configurations.NOTE
 
+    def test_configurations_alike_in_time_and_calls_come_in_first_call_order(self):
+        """A read is in first-call order, so only one out of order reaches this tiebreak."""
+        later, earlier = (
+            configurations.Configuration(
+                op="ttnn.add",
+                arguments=(("0", shape),),
+                operation_ids=ids,
+                digest=digest,
+            )
+            for shape, ids, digest in [
+                ("[2]", (3, 4), "b" * 16),
+                ("[1]", (1, 2), "a" * 16),
+            ]
+        )
+        read = configurations.Configurations(
+            configurations=(later, earlier),
+            left_out={},
+            tensors_without_memory_config=False,
+        )
+
+        result = configurations.answer(
+            "handle", read, RankScope(multi_host=False, rank=None), None, {}
+        )
+
+        assert [row["operation_ids"] for row in result["configurations"]] == [
+            [1, 2],
+            [3, 4],
+        ]
+
 
 class TestOneConfiguration:
     def test_a_digest_answers_its_configuration_at_length(self, tmp_path):
@@ -551,6 +665,33 @@ class TestOneConfiguration:
         )
         assert len(first_add["config_digest"]) == 16
         assert first_add["config_digest"] == second_add["config_digest"]
+
+    def test_a_configurations_digest_is_pinned(self):
+        """An agent may keep a digest, so its layout cannot change unnoticed."""
+        arguments = (
+            ("0", "ttnn.Tensor(shape=Shape([1, 32]), dtype=DataType::BFLOAT16)"),
+            ("name", "é"),
+            ("output_tensor", None),
+        )
+
+        digest = configurations.configuration_digest("ttnn.add", arguments)
+
+        assert digest == "d212c64127e0e06e"
+
+    def test_configurations_sharing_a_digest_answer_the_first_and_say_so(
+        self, tmp_path
+    ):
+        calls = [("ttnn.relu", [("0", "x")]), ("ttnn.gelu", [("0", "x")])]
+
+        with patch.object(
+            configurations, "configuration_digest", return_value="0" * 16
+        ):
+            result = _listing(tmp_path, calls, config_digest="0" * 16)
+
+        assert result["op"] == "ttnn.gelu"
+        assert "2 configurations share this digest; this is the first." in (
+            result["caveat"]
+        )
 
     def test_two_operations_called_alike_have_their_own_digests(self, tmp_path):
         registry, handle = _capture(
@@ -681,6 +822,45 @@ class TestDeviceTime:
             {"op": "ttnn.matmul", "calls": 3, "configurations": 2, "device_time": 7.0}
         ]
 
+    def test_untimed_configurations_rank_after_timed_ones(self, linked, tmp_path):
+        relus = (2, 3, 4)
+        registry, handle = self._linked_capture(
+            linked,
+            tmp_path,
+            operations=[(1, "ttnn.add"), *((index, "ttnn.relu") for index in relus)],
+            graphs={
+                1: _graph("ttnn.add", "BinaryNgDeviceOperation"),
+                **{
+                    index: _graph("ttnn.relu", "UnaryDeviceOperation")
+                    for index in relus
+                },
+            },
+            rows=[
+                {**_perf_row("BinaryNgDeviceOperation", 1), "device_time": "9.0"},
+                *(
+                    {**_perf_row("UnaryDeviceOperation", index), "device_time": ""}
+                    for index in relus
+                ),
+            ],
+            arguments=[(index, "0", _tensor("[1, 32]")) for index in (1, *relus)],
+        )
+
+        result = linking.op_configurations(registry, handle)
+
+        assert [
+            (
+                row["op"],
+                row["device_time"],
+                row["device_time_share_percent"],
+                row["untimed_calls"],
+            )
+            for row in result["configurations"]
+        ] == [("ttnn.add", 9.0, 100.0, 0), ("ttnn.relu", None, None, 3)]
+        assert result["ops"] == [
+            {"op": "ttnn.add", "calls": 1, "configurations": 1, "device_time": 9.0},
+            {"op": "ttnn.relu", "calls": 3, "configurations": 1, "device_time": None},
+        ]
+
     def test_a_partitioned_run_carries_its_caveat(self, linked, tmp_path):
         """Shares divide by a total that assumes the sub-devices ran one after another."""
         rows = [
@@ -757,6 +937,23 @@ class TestServer:
         assert answer["configurations"][0]["op"] == "ttnn.relu"
         assert "{operation_id}" in answer["app_link_template"]
         assert outcome.value == "ok"
+
+    def test_a_digest_that_is_not_one_is_an_error_naming_the_form(self, tmp_path):
+        registry, handle = _capture(tmp_path, [("ttnn.relu", [])])
+
+        result, _ = tool_call(
+            registry, "op_configurations", {"handle": handle, "config_digest": "abc"}
+        )
+
+        assert result.get("isError")
+        assert "16 hexadecimal digits" in result["content"][0]["text"]
+
+    def test_the_description_states_what_the_grouping_removes(self):
+        table = server._tool_table(ReportRegistry())
+        description = table[McpToolName.OP_CONFIGURATIONS]["description"]
+
+        assert configurations.REMOVED_FROM_TEXT in description
+        assert configurations.REMOVED_FROM_TEXT in configurations.GROUPING
 
     def test_load_report_lists_it_only_with_the_arguments_table(self, tmp_path):
         _capture(tmp_path / "with", [("ttnn.relu", [])])

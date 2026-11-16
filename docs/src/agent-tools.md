@@ -837,16 +837,19 @@ data movement and memory management such as `ttnn.to_device`, `ttnn.from_torch` 
 `ttnn.deallocate`, and any name outside `ttnn`. The tracer also records only the
 operations its sweep list (`tests/sweep_framework/Allops.txt`) names. That list moves with
 tt-metal's ops, so it is not applied here, and a listed operation may have no sweep at all:
-8% of the calls in the local captures are of such operations, `ttnn.Tensor.__getitem__`
-and `ttnn.avg_pool2d` among them. Its two semaphore
-arguments, `multi_device_global_semaphore` and `barrier_semaphore`, are dropped, and an
-object's address (` at 0x…`) and a program config's unset `allowed_worker_cores` are
-removed. The text also holds what the tracer's JSON never does, so a tensor's `tensor_id`,
+at tt-metal `4bf156f6ea` the list names neither `ttnn.Tensor.__getitem__` nor
+`ttnn.avg_pool2d`. The tracer's two semaphore keyword arguments,
+`multi_device_global_semaphore` and `barrier_semaphore`, are dropped, and an object's address (` at 0x…`) and a program
+config's unset `allowed_worker_cores` are removed. Any other semaphore, such as
+`all_reduce_async`'s `barrier_semaphores`, is kept, as the tracer keeps it: a semaphore
+prints as an object at an address, so with the address removed it reads the same on every
+call. The text also holds what the tracer's JSON never does, so a tensor's `tensor_id`,
 `device_id` and `is_allocated`, the `device_id: N, ` that leads each device's copy of a
 tensor (`device_id:N` on a line of its own in older captures), and the preview of its data
-that older captures print ahead of its shape are removed too. Arguments are then compared whole, by name: calls whose arguments differ in
-any text are different configurations. The tracer's memory-config hash has no counterpart
-in the text.
+that older captures print ahead of its shape are removed too, from the tensor's own text
+only: a `device_id=` anywhere else is kept. Arguments are then compared whole, by name:
+calls whose arguments differ in any text are different configurations. The tracer's
+memory-config hash has no counterpart in the text.
 
 Configurations rank by device time when the performance report links, summed over the rows
 each call launched as `operation_detail` sums them, with `untimed_calls` counting the calls
