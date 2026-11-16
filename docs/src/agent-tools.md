@@ -150,6 +150,7 @@ of them. `noc_congestion` is listed when the handle's `npe_path` starts as a tra
 zstd frame for `.zst` and a JSON object otherwise. The trace is only read whole on its
 first call, which refuses one that is not a readable tt-npe trace.
 
+(agent-load-report-capture)=
 `load_report` also says what the capture is:
 
 - `signposts` lists the names a signpost range can take, in the order tt-perf-report
@@ -877,8 +878,8 @@ kept, so the next call tries again. A handle keeps answering from the capture it
 read, so it never mixes two. A read that needs the CSV again after it was rewritten, or
 after a newer `ops_perf_results` file appeared — a range not asked before, or one dropped
 from the cache — is refused rather than lined up against operations linked from the old
-capture; call `load_report` again for a fresh handle. A handle loaded before its CSV was
-written stays with the first CSV a read of it finds.
+capture; call `load_report` again for a fresh handle. For a handle loaded before its CSV
+was written, see {ref}`load_report <agent-load-report-capture>`.
 
 **`critical_path` and `subgraph_between` read the graph's edges as the graph view does.**
 An edge runs from the operation that produced a tensor to each operation that consumed it,

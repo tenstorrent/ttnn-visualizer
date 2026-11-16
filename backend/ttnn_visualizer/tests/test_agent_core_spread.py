@@ -289,7 +289,7 @@ class TestRefusals:
             tools.core_spread(registry, handle, limit=1)
 
         write_ops_perf(tmp_path, smoke_rows())
-        tools.core_spread(registry, handle, limit=1)
+        assert tools.core_spread(registry, handle, limit=1)["ops"]
         write_ops_perf(tmp_path, smoke_rows()[:-1])
 
         with pytest.raises(ValueError, match="has changed since it was first read"):

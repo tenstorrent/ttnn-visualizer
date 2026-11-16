@@ -179,7 +179,8 @@ def _rewrite_capture(directory):
 
 
 def _supersede_capture(directory):
-    """Add a newer ops_perf CSV beside the first, leaving the first untouched."""
+    """A newer ops_perf CSV beside the first, which stays untouched: touching it would
+    change the source `_require_same_source` compares, refusing for the wrong reason."""
     original = directory / "ops_perf_results.csv"
     newer = directory / "ops_perf_results_newer.csv"
     newer.write_text(original.read_text())
@@ -1773,7 +1774,7 @@ class TestSignpostRangeEndToEnd:
         handle = self._handle(registry, tmp_path)
         whole = tools.top_ops(registry, handle)
 
-        write_ops_perf(tmp_path / "signposted", signposted_rows()[:-1])
+        _rewrite_capture(tmp_path / "signposted")
 
         with pytest.raises(ValueError, match="has changed since it was first read"):
             self._ranged(registry, handle)
@@ -1791,10 +1792,12 @@ class TestSignpostRangeEndToEnd:
         directory = tmp_path / "signposted"
         directory.mkdir()
         handle = load_report(registry, performance_path=str(directory))["handle"]
-        # A miss keeps nothing, so a second one finds no error or empty pin held.
+        # Repeated whole and ranged misses must leave it free to pin the next CSV.
         for _ in range(2):
             with pytest.raises(FileNotFoundError):
                 tools.top_ops(registry, handle)
+            with pytest.raises(FileNotFoundError):
+                self._ranged(registry, handle)
 
         write_ops_perf(directory, signposted_rows())
         whole = tools.top_ops(registry, handle)
@@ -1809,13 +1812,7 @@ class TestSignpostRangeEndToEnd:
         handle = self._handle(registry, tmp_path)
         self._ranged(registry, handle)
 
-        original = tmp_path / "signposted" / "ops_perf_results.csv"
-        newer = tmp_path / "signposted" / "ops_perf_results_newer.csv"
-        newer.write_text(original.read_text())
-        # Touching the original would change the source `_require_same_source`
-        # compares and refuse for the wrong reason, so only `newer` moves.
-        _touch_after(original, newer, (time.time() + 1, time.time() + 1))
-        assert newest_ops_perf_file(original.parent) == newer
+        _supersede_capture(tmp_path / "signposted")
 
         with pytest.raises(ValueError, match="has changed since it was first read"):
             tools.top_ops(registry, handle)
@@ -1827,6 +1824,31 @@ class TestSignpostRangeEndToEnd:
         second = load_report(registry, performance_path=str(tmp_path / "signposted"))[
             "handle"
         ]
+        ranged = tools.SignpostRange("PERF_START", "PERF_END")
+
+        with patch.object(
+            tools,
+            "_generate_canonical_report",
+            wraps=tools._generate_canonical_report,
+        ) as generate:
+            whole = tools.canonical_report(registry, first)
+            window = tools.canonical_report(registry, first, ranged)
+
+            assert tools.canonical_report(registry, second) is whole
+            assert tools.canonical_report(registry, second, ranged) is window
+        assert generate.call_count == 2
+
+    def test_a_handle_pinned_late_shares_its_snapshots_with_a_reload(self, tmp_path):
+        """`test_reloading_an_unchanged_capture_shares_its_snapshots`, with the first
+        handle loaded before its CSV was written. #2227"""
+        registry = ReportRegistry()
+        directory = tmp_path / "signposted"
+        directory.mkdir()
+        first = load_report(registry, performance_path=str(directory))["handle"]
+        with pytest.raises(FileNotFoundError):
+            tools.top_ops(registry, first)
+        write_ops_perf(directory, signposted_rows())
+        second = load_report(registry, performance_path=str(directory))["handle"]
         ranged = tools.SignpostRange("PERF_START", "PERF_END")
 
         with patch.object(
