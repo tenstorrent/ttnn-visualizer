@@ -28,6 +28,7 @@ from ttnn_visualizer.agent import (
     failures,
     linking,
     noc_congestion,
+    op_configurations,
     operations,
     perf_detail,
     report_diff,
@@ -746,6 +747,65 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
             "handler": lambda arguments: app_links.with_operation_link(
                 registry,
                 operations.operation_provenance(registry, **arguments),
+            ),
+        },
+        McpToolName.OP_CONFIGURATIONS: {
+            "title": "Operation configurations",
+            # Restates the id space, which INSTRUCTIONS has no room to list (#2345).
+            "description": (
+                "Each operation's distinct argument combinations: how many calls used "
+                "each and, when the performance report links, their summed device "
+                "time. For checking which configurations a sweep must cover, or "
+                "pulling one to reproduce. Calls are grouped as tt-metal's model "
+                "tracer groups them: op names with :: read as ., the operations it "
+                "excludes (data movement, deallocate, from_torch and the like) and names "
+                "outside ttnn left out and counted, its semaphore arguments dropped, and "
+                "object addresses, "
+                "tensor ids, device ids and tensor data previews removed from the "
+                "argument text. Ranked by device time, else by calls. A listing shows "
+                "each configuration's first "
+                f"{op_configurations.MAX_LISTED_ARGUMENTS} arguments, cut short; pass "
+                "its config_digest for every argument at length and up to "
+                f"{MAX_LIMIT} of its operation ids, which are the memory report "
+                "database's operation_id. A config_digest is not the tracer's "
+                "config_hash. A capture that writes tensors without their "
+                "memory config merges calls differing only in it, and its caveat says "
+                "so. The tracer's sweep list is not applied, so a listed op may have no "
+                "sweep."
+            ),
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "handle": {"type": "string"},
+                    "name_contains": {
+                        "type": "string",
+                        "description": (
+                            "Only operations whose name contains this, ignoring "
+                            "case, such as ttnn.matmul."
+                        ),
+                    },
+                    "config_digest": {
+                        "type": "string",
+                        "description": (
+                            "One configuration's config_digest, as a listing gives "
+                            "it: answers that configuration alone, with every "
+                            "argument at length."
+                        ),
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": (
+                            "Configurations to list, capped at "
+                            f"{op_configurations.MAX_LISTED_CONFIGURATIONS}."
+                        ),
+                    },
+                    "rank": _RANK_SCHEMA,
+                },
+                "required": ["handle"],
+            },
+            "handler": lambda arguments: app_links.with_operation_link_template(
+                registry,
+                linking.op_configurations(registry, **arguments),
             ),
         },
         McpToolName.TENSOR_FLOW: {

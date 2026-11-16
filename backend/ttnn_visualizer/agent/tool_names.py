@@ -27,6 +27,7 @@ class McpToolName(str, Enum):
     MEMORY_PROFILE = "memory_profile"
     TENSOR_FLOW = "tensor_flow"
     OPERATION_PROVENANCE = "operation_provenance"
+    OP_CONFIGURATIONS = "op_configurations"
     ERRORS = "errors"
     DRAM_FALLBACKS = "dram_fallbacks"
     L1_PEAK = "l1_peak"

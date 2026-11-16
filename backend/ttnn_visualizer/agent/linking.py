@@ -36,6 +36,9 @@ from typing import Dict, List, NamedTuple, Optional, Sequence, Set, Tuple
 from tt_perf_report.perf_report import HOST_OP_MARKER
 from ttnn_visualizer.agent import (
     failures,
+)
+from ttnn_visualizer.agent import op_configurations as configurations
+from ttnn_visualizer.agent import (
     op_graph,
     operations,
     perf_detail,
@@ -868,6 +871,59 @@ def critical_path(
     return result
 
 
+def op_configurations(
+    registry: ReportRegistry,
+    handle: str,
+    name_contains: Optional[str] = None,
+    config_digest: Optional[str] = None,
+    limit: Optional[int] = None,
+    rank: Optional[int] = None,
+) -> Dict[str, object]:
+    """Each operation's distinct argument combinations, with device time when linked."""
+    instance = registry.get(handle)
+    with operations.profiler_db(instance) as queries:
+        scope = operations.rank_scope(queries, rank)
+        operations.refuse_unattributable(queries, scope, "operation_arguments")
+        read = operations.cached_per_rank(
+            registry,
+            handle,
+            CacheVariant.OP_CONFIGURATIONS,
+            queries,
+            scope,
+            configurations.read_configurations,
+        )
+    link = operation_link(registry, handle)
+    device_time = None
+    if link.status is LinkStatus.LINKED and scope.rank != link.rank:
+        link = OperationLink(
+            LinkStatus.UNAVAILABLE,
+            rank=link.rank,
+            reason=_rank_mismatch_reason(link.rank, scope.rank, "the grouping"),
+        )
+    elif link.status is LinkStatus.LINKED:
+        device_time = configurations.DeviceTime(
+            by_operation_id={
+                operation_id: timed
+                for operation_id, rows in link.perf_rows_by_operation.items()
+                if (timed := operation_device_time(rows)) is not None
+            },
+            report_total=link.report_device_time_total,
+            unit=DEVICE_TIME_UNIT,
+            projection=tools.projection(None),
+            caveat=link.partitioned_caveat,
+        )
+    return configurations.answer(
+        handle,
+        read,
+        scope,
+        device_time,
+        link.as_response(),
+        name_contains=name_contains,
+        config_digest=config_digest,
+        limit=limit,
+    )
+
+
 PROGRAM_CACHE_LINK_NOTE = (
     "first_repeat_miss_operation_id is the memory report database id of the operation that "
     "launched the op code's first repeat miss, to pass to operation_provenance for its "
@@ -912,6 +968,7 @@ __all__ = [
     "device_operation_orders",
     "is_host_op_row",
     "match_device_operations",
+    "op_configurations",
     "operation_detail",
     "operation_device_time",
     "operation_link",

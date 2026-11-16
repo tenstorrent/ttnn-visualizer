@@ -1081,6 +1081,7 @@ _PRIVACY_REVIEWED_ATTRIBUTES: dict[str, dict[str, frozenset[str] | str]] = {
                 "memory_profile",
                 "tensor_flow",
                 "operation_provenance",
+                "op_configurations",
                 "errors",
                 "dram_fallbacks",
                 "l1_peak",

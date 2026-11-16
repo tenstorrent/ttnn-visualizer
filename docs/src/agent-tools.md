@@ -60,8 +60,8 @@ Answers link to the same thing in the web application, for the reader to open:
 - `load_report` returns an `app_link` to the report.
 - `operation_detail` and `operation_provenance` return an `app_link` to the operation.
 - `find_operations`, `top_ops`, `program_cache`, `memory_profile`, `tensor_flow`,
-  `errors`, `dram_fallbacks`, `l1_peak`, `late_deallocations`, `critical_path` and
-  `subgraph_between` return one `app_link_template`, in which
+  `errors`, `dram_fallbacks`, `l1_peak`, `late_deallocations`, `critical_path`,
+  `subgraph_between` and `op_configurations` return one `app_link_template`, in which
   `{operation_id}` takes any operation id the answer lists.
 
 A link names the report by its directories, and the visualizer opens them when the link is
@@ -106,6 +106,7 @@ another rank's operation under the same id.
 | `memory_profile` | Memory footprint per operation, keyed by buffer type and ranked within each, with each type's largest footprint, the device's L1 geometry, and `l1_pressure` ranking operations by smallest `largest_free_block` on the most constrained device, with `operations_at_top` counting those that share the first row's `largest_free_block`. A floor rather than the peak — see below. |
 | `tensor_flow` | Which operation produced a tensor and which ones consumed it. |
 | `operation_provenance` | What one operation was called with, and where in the model code it came from. |
+| `op_configurations` | Each operation's distinct argument combinations, grouped as tt-metal's model tracer groups the calls behind its sweeps: how many calls used each and, with a linked performance report, their device time, and one configuration's every argument by its `config_digest` — for checking a sweep's coverage against a real run, or reproducing one configuration. |
 | `errors` | The errors the run recorded, including an operation that started and never completed: which operation, the device operations whose launch failed, and for an allocation failure its figures and why it did not fit. |
 | `dram_fallbacks` | Operations that likely fell back from L1 to DRAM, inferred from their memory config arguments and from retries after an L1 allocation failure. |
 | `l1_peak` | The run's L1 peak per bank, split into circular buffers, intra-operation tensors, persistent tensors and stale ones, with the operation holding it and the operations closest to it. |
@@ -116,9 +117,9 @@ another rank's operation under the same id.
 
 `top_ops`, `op_breakdown`, `program_cache`, `zone_timings`, `zone_intervals`, `core_spread`
 and `diff_reports` read the performance CSVs; the operation tools — `find_operations`,
-`operation_detail`, `memory_profile`, `tensor_flow`, `operation_provenance`, `errors`,
-`dram_fallbacks`, `l1_peak`, `late_deallocations` and `subgraph_between` — read the memory
-report's SQLite database; `critical_path` reads both, and is listed only when the
+`operation_detail`, `memory_profile`, `tensor_flow`, `operation_provenance`,
+`op_configurations`, `errors`, `dram_fallbacks`, `l1_peak`, `late_deallocations` and
+`subgraph_between` — read the memory report's SQLite database; `critical_path` reads both, and is listed only when the
 performance CSV can be reported on and the database holds the graph's tables and its
 captured graphs; `noc_congestion` reads a tt-npe trace. `load_report` takes any of the
 three, since its whole job is saying which of the others apply. A capture can carry any of
@@ -825,6 +826,43 @@ intervals still count in `by_device` and `timeline_count`. `core_spread` also li
 most 32 RISCs an operation in `by_risc`, the first by name, counting the rest in
 `by_risc_unlisted_past_cap`, since tt-metal has 32 RISC types; their kernels too still
 count in their cores' spans.
+
+**`op_configurations` groups calls as tt-metal's model tracer does, so a sweep's coverage can
+be checked against a real run.** The tracer (`model_tracer/generic_ops_tracer.py`) records
+each `ttnn` call's arguments for the sweeps built from it, and calls two calls one
+configuration when their cleaned arguments match. A memory report keeps each argument as
+the text of its repr, so the tracer's rules are applied to that text. An op name's `::`
+reads as `.`. The operations the tracer excludes are left out and counted in `left_out`:
+data movement and memory management such as `ttnn.to_device`, `ttnn.from_torch` and
+`ttnn.deallocate`, and any name outside `ttnn`. The tracer also records only the
+operations its sweep list (`tests/sweep_framework/Allops.txt`) names. That list moves with
+tt-metal's ops, so it is not applied here, and a listed operation may have no sweep at all:
+8% of the calls in the local captures are of such operations, `ttnn.Tensor.__getitem__`
+and `ttnn.avg_pool2d` among them. Its two semaphore
+arguments, `multi_device_global_semaphore` and `barrier_semaphore`, are dropped, and an
+object's address (` at 0x…`) and a program config's unset `allowed_worker_cores` are
+removed. The text also holds what the tracer's JSON never does, so a tensor's `tensor_id`,
+`device_id` and `is_allocated`, the `device_id: N, ` that leads each device's copy of a
+tensor (`device_id:N` on a line of its own in older captures), and the preview of its data
+that older captures print ahead of its shape are removed too. Arguments are then compared whole, by name: calls whose arguments differ in
+any text are different configurations. The tracer's memory-config hash has no counterpart
+in the text.
+
+Configurations rank by device time when the performance report links, summed over the rows
+each call launched as `operation_detail` sums them, with `untimed_calls` counting the calls
+that launched none; otherwise they rank by calls. `ops` gives each operation's calls and
+configuration count, the first look at what a sweep must cover. A listing shows up to 20
+configurations (`limit`), each with its first 8 arguments, positional ones first, cut at
+224 characters, which is far enough for a tensor's shape, dtype, layout, memory layout and
+buffer type, and its first 5 operation ids. A configuration's `config_digest` asks for it
+alone: every argument up to 32, each cut at 1,500 characters, and up to 100 of its
+operation ids, which `operation_provenance` turns into call sites. A `config_digest` is the
+first 16 hex digits of the SHA-256 of the configuration's grouped text, so the same
+configuration in another capture written by the same ttnn has the same digest. It is not the
+tracer's `config_hash`, which hashes the tracer's JSON, so a sweep is matched by the
+arguments themselves. Older captures write a tensor's shape, dtype and layout without its
+memory config, so calls that differ only in a tensor's memory config share a
+configuration there, and the caveat says so.
 
 **`noc_congestion` reads tt-npe's simulation of the NoC, not a measurement.** Its figures
 are percentages of a link's bandwidth per timestep of `cycles_per_timestep` device cycles.
