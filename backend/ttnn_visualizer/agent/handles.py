@@ -82,6 +82,11 @@ class CacheVariant(str, Enum):
     L1_PEAK = "l1_peak"
     # Every device op's per-core spread, from one read of the device log.
     CORE_SPREAD = "core_spread"
+    # The device log's per-zone totals, which `zone_timings` gives.
+    ZONE_TIMINGS = "zone_timings"
+    # Every zone's intervals from one read of the device log, which `zone_intervals`
+    # answers each zone from.
+    ZONE_INTERVALS = "zone_intervals"
     # Buffer Summary's late deallocations by rank and buffer type.
     LATE_DEALLOCATIONS = "late_deallocations"
     # A tt-npe trace's link demand, summed per link and burst from one read.

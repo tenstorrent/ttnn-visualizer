@@ -20,6 +20,7 @@ import getPlotLabel from '../../functions/getPlotLabel';
 import { getAxisUpperRange } from '../../functions/perfFunctions';
 import { getPrimaryDataColours, getSecondaryDataColours } from '../../definitions/PerformancePlotColours';
 import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
+import { getMaxValue } from '../../functions/numericExtent';
 
 interface PerfCoreCountUtilizationChartProps {
     datasets?: TypedPerfTableRow[][];
@@ -63,7 +64,7 @@ function PerfCoreCountUtilizationChart({ datasets = [], maxCores, chartId }: Per
             })) as Partial<PlotData>[],
         [datasets, perfReport, comparisonReportList, maxCores],
     );
-    const maxY2Value = Math.max(...chartDataUtilization.flatMap((data) => (data.y as number[]) ?? []));
+    const maxY2Value = getMaxValue(chartDataUtilization.flatMap((data) => (data.y as number[]) ?? []));
 
     const chartData = useMemo(
         () => [...chartDataDuration, ...chartDataUtilization],

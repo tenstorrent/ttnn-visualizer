@@ -10,7 +10,10 @@ way the reader must: at kernel starts and at changes of run host ID or trace rep
 #2155
 """
 
+import dataclasses
 import json
+import logging
+from contextlib import contextmanager
 from itertools import zip_longest
 from typing import List
 from unittest.mock import patch
@@ -18,8 +21,9 @@ from unittest.mock import patch
 import pytest
 from ttnn_visualizer import csv_queries
 from ttnn_visualizer.agent import server, tools
-from ttnn_visualizer.agent.handles import ReportRegistry, load_report
+from ttnn_visualizer.agent.handles import CacheVariant, ReportRegistry, load_report
 from ttnn_visualizer.event_logging import McpToolOutcome
+from ttnn_visualizer.models import Instance
 from ttnn_visualizer.tests.mcp_calls import tool_call
 from ttnn_visualizer.tests.smoke_capture import SMOKE_CAPTURE_DIR
 from ttnn_visualizer.tests.test_agent_tools import (
@@ -61,11 +65,38 @@ def _every(start: int, step: int, count: int) -> List[int]:
     return [start + step * index for index in range(count)]
 
 
-def _intervals(tmp_path, rows, zone=LOOP, header=MODERN_HEADER, **arguments):
+def _answer(directory, zone, **arguments):
+    """The tool's answer on a fresh handle, or its refusal, and whether one pass of
+    every zone gave it."""
     registry = ReportRegistry()
+    load_report(registry, performance_path=str(directory))
+    try:
+        answer = tools.zone_intervals(registry, "report-1", zone, **arguments)
+    except ValueError as refusal:
+        answer = refusal
+    kept = registry._reports.get(("report-1", CacheVariant.ZONE_INTERVALS))
+    passed = getattr(kept, "zones", None)
+    return answer, passed is not None and passed.intervals(zone) is not None
+
+
+def _intervals(tmp_path, rows, zone=LOOP, header=MODERN_HEADER, held=True, **arguments):
+    """The tool's answer, which must be the same read from one pass of every zone as
+    read for the zone alone; ``held`` says whether the pass gives it, a refusal too: one
+    of the arguments or of the log's shape reads no pass. #2248"""
     write_device_log(tmp_path, header, rows)
-    load_report(registry, performance_path=str(tmp_path))
-    return tools.zone_intervals(registry, "report-1", zone, **arguments)
+    answer, from_pass = _answer(tmp_path, zone, **arguments)
+    with patch.object(
+        csv_queries.DeviceLogProfilerQueries,
+        "query_every_zone_intervals",
+        return_value=None,
+    ):
+        alone, _ = _answer(tmp_path, zone, **arguments)
+    assert from_pass == held
+    if isinstance(answer, ValueError):
+        assert (type(alone), str(alone)) == (type(answer), str(answer))
+        raise answer
+    assert alone == answer
+    return answer
 
 
 class TestIntervals:
@@ -737,49 +768,57 @@ class TestGaps:
         )
 
     @pytest.mark.parametrize(
-        "bad",
+        "bad, held",
         [
             pytest.param(
                 modern_row(0, 1, 1, "BRISC", "x", LOOP, "ZONE_START"),
+                True,
                 id="not-a-number",
             ),
             pytest.param(
                 modern_row(0, 1, 1, "BRISC", "1e300", LOOP, "ZONE_START"),
+                False,
                 id="cycles-past-int64",
             ),
             pytest.param(
                 modern_row(0, 1, 1, "BRISC", str(2**63), LOOP, "ZONE_START"),
+                True,
                 id="cycles-at-2-63",
             ),
             pytest.param(
                 modern_row(0, 1, 1, "BRISC", -5, LOOP, "ZONE_START"),
+                True,
                 id="negative-cycles",
             ),
             pytest.param(
                 modern_row("1e30", 1, 1, "BRISC", 1500, LOOP, "ZONE_START"),
+                False,
                 id="slot-past-int64",
             ),
             pytest.param(
                 modern_row("-1e30", 1, 1, "BRISC", 1500, LOOP, "ZONE_START"),
+                False,
                 id="slot-below-int64",
             ),
             pytest.param(
                 modern_row(0, "1e30", 1, "BRISC", 1500, LOOP, "ZONE_START"),
+                False,
                 id="core-past-int64",
             ),
             pytest.param(
                 modern_row(0, 1, 1, "BRISC", 1500, LOOP, "ZONE_START", run="1e30"),
+                False,
                 id="run-past-int64",
             ),
         ],
     )
-    def test_unreadable_rows_are_left_out_and_counted(self, tmp_path, bad):
+    def test_unreadable_rows_are_left_out_and_counted(self, tmp_path, bad, held):
         """Cast to int64, a cell past it would wrap into some other device, core,
-        run or time."""
+        run or time. One past a float's exact range is read per zone."""
         rows = _run(0, 1, 1, "BRISC", 0, [100, 1100, 2100])
         rows.insert(3, bad)
 
-        answer = _intervals(tmp_path, rows)
+        answer = _intervals(tmp_path, rows, held=held)
 
         assert answer["by_core_risc"][0]["intervals"] == 2
         assert answer["by_core_risc"][0]["max_us"] == 1.0
@@ -831,7 +870,7 @@ class TestGaps:
         rows.insert(3, modern_row(0, 1, 1, "BRISC", "", LOOP, "ZONE_START"))
         rows.insert(-1, modern_row(0, 1, 1, "BRISC", 2**63 - 1, LOOP, "ZONE_START"))
 
-        answer = _intervals(tmp_path, rows)
+        answer = _intervals(tmp_path, rows, held=False)
 
         (entry,) = answer["by_core_risc"]
         assert (entry["intervals"], entry["max_us"]) == (2, 1.0)
@@ -868,7 +907,7 @@ class TestGaps:
             modern_row(0, 1, 1, "BRISC", "9e18", LOOP, "ZONE_START"),
         ]
 
-        answer = _intervals(tmp_path, rows)
+        answer = _intervals(tmp_path, rows, held=False)
 
         assert answer["by_device"][0]["occurrences"] == 1
         assert "1 rows have a slot, core, run or cycle count" in answer["caveat"]
@@ -884,7 +923,7 @@ class TestGaps:
         ]
 
         with patch.object(csv_queries, "MAX_OPEN_ZONE_STARTS", 1):
-            answer = _intervals(tmp_path, rows)
+            answer = _intervals(tmp_path, rows, held=False)
 
         assert (
             "1 starts went unpaired past the open-zone ceiling, which a well-formed "
@@ -898,11 +937,360 @@ class TestGaps:
         ]
 
         with patch.object(csv_queries, "MAX_ZONE_TIMELINES", 1):
-            answer = _intervals(tmp_path, rows)
+            answer = _intervals(tmp_path, rows, held=False)
 
         assert answer["timeline_count"] == 1
         # A kernel start and two zones' starts and ends: the kernel's end is not read.
         assert "5 rows belong to core-RISC timelines past the" in answer["caveat"]
+
+
+# An unreadable kernel start, another zone's marker, and firmware and kernel ends.
+UNREADABLE_OF_EVERY_KIND = [
+    modern_row(0, 1, 1, "BRISC", 0, "BRISC-FW", "ZONE_START"),
+    modern_row(0, 1, 1, "BRISC", "x", "BRISC-KERNEL", "ZONE_START"),
+    *_zone(0, 1, 1, "BRISC", 100, 150),
+    modern_row(0, 1, 1, "BRISC", "y", "OTHER", "ZONE_START"),
+    *_zone(0, 1, 1, "BRISC", 1100, 1150),
+    modern_row(0, 1, 1, "BRISC", "z", "BRISC-FW", "ZONE_END"),
+    modern_row(0, 1, 1, "BRISC", "w", "NCRISC-FW", "ZONE_END"),
+    modern_row(0, 1, 1, "BRISC", -5, "BRISC-KERNEL", "ZONE_END"),
+]
+
+
+class TestOneRead:
+    """Every zone comes from one pass of the log, kept per handle. #2248"""
+
+    @staticmethod
+    def _loaded(tmp_path, rows, header=MODERN_HEADER):
+        write_device_log(tmp_path, header, rows)
+        registry = ReportRegistry()
+        load_report(registry, performance_path=str(tmp_path))
+        return registry
+
+    @staticmethod
+    def _every_zone(tmp_path):
+        instance = Instance(instance_id="pytest", performance_path=str(tmp_path))
+        with csv_queries.DeviceLogProfilerQueries(instance, stream=True) as queries:
+            return queries.query_every_zone_intervals()
+
+    @staticmethod
+    @contextmanager
+    def _counting(method):
+        """The calls of `DeviceLogProfilerQueries.<method>` while the block runs."""
+        calls = []
+        original = getattr(csv_queries.DeviceLogProfilerQueries, method)
+
+        def counted(self, *arguments):
+            calls.append(arguments)
+            return original(self, *arguments)
+
+        with patch.object(csv_queries.DeviceLogProfilerQueries, method, counted):
+            yield calls
+
+    def test_the_log_is_read_once_for_every_zone_and_refusal(self, tmp_path):
+        registry = self._loaded(
+            tmp_path,
+            [
+                *_run(0, 1, 1, "BRISC", 0, [100, 1100]),
+                *_run(0, 1, 1, "NCRISC", 0, [100, 2100], zone="OTHER"),
+            ],
+        )
+
+        with self._counting("_zone_chunks") as reads:
+            loop = tools.zone_intervals(registry, "report-1", LOOP)
+            other = tools.zone_intervals(registry, "report-1", "OTHER")
+            with pytest.raises(ValueError, match="no zone named 'LOPO'"):
+                tools.zone_intervals(registry, "report-1", "LOPO")
+
+        assert len(reads) == 1
+        assert loop["by_core_risc"][0]["median_us"] == 1.0
+        assert other["by_core_risc"][0]["median_us"] == 2.0
+
+    def test_a_kept_read_answers_with_the_clock_it_was_read_at(self, tmp_path):
+        """A log rewritten since must not pair its new clock with the old intervals."""
+        registry = self._loaded(tmp_path, _run(0, 1, 1, "BRISC", 0, [100, 1100]))
+        first = tools.zone_intervals(registry, "report-1", LOOP)
+        log = write_device_log(
+            tmp_path, MODERN_HEADER, _run(0, 1, 1, "BRISC", 0, [100, 5100])
+        )
+        log.write_text(
+            log.read_text()
+            .replace("wormhole_b0", "blackhole")
+            .replace("CHIP_FREQ[MHz]: 1000", "CHIP_FREQ[MHz]: 2000")
+        )
+
+        again = tools.zone_intervals(registry, "report-1", LOOP)
+        fresh = tools.zone_intervals(
+            registry,
+            load_report(registry, performance_path=str(tmp_path))["handle"],
+            LOOP,
+        )
+
+        assert again == first
+        assert (fresh["arch"], fresh["clock_mhz"]) == ("blackhole", 2000)
+        assert fresh["by_core_risc"][0]["median_us"] == 2.5
+
+    @pytest.mark.parametrize(
+        "zone, between",
+        [
+            # A firmware zone's read keeps no other zone's rows, so they cannot part it.
+            ("BRISC-FW", LOOP),
+            # Nor does a firmware zone's row part another zone's run.
+            (LOOP, "BRISC-FW"),
+        ],
+    )
+    def test_a_run_host_id_back_before_a_kernel_start_is_read_per_zone(
+        self, tmp_path, zone, between
+    ):
+        rows = [
+            *_zone(0, 1, 1, "BRISC", 0, 5, zone=zone),
+            *_zone(0, 1, 1, "BRISC", 10, 20, zone=between, run=2),
+            *_zone(0, 1, 1, "BRISC", 1000, 1005, zone=zone),
+        ]
+
+        answer = _intervals(tmp_path, rows, zone=zone, held=False)
+
+        assert self._every_zone(tmp_path) is None
+        assert answer["by_core_risc"][0]["median_us"] == 1.0
+
+    def test_a_zone_also_named_on_other_rows_is_read_alone(self, tmp_path):
+        """Such a row joins only its own zone's read, so one pass leaves that zone."""
+        rows = [
+            *_run(0, 1, 1, "BRISC", 0, [100, 1100]),
+            modern_row(0, 1, 1, "BRISC", 1200, LOOP, "TS_DATA"),
+            *_run(0, 1, 1, "NCRISC", 0, [100, 2100], zone="OTHER"),
+        ]
+
+        answer = _intervals(tmp_path, rows, held=False)
+        every = self._every_zone(tmp_path)
+
+        assert every.read_alone == {LOOP}
+        assert every.intervals(LOOP) is None
+        assert every.intervals("OTHER") is not None
+        assert answer["by_core_risc"][0]["intervals"] == 1
+
+    @staticmethod
+    def _fields(read):
+        """Every field of a read, its timelines and zone counts in order."""
+        fields = dataclasses.asdict(read)
+        fields["timelines"] = [
+            (timeline, dataclasses.astuple(repeats))
+            for timeline, repeats in read.timelines.items()
+        ]
+        fields["zone_starts"] = list(read.zone_starts.items())
+        return fields
+
+    @pytest.mark.parametrize(
+        "rows",
+        [
+            pytest.param(
+                [
+                    modern_row(0, 1, 1, "BRISC", 0, "BRISC-KERNEL", "ZONE_START"),
+                    *_zone(0, 1, 1, "BRISC", 10, 20, zone="BRISC-FW"),
+                    *_zone(0, 1, 1, "BRISC", 30, 40, zone="PROFILER-NOC-FLUSH"),
+                    *_zone(0, 1, 1, "BRISC", 1010, 1020, zone="BRISC-FW"),
+                ],
+                id="a firmware zone across another zone's flush",
+            ),
+            pytest.param(UNREADABLE_OF_EVERY_KIND, id="unreadable rows of every kind"),
+            pytest.param(
+                [
+                    row
+                    for run in (5, 6, 5, 6)
+                    for row in [
+                        modern_row(0, 1, 1, "BRISC", 0, "BRISC-FW", "ZONE_START", run),
+                        *_run(0, 1, 1, "BRISC", 1, [100, 1100], run=run),
+                        modern_row(0, 1, 1, "BRISC", 1300, "BRISC-FW", "ZONE_END", run),
+                    ]
+                ],
+                id="a traced replay with firmware rows",
+            ),
+            pytest.param(
+                [
+                    modern_row(0, 1, 1, "BRISC", 0, "BRISC-KERNEL", "ZONE_START"),
+                    *_zone(0, 1, 1, "BRISC", 10, 20, zone="PROFILER-NOC-FLUSH"),
+                    *_zone(0, 1, 1, "BRISC", 30, 40, zone="PROFILER-DRAM-PUSH"),
+                    *_zone(0, 1, 1, "BRISC", 1010, 1020, zone="PROFILER-NOC-FLUSH"),
+                    *_zone(0, 1, 1, "BRISC", 2010, 2020, zone="PROFILER-NOC-FLUSH"),
+                ],
+                id="a flush zone across another flush",
+            ),
+        ],
+    )
+    def test_every_zone_of_a_log_the_pass_holds_reads_as_it_would_alone(
+        self, tmp_path, rows
+    ):
+        write_device_log(tmp_path, MODERN_HEADER, rows)
+        instance = Instance(instance_id="pytest", performance_path=str(tmp_path))
+
+        every = self._every_zone(tmp_path)
+
+        assert every is not None
+        for zone in [*every.zone_starts, "BRISC-KERNEL", "NCRISC-FW", "LOPO"]:
+            with csv_queries.DeviceLogProfilerQueries(instance, stream=True) as queries:
+                alone = queries.query_zone_intervals(zone)
+            assert self._fields(every.intervals(zone)) == self._fields(alone), zone
+
+    def test_an_unreadable_row_counts_for_each_zone_whose_read_keeps_it(self, tmp_path):
+        """A zone's read keeps the kernel starts and its own rows, and a zone the L1
+        cap cuts keeps the other zones' markers too: two of the unreadable rows each."""
+        write_device_log(tmp_path, MODERN_HEADER, UNREADABLE_OF_EVERY_KIND)
+
+        every = self._every_zone(tmp_path)
+
+        zones = [LOOP, "OTHER", "BRISC-FW", "NCRISC-FW", "BRISC-KERNEL"]
+        reads = {zone: every.intervals(zone) for zone in zones}
+        assert {zone: read.malformed for zone, read in reads.items()} == dict.fromkeys(
+            zones, 2
+        )
+        assert [zone for zone, read in reads.items() if read.malformed_starts] == [
+            "OTHER",
+            "BRISC-KERNEL",
+        ]
+
+    def test_a_chunk_read_as_floats_past_their_exact_range_is_read_per_zone(
+        self, tmp_path
+    ):
+        """A cell only the pass keeps makes the column floats, which round these starts;
+        the zone's own read keeps them whole."""
+        start = 2**53 + 1
+        rows = [
+            modern_row(0, 1, 1, "BRISC", 0, "BRISC-KERNEL", "ZONE_START"),
+            *_zone(0, 1, 1, "BRISC", start, start + 5),
+            modern_row(0, 1, 1, "BRISC", "x", "BRISC-FW", "ZONE_END"),
+            *_zone(0, 1, 1, "BRISC", start + 10, start + 15),
+        ]
+
+        answer = _intervals(tmp_path, rows, held=False)
+
+        assert self._every_zone(tmp_path) is None
+        assert answer["by_core_risc"][0]["median_us"] == 0.01
+
+    @pytest.mark.parametrize(
+        "cap, value",
+        [("MAX_COUNTED_ZONE_NAMES", 2), ("MAX_ZONE_TIMELINES", 1)],
+    )
+    def test_a_log_past_what_one_zones_read_holds_is_read_per_zone(
+        self, tmp_path, cap, value
+    ):
+        write_device_log(
+            tmp_path,
+            MODERN_HEADER,
+            [
+                *_run(0, 1, 1, "BRISC", 0, [100, 1100]),
+                *_run(0, 2, 1, "BRISC", 0, [100], zone="OTHER"),
+            ],
+        )
+
+        with patch.object(csv_queries, cap, value):
+            assert self._every_zone(tmp_path) is None
+
+    def test_a_pass_past_its_zones_timelines_in_all_is_read_per_zone(self, tmp_path):
+        """One timeline holds a kernel zone and LOOP: each zone's read fits the one
+        timeline allowed, but the pass holds two in all."""
+        rows = _run(0, 1, 1, "BRISC", 0, [100, 1100])
+
+        with patch.object(csv_queries, "MAX_ZONE_TIMELINES", 1):
+            answer = _intervals(tmp_path, rows, held=False)
+            assert self._every_zone(tmp_path) is None
+
+        assert answer["by_core_risc"][0]["median_us"] == 1.0
+
+    def test_a_pass_past_the_intervals_it_keeps_is_read_per_zone(self, tmp_path):
+        rows = _run(0, 1, 1, "BRISC", 0, [100, 1100, 2100])
+
+        with patch.object(csv_queries, "MAX_KEPT_ZONE_INTERVALS", 1):
+            answer = _intervals(tmp_path, rows, held=False)
+
+        assert answer["by_core_risc"][0]["intervals"] == 2
+
+    @pytest.mark.parametrize("names, held", [("AB", True), ("ABC", False)])
+    def test_names_on_other_rows_past_the_names_counted_are_read_per_zone(
+        self, tmp_path, names, held
+    ):
+        write_device_log(
+            tmp_path,
+            MODERN_HEADER,
+            [
+                *_run(0, 1, 1, "BRISC", 0, [100, 1100]),
+                *(
+                    modern_row(0, 1, 1, "BRISC", 1300 + index, name, "TS_DATA")
+                    for index, name in enumerate(names)
+                ),
+            ],
+        )
+
+        with patch.object(csv_queries, "MAX_COUNTED_ZONE_NAMES", 2):
+            assert (self._every_zone(tmp_path) is not None) == held
+
+    def test_a_pass_that_gives_up_logs_why_and_where(self, tmp_path, caplog):
+        write_device_log(
+            tmp_path, MODERN_HEADER, _run(0, 1, 1, "BRISC", 0, [100, 1100, 2100])
+        )
+
+        with (
+            patch.object(csv_queries, "MAX_KEPT_ZONE_INTERVALS", 1),
+            caplog.at_level(logging.INFO, logger=csv_queries.logger.name),
+        ):
+            assert self._every_zone(tmp_path) is None
+
+        assert (
+            "one pass of every zone gave up in its first 8 rows, as its zones hold "
+            "more than 1 intervals"
+        ) in caplog.text
+
+    def test_cycle_counts_past_a_floats_exact_range_read_whole_are_held(self, tmp_path):
+        """No cell makes the column floats, so the pass reads them as int64, exactly:
+        as floats, 2**53 + 1 would round to 2**53."""
+        start = 2**53 + 1
+        rows = _run(0, 1, 1, "BRISC", start - 1, [start, start + 1003])
+
+        answer = _intervals(tmp_path, rows)
+
+        assert answer["by_core_risc"][0]["median_us"] == 1.003
+
+    @pytest.mark.parametrize(
+        "rows",
+        [
+            pytest.param(
+                [
+                    *_zone(0, 1, 1, "BRISC", 0, 5),
+                    *_zone(0, 1, 1, "BRISC", 10, 20, zone="BRISC-FW", run=2),
+                    *_zone(0, 1, 1, "BRISC", 1000, 1005),
+                ],
+                id="a log the pass cannot hold",
+            ),
+            pytest.param(
+                [
+                    *_run(0, 1, 1, "BRISC", 0, [100, 1100]),
+                    modern_row(0, 1, 1, "BRISC", 1300, LOOP, "TS_DATA"),
+                ],
+                id="a zone the pass leaves to be read alone",
+            ),
+        ],
+    )
+    def test_a_zone_read_alone_costs_one_read_a_call_after_the_pass(
+        self, tmp_path, rows
+    ):
+        """The first call reads the pass and the zone alone, each later call the zone
+        alone, and never the pass again."""
+        registry = self._loaded(tmp_path, rows)
+
+        with self._counting("_zone_chunks") as reads:
+            for _ in range(2):
+                tools.zone_intervals(registry, "report-1", LOOP)
+
+        assert len(reads) == 3
+
+    def test_a_refusal_for_the_logs_shape_is_kept_too(self, tmp_path):
+        registry = self._loaded(tmp_path, UNTYPED_ROWS, header=UNTYPED_HEADER)
+
+        with self._counting("query_every_zone_intervals") as reads:
+            for _ in range(2):
+                with pytest.raises(ValueError, match="marks no zone starts or ends"):
+                    tools.zone_intervals(registry, "report-1", "MATMUL")
+
+        assert len(reads) == 1
 
 
 class TestRefusals:
@@ -946,7 +1334,7 @@ class TestRefusals:
             patch.object(tools, "MAX_ZONE_TIMELINES", 0),
             pytest.raises(ValueError) as refusal,
         ):
-            _intervals(tmp_path, rows)
+            _intervals(tmp_path, rows, held=False)
 
         assert str(refusal.value).endswith(
             ": 0 have a slot, core, run or cycle count that is not a number or does not "
@@ -965,7 +1353,7 @@ class TestRefusals:
             patch.object(csv_queries, "MAX_COUNTED_ZONE_NAMES", 1),
             pytest.raises(ValueError) as refusal,
         ):
-            _intervals(tmp_path, rows)
+            _intervals(tmp_path, rows, held=False)
 
         assert str(refusal.value).startswith(
             "'LOOP' starts 1 times in profile_log_device.csv, but none could be read"
@@ -979,7 +1367,7 @@ class TestRefusals:
             patch.object(tools, "MAX_COUNTED_ZONE_NAMES", 1),
             pytest.raises(ValueError) as refusal,
         ):
-            _intervals(tmp_path, rows, zone="LOPO")
+            _intervals(tmp_path, rows, zone="LOPO", held=False)
 
         assert str(refusal.value).endswith(
             "; the log names more zones than the 1 counted"
@@ -1003,7 +1391,9 @@ class TestRefusals:
 
     def test_an_oversized_zone_argument_is_refused(self, tmp_path):
         with pytest.raises(ValueError, match="zone is 257 characters; a zone name is"):
-            _intervals(tmp_path, _run(0, 1, 1, "BRISC", 0, [100]), zone="Q" * 257)
+            _intervals(
+                tmp_path, _run(0, 1, 1, "BRISC", 0, [100]), zone="Q" * 257, held=False
+            )
 
     def test_a_log_with_no_zone_starts_says_so(self, tmp_path):
         rows = [modern_row(0, 1, 1, "BRISC", 100, LOOP, "ZONE_END")]
@@ -1061,7 +1451,7 @@ class TestRefusals:
 
     def test_a_blank_zone_is_refused(self, tmp_path):
         with pytest.raises(ValueError, match="zone must name a zone the device log"):
-            _intervals(tmp_path, _run(0, 1, 1, "BRISC", 0, [100]), zone=" ")
+            _intervals(tmp_path, _run(0, 1, 1, "BRISC", 0, [100]), zone=" ", held=False)
 
     def test_a_report_without_a_device_log_is_refused(self, tmp_path):
         registry = ReportRegistry()
@@ -1082,7 +1472,9 @@ class TestRefusals:
 
     def test_a_log_that_cannot_tell_starts_from_ends_is_refused(self, tmp_path):
         with pytest.raises(ValueError, match="marks no zone starts or ends"):
-            _intervals(tmp_path, UNTYPED_ROWS, zone="MATMUL", header=UNTYPED_HEADER)
+            _intervals(
+                tmp_path, UNTYPED_ROWS, zone="MATMUL", header=UNTYPED_HEADER, held=False
+            )
 
 
 class TestServer:
@@ -1119,6 +1511,20 @@ class TestServer:
         assert result["isError"] is True
         assert refusal in result["content"][0]["text"]
         assert outcome is McpToolOutcome.REFUSED
+
+    def test_a_kept_refusal_is_recorded_as_one_on_every_call(self, tmp_path):
+        """The second call raises the kept error, which must still be the ValueError
+        the server records as a refusal."""
+        registry = ReportRegistry()
+        write_device_log(tmp_path, UNTYPED_HEADER, UNTYPED_ROWS)
+        load_report(registry, performance_path=str(tmp_path))
+
+        outcomes = [
+            self._call(registry, {"handle": "report-1", "zone": "MATMUL"})[1]
+            for _ in range(2)
+        ]
+
+        assert outcomes == [McpToolOutcome.REFUSED] * 2
 
     def test_a_profiler_only_handle_is_refused_as_the_agents_to_fix(self, tmp_path):
         registry = ReportRegistry()
@@ -1160,3 +1566,16 @@ def test_the_smoke_capture_reads_end_to_end():
     assert answer["by_device"][0]["occurrences"] > 0
     assert (answer["timeline_count"], answer["by_core_risc"]) == (0, [])
     assert "never started twice in one run" in answer["caveat"]
+
+    # The one real tt-metal capture here: one pass holds it, as each zone's read would.
+    instance = Instance(instance_id="pytest", performance_path=str(SMOKE_CAPTURE_DIR))
+    with csv_queries.DeviceLogProfilerQueries(instance, stream=True) as queries:
+        every = queries.query_every_zone_intervals()
+    assert every is not None
+    assert every.zone_starts
+    for zone in every.zone_starts:
+        with csv_queries.DeviceLogProfilerQueries(instance, stream=True) as queries:
+            alone = queries.query_zone_intervals(zone)
+        assert TestOneRead._fields(every.intervals(zone)) == TestOneRead._fields(
+            alone
+        ), zone

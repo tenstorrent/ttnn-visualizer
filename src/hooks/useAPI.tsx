@@ -111,6 +111,7 @@ import { throwNpeClientAxiosError } from '../functions/throwNpeClientAxiosError'
 import validateNpeSummary from '../functions/validateNpeSummary';
 import validateNpeWindow from '../functions/validateNpeWindow';
 import { comparisonReportAxiosError } from '../functions/comparisonReportAxiosError';
+import { getPerformanceIdRange } from '../functions/numericExtent';
 
 const EMPTY_PERF_RETURN = { report: [], stacked_report: [], signposts: [] };
 
@@ -984,16 +985,7 @@ export const usePerformanceRange = (): NumberRange | null => {
     const activeReportFolderName = useAtomValue(activePerformanceReportFolderNameAtom);
     const { data: perfData } = usePerformanceReport(activeReportFolderName);
 
-    return useMemo(
-        () =>
-            perfData?.report?.length
-                ? [
-                      Math.min(...perfData.report.map((data) => parseInt(data.id, 10))),
-                      Math.max(...perfData.report.map((data) => parseInt(data.id, 10))),
-                  ]
-                : null,
-        [perfData],
-    );
+    return useMemo(() => getPerformanceIdRange(perfData?.report), [perfData]);
 };
 
 interface ReportMetadata {
