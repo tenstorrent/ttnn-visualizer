@@ -121,7 +121,7 @@ def test_a_hundred_names_keep_zone_timings_within_its_budget(
 def test_a_zone_argument_one_byte_past_the_bound_is_refused(tmp_path, zone):
     """A JSON argument can carry a lone surrogate, which the wire writes in six bytes."""
     with pytest.raises(ValueError, match="zone is 257 bytes as an answer writes it"):
-        _intervals(tmp_path, _run(0, 1, 1, "BRISC", 0, [100]), zone=zone)
+        _intervals(tmp_path, _run(0, 1, 1, "BRISC", 0, [100]), zone=zone, held=False)
 
 
 def _signposted(tmp_path, names):
