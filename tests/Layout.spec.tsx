@@ -32,12 +32,22 @@ const initEventLogging = vi.hoisted(() => vi.fn(() => teardown));
 const recordEvent = vi.hoisted(() => vi.fn());
 const persistReportLinks = vi.hoisted(() => vi.fn());
 const axiosPost = vi.hoisted(() => vi.fn());
+// Lets the footer-containment case make the footer stub throw
+const footerStub = vi.hoisted(() => ({ shouldThrow: false }));
 
 vi.mock('../src/functions/recordEvent', () => ({ default: recordEvent, initEventLogging }));
 
 vi.mock('../src/components/SideNavigation', () => ({ default: () => <div data-testid='stub-side-navigation' /> }));
 vi.mock('../src/components/ServerModeBanner', () => ({ default: () => <div data-testid='stub-server-mode-banner' /> }));
-vi.mock('../src/components/FooterInfobar', () => ({ default: () => <div data-testid='stub-footer-infobar' /> }));
+vi.mock('../src/components/FooterInfobar', () => ({
+    default: () => {
+        if (footerStub.shouldThrow) {
+            throw new Error('footer failed');
+        }
+
+        return <div data-testid='stub-footer-infobar' />;
+    },
+}));
 vi.mock('../src/components/FeedbackButton', () => ({ default: () => null }));
 vi.mock('../src/components/FileStatusOverlay', () => ({ default: () => null }));
 vi.mock('../src/components/cluster/ClusterRenderer', () => ({
@@ -308,5 +318,75 @@ describe('Layout linked-report error', () => {
         });
 
         await waitFor(() => expect(getReportLinkError()).toBeNull());
+    });
+});
+
+// The footer is always mounted, so a fault in it used to reach the router's root error page and
+// replace every route. `Layout` wraps it in a boundary that a report switch retries.
+describe('Layout footer containment', () => {
+    // React's development build re-dispatches a render error as a window `error` event, which jsdom
+    // reports as uncaught even though the boundary caught it
+    const suppressReportedError = (event: ErrorEvent) => event.preventDefault();
+
+    beforeEach(async () => {
+        await resetViewOpenedMemory();
+        vi.clearAllMocks();
+        footerStub.shouldThrow = true;
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        window.addEventListener('error', suppressReportedError);
+    });
+
+    afterEach(async () => {
+        cleanup();
+        footerStub.shouldThrow = false;
+        window.removeEventListener('error', suppressReportedError);
+        vi.restoreAllMocks();
+
+        const { getDefaultStore } = await import('jotai');
+        const { activePerformanceReportAtom, operationRangeAtom, selectedOperationRangeAtom } =
+            await import('../src/store/app');
+        const store = getDefaultStore();
+
+        store.set(activePerformanceReportAtom, null);
+        store.set(operationRangeAtom, null);
+        store.set(selectedOperationRangeAtom, null);
+    });
+
+    it('keeps the shell when the footer throws, and retries the footer on a report switch', async () => {
+        const { default: Layout } = await import('../src/components/Layout');
+        const { getDefaultStore } = await import('jotai');
+        const { activePerformanceReportAtom } = await import('../src/store/app');
+
+        renderLayout(Layout);
+
+        expect(screen.getByTestId('stub-side-navigation')).toBeInTheDocument();
+        expect(screen.queryByTestId('stub-footer-infobar')).not.toBeInTheDocument();
+
+        footerStub.shouldThrow = false;
+        act(() => {
+            getDefaultStore().set(activePerformanceReportAtom, { path: '/reports/b', reportName: 'b' });
+        });
+
+        expect(await screen.findByTestId('stub-footer-infobar')).toBeInTheDocument();
+    });
+
+    it('shows the failed footer, and resets the hidden range when retried from it', async () => {
+        const { default: Layout } = await import('../src/components/Layout');
+        const { getDefaultStore } = await import('jotai');
+        const { operationRangeAtom, selectedOperationRangeAtom } = await import('../src/store/app');
+        const store = getDefaultStore();
+
+        store.set(operationRangeAtom, [1, 50]);
+        store.set(selectedOperationRangeAtom, [10, 20]);
+
+        renderLayout(Layout);
+
+        expect(screen.getByRole('alert')).toHaveTextContent('The footer failed to load');
+
+        footerStub.shouldThrow = false;
+        fireEvent.click(screen.getByRole('button', { name: 'Reset range and retry' }));
+
+        expect(await screen.findByTestId('stub-footer-infobar')).toBeInTheDocument();
+        expect(store.get(selectedOperationRangeAtom)).toEqual([1, 50]);
     });
 });
