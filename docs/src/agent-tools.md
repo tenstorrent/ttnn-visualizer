@@ -690,7 +690,9 @@ device — the captures we test against span 8 and 32 PCIe slots, and coordinate
 repeat on each — so a zone can report thousands of cores on a multi-device run. Durations
 need the device log's `type` column to pair zone starts with ends; a capture without it
 reports occurrence counts only, and a capture that stopped mid-zone reports how many starts
-and ends failed to pair so a partial total does not read as a complete one.
+and ends failed to pair so a partial total does not read as a complete one. The first call
+on a handle reads the device log once, and later calls answer from that read, with the
+clock it was read at.
 
 `core_spread` reads each operation on one device only, never pooling devices, since each
 runs its own clock. A performance row's global call count is the device log's `run host ID`
@@ -764,7 +766,17 @@ characters, which is the capture's text, not the tool's; a zone asked for by a l
 is refused. A row whose slot, core, run or cycle count is not a number or does not fit a
 64-bit integer, or whose cycle count is negative, is left out and counted in a caveat, and
 a zone whose every start was left out is refused with how many were unreadable that way
-and how many lay past the 200,000 core-RISC timelines followed at once.
+and how many lay past the 200,000 core-RISC timelines followed at once. The first call on
+a handle reads the device log once for every zone, and later calls, for any zone and the
+refusal of one the log does not start included, answer from that read, with the clock it
+was read at; a log that cannot be read is refused until `load_report` loads it again. A log
+that one pass cannot read as each zone's own read would has the zone asked for read alone
+on every call, the first after the pass: one past those caps counted across all its zones,
+naming more than 1,000 zones or holding more than 4,000,000 intervals, one where a RISC's
+run host ID comes back before its next kernel start, and one whose cycle counts run past
+what a float holds exactly where a cell is not a whole number. A zone also named on rows
+that neither start nor end one is read alone the same way. The server's log says when and
+why the pass gave up.
 
 No zone tool shows a zone name longer than 256 characters or a RISC name longer than 32
 characters: such a name is the capture's text, not the tool's, and tt-metal's longest RISC

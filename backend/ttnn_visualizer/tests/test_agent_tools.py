@@ -2457,6 +2457,87 @@ class TestZoneTimingsTool:
         assert "occupancy" in result["note"]
 
 
+class TestZoneTimingsRead:
+    """`zone_timings` reads the log once per handle. #2248"""
+
+    def test_the_log_is_read_once_per_handle(self, tmp_path):
+        registry = _zone_log(tmp_path, [("MATMUL", "BRISC", 100)])
+        calls = []
+        original = DeviceLogProfilerQueries.query_zone_summary
+
+        def counted(self):
+            calls.append(self)
+            return original(self)
+
+        with patch.object(DeviceLogProfilerQueries, "query_zone_summary", counted):
+            first = tools.zone_timings(registry, "report-1")
+            second = tools.zone_timings(registry, "report-1", limit=1)
+
+        assert len(calls) == 1
+        assert second["zones"] == first["zones"]
+
+    def test_a_kept_read_answers_with_the_clock_it_was_read_at(self, tmp_path):
+        registry = _zone_log(tmp_path, [("MATMUL", "BRISC", 1000)])
+        first = tools.zone_timings(registry, "report-1")
+        log = write_device_log(
+            tmp_path,
+            MODERN_HEADER,
+            [
+                modern_row(1, 1, 1, "BRISC", 0, "MATMUL", "ZONE_START"),
+                modern_row(1, 1, 1, "BRISC", 5000, "MATMUL", "ZONE_END"),
+            ],
+        )
+        log.write_text(
+            log.read_text()
+            .replace("wormhole_b0", "blackhole")
+            .replace("CHIP_FREQ[MHz]: 1000", "CHIP_FREQ[MHz]: 2000")
+        )
+
+        again = tools.zone_timings(registry, "report-1")
+        fresh = tools.zone_timings(
+            registry, load_report(registry, performance_path=str(tmp_path))["handle"]
+        )
+
+        assert again == first
+        assert (fresh["arch"], fresh["clock_mhz"]) == ("blackhole", 2000.0)
+        assert fresh["zones"][0]["total_us"] == 2.5
+
+    def test_a_refusal_for_the_logs_shape_is_kept_too(self, tmp_path):
+        write_device_log(
+            tmp_path, MODERN_HEADER.replace(" core_y,", " not_core_y,"), []
+        )
+        registry = ReportRegistry()
+        load_report(registry, performance_path=str(tmp_path))
+        calls = []
+        original = DeviceLogProfilerQueries.query_zone_summary
+
+        def counted(self):
+            calls.append(self)
+            return original(self)
+
+        refusals = []
+        with patch.object(DeviceLogProfilerQueries, "query_zone_summary", counted):
+            for _ in range(2):
+                with pytest.raises(DataFormatError, match="core_y") as refusal:
+                    tools.zone_timings(registry, "report-1")
+                refusals.append(str(refusal.value))
+
+        assert len(calls) == 1
+        assert refusals[0] == refusals[1]
+
+    def test_the_architecture_is_read_as_zone_intervals_reads_it(self, tmp_path):
+        """One reader for both tools, so a first line read two ways cannot give them
+        two architectures."""
+        registry = _zone_log(tmp_path, [("MATMUL", "BRISC", 1000)])
+        log = tmp_path / DeviceLogProfilerQueries.DEVICE_LOG_FILE
+        log.write_text(log.read_text().replace("wormhole_b0", "wormhole_b0 rev2", 1))
+
+        timings = tools.zone_timings(registry, "report-1")
+        intervals = tools.zone_intervals(registry, "report-1", "MATMUL")
+
+        assert timings["arch"] == intervals["arch"] == "wormhole_b0"
+
+
 class TestPreRenameCaptures:
     def test_a_begin_end_capture_pairs_rather_than_double_counting(self, tmp_path):
         """Pre-rename logs mark boundaries in `zone phase`, not `type`.
