@@ -1218,7 +1218,7 @@ def test_orjson_reads_as_deep_as_the_streamed_read_does():
     with pytest.raises(orjson.JSONDecodeError) as refused:
         orjson.loads("[" * (depth + 1) + "]" * (depth + 1))
 
-    assert refused.value.msg == npe_index._ORJSON_TOO_DEEP
+    assert refused.value.msg in npe_index._ORJSON_TOO_DEEP
 
 
 def _nested_in(where: str, depth: int) -> str:
@@ -1251,8 +1251,9 @@ def test_a_streamed_read_refuses_the_depth_the_whole_parse_refuses(where, past, 
         return _read_through(_streamed(text))
 
     if past:
-        with pytest.raises(orjson.JSONDecodeError, match="depth limit exceeded"):
+        with pytest.raises(orjson.JSONDecodeError) as refused:
             orjson.loads(text)
+        assert refused.value.msg in npe_index._ORJSON_TOO_DEEP
         with pytest.raises(npe_index.NestsTooDeep):
             _from_frames_deep(frames, streamed)
     else:
