@@ -238,6 +238,26 @@ class DatabaseQueries:
         columns: Optional[List[str]] = None,
         select_clause: Optional[str] = None,
     ) -> List[Any]:
+        query, params = self._table_query(
+            table_name,
+            filters,
+            additional_conditions,
+            additional_params,
+            columns,
+            select_clause,
+        )
+        return self.query_runner.execute_query(query, params)
+
+    def _table_query(
+        self,
+        table_name: str,
+        filters: Optional[Dict[str, Union[Any, List[Any]]]] = None,
+        additional_conditions: Optional[str] = None,
+        additional_params: Optional[List[Any]] = None,
+        columns: Optional[List[str]] = None,
+        select_clause: Optional[str] = None,
+    ) -> Tuple[str, List[Any]]:
+        """The query `_query_table` runs and its parameters, for a caller streaming it."""
         if select_clause is not None:
             columns_str = select_clause
         elif columns:
@@ -267,7 +287,7 @@ class DatabaseQueries:
             if additional_params:
                 params.extend(additional_params)
 
-        return self.query_runner.execute_query(query, params)
+        return query, params
 
     def merge_rank_filter(
         self,
@@ -508,16 +528,34 @@ class DatabaseQueries:
         )
         return int(rows[0][0]) if rows else 0
 
-    def query_operation_arguments(
-        self, filters: Optional[Dict[str, Union[Any, List[Any]]]] = None
-    ) -> Generator[OperationArgument, None, None]:
+    def _operation_arguments_query(
+        self, filters: Optional[Dict[str, Union[Any, List[Any]]]]
+    ) -> Tuple[str, List[Any]]:
+        """The query both argument reads run, and its parameters."""
         select_clause = self._dataclass_select_clause(
             "operation_arguments", OperationArgument
         )
-        rows = self._query_table(
+        return self._table_query(
             "operation_arguments", filters, select_clause=select_clause
         )
+
+    def query_operation_arguments(
+        self, filters: Optional[Dict[str, Union[Any, List[Any]]]] = None
+    ) -> Generator[OperationArgument, None, None]:
+        rows = self.query_runner.execute_query(
+            *self._operation_arguments_query(filters)
+        )
         for row in rows:
+            yield OperationArgument(*row)
+
+    def iter_operation_arguments(
+        self, filters: Optional[Dict[str, Union[Any, List[Any]]]] = None
+    ) -> Iterator[OperationArgument]:
+        """`query_operation_arguments`, streamed: a caller reading every argument of a
+        capture holds one row at a time rather than all of them at once."""
+        for row in self.query_runner.iter_query(
+            *self._operation_arguments_query(filters)
+        ):
             yield OperationArgument(*row)
 
     def query_operations(

@@ -1200,7 +1200,7 @@ class TestOperationDetailLink:
             }
         ]
         assert result["perf_row_count"] == 1
-        assert result["device_time_unit"] == linking.DEVICE_TIME_UNIT
+        assert result["device_time_unit"] == tools.DEVICE_TIME_UNIT
         assert result["duration_unit"] == "host_seconds"
         # The rows and their shares come from the canonical report, merged per device.
         assert result["projection"] == tools.CANONICAL_PROJECTION
@@ -1949,6 +1949,8 @@ class TestCriticalPath:
         assert result["device_time_share_percent"] == tools.share_percent(
             16.0, report_total
         )
+        assert result["report_device_time_total"] == round(report_total, 3)
+        assert result["device_time_unit"] == tools.DEVICE_TIME_UNIT
 
     def test_it_states_the_projection_its_weights_were_read_through(self, path_report):
         registry, handle = path_report()

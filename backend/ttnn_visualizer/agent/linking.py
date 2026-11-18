@@ -50,13 +50,15 @@ from ttnn_visualizer.agent.bounds import (
 )
 from ttnn_visualizer.agent.captured_graph import UnreadableGraphError, parse_graph
 from ttnn_visualizer.agent.handles import CacheVariant, ReportRegistry
+from ttnn_visualizer.agent.op_configurations import (
+    DeviceTime,
+    answer_configurations,
+    read_configurations,
+)
 from ttnn_visualizer.agent.scope_outcomes import is_device_operation, scope_pairing
 from ttnn_visualizer.models import Instance
 
 logger = logging.getLogger(__name__)
-
-# Microseconds, as tt-perf-report writes `device_time`.
-DEVICE_TIME_UNIT = "us"
 
 
 class LinkStatus(str, Enum):
@@ -125,6 +127,8 @@ class OperationLink:
     matched_on: Optional[MatchedOn] = None
     operation_by_perf_id: Dict[str, int] = field(default_factory=dict)
     perf_rows_by_operation: Dict[int, List[Dict]] = field(default_factory=dict)
+    # Each linked operation's `operation_device_time`, for tools weighing every one.
+    device_time_by_operation: Dict[int, float] = field(default_factory=dict)
     # What every device-time share in `operation_detail` divides by.
     report_device_time_total: float = 0.0
     # Said beside every share, since a share assumes the ops ran one after another.
@@ -542,6 +546,11 @@ def _build_link(
         matched_on=match.matched_on,
         operation_by_perf_id=operation_by_perf_id,
         perf_rows_by_operation=perf_rows_by_operation,
+        device_time_by_operation={
+            operation_id: device_time
+            for operation_id, rows in perf_rows_by_operation.items()
+            if (device_time := operation_device_time(rows)) is not None
+        },
         unlinked=unlinked_rows(all_rows, operation_by_perf_id),
         # Every pairable row, paired or not. Operation Details (#2111) sums the same
         # rows: it fetches with host ops hidden, and a signpost's device time is blank.
@@ -656,8 +665,9 @@ def _timed_rows(rows: Sequence[Dict]) -> List[Tuple[Dict, float]]:
 def operation_device_time(rows: Sequence[Dict]) -> Optional[float]:
     """An operation's device time over every row it launched, or None if none is timed.
 
-    Summed, since an operation's device operations run one after another; both
-    `operation_detail` and `critical_path` read it here, so the two cannot disagree.
+    Summed, since an operation's device operations run one after another.
+    `operation_detail` sums the same rows, and `critical_path` and `op_configurations`
+    read it through the link's `device_time_by_operation`, so none of them disagree.
     The graph view takes the slowest row instead (`aggregatePerfByOp`), so on an
     operation launching several the agent and the view differ.
     """
@@ -706,14 +716,7 @@ def operation_detail(
             circular_buffer_limit=tools.row_limit(MAX_LIMIT, groups),
         ),
     )
-    link = operation_link(registry, handle)
-    if link.status is LinkStatus.LINKED and result.get("rank") != link.rank:
-        result["operation_link"] = OperationLink(
-            LinkStatus.UNAVAILABLE,
-            rank=link.rank,
-            reason=_rank_mismatch_reason(link.rank, result.get("rank")),
-        ).as_response()
-        return result
+    link = _link_at_rank(operation_link(registry, handle), result.get("rank"))
     if link.status is LinkStatus.LINKED:
         rows = link.perf_rows_by_operation.get(int(operation_id), [])
         empty = tools.empty_detail_fields(registry, handle, groups)
@@ -730,10 +733,11 @@ def operation_detail(
             for row in rows[: tools.row_limit(MAX_LIMIT, groups)]
         ]
         result["perf_row_count"] = len(rows)
-        # Stated because this response's other duration is host seconds, and the two
-        # invite being compared.
-        result["device_time_unit"] = DEVICE_TIME_UNIT
-        result["projection"] = tools.projection(None)
+        # The unit is stated because this response's other duration is host seconds,
+        # and the two invite being compared; the total only beside shares it divides.
+        result.update(
+            tools.device_time_header(link.report_device_time_total if rows else None)
+        )
         result.update(perf_detail.summary(groups, empty))
         flagged = perf_flags.flagged_rows(
             rows, flag_inputs, key=("operation", link.rank, int(operation_id))
@@ -741,7 +745,6 @@ def operation_detail(
         result.update(perf_flags.summary(flag_inputs, flagged))
         if rows:
             result.update(_device_time_summary(rows, link.report_device_time_total))
-            result["report_device_time_total"] = round(link.report_device_time_total, 3)
             if link.partitioned_caveat:
                 result["caveat"] = operations.joined_caveat(
                     result.get("caveat"), link.partitioned_caveat
@@ -769,6 +772,19 @@ def _rank_mismatch_reason(
     )
 
 
+def _link_at_rank(
+    link: OperationLink, rank: object, subject: str = "this operation"
+) -> OperationLink:
+    """`link`, or why it is unavailable to an answer read at a rank its rows are not."""
+    if link.status is LinkStatus.LINKED and rank != link.rank:
+        return OperationLink(
+            LinkStatus.UNAVAILABLE,
+            rank=link.rank,
+            reason=_rank_mismatch_reason(link.rank, rank, subject),
+        )
+    return link
+
+
 def critical_path(
     registry: ReportRegistry,
     handle: str,
@@ -791,25 +807,18 @@ def critical_path(
         graph = operations.read_scoped_graph(registry, handle, queries, scope)
 
     kept = op_graph.kept_operation_ids(graph)
-    device_time_by_operation_id: Dict[int, float] = {}
-    for operation_id in kept:
-        device_time = operation_device_time(
-            link.perf_rows_by_operation.get(operation_id, [])
-        )
-        if device_time is not None:
-            device_time_by_operation_id[operation_id] = device_time
     # `find_critical_path` drops an edge to an operation not kept, as the app's does.
     # An operation that reads a tensor it also writes is not a cycle, since that edge
     # is not drawn.
     path = op_graph.find_critical_path(
-        sorted(kept), graph.drawn_edges, device_time_by_operation_id
+        sorted(kept), graph.drawn_edges, link.device_time_by_operation
     )
 
     cap = bounded(limit, MAX_LIMIT)
     uncosted = [
         operation_id
         for operation_id in path.operation_ids
-        if operation_id not in device_time_by_operation_id
+        if operation_id not in link.device_time_by_operation
     ]
     caveats = []
     if not kept:
@@ -838,18 +847,17 @@ def critical_path(
         "handle": handle,
         "path_length": len(path.operation_ids),
         "device_time": round(path.total, 3),
-        "device_time_unit": DEVICE_TIME_UNIT,
         "device_time_share_percent": tools.share_percent(
             path.total, link.report_device_time_total
         ),
-        "report_device_time_total": round(link.report_device_time_total, 3),
+        **tools.device_time_header(link.report_device_time_total),
         "operations": [
             {
                 "operation_id": operation_id,
                 "name": graph.names.get(operation_id),
                 "device_time": (
-                    round(device_time_by_operation_id[operation_id], 3)
-                    if operation_id in device_time_by_operation_id
+                    round(link.device_time_by_operation[operation_id], 3)
+                    if operation_id in link.device_time_by_operation
                     else None
                 ),
             }
@@ -859,13 +867,55 @@ def critical_path(
         "uncosted_operation_count": len(uncosted),
         "uncosted_operation_ids": uncosted[:MAX_LIMIT],
         "has_cycle": path.has_cycle,
-        "projection": tools.projection(None),
         "graph_projection": CRITICAL_PATH_PROJECTION,
         **scope.as_response(),
         **operations.caveat_field(scope, *caveats),
         "operation_link": link.as_response(),
     }
     return result
+
+
+def op_configurations(
+    registry: ReportRegistry,
+    handle: str,
+    name_contains: Optional[str] = None,
+    config_digest: Optional[str] = None,
+    limit: Optional[int] = None,
+    rank: Optional[int] = None,
+    offset: Optional[int] = None,
+) -> Dict[str, object]:
+    """Each operation's distinct argument combinations, with device time when linked."""
+    instance = registry.get(handle)
+    with operations.profiler_db(instance) as queries:
+        scope = operations.rank_scope(queries, rank)
+        operations.refuse_unattributable(queries, scope, "operation_arguments")
+        read = operations.cached_per_rank(
+            registry,
+            handle,
+            CacheVariant.OP_CONFIGURATIONS,
+            queries,
+            scope,
+            read_configurations,
+        )
+    link = _link_at_rank(operation_link(registry, handle), scope.rank, "the grouping")
+    device_time = None
+    if link.status is LinkStatus.LINKED:
+        device_time = DeviceTime(
+            by_operation_id=link.device_time_by_operation,
+            report_total=link.report_device_time_total,
+            caveat=link.partitioned_caveat,
+        )
+    return answer_configurations(
+        handle,
+        read,
+        scope,
+        device_time,
+        link.as_response(),
+        name_contains=name_contains,
+        config_digest=config_digest,
+        limit=limit,
+        offset=offset,
+    )
 
 
 PROGRAM_CACHE_LINK_NOTE = (
@@ -897,7 +947,6 @@ def program_cache(
 
 __all__ = [
     "CRITICAL_PATH_PROJECTION",
-    "DEVICE_TIME_UNIT",
     "PROGRAM_CACHE_LINK_NOTE",
     "TOP_OPS_LINK_NOTE",
     "DeviceOperation",
@@ -912,6 +961,7 @@ __all__ = [
     "device_operation_orders",
     "is_host_op_row",
     "match_device_operations",
+    "op_configurations",
     "operation_detail",
     "operation_device_time",
     "operation_link",

@@ -96,6 +96,8 @@ class CacheVariant(str, Enum):
     # The operation graph by rank, which `critical_path` and `subgraph_between` read
     # whole and an agent reading a model block by block asks for again and again.
     OP_GRAPH = "op_graph"
+    # Every call grouped into its configuration by rank, which `op_configurations` lists.
+    OP_CONFIGURATIONS = "op_configurations"
 
 
 # Snapshots narrowed by a scope -- a signpost range -- kept at once, across every
@@ -358,6 +360,8 @@ TOOL_TABLES: Dict[str, frozenset] = {
     # where `query_stack_traces` now guards like its neighbours rather than letting
     # SQLite's `no such table` reach the agent. #2021
     "operation_provenance": frozenset({"operations", "operation_arguments"}),
+    # The performance report is optional: without a link the configurations carry no time.
+    "op_configurations": frozenset({"operations", "operation_arguments"}),
     # The errors table is optional: a report that predates it is answered with a caveat.
     "errors": frozenset({"operations"}),
     # `buffers` as the app needs it: `/api/operations` joins it for a tensor's size.

@@ -14,7 +14,7 @@ from fractions import Fraction
 from statistics import median
 from typing import Callable, Dict, FrozenSet, Hashable, List, Optional, Tuple, cast
 
-from ttnn_visualizer.agent.bounds import cut_op_code, cut_text, shown_in_text
+from ttnn_visualizer.agent.bounds import cut_op_code, cut_text, echoed
 from ttnn_visualizer.agent.cells import finite_number
 
 
@@ -71,8 +71,6 @@ DEFAULT_MIN_PERCENT = 5.0
 MAX_CAPTURES_PER_SIDE = 5
 # A local MoE expert op's 30 tensors run to 1,550 characters of signature.
 MAX_SIGNATURE_CHARS = 300
-# Enough for any number or handle list an agent means to pass.
-_MAX_ECHOED_CHARS = 64
 # Every figure an answer gives, and every comparison of them, is to the nanosecond.
 ANSWER_DECIMALS = 3
 
@@ -108,11 +106,6 @@ def as_answered(figure: float) -> float:
     return round(figure, ANSWER_DECIMALS)
 
 
-def _echoed(value: object) -> str:
-    """`value` as a refusal names it, cut so an argument cannot fill the answer."""
-    return shown_in_text(repr(value), _MAX_ECHOED_CHARS)
-
-
 @dataclass(frozen=True)
 class Thresholds:
     """How far a group must move to be a change: `min_percent` of its before figure,
@@ -143,7 +136,7 @@ def threshold(name: str, value: object, default: float) -> float:
         return default
     number = finite_number(value)
     if number is None or number < 0:
-        raise ValueError(f"{name} must be a number of at least 0, not {_echoed(value)}")
+        raise ValueError(f"{name} must be a number of at least 0, not {echoed(value)}")
     return number
 
 
@@ -154,7 +147,7 @@ def side_handles(label: str, handle: str, repeats: object) -> List[str]:
     if not isinstance(repeats, list) or not all(
         isinstance(repeat, str) for repeat in repeats
     ):
-        raise ValueError(f"{label} must be a list of handles, not {_echoed(repeats)}")
+        raise ValueError(f"{label} must be a list of handles, not {echoed(repeats)}")
     if len(repeats) >= MAX_CAPTURES_PER_SIDE:
         raise ValueError(
             f"{label} takes at most {MAX_CAPTURES_PER_SIDE - 1} handles, since each "
