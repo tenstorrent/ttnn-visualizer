@@ -65,6 +65,7 @@ MLIR_CONVERT_EXTENSION_IDS = ("tt_adapter", "builtin_mlir")
 # Keep in sync with `MLIR_SERVER_ACCEPTED_EXTENSIONS` in
 # `src/definitions/MlirServer.ts` (frontend `accept` filter) and the upload-path
 # constant there — the two stacks validate against the same list independently.
+# `MlirFileFormat` in `event_logging.py` names each one for usage events; a test pins it.
 MLIR_SERVER_ACCEPTED_EXTENSIONS = (
     ".pb",
     ".pbtxt",
