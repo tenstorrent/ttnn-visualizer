@@ -43,7 +43,6 @@ from ttnn_visualizer.event_logging import (
     EventLogEventRejected,
     EventLogView,
     LaunchMode,
-    MlirFileFormat,
     ReportKind,
     ReportLoadFailureReason,
     get_application_version,
@@ -58,7 +57,6 @@ from ttnn_visualizer.event_logging import (
     record_events,
     validate_client_event,
 )
-from ttnn_visualizer.mlir import MLIR_SERVER_ACCEPTED_EXTENSIONS
 from ttnn_visualizer.settings import DefaultConfig
 from ttnn_visualizer.tests.event_log_readers import (
     parse_event_log_line,
@@ -1787,18 +1785,6 @@ def test_record_events_writes_nothing_when_recording_is_disabled(
     assert read_event_log_lines(event_log_directory) == []
 
 
-def test_mlir_file_formats_are_exactly_the_accepted_extensions():
-    """A newly accepted extension must gain a format, or every load of it reads ``other``.
-
-    Nothing else would notice: ``other`` is a valid value, so the drift stays silent.
-    """
-    assert {
-        f".{member.value}"
-        for member in MlirFileFormat
-        if member is not MlirFileFormat.OTHER
-    } == set(MLIR_SERVER_ACCEPTED_EXTENSIONS)
-
-
 @pytest.mark.parametrize(
     "details",
     [
@@ -1850,3 +1836,16 @@ def test_a_test_that_opts_into_nothing_still_logs_inside_tmp_path(
     )
 
     assert get_event_log_path().is_file()
+
+
+def test_an_event_with_details_names_them_when_the_keys_are_wrong():
+    with pytest.raises(
+        EventLogEventRejected,
+        match=r"^Event view_opened expects exactly these details: view$",
+    ):
+        validate_client_event(
+            {
+                "event": EventLogEvent.VIEW_OPENED.value,
+                "details": {"view": "operations", "query": "matmul"},
+            }
+        )

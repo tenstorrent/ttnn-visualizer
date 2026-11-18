@@ -22,6 +22,7 @@ from ttnn_visualizer.event_logging import (
     EVENT_FIELD,
     EVENT_LOG_ID_LENGTH,
     EVENT_LOG_ID_SESSION_KEY,
+    LOCAL_ONLY_CLIENT_EVENTS,
     LOG_SIZE_CHECK_INTERVAL_BYTES,
     MAX_EVENT_LOG_BATCH_EVENTS,
     RECORDING_DISABLED_ENV_VAR,
@@ -439,8 +440,8 @@ def test_accepted_batch_totals_the_way_the_collector_reads_it(
         ),
         pytest.param(
             {
-                "event": EventLogEvent.MLIR_SPLIT_VIEW_USED.value,
-                "details": {"view": "mlir"},
+                "event": EventLogEvent.NPE_PLAYBACK_STARTED.value,
+                "details": {"npe_mode": "zones"},
             },
             id="detail_on_an_event_without_details",
         ),
@@ -460,10 +461,10 @@ def test_accepted_batch_totals_the_way_the_collector_reads_it(
         ),
         pytest.param(
             {
-                "event": EventLogEvent.MLIR_FILE_LOADED.value,
-                "details": {"mlir_format": ".tflite"},
+                "event": EventLogEvent.PERF_CHART_VIEWED.value,
+                "details": {"perf_chart": "perf-chart-op-duration-histogram"},
             },
-            id="mlir_format_with_its_dot",
+            id="perf_chart_as_its_dom_id",
         ),
         pytest.param({"details": {"view": "operations"}}, id="event_name_absent"),
     ],
@@ -517,8 +518,6 @@ ACCEPTED_EVENTS = {
     EventLogEvent.PERF_COMPARISON_USED: {"report_count_bucket": "three_or_more"},
     EventLogEvent.NPE_PLAYBACK_STARTED: {},
     EventLogEvent.NPE_MODE_CHANGED: {"npe_mode": "cycles_scale"},
-    EventLogEvent.MLIR_FILE_LOADED: {"mlir_format": "mlirbc"},
-    EventLogEvent.MLIR_SPLIT_VIEW_USED: {},
     EventLogEvent.DRILLDOWN_OPENED: {"drilldown_target": "source_file"},
     EventLogEvent.FILTER_USED: {"filter_surface": "perf_op_code"},
     EventLogEvent.REMOTE_CONNECTION_TEST: {
@@ -936,3 +935,49 @@ def test_switch_off_via_marker_file_writes_nothing(client, event_log_directory):
 
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert read_event_log_lines(event_log_directory) == []
+
+
+_LOCAL_ONLY_EVENT_DETAILS = {
+    EventLogEvent.PERF_COMPARISON_USED: {"report_count_bucket": "one"},
+    EventLogEvent.REMOTE_CONNECTION_TEST: {"connection_test_result": "success"},
+}
+
+
+def test_every_local_only_event_has_a_case_below():
+    assert set(_LOCAL_ONLY_EVENT_DETAILS) == LOCAL_ONLY_CLIENT_EVENTS
+
+
+@pytest.mark.parametrize("event", sorted(LOCAL_ONLY_CLIENT_EVENTS, key=str))
+def test_hosted_endpoint_refuses_an_event_for_a_local_only_feature(
+    app, client, event_log_directory, event
+):
+    """Comparison and remote sync do not exist hosted, so a hosted post is not real use."""
+    app.config["SERVER_MODE"] = True
+
+    response = _post_events(
+        client,
+        [
+            REPORT_LOADED_EVENT,
+            {EVENT_FIELD: event.value, "details": _LOCAL_ONLY_EVENT_DETAILS[event]},
+        ],
+    )
+
+    assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+    assert (
+        response.get_json()["error"] == "That event is not recorded under SERVER_MODE"
+    )
+    # Refused whole, like any batch carrying a bad event, so the session gains no log.
+    assert _event_log_id(client) is None
+
+
+@pytest.mark.parametrize("event", sorted(LOCAL_ONLY_CLIENT_EVENTS, key=str))
+def test_local_endpoint_records_an_event_for_a_local_only_feature(
+    client, event_log_directory, event
+):
+    response = _post_events(
+        client,
+        [{EVENT_FIELD: event.value, "details": _LOCAL_ONLY_EVENT_DETAILS[event]}],
+    )
+
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert len(read_event_log_lines(event_log_directory)) == 1

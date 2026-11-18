@@ -3081,19 +3081,19 @@ def ingest_event_log_events():
         )
 
     validated: List[Tuple[EventLogEvent, Dict[str, Enum]]] = []
+    server_mode = is_flag_enabled(current_app.config["SERVER_MODE"])
 
     # Every event is validated before any is written, so a batch carrying one bad event
     # appends nothing. Partial acceptance would leave a reader unable to tell a truncated
     # batch from a complete one.
     for entry in events:
         try:
-            validated.append(validate_client_event(entry))
+            validated.append(validate_client_event(entry, server_mode=server_mode))
         except EventLogEventRejected as rejection:
             # `EventLogEventRejected` messages describe the schema rather than echoing what
             # arrived, so passing one through cannot leak client-supplied text.
             return response_unprocessable_entity(str(rejection))
 
-    server_mode = is_flag_enabled(current_app.config["SERVER_MODE"])
     event_log_id = ensure_event_log_id() if server_mode else None
     if not admit_event_log_batch(server_mode, event_log_id):
         return Response(status=HTTPStatus.NO_CONTENT)

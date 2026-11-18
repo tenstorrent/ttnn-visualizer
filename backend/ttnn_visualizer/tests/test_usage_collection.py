@@ -1163,31 +1163,13 @@ _PRIVACY_REVIEWED_ATTRIBUTES: dict[str, dict[str, frozenset[str] | str]] = {
             }
         ),
     },
-    "ttnn_visualizer_mlir_file_loaded_total": {
-        "mlir_format": frozenset(
-            {
-                "pb",
-                "pbtxt",
-                "graphdef",
-                "tflite",
-                "json",
-                "pt2",
-                "mlir",
-                "mlirbc",
-                "other",
-            }
-        ),
-    },
-    "ttnn_visualizer_mlir_split_view_used_total": {},
     "ttnn_visualizer_drilldown_opened_total": {
         "drilldown_target": frozenset(
             {"tensor_details", "buffer_details", "stack_trace", "source_file"}
         ),
     },
     "ttnn_visualizer_filter_used_total": {
-        "filter_surface": frozenset(
-            {"operations", "tensors", "perf_op_code", "mlir_op"}
-        ),
+        "filter_surface": frozenset({"operations", "tensors", "perf_op_code"}),
     },
     "ttnn_visualizer_remote_connection_test_total": {
         "connection_test_result": frozenset(

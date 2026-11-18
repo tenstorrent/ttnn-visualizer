@@ -8,23 +8,18 @@ import {
     DrilldownTarget,
     EventLogEvent,
     FilterSurface,
-    MlirFileFormat,
     NpeMode,
     PerfChartLabel,
     PerfTableOption,
     RemoteConnectionTestResult,
 } from '../src/definitions/EventLogEvent';
-import { MLIR_SERVER_ACCEPTED_EXTENSIONS } from '../src/definitions/MlirServer';
 import { PerfChartId } from '../src/definitions/PerformanceCharts';
 import { getOperationTypesChartId } from '../src/functions/buildChartIndexEntries';
 import {
     getComparisonReportCountBucket,
-    getMlirFileFormat,
     getPerfChartForChartId,
     recordDrilldownOpened,
     recordFilterUsed,
-    recordMlirFileLoaded,
-    recordMlirSplitViewUsed,
     recordNpeModeChanged,
     recordNpePlaybackStarted,
     recordPerfChartViewed,
@@ -61,6 +56,8 @@ describe('getPerfChartForChartId', () => {
     it('returns null for an id that is not a chart', () => {
         expect(getPerfChartForChartId('buffer-summary-plot')).toBeNull();
         expect(getPerfChartForChartId('perf-chart-operation-typesX')).toBeNull();
+        // The bare prefix is no report's section: every one carries a suffix.
+        expect(getPerfChartForChartId(`${PerfChartId.OperationTypes}-`)).toBeNull();
     });
 });
 
@@ -72,32 +69,16 @@ describe('getComparisonReportCountBucket', () => {
         [2, ComparisonReportCountBucket.TWO],
         [3, ComparisonReportCountBucket.THREE_OR_MORE],
         [7, ComparisonReportCountBucket.THREE_OR_MORE],
-    ])('buckets %i comparison reports as %s', (reportCount, bucket) => {
+        // Not a whole number of reports, so not a comparison to count.
+        [Number.NaN, null],
+        [1.5, null],
+    ])('buckets %d comparison reports as %s', (reportCount, bucket) => {
         expect(getComparisonReportCountBucket(reportCount)).toBe(bucket);
     });
 });
 
-describe('getMlirFileFormat', () => {
-    it.each(MLIR_SERVER_ACCEPTED_EXTENSIONS)('gives the accepted extension %s its own format', (extension) => {
-        expect(getMlirFileFormat(`model${extension}`)).toBe(extension.slice(1));
-    });
-
-    it.each([
-        ['model.tflite', MlirFileFormat.TFLITE],
-        ['MODEL.PT2', MlirFileFormat.PT2],
-        ['graph.mlirbc', MlirFileFormat.MLIRBC],
-        ['graph.mlir', MlirFileFormat.MLIR],
-        ['archive.tar.pb', MlirFileFormat.PB],
-        ['notes.txt', MlirFileFormat.OTHER],
-        ['no-extension', MlirFileFormat.OTHER],
-        ['trailing.', MlirFileFormat.OTHER],
-    ])('reads %s as %s', (filename, format) => {
-        expect(getMlirFileFormat(filename)).toBe(format);
-    });
-});
-
 describe('recorders', () => {
-    it.each([
+    const recorderCases: [() => void, { event: EventLogEvent; details: object }][] = [
         [
             () => recordPerfChartViewed(PerfChartLabel.MATMUL_DEVICE_TIME),
             { event: EventLogEvent.PERF_CHART_VIEWED, details: { perf_chart: PerfChartLabel.MATMUL_DEVICE_TIME } },
@@ -122,17 +103,12 @@ describe('recorders', () => {
             { event: EventLogEvent.NPE_MODE_CHANGED, details: { npe_mode: NpeMode.CYCLES_SCALE } },
         ],
         [
-            () => recordMlirFileLoaded('resnet.graphdef'),
-            { event: EventLogEvent.MLIR_FILE_LOADED, details: { mlir_format: MlirFileFormat.GRAPHDEF } },
-        ],
-        [() => recordMlirSplitViewUsed(), { event: EventLogEvent.MLIR_SPLIT_VIEW_USED, details: {} }],
-        [
             () => recordDrilldownOpened(DrilldownTarget.STACK_TRACE),
             { event: EventLogEvent.DRILLDOWN_OPENED, details: { drilldown_target: DrilldownTarget.STACK_TRACE } },
         ],
         [
-            () => recordFilterUsed(FilterSurface.MLIR_OP),
-            { event: EventLogEvent.FILTER_USED, details: { filter_surface: FilterSurface.MLIR_OP } },
+            () => recordFilterUsed(FilterSurface.TENSORS),
+            { event: EventLogEvent.FILTER_USED, details: { filter_surface: FilterSurface.TENSORS } },
         ],
         [
             () => recordRemoteConnectionTest(RemoteConnectionTestResult.UNREACHABLE),
@@ -141,21 +117,20 @@ describe('recorders', () => {
                 details: { connection_test_result: RemoteConnectionTestResult.UNREACHABLE },
             },
         ],
-    ])('posts the wire shape the server validates (%#)', (record, payload) => {
-        record();
+    ];
 
-        expect(recordEvent).toHaveBeenCalledExactlyOnceWith(payload);
-    });
+    it.each(recorderCases.map(([record, payload]) => ({ record, payload, event: payload.event })))(
+        'posts the wire shape the server validates for $event',
+        ({ record, payload }) => {
+            record();
+
+            expect(recordEvent).toHaveBeenCalledExactlyOnceWith(payload);
+        },
+    );
 
     it('records nothing for an empty comparison', () => {
         recordPerfComparisonUsed(0);
 
         expect(recordEvent).not.toHaveBeenCalled();
-    });
-
-    it('never records the MLIR file name itself', () => {
-        recordMlirFileLoaded('secret-customer-model.tflite');
-
-        expect(JSON.stringify(recordEvent.mock.calls)).not.toContain('secret-customer-model');
     });
 });

@@ -35,8 +35,6 @@ export enum EventLogEvent {
     PERF_COMPARISON_USED = 'perf_comparison_used',
     NPE_PLAYBACK_STARTED = 'npe_playback_started',
     NPE_MODE_CHANGED = 'npe_mode_changed',
-    MLIR_FILE_LOADED = 'mlir_file_loaded',
-    MLIR_SPLIT_VIEW_USED = 'mlir_split_view_used',
     DRILLDOWN_OPENED = 'drilldown_opened',
     FILTER_USED = 'filter_used',
     REMOTE_CONNECTION_TEST = 'remote_connection_test',
@@ -98,13 +96,15 @@ export enum EventLogView {
 }
 
 // The vocabularies below serve the per-surface events from #1837. What each one counts,
-// and the caveats for reading it, live on its Python twin in `event_logging.py` and in
-// `docs/src/event-logging.md`.
+// and most caveats for reading it, live on its Python twin in `event_logging.py` and in
+// `docs/src/event-logging.md`. A caveat stays here only where it guards an invariant a
+// change on this side could break.
 
 /**
  * One member per `PerfChartId`: the DOM id without its `perf-chart-` prefix, in snake_case,
  * so the exported label does not move with markup. Named apart from the `PerfChart`
- * component, which renders a chart rather than labelling one.
+ * component, which renders a chart rather than labelling one. Not `PERF_CHART_LABELS`
+ * either: those are the titles shown to people, and these are never displayed.
  */
 export enum PerfChartLabel {
     OP_DURATION_HISTOGRAM = 'op_duration_histogram',
@@ -152,19 +152,6 @@ export enum NpeMode {
     ZONES = 'zones',
 }
 
-// Every member but `OTHER` is an extension in `MLIR_SERVER_ACCEPTED_EXTENSIONS`, without the dot.
-export enum MlirFileFormat {
-    PB = 'pb',
-    PBTXT = 'pbtxt',
-    GRAPHDEF = 'graphdef',
-    TFLITE = 'tflite',
-    JSON = 'json',
-    PT2 = 'pt2',
-    MLIR = 'mlir',
-    MLIRBC = 'mlirbc',
-    OTHER = 'other',
-}
-
 // `operation_details` is absent on purpose: it is a route, and `view_opened` owns it.
 export enum DrilldownTarget {
     TENSOR_DETAILS = 'tensor_details',
@@ -177,7 +164,6 @@ export enum FilterSurface {
     OPERATIONS = 'operations',
     TENSORS = 'tensors',
     PERF_OP_CODE = 'perf_op_code',
-    MLIR_OP = 'mlir_op',
 }
 
 export enum RemoteConnectionTestResult {
@@ -221,8 +207,6 @@ export type EventLogEventPayload =
       }
     | { event: EventLogEvent.NPE_PLAYBACK_STARTED; details: Record<string, never> }
     | { event: EventLogEvent.NPE_MODE_CHANGED; details: { npe_mode: NpeMode } }
-    | { event: EventLogEvent.MLIR_FILE_LOADED; details: { mlir_format: MlirFileFormat } }
-    | { event: EventLogEvent.MLIR_SPLIT_VIEW_USED; details: Record<string, never> }
     | { event: EventLogEvent.DRILLDOWN_OPENED; details: { drilldown_target: DrilldownTarget } }
     | { event: EventLogEvent.FILTER_USED; details: { filter_surface: FilterSurface } }
     | { event: EventLogEvent.REMOTE_CONNECTION_TEST; details: { connection_test_result: RemoteConnectionTestResult } };

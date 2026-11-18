@@ -66,7 +66,7 @@ Under `SERVER_MODE`, create `/data/usage/disabled` instead. The marker applies t
 Ordinary event lines contain these common fields:
 
 - `ts`: the UTC time at which the server wrote the event, in `YYYY-MM-DDTHH:MM:SSZ` form. Frontend events are buffered, so this can be later than the interaction.
-- `event`: one of `app_start`, `report_loaded`, `report_load_failed`, `view_opened`, `view_engaged`, `mcp_tool_called`, `perf_chart_viewed`, `perf_table_option_toggled`, `perf_comparison_used`, `npe_playback_started`, `npe_mode_changed`, `mlir_file_loaded`, `mlir_split_view_used`, `drilldown_opened`, `filter_used`, or `remote_connection_test`.
+- `event`: one of `app_start`, `report_loaded`, `report_load_failed`, `view_opened`, `view_engaged`, `mcp_tool_called`, `perf_chart_viewed`, `perf_table_option_toggled`, `perf_comparison_used`, `npe_playback_started`, `npe_mode_changed`, `drilldown_opened`, `filter_used`, or `remote_connection_test`.
 - `schema_version`: the log format version, currently `1`.
 - `run_id`: a random `8`-character identifier generated for each backend launch and shared by its server workers. It is not persisted between launches and is never exported, either by the local metrics projection or by a hosted collector. Hosted browser-session identity comes from the containing directory, not this field.
 
@@ -137,7 +137,7 @@ Recorded by `ttnn-visualizer-mcp` when a registered tool reaches its handler, no
 
 `refused` is a tool declining a well-formed call it cannot answer (unknown handle, argument out of range). `error` is an unexpected failure the server did not anticipate.
 
-**Per-surface events.** The events below record what is used inside the Performance, NPE and MLIR views, and across them. Each section names the #1819 question it answers. Most fire once per deliberate action, from the control itself: restoring persisted state, a reset by the application, a re-click on the option already selected, and anything continuous such as dragging or scrubbing record nothing. Two are tied to what is shown rather than to a control, and say so in their sections: `perf_chart_viewed` follows the scroll position, and `drilldown_opened` with `buffer_details` is recorded again when a reload restores the navigation that opened it. Read every count against the matching `report_loaded` count: a view nobody opens because nobody loaded that kind of report is not evidence that the feature is unwanted.
+**Per-surface events.** The events below record what is used inside the Performance and NPE views, and across them. Each section names the #1819 question it answers. Most fire once per deliberate action, from the control itself: restoring persisted state, a reset by the application, a re-click on the option already selected, and anything continuous such as dragging or scrubbing record nothing. Two are tied to what is shown rather than to a control, and say so in their sections: `perf_chart_viewed` follows the scroll position, and `drilldown_opened` with `buffer_details` is recorded again when a reload restores the navigation that opened it. Read every count against the matching `report_loaded` count: a view nobody opens because nobody loaded that kind of report is not evidence that the feature is unwanted.
 
 ### `perf_chart_viewed`
 
@@ -157,7 +157,7 @@ Recorded when a switch above the performance table is flipped. It answers which 
 
 ### `perf_comparison_used`
 
-Recorded each time a comparison report is added or replaced in the Performance view. It answers whether comparison is worth its complexity (Q4). Removing one records nothing. Comparison is unavailable under `SERVER_MODE`, so the application never records this event there.
+Recorded each time a comparison report is added or replaced in the Performance view. It answers whether comparison is worth its complexity (Q4). Removing one records nothing. Comparison is unavailable under `SERVER_MODE`, so the endpoint refuses this event there.
 
 - `report_count_bucket`: `one`, `two`, `three_or_more`.
 
@@ -175,18 +175,6 @@ Recorded when an NPE view control is switched. It answers which NPE modes are us
 
 `fabric_events` and `local_events` mean only that kind of event is shown, and `all_events` that both are. `zones` is opening the zones panel. `alt_congestion_colours` is the one two-state switch, so it names the switch flipped and is recorded whichever way it goes, never for the saved preference applied at load.
 
-### `mlir_file_loaded`
-
-Recorded once per file shown in the MLIR view after an upload, beside `report_loaded`. It answers which inputs the beta is used with (Q3 and Q4).
-
-- `mlir_format`: `pb`, `pbtxt`, `graphdef`, `tflite`, `json`, `pt2`, `mlir`, `mlirbc`, `other`.
-
-The format is the extension of the uploaded file's name, and the name itself is never recorded. The view is unavailable under `SERVER_MODE`, so the application never records this event there, and released builds load every format through the MLIR server.
-
-### `mlir_split_view_used`
-
-Recorded when the MLIR split view is opened, either from its button or by viewing two files at once. It answers whether the split view is used (Q4). It has no event-specific fields.
-
 ### `drilldown_opened`
 
 Recorded when a detail surface is opened. It answers how deep use goes (Q4).
@@ -202,15 +190,13 @@ Operation details are not a target: `view_opened` already counts them with `view
 
 ### `filter_used`
 
-Recorded the first time a filter's query becomes non-empty, per visit to the list or graph. It answers which filters are used (Q4). The query text is never recorded.
+Recorded the first time a filter's query becomes non-empty, per visit to the list, a visit being each time the list is opened. It answers which filters are used (Q4). The query text is never recorded.
 
-- `filter_surface`: `operations`, `tensors`, `perf_op_code`, `mlir_op`.
-
-In the MLIR split view each pane has its own filter, so one visit can record `mlir_op` twice.
+- `filter_surface`: `operations`, `tensors`, `perf_op_code`.
 
 ### `remote_connection_test`
 
-Recorded when a remote connection test in the connection dialog finishes. It answers how often SSH sync works, and how it fails (Q5). Form errors caught before a request is sent are not tests and record nothing. Remote sync is unavailable under `SERVER_MODE`, so the application never records this event there. Host, user and path are never recorded.
+Recorded when a remote connection test in the connection dialog finishes. It answers how often SSH sync works, and how it fails (Q5). Form errors caught before a request is sent are not tests and record nothing. Remote sync is unavailable under `SERVER_MODE`, so the endpoint refuses this event there. Host, user and path are never recorded.
 
 - `connection_test_result`: `success`, `auth_failed`, `host_key_rejected`, `unreachable`, `no_reports_found`, `report_path_failed`, `other`.
 

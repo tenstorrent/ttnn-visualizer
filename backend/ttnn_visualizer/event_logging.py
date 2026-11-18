@@ -169,7 +169,6 @@ PERF_CHART_FIELD = "perf_chart"
 PERF_TABLE_OPTION_FIELD = "perf_table_option"
 REPORT_COUNT_BUCKET_FIELD = "report_count_bucket"
 NPE_MODE_FIELD = "npe_mode"
-MLIR_FORMAT_FIELD = "mlir_format"
 DRILLDOWN_TARGET_FIELD = "drilldown_target"
 FILTER_SURFACE_FIELD = "filter_surface"
 CONNECTION_TEST_RESULT_FIELD = "connection_test_result"
@@ -248,8 +247,6 @@ class EventLogEvent(str, Enum):
     PERF_COMPARISON_USED = "perf_comparison_used"
     NPE_PLAYBACK_STARTED = "npe_playback_started"
     NPE_MODE_CHANGED = "npe_mode_changed"
-    MLIR_FILE_LOADED = "mlir_file_loaded"
-    MLIR_SPLIT_VIEW_USED = "mlir_split_view_used"
     DRILLDOWN_OPENED = "drilldown_opened"
     FILTER_USED = "filter_used"
     REMOTE_CONNECTION_TEST = "remote_connection_test"
@@ -418,7 +415,7 @@ class ComparisonReportCountBucket(str, Enum):
 
     Answers whether comparison is worth its complexity (Q4). Bucketed rather than counted,
     as every size here is. Comparison is unavailable under ``SERVER_MODE``, so the
-    application never records this event there; the endpoint does not refuse it.
+    endpoint refuses this event there.
     """
 
     ONE = "one"
@@ -452,27 +449,6 @@ class NpeMode(str, Enum):
     ZONES = "zones"
 
 
-class MlirFileFormat(str, Enum):
-    """The extension of a loaded MLIR input, for ``mlir_file_loaded`` (Q3, Q4).
-
-    The members other than ``OTHER`` are exactly ``MLIR_SERVER_ACCEPTED_EXTENSIONS`` in
-    ``mlir.py``, without the dot; a test pins the two together. Taken from the uploaded
-    file's name, never the converted graph's, which is always ``.json``. There is no
-    server-versus-browser detail: the browser-only JSON loader exists in development
-    builds alone, so released builds always load through a server.
-    """
-
-    PB = "pb"
-    PBTXT = "pbtxt"
-    GRAPHDEF = "graphdef"
-    TFLITE = "tflite"
-    JSON = "json"
-    PT2 = "pt2"
-    MLIR = "mlir"
-    MLIRBC = "mlirbc"
-    OTHER = "other"
-
-
 class DrilldownTarget(str, Enum):
     """The detail surface a user opened, for ``drilldown_opened`` (Q4: depth of use).
 
@@ -488,17 +464,15 @@ class DrilldownTarget(str, Enum):
 
 
 class FilterSurface(str, Enum):
-    """A list or graph whose filter was used, for ``filter_used`` (Q4).
+    """A list whose filter was used, for ``filter_used`` (Q4).
 
-    The event is the boolean: it fires on the first non-empty query per mount of the
-    surface, and the query itself is never recorded. In the MLIR split view each pane
-    has its own filter, so one sitting can record ``mlir_op`` twice.
+    The event is the boolean: it fires on the first non-empty query per visit to the
+    surface, a visit being each time it mounts, and the query itself is never recorded.
     """
 
     OPERATIONS = "operations"
     TENSORS = "tensors"
     PERF_OP_CODE = "perf_op_code"
-    MLIR_OP = "mlir_op"
 
 
 class RemoteConnectionTestResult(str, Enum):
@@ -507,9 +481,8 @@ class RemoteConnectionTestResult(str, Enum):
     ``host_key_rejected`` and ``report_path_failed`` are split out of ``auth_failed`` and
     ``other`` because they are the likeliest first-connection failures and need
     different fixes. ``report_path_failed`` means SSH succeeded but a configured path is
-    missing, not a directory, or unreadable. Remote sync is local-only, so the application
-    never records this event under ``SERVER_MODE``; the endpoint does not refuse it. Host,
-    user and path are never recorded.
+    missing, not a directory, or unreadable. Remote sync is local-only, so the endpoint
+    refuses this event under ``SERVER_MODE``. Host, user and path are never recorded.
     """
 
     SUCCESS = "success"
@@ -539,7 +512,6 @@ _DETAIL_FIELD_ENUMS: Mapping[str, Type[Enum]] = {
     PERF_TABLE_OPTION_FIELD: PerfTableOption,
     REPORT_COUNT_BUCKET_FIELD: ComparisonReportCountBucket,
     NPE_MODE_FIELD: NpeMode,
-    MLIR_FORMAT_FIELD: MlirFileFormat,
     DRILLDOWN_TARGET_FIELD: DrilldownTarget,
     FILTER_SURFACE_FIELD: FilterSurface,
     CONNECTION_TEST_RESULT_FIELD: RemoteConnectionTestResult,
@@ -565,13 +537,21 @@ CLIENT_EVENT_DETAIL_FIELDS: Mapping[EventLogEvent, Tuple[str, ...]] = {
     # with `details: {}`.
     EventLogEvent.NPE_PLAYBACK_STARTED: (),
     EventLogEvent.NPE_MODE_CHANGED: (NPE_MODE_FIELD,),
-    EventLogEvent.MLIR_FILE_LOADED: (MLIR_FORMAT_FIELD,),
-    # Q4: is the split view used. No details, like playback.
-    EventLogEvent.MLIR_SPLIT_VIEW_USED: (),
     EventLogEvent.DRILLDOWN_OPENED: (DRILLDOWN_TARGET_FIELD,),
     EventLogEvent.FILTER_USED: (FILTER_SURFACE_FIELD,),
     EventLogEvent.REMOTE_CONNECTION_TEST: (CONNECTION_TEST_RESULT_FIELD,),
 }
+
+# Client events whose feature does not exist under ``SERVER_MODE``, so a hosted post of
+# one cannot be real use. Refused there rather than written: any visitor could otherwise
+# inflate the hosted count of a feature nobody hosted can reach.
+LOCAL_ONLY_CLIENT_EVENTS: FrozenSet[EventLogEvent] = frozenset(
+    {
+        EventLogEvent.PERF_COMPARISON_USED,
+        EventLogEvent.REMOTE_CONNECTION_TEST,
+    }
+)
+
 SERVER_EVENT_DETAIL_FIELDS: Mapping[EventLogEvent, Tuple[str, ...]] = {
     EventLogEvent.APP_START: (
         VERSION_FIELD,
@@ -1464,7 +1444,9 @@ def _describe_expected_details(
     return f"Event {event.value} {lead}: {', '.join(expected)}"
 
 
-def validate_client_event(entry: Any) -> Tuple[EventLogEvent, Dict[str, Enum]]:
+def validate_client_event(
+    entry: Any, server_mode: bool = False
+) -> Tuple[EventLogEvent, Dict[str, Enum]]:
     """Resolve one posted event object against the schema, or refuse it outright.
 
     Takes the whole object rather than a name and a details mapping so the wire shape has
@@ -1505,6 +1487,9 @@ def validate_client_event(entry: Any) -> Tuple[EventLogEvent, Dict[str, Enum]]:
     if event not in CLIENT_EVENT_DETAIL_FIELDS:
         # `app_start` is a real member, so an unqualified `EventLogEvent(name)` accepts it.
         raise EventLogEventRejected("That event cannot be recorded by a client")
+
+    if server_mode and event in LOCAL_ONLY_CLIENT_EVENTS:
+        raise EventLogEventRejected("That event is not recorded under SERVER_MODE")
 
     expected = CLIENT_EVENT_DETAIL_FIELDS[event]
 
