@@ -8,8 +8,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import NPEView from '../src/components/npe/NPEViewComponent';
 import { NPEData } from '../src/model/NPEModel';
 import { EventLogEvent, NpeMode } from '../src/definitions/EventLogEvent';
-import { altCongestionColorsAtom } from '../src/store/app';
-import { AtomProviderInitialValues } from './helpers/atomProvider';
 import { TestProviders } from './helpers/TestProviders';
 
 const { recordEvent, zonesPanel } = vi.hoisted(() => ({
@@ -78,16 +76,16 @@ const FABRIC_TRANSFER = {
     route: [],
 };
 
-const viewTree = (initialAtomValues: AtomProviderInitialValues, nocTransfers: unknown[]) => (
-    <TestProviders initialAtomValues={initialAtomValues}>
+const viewTree = (nocTransfers: unknown[]) => (
+    <TestProviders>
         <NPEView npeData={makeNpeData(nocTransfers)} />
     </TestProviders>
 );
 
-function renderView(initialAtomValues: AtomProviderInitialValues = [], nocTransfers: unknown[] = []) {
-    const view = render(viewTree(initialAtomValues, nocTransfers));
+function renderView(nocTransfers: unknown[] = []) {
+    const view = render(viewTree(nocTransfers));
 
-    return { ...view, showTrace: (transfers: unknown[]) => view.rerender(viewTree(initialAtomValues, transfers)) };
+    return { ...view, showTrace: (transfers: unknown[]) => view.rerender(viewTree(transfers)) };
 }
 
 const click = (name: string) => fireEvent.click(screen.getByRole('button', { name }));
@@ -101,12 +99,22 @@ beforeEach(() => {
 afterEach(() => {
     cleanup();
     vi.useRealTimers();
+    window.localStorage.clear();
 });
 
 describe('NPEView usage events', () => {
-    it('records nothing on mount, including a saved alternate-colour preference', () => {
-        renderView([[altCongestionColorsAtom, true]]);
+    it('records nothing on mount', () => {
+        renderView();
 
+        expect(recordEvent).not.toHaveBeenCalled();
+    });
+
+    it('records nothing when a saved alternate-colour preference is restored', () => {
+        // Seeded in storage rather than hydrated, so the atom restores it after mount.
+        window.localStorage.setItem('altCongestionColors', 'true');
+        renderView();
+
+        expect(screen.getByLabelText<HTMLInputElement>('Alternate congestion colors').checked).toBe(true);
         expect(recordEvent).not.toHaveBeenCalled();
     });
 
@@ -206,13 +214,12 @@ describe('NPEView usage events', () => {
         renderView();
 
         const altColours = screen.getByLabelText<HTMLInputElement>('Alternate congestion colors');
-        // The preference is persisted, so read where it starts rather than assume it.
-        const wasOn = altColours.checked;
+        expect(altColours.checked).toBe(false);
 
         fireEvent.click(altColours);
-        expect(altColours.checked).toBe(!wasOn);
+        expect(altColours.checked).toBe(true);
         fireEvent.click(altColours);
-        expect(altColours.checked).toBe(wasOn);
+        expect(altColours.checked).toBe(false);
 
         expect(recordEvent.mock.calls).toEqual([
             [modeChanged(NpeMode.ALT_CONGESTION_COLOURS)],
@@ -240,7 +247,7 @@ describe('NPEView usage events', () => {
     });
 
     it('records the event filter state each switch leads to', () => {
-        renderView([], [FABRIC_TRANSFER]);
+        renderView([FABRIC_TRANSFER]);
 
         // Both shown, so turning fabric events off leaves local; turning it back on shows
         // both again; turning local off leaves fabric.
@@ -256,7 +263,7 @@ describe('NPEView usage events', () => {
     });
 
     it('records each event filter state, including from one scope straight to the other', () => {
-        renderView([], [FABRIC_TRANSFER]);
+        renderView([FABRIC_TRANSFER]);
         const fabric = screen.getByLabelText('Fabric events');
         const local = screen.getByLabelText('Local events');
 
@@ -279,7 +286,7 @@ describe('NPEView usage events', () => {
     });
 
     it('records nothing when a trace without fabric events resets the event filter', () => {
-        const { showTrace } = renderView([], [FABRIC_TRANSFER]);
+        const { showTrace } = renderView([FABRIC_TRANSFER]);
 
         fireEvent.click(screen.getByLabelText('Fabric events'));
         showTrace([]);

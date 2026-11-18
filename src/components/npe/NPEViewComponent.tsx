@@ -432,8 +432,8 @@ const NPEView = ({
         return clearInterval(animationInterval as number);
     };
 
-    // Recorded here, from the buttons, never in `startAnimation` or its interval: those run
-    // on every tick. 2x during playback changes speed rather than starting it.
+    // Recorded here, from the buttons, never in `startAnimation` (2x during playback calls it
+    // too, changing speed rather than starting playback) or its interval (runs on every tick).
     const onPlay = (speed: number = PLAYBACK_SPEED) => {
         if (!isTimelinePlaying) {
             recordNpePlaybackStarted();
