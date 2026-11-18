@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import (
     Callable,
     Dict,
+    Final,
     Hashable,
     Iterator,
     List,
@@ -280,10 +281,17 @@ def _buffer_type_name(value: object) -> str:
 
 L1_PRESSURE_NOTE = (
     "Sizes are bytes per bank on `device_id` only, the most constrained device: "
-    "the one with the smallest largest free block. Free-space figures are an "
-    "upper bound: `buffers` records tensor allocations only, excluding "
-    "circular buffers and tensors allocated and freed inside one operation."
+    "the one with the smallest largest free block. `buffers` records tensor "
+    "allocations only, excluding circular buffers and tensors allocated and freed "
+    "inside one operation, so `largest_free_block` and `largest_free_pct` are an "
+    "upper bound, `allocated_bytes`, `fullness_pct` and `high_water_bytes` a floor, "
+    "and `free_segments` neither. `high_water_bytes` is where the highest recorded "
+    "tensor ends above the window's start, not a peak: it often equals "
+    "`usable_bytes` while L1 is mostly free."
 )
+
+# What `l1_pressure` ranks by first, and so what `operations_at_top` ties on.
+L1_PRESSURE_RANK_KEY: Final = "largest_free_block"
 
 NO_L1_GEOMETRY_CAVEAT = (
     "l1_pressure is null because no device records a usable L1 window "
@@ -377,7 +385,7 @@ def _pressure_rank(
     """Most constrained first: smallest largest free block, then fullest, then most
     allocated, then `tie`. Fullness is compared unrounded, as the app compares it."""
     return (
-        pressure["largest_free_block"],
+        pressure[L1_PRESSURE_RANK_KEY],
         -pressure["allocated_bytes"] / pressure["usable_bytes"],
         -pressure["allocated_bytes"],
         tie,
@@ -527,21 +535,30 @@ def _ranked_l1_pressure(
         for operation_id in sorted(operation_ids - seen):
             yield operation_id, empty
 
-    count = 0
+    count = at_top = 0
+    smallest: Optional[int] = None
 
     def counted() -> Iterator[Tuple[int, L1Pressure]]:
-        nonlocal count
+        nonlocal count, at_top, smallest
         for item in measured():
             count += 1
+            free = item[1][L1_PRESSURE_RANK_KEY]
+            if smallest is None or free < smallest:
+                smallest, at_top = free, 1
+            elif free == smallest:
+                at_top += 1
             yield item
 
     top = heapq.nsmallest(
         cap, counted(), key=lambda item: _pressure_rank(item[1], item[0])
     )
     return {
-        "ranked_by": "largest_free_block",
+        "ranked_by": L1_PRESSURE_RANK_KEY,
         "size_unit": BUFFER_SIZE_UNIT,
         "operation_count": count,
+        # As `operations_at_peak`, but a zero counts, since a full L1 is a real top:
+        # tens of operations routinely share it, and a limit must not hide them.
+        "operations_at_top": at_top,
         "returned": len(top),
         "operations": [
             _ranked_row(operation_id, names.get(operation_id), pressure)
@@ -1089,6 +1106,12 @@ def memory_profile(
     hold almost no L1 tensors at all, so this reports a figure near zero for a
     model saturating L1. Neither the true peak nor the operation holding it can
     be derived from this response. #2034
+
+    `l1_pressure` ranks the operations by their most constrained device's largest free
+    block. It is None under any `buffer_type` but L1, for a report holding no L1
+    buffers (where a `buffer_type` of L1 is refused if the report holds other types),
+    and, with a caveat, when no device records an L1 window or the devices rows cannot
+    be attributed to the rank.
 
     Nothing here adds one memory type to another. `max_size_per_bank` is divided
     by the bank count of its own memory type, and those counts differ, so a

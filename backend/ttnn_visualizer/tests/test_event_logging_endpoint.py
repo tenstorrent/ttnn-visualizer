@@ -433,6 +433,38 @@ def test_accepted_batch_totals_the_way_the_collector_reads_it(
             id="details_not_an_object",
         ),
         pytest.param({"event": EventLogEvent.VIEW_OPENED.value}, id="details_absent"),
+        pytest.param(
+            {"event": EventLogEvent.NPE_PLAYBACK_STARTED.value},
+            id="details_absent_on_an_event_without_details",
+        ),
+        pytest.param(
+            {
+                "event": EventLogEvent.MLIR_SPLIT_VIEW_USED.value,
+                "details": {"view": "mlir"},
+            },
+            id="detail_on_an_event_without_details",
+        ),
+        pytest.param(
+            {
+                "event": EventLogEvent.FILTER_USED.value,
+                "details": {"filter_surface": "operations", "query": "matmul"},
+            },
+            id="filter_query_text",
+        ),
+        pytest.param(
+            {
+                "event": EventLogEvent.DRILLDOWN_OPENED.value,
+                "details": {"drilldown_target": "operation_details"},
+            },
+            id="operation_details_is_not_a_drilldown",
+        ),
+        pytest.param(
+            {
+                "event": EventLogEvent.MLIR_FILE_LOADED.value,
+                "details": {"mlir_format": ".tflite"},
+            },
+            id="mlir_format_with_its_dot",
+        ),
         pytest.param({"details": {"view": "operations"}}, id="event_name_absent"),
     ],
 )
@@ -480,13 +512,25 @@ ACCEPTED_EVENTS = {
     },
     EventLogEvent.VIEW_OPENED: {"view": "operations"},
     EventLogEvent.VIEW_ENGAGED: {"view": "performance"},
+    EventLogEvent.PERF_CHART_VIEWED: {"perf_chart": "matmul_device_time"},
+    EventLogEvent.PERF_TABLE_OPTION_TOGGLED: {"perf_table_option": "tracing_mode"},
+    EventLogEvent.PERF_COMPARISON_USED: {"report_count_bucket": "three_or_more"},
+    EventLogEvent.NPE_PLAYBACK_STARTED: {},
+    EventLogEvent.NPE_MODE_CHANGED: {"npe_mode": "cycles_scale"},
+    EventLogEvent.MLIR_FILE_LOADED: {"mlir_format": "mlirbc"},
+    EventLogEvent.MLIR_SPLIT_VIEW_USED: {},
+    EventLogEvent.DRILLDOWN_OPENED: {"drilldown_target": "source_file"},
+    EventLogEvent.FILTER_USED: {"filter_surface": "perf_op_code"},
+    EventLogEvent.REMOTE_CONNECTION_TEST: {
+        "connection_test_result": "report_path_failed"
+    },
 }
 
 
 def test_the_round_trip_fixture_covers_every_client_postable_event():
     """The parametrisation above is hand-written, so nothing else would notice a gap.
 
-    A fifth entry in ``CLIENT_EVENT_DETAIL_FIELDS`` fails no existing test: it would
+    A new entry in ``CLIENT_EVENT_DETAIL_FIELDS`` fails no existing test: it would
     simply never be posted, and the suite would stay green while end-to-end coverage
     quietly narrowed.
     """
@@ -495,7 +539,7 @@ def test_the_round_trip_fixture_covers_every_client_postable_event():
 
 @pytest.mark.parametrize("event", list(ACCEPTED_EVENTS), ids=lambda event: event.value)
 def test_every_client_postable_event_round_trips(client, event_log_directory, event):
-    """All four, not just the two the other cases happen to use.
+    """Every postable event, not only those the other cases happen to use.
 
     A detail tuple naming the wrong-but-valid field — ``view`` where ``reason_class``
     belongs — would satisfy the schema meta-tests and fail only here.

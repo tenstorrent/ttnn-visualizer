@@ -17,10 +17,18 @@ import io
 import json
 import os
 import re
+import signal
 import sqlite3
+import subprocess
+import sys
+import threading
 import time
+from contextlib import contextmanager
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
+import matplotlib
 import pytest
 from ttnn_visualizer import csv_queries
 from ttnn_visualizer.agent import handles, server, tools
@@ -28,11 +36,13 @@ from ttnn_visualizer.agent.bounds import MAX_LIMIT
 from ttnn_visualizer.agent.handles import (
     MAX_SCOPED_DIFF_TOTALS,
     MAX_SCOPED_REPORTS,
+    PERF_CSV_TOOLS,
     CacheVariant,
     ReportRegistry,
     UnkeptSnapshot,
     UnknownHandleError,
     load_report,
+    without_performance_csv,
 )
 from ttnn_visualizer.csv_queries import (
     DegradedPerformanceReport,
@@ -60,6 +70,7 @@ from ttnn_visualizer.tests.smoke_capture import (
     SIGNPOST_START_POSITION,
     SIGNPOSTED_WINDOW_IDS,
     SMOKE_CAPTURE_DIR,
+    append_unparsable_row,
     signpost,
     signposted_rows,
     smoke_rows,
@@ -73,6 +84,9 @@ from ttnn_visualizer.tests.test_device_log_columns import (
     write_device_log,
 )
 from ttnn_visualizer.utils import newest_ops_perf_file
+
+# What a CSV pandas cannot parse is refused with, ahead of pandas' own wording.
+SIGNPOST_PREFIX = "could not read the report's signposts"
 
 ZONED_ROWS = [
     # Two cores running the same zone, so `cores` counts distinctly from
@@ -129,6 +143,9 @@ def _row(**overrides):
     return row
 
 
+# Claude Code cuts a tool description past this many characters.
+_CLIENT_TOOL_DESCRIPTION_LIMIT = 2048
+
 # The signposts a patched handle "holds", in file order. Every name the mocked
 # tests range over is here, since a name a report lacks is now refused against this
 # list before a report is generated.
@@ -174,10 +191,119 @@ def _touch_after(older, newer, times=None):
         time.sleep(0.01)
 
 
+def _rewrite_capture(directory):
+    write_ops_perf(directory, signposted_rows()[:-1])
+
+
+def _supersede_capture(directory):
+    """Add a newer ops_perf CSV beside the first, leaving the first untouched."""
+    original = directory / "ops_perf_results.csv"
+    newer = directory / "ops_perf_results_newer.csv"
+    newer.write_text(original.read_text())
+    _touch_after(original, newer, (time.time() + 1, time.time() + 1))
+    assert newest_ops_perf_file(directory) == newer
+
+
 def _touch_in_order(older, newer):
     """`_touch_after`, with both mtimes aged too, for any reader that uses them."""
     os.utime(older, (1000, 1000))
     _touch_after(older, newer, (2000, 2000))
+
+
+class TestPerfCsvTools:
+    """The tools a CSV that does not parse leaves unanswerable. #2198"""
+
+    def test_they_are_the_tools_the_inventory_lists_only_for_a_readable_csv(self):
+        """With everything else present, a CSV problem flips exactly these."""
+        everything = frozenset().union(
+            *handles.TOOL_TABLES.values(), {"captured_graph"}
+        )
+        instance = Instance(
+            instance_id="x", profiler_path="p", performance_path="q", npe_path=None
+        )
+
+        def answerable(problem):
+            with (
+                patch.object(handles, "_perf_csv_problem", return_value=problem),
+                patch.object(
+                    handles,
+                    "_csv_columns",
+                    return_value=frozenset({"PROGRAM HASH", "PROGRAM CACHE HIT"}),
+                ),
+                patch.object(
+                    handles,
+                    "_answerable_device_log_columns",
+                    return_value=frozenset({"type"}),
+                ),
+                patch.object(
+                    handles.DeviceLogProfilerQueries, "clock_mhz", return_value=1000
+                ),
+                patch.object(handles, "_readable_tables", return_value=everything),
+            ):
+                return set(handles._inventory(instance, Path("q.csv"))["answerable"])
+
+        assert answerable(None) - answerable("bad") == PERF_CSV_TOOLS
+
+    @staticmethod
+    def _capture(directory, parses):
+        """Beside a device log, with the program-cache columns, so every moved tool
+        but `critical_path`, which needs a database, starts answerable."""
+        write_ops_perf(
+            directory,
+            [
+                {**row, "PROGRAM HASH": "1", "PROGRAM CACHE HIT": "False"}
+                for row in smoke_rows()
+            ],
+        )
+        write_device_log(directory, MODERN_HEADER, ZONED_ROWS)
+        if not parses:
+            append_unparsable_row(directory)
+        registry = ReportRegistry()
+        loaded = tools.with_signposts(
+            registry, load_report(registry, performance_path=str(directory))
+        )
+        return registry, loaded
+
+    def test_a_csv_pandas_cannot_parse_moves_them_and_no_other(self, tmp_path):
+        """`core_spread` and `program_cache` move with the rest, and the zone tools stay."""
+        moved = PERF_CSV_TOOLS - {"critical_path"}
+        _, sound = self._capture(tmp_path / "sound", parses=True)
+        _, loaded = self._capture(tmp_path / "unclosed", parses=False)
+
+        assert moved <= set(sound["answerable"])
+        assert set(loaded["answerable"]) == {"zone_timings", "zone_intervals"}
+        assert moved <= set(loaded["unanswerable"])
+        assert len(loaded["unanswerable"]) == len(set(loaded["unanswerable"]))
+        assert set(loaded["answerable"]).isdisjoint(loaded["unanswerable"])
+        assert SIGNPOST_PREFIX in loaded["performance_csv_problem"]
+        assert "signposts" not in loaded
+        assert "signposts_problem" not in loaded
+
+    @pytest.mark.parametrize(
+        "tool", ["top_ops", "op_breakdown", "core_spread", "program_cache"]
+    )
+    def test_each_tool_it_moves_refuses_the_csv(self, tmp_path, tool):
+        registry, loaded = self._capture(tmp_path, parses=False)
+
+        with pytest.raises(DataFormatError, match=SIGNPOST_PREFIX):
+            getattr(tools, tool)(registry, loaded["handle"])
+
+    def test_without_performance_csv_moves_only_the_csv_tools(self):
+        loaded = {
+            "handle": "h",
+            "answerable": ["find_operations", "top_ops", "zone_timings"],
+            "unanswerable": ["critical_path"],
+            "performance_csv_problem": None,
+        }
+
+        moved = without_performance_csv(loaded, "could not parse")
+
+        assert moved == {
+            "handle": "h",
+            "answerable": ["find_operations", "zone_timings"],
+            "unanswerable": ["critical_path", "top_ops"],
+            "performance_csv_problem": "could not parse",
+        }
 
 
 class TestReportInventory:
@@ -817,12 +943,9 @@ class TestReportFacts:
 
         assert loaded["device_count"] == {"performance_csv": 1}
 
-    def test_a_csv_pandas_cannot_parse_gives_no_count_and_still_loads(
-        self, tmp_path, event_log_directory
-    ):
+    def test_a_csv_pandas_cannot_parse_gives_no_count_and_still_loads(self, tmp_path):
         write_ops_perf(tmp_path, smoke_rows())
-        with (tmp_path / "ops_perf_results.csv").open("a") as out:
-            out.write('"unclosed,row\n')
+        append_unparsable_row(tmp_path)
 
         response = server.handle_message(
             {
@@ -840,7 +963,8 @@ class TestReportFacts:
         assert "isError" not in response["result"]
         loaded = json.loads(response["result"]["content"][0]["text"])
         assert loaded["device_count"] == {}
-        assert "signposts_problem" in loaded
+        assert SIGNPOST_PREFIX in loaded["performance_csv_problem"]
+        assert "top_ops" in loaded["unanswerable"]
 
     @pytest.mark.parametrize(
         "schema",
@@ -1001,26 +1125,10 @@ class TestLoadReportSignposts:
         assert "signposts" not in loaded
         assert "signposts_problem" not in loaded
 
-    def test_signposts_that_cannot_be_read_say_why(self, tmp_path):
-        """A quote left open passes the line scan behind performance_csv_problem."""
-        write_ops_perf(tmp_path, smoke_rows())
-        with (tmp_path / "ops_perf_results.csv").open("a") as out:
-            out.write('"unclosed,signpost\n')
-        registry = ReportRegistry()
-
-        loaded = tools.with_signposts(
-            registry, load_report(registry, performance_path=str(tmp_path))
-        )
-
-        assert loaded["performance_csv_problem"] is None
-        assert "signposts" not in loaded
-        assert "could not read the report's signposts" in loaded["signposts_problem"]
-
     def test_signposts_that_cannot_be_read_are_parsed_once_per_capture(self, tmp_path):
         """Loading the capture again, or asking it a range, parsed to the failure again."""
         write_ops_perf(tmp_path, smoke_rows())
-        with (tmp_path / "ops_perf_results.csv").open("a") as out:
-            out.write('"unclosed,signpost\n')
+        append_unparsable_row(tmp_path)
         registry = ReportRegistry()
 
         with patch.object(
@@ -1036,7 +1144,11 @@ class TestLoadReportSignposts:
                 tools.top_ops(registry, answers[0]["handle"], start_signpost="A")
 
         resolve.assert_called_once()
-        assert answers[0]["signposts_problem"] == answers[1]["signposts_problem"]
+        assert SIGNPOST_PREFIX in answers[0]["performance_csv_problem"]
+        assert (
+            answers[0]["performance_csv_problem"]
+            == answers[1]["performance_csv_problem"]
+        )
 
     def test_the_read_is_shared_by_every_handle_on_one_capture(self, tmp_path):
         """`load_report` again, as a refusal asks, should not read the CSV again."""
@@ -1065,9 +1177,7 @@ class TestLoadReportSignposts:
         assert loaded["signposts"] == [{"name": "PERF_START", "occurrences": 1}]
         assert loaded["signposts_unlisted_too_long"] == 1
 
-    def test_a_host_time_a_chunk_types_apart_still_loads(
-        self, tmp_path, event_log_directory
-    ):
+    def test_a_host_time_a_chunk_types_apart_still_loads(self, tmp_path):
         """One non-numeric host time past pandas' first chunk raised `TypeError`, which
         refused the whole `load_report` on a capture that loaded before."""
         template = smoke_rows()[0]
@@ -1103,16 +1213,25 @@ class TestLoadReportSignposts:
         assert {"top_ops", "op_breakdown"} <= set(loaded["answerable"])
 
     @pytest.mark.parametrize(
-        "error", [TypeError("'<' not supported"), DataFormatError("ragged")]
+        "error, field, tools_answer",
+        [
+            (TypeError("'<' not supported"), "signposts_problem", True),
+            (DataFormatError("EOF inside string"), "performance_csv_problem", False),
+        ],
     )
-    def test_a_signpost_read_that_fails_never_refuses_the_report(self, tmp_path, error):
-        """The signposts describe the capture; failing to read them is said, not raised."""
+    def test_a_signpost_read_that_fails_never_refuses_the_report(
+        self, tmp_path, error, field, tools_answer
+    ):
+        """The signposts describe the capture; failing to read them is said, not raised.
+        A CSV that does not parse is one no tool reading it can answer. #2198"""
         registry = ReportRegistry()
         with patch.object(tools, "_resolve_signposts", side_effect=error):
             loaded = self._loaded(registry, tmp_path, signposted_rows())
 
-        assert loaded["signposts_problem"] == str(error)
+        assert loaded[field] == str(error)
         assert "signposts" not in loaded
+        # Only a CSV that does not parse costs the tools their answer.
+        assert ("top_ops" in loaded["answerable"]) is tools_answer
 
     def test_a_capture_rewritten_after_loading_is_refused(self, tmp_path):
         """The listing pins the capture at load, so a handle never mixes two."""
@@ -1152,9 +1271,7 @@ class TestLoadReportSignposts:
 
         resolve.assert_called_once()
 
-    def test_the_server_lists_them_in_load_reports_answer(
-        self, tmp_path, event_log_directory
-    ):
+    def test_the_server_lists_them_in_load_reports_answer(self, tmp_path):
         write_ops_perf(tmp_path, signposted_rows())
 
         response = server.handle_message(
@@ -1184,7 +1301,7 @@ class TestTopOps:
             yield
 
     def test_a_csv_missing_device_id_converts_perf_report_exit_naming_the_csv(
-        self, tmp_path, event_log_directory
+        self, tmp_path
     ):
         """A CSV missing `DEVICE ID` triggers `tt-perf-report`'s `sys.exit(1)`, which
         is converted into `DataFormatError` naming only the file (never `tmp_path`) so
@@ -1396,7 +1513,9 @@ class TestTopOps:
         registry = self._registry(tmp_path)
         name = "S" * (tools.MAX_SIGNPOST_NAME_LENGTH + 1)
         with patch.object(tools, "_generate_canonical_report") as generate:
-            with pytest.raises(ValueError, match=f"{argument} is 257 characters"):
+            with pytest.raises(
+                ValueError, match=f"{argument} is 257 bytes as an answer writes it"
+            ):
                 tools.top_ops(registry, "report-1", **{argument: name})
 
         generate.assert_not_called()
@@ -1797,6 +1916,30 @@ class TestSignpostRangeEndToEnd:
         with pytest.raises(ValueError, match="has changed since it was first read"):
             self._ranged(registry, handle)
         # What the handle already holds still answers, from the first capture.
+        assert tools.top_ops(registry, handle) == whole
+
+    @pytest.mark.parametrize(
+        "change", [_rewrite_capture, _supersede_capture], ids=["rewritten", "newer"]
+    )
+    def test_a_handle_loaded_before_its_csv_pins_the_first_one_read(
+        self, tmp_path, change
+    ):
+        """With no CSV to pin at first, the first read that finds one pins it. #2227"""
+        registry = ReportRegistry()
+        directory = tmp_path / "signposted"
+        directory.mkdir()
+        handle = load_report(registry, performance_path=str(directory))["handle"]
+        # A miss keeps nothing, so a second one finds no error or empty pin held.
+        for _ in range(2):
+            with pytest.raises(FileNotFoundError):
+                tools.top_ops(registry, handle)
+
+        write_ops_perf(directory, signposted_rows())
+        whole = tools.top_ops(registry, handle)
+        change(directory)
+
+        with pytest.raises(ValueError, match="has changed since it was first read"):
+            self._ranged(registry, handle)
         assert tools.top_ops(registry, handle) == whole
 
     def test_a_newer_capture_beside_the_first_is_refused_too(self, tmp_path):
@@ -2259,7 +2402,7 @@ class TestZoneSummary:
         write_device_log(tmp_path, MODERN_HEADER, ZONED_ROWS)
 
         with DeviceLogProfilerQueries(instance, stream=True) as queries:
-            summary, _pairing = queries.query_zone_summary()
+            summary = queries.query_zone_summary().zones
 
         by_zone = {entry["zone"]: entry for entry in summary}
         # 400 cycles on core (1,1) plus 100 on core (2,1).
@@ -2281,11 +2424,53 @@ class TestZoneSummary:
         instance = Instance(instance_id="pytest", performance_path=str(tmp_path))
 
         with DeviceLogProfilerQueries(instance, stream=True) as queries:
-            summary, _pairing = queries.query_zone_summary()
+            summary = queries.query_zone_summary().zones
 
         by_zone = {entry["zone"]: entry for entry in summary}
         assert by_zone["MATMUL"]["total_cycles"] == 500
         assert by_zone["MATMUL"]["occurrences"] == 2
+
+    @pytest.mark.parametrize(
+        "extra, malformed",
+        [
+            pytest.param([], 0, id="every-row-readable"),
+            pytest.param(
+                [modern_row(1, 1, 1, "BRISC", "x", "MATMUL", "ZONE_START")],
+                1,
+                id="one-unreadable-row",
+            ),
+        ],
+    )
+    def test_the_count_of_rows_left_out_is_returned(self, tmp_path, extra, malformed):
+        write_device_log(tmp_path, MODERN_HEADER, [*ZONED_ROWS, *extra])
+        instance = Instance(instance_id="pytest", performance_path=str(tmp_path))
+
+        with DeviceLogProfilerQueries(instance, stream=True) as queries:
+            assert queries.query_zone_summary().malformed == malformed
+
+    def test_floats_past_2_53_are_summed_without_a_guard(self, tmp_path):
+        """A blank cell makes the chunk's cycles floats; unlike the all-zones interval
+        pass, this read has nothing to agree with, so it sums rather than refuses."""
+        top = 2**53
+        write_device_log(
+            tmp_path,
+            MODERN_HEADER,
+            [
+                modern_row(1, 1, 1, "BRISC", "", "MATMUL", "ZONE_START"),
+                modern_row(1, 1, 1, "BRISC", top, "MATMUL", "ZONE_START"),
+                modern_row(1, 1, 1, "BRISC", top + 4, "MATMUL", "ZONE_END"),
+            ],
+        )
+        instance = Instance(instance_id="pytest", performance_path=str(tmp_path))
+
+        with DeviceLogProfilerQueries(instance, stream=True) as queries:
+            read = queries.query_zone_summary()
+
+        assert read.malformed == 1
+        assert not any(read.pairing.values())
+        assert [(zone["occurrences"], zone["total_cycles"]) for zone in read.zones] == [
+            (1, 4)
+        ]
 
     def test_a_core_is_scoped_to_its_device(self, tmp_path):
         """`(core_x, core_y)` repeats on every PCIe slot.
@@ -2300,7 +2485,7 @@ class TestZoneSummary:
         instance = Instance(instance_id="pytest", performance_path=str(tmp_path))
 
         with DeviceLogProfilerQueries(instance, stream=True) as queries:
-            summary, _pairing = queries.query_zone_summary()
+            summary = queries.query_zone_summary().zones
 
         assert summary[0]["cores"] == 2
         assert summary[0]["occurrences"] == 2
@@ -2321,14 +2506,14 @@ class TestZoneSummary:
         instance = Instance(instance_id="pytest", performance_path=str(tmp_path))
 
         with DeviceLogProfilerQueries(instance, stream=True) as queries:
-            summary, pairing = queries.query_zone_summary()
+            read = queries.query_zone_summary()
 
-        assert pairing == {
+        assert read.pairing == {
             "unmatched_starts": 1,
             "unmatched_ends": 1,
             "dropped_starts": 0,
         }
-        assert summary[0]["occurrences"] == 1
+        assert read.zones[0]["occurrences"] == 1
 
     def test_a_capture_missing_a_column_this_query_reads_is_refused(self, tmp_path):
         """Refused here rather than by widening `REQUIRED_DEVICE_LOG_COLUMNS`.
@@ -2350,7 +2535,7 @@ class TestZoneSummary:
         instance = Instance(instance_id="pytest", performance_path=str(tmp_path))
 
         with DeviceLogProfilerQueries(instance, stream=True) as queries:
-            summary, _pairing = queries.query_zone_summary()
+            summary = queries.query_zone_summary().zones
 
         assert summary[0]["occurrences"] == 2
         assert summary[0]["total_cycles"] is None
@@ -2368,6 +2553,14 @@ class TestZoneSummary:
         assert PREAMBLE.startswith("ARCH")
 
 
+def _loaded_log(tmp_path, rows):
+    """A registry holding one report loaded from a device log of ``rows``."""
+    registry = ReportRegistry()
+    write_device_log(tmp_path, MODERN_HEADER, rows)
+    load_report(registry, performance_path=str(tmp_path))
+    return registry
+
+
 def _zone_log(tmp_path, zones):
     """A loaded log with one paired zone for each ``(zone, risc, cycles)``."""
     rows = [
@@ -2378,14 +2571,32 @@ def _zone_log(tmp_path, zones):
             modern_row(1, 1, 1, risc, cycles, zone, "ZONE_END"),
         )
     ]
-    registry = ReportRegistry()
-    write_device_log(tmp_path, MODERN_HEADER, rows)
-    load_report(registry, performance_path=str(tmp_path))
-    return registry
+    return _loaded_log(tmp_path, rows)
 
 
 def _zone_timings(tmp_path, zones, **arguments):
     return tools.zone_timings(_zone_log(tmp_path, zones), "report-1", **arguments)
+
+
+@contextmanager
+def _counting_zone_summary():
+    """`query_zone_summary` as it is, with its calls counted on the mock yielded."""
+    with patch.object(
+        DeviceLogProfilerQueries,
+        "query_zone_summary",
+        autospec=True,
+        side_effect=DeviceLogProfilerQueries.query_zone_summary,
+    ) as summary:
+        yield summary
+
+
+def _rows_left_out(rows: int) -> str:
+    """The caveat `zone_timings` and `zone_intervals` give rows they left out, built
+    from the reason it quotes; one test pins it word for word."""
+    return (
+        f"{rows} rows have a slot, core, run or cycle count "
+        f"{csv_queries.UNREADABLE_NUMBER_REASON}, and were left out."
+    )
 
 
 class TestZoneTimingsTool:
@@ -2489,24 +2700,294 @@ class TestZoneTimingsTool:
         assert "occupancy" in result["note"]
 
 
+class TestZoneTimingsUnreadableCells:
+    """Left out and counted, as `zone_intervals` and `core_spread` count them. #2258"""
+
+    @staticmethod
+    def _answer(tmp_path, rows):
+        paired = [
+            modern_row(0, 1, 1, "BRISC", 100, "MATMUL", "ZONE_START"),
+            modern_row(0, 1, 1, "BRISC", 400, "MATMUL", "ZONE_END"),
+        ]
+        write_device_log(tmp_path, MODERN_HEADER, [*paired, *rows])
+        registry = ReportRegistry()
+        load_report(registry, performance_path=str(tmp_path))
+        return tools.zone_timings(registry, "report-1")
+
+    @pytest.mark.parametrize(
+        "bad",
+        [
+            pytest.param(
+                modern_row(0, 1, 1, "BRISC", "x", "MATMUL", "ZONE_START"),
+                id="cycles-not-a-number",
+            ),
+            pytest.param(
+                modern_row(0, 1, 1, "BRISC", "", "MATMUL", "ZONE_START"),
+                id="blank-cycles",
+            ),
+            pytest.param(
+                modern_row(0, 1, 1, "BRISC", "inf", "MATMUL", "ZONE_START"),
+                id="inf-cycles",
+            ),
+            pytest.param(
+                modern_row(0, 1, 1, "BRISC", "1e300", "MATMUL", "ZONE_END"),
+                id="cycles-past-int64",
+            ),
+            pytest.param(
+                modern_row(0, 1, 1, "BRISC", 2**63, "MATMUL", "ZONE_END"),
+                id="cycles-one-past-int64",
+            ),
+            pytest.param(
+                modern_row(0, 1, 1, "BRISC", -5, "MATMUL", "ZONE_END"),
+                id="negative-end",
+            ),
+            pytest.param(
+                modern_row(0, 1, 1, "BRISC", -5, "MATMUL", "ZONE_START"),
+                id="negative-start",
+            ),
+            pytest.param(
+                modern_row("x", 1, 1, "BRISC", 500, "MATMUL", "ZONE_START"),
+                id="slot-not-a-number",
+            ),
+            pytest.param(
+                modern_row("0.5", 1, 1, "BRISC", 500, "MATMUL", "ZONE_START"),
+                id="slot-not-whole",
+            ),
+            pytest.param(
+                modern_row(0, "1.5", 1, "BRISC", 500, "MATMUL", "ZONE_START"),
+                id="core-x-not-whole",
+            ),
+            pytest.param(
+                modern_row(0, 1, "x", "BRISC", 500, "MATMUL", "ZONE_START"),
+                id="core-y-not-a-number",
+            ),
+            pytest.param(
+                modern_row(0, 1, 1, "BRISC", 500, "MATMUL", "ZONE_START", run="x"),
+                id="run-not-a-number",
+            ),
+            pytest.param(
+                modern_row(0, 1, 1, "BRISC", "2150.5", "MATMUL", "ZONE_END"),
+                id="cycles-not-whole",
+            ),
+        ],
+    )
+    def test_a_row_with_a_cell_that_cannot_be_read_is_left_out(self, tmp_path, bad):
+        result = self._answer(tmp_path, [bad])
+
+        (zone,) = result["zones"]
+        assert (zone["occurrences"], zone["total_cycles"], zone["cores"]) == (1, 300, 1)
+        assert result["caveat"] == _rows_left_out(1)
+
+    def test_a_negative_core_is_kept(self, tmp_path):
+        """Only cycle counts must not be negative: a core's coordinates may be."""
+        result = self._answer(
+            tmp_path,
+            [
+                modern_row(0, -1, 1, "BRISC", 500, "MATMUL", "ZONE_START"),
+                modern_row(0, -1, 1, "BRISC", 700, "MATMUL", "ZONE_END"),
+            ],
+        )
+
+        (zone,) = result["zones"]
+        assert (zone["occurrences"], zone["total_cycles"], zone["cores"]) == (2, 500, 2)
+        assert "caveat" not in result
+
+    @pytest.mark.parametrize("cycles, total", [("1e300", 300), (-5, 300)])
+    def test_an_end_that_cannot_be_read_leaves_its_start_open(
+        self, tmp_path, cycles, total
+    ):
+        """Read, it would close the start: a total 301 digits long, or negative. The
+        unpaired start is said first, then the row left out."""
+        result = self._answer(
+            tmp_path,
+            [
+                modern_row(0, 1, 1, "BRISC", 500, "MATMUL", "ZONE_START"),
+                modern_row(0, 1, 1, "BRISC", cycles, "MATMUL", "ZONE_END"),
+            ],
+        )
+
+        (zone,) = result["zones"]
+        assert (zone["occurrences"], zone["total_cycles"]) == (1, total)
+        assert result["caveat"] == (
+            "1 zone starts and 0 ends did not pair, so these totals cover only the "
+            "zones that did. A capture stopped mid-run is the usual cause. "
+            + _rows_left_out(1)
+        )
+
+    def test_padded_zone_names_are_one_zone(self, tmp_path):
+        """Names are compared stripped, and a name of only spaces is no name."""
+        write_device_log(
+            tmp_path,
+            MODERN_HEADER,
+            [
+                modern_row(0, 1, 1, "BRISC", 100, " MATMUL", "ZONE_START"),
+                modern_row(0, 1, 1, "BRISC", 400, "MATMUL ", "ZONE_END"),
+                modern_row(0, 1, 1, "BRISC", "x", " ", "ZONE_START"),
+            ],
+        )
+        registry = ReportRegistry()
+        load_report(registry, performance_path=str(tmp_path))
+
+        result = tools.zone_timings(registry, "report-1")
+
+        assert [
+            (zone["zone"], zone["occurrences"], zone["total_cycles"])
+            for zone in result["zones"]
+        ] == [("MATMUL", 1, 300)]
+        assert "caveat" not in result
+
+    def test_a_row_with_no_zone_name_is_neither_a_zone_nor_unreadable(self, tmp_path):
+        """tt-metal writes timestamped data under no zone name, millions of rows."""
+        result = self._answer(
+            tmp_path, [modern_row(0, 1, 1, "BRISC", "x", "", "TS_DATA")]
+        )
+
+        assert [zone["zone"] for zone in result["zones"]] == ["MATMUL"]
+        assert "caveat" not in result
+
+    def test_a_log_without_phases_leaves_out_what_it_cannot_read_too(self, tmp_path):
+        """It counts occurrences only, but reads each row as the other zone tools do."""
+        rows = [
+            modern_row(0, 1, 1, "BRISC", 100, "MATMUL", "ZONE_START"),
+            modern_row(0, 1, 1, "BRISC", "x", "MATMUL", "ZONE_START"),
+        ]
+        write_device_log(tmp_path, *_drop_column(MODERN_HEADER, rows, "type"))
+        registry = ReportRegistry()
+        load_report(registry, performance_path=str(tmp_path))
+
+        result = tools.zone_timings(registry, "report-1")
+
+        (zone,) = result["zones"]
+        assert zone["occurrences"] == 1
+        assert result["caveat"] == _rows_left_out(1)
+
+    def test_rows_left_out_in_different_chunks_are_all_counted(
+        self, tmp_path, monkeypatch
+    ):
+        """A count reset per chunk, or a chunk the name filter empties, would lose one."""
+        write_device_log(
+            tmp_path,
+            MODERN_HEADER,
+            [
+                modern_row(0, 1, 1, "BRISC", 100, "MATMUL", "ZONE_START"),
+                modern_row(0, 1, 1, "BRISC", "x", "MATMUL", "ZONE_START"),
+                modern_row(0, 1, 1, "BRISC", 200, "", "TS_DATA"),
+                modern_row(0, 1, 1, "BRISC", "2.5", "MATMUL", "ZONE_END"),
+                modern_row(0, 1, 1, "BRISC", 400, "MATMUL", "ZONE_END"),
+            ],
+        )
+        monkeypatch.setattr(csv_queries, "CSV_CHUNK_SIZE", 1)
+        registry = ReportRegistry()
+        load_report(registry, performance_path=str(tmp_path))
+
+        result = tools.zone_timings(registry, "report-1")
+
+        (zone,) = result["zones"]
+        assert (zone["occurrences"], zone["total_cycles"]) == (1, 300)
+        assert result["caveat"] == _rows_left_out(2)
+
+    def test_a_zone_whose_every_row_is_unreadable_is_not_listed(self, tmp_path):
+        result = self._answer(
+            tmp_path, [modern_row(0, 1, 1, "NCRISC", "x", "READ", "ZONE_START")]
+        )
+
+        assert [zone["zone"] for zone in result["zones"]] == ["MATMUL"]
+        assert "zones_unlisted_too_long" not in result
+        assert result["caveat"] == _rows_left_out(1)
+
+    def test_zone_intervals_counts_the_same_unreadable_row(self, tmp_path):
+        """One wording and one rule for both tools; the nameless row neither keeps.
+        The one test that holds the wording; the rest build it from the reason."""
+        write_device_log(
+            tmp_path,
+            MODERN_HEADER,
+            [
+                modern_row(0, 1, 1, "BRISC", 50, "BRISC-KERNEL", "ZONE_START"),
+                modern_row(0, 1, 1, "BRISC", 100, "MATMUL", "ZONE_START"),
+                modern_row(0, 1, 1, "BRISC", 200, "MATMUL", "ZONE_END"),
+                modern_row(0, 1, 1, "BRISC", 300, "MATMUL", "ZONE_START"),
+                modern_row(0, 1, 1, "BRISC", 400, "MATMUL", "ZONE_END"),
+                modern_row(0, 1, 1, "BRISC", "x", "MATMUL", "ZONE_START"),
+                modern_row(0, 1, 1, "BRISC", "x", "", "TS_DATA"),
+            ],
+        )
+        registry = ReportRegistry()
+        load_report(registry, performance_path=str(tmp_path))
+
+        timings = tools.zone_timings(registry, "report-1")
+        intervals = tools.zone_intervals(registry, "report-1", "MATMUL")
+
+        unreadable = (
+            "1 rows have a slot, core, run or cycle count that is not a whole number "
+            "or does not fit a 64-bit integer, or a negative cycle count, and were "
+            "left out."
+        )
+        assert unreadable in timings["caveat"]
+        assert unreadable in intervals["caveat"]
+
+    def test_a_log_pandas_cannot_parse_is_refused(self, tmp_path):
+        """Refused, so the server counts it as one, not as a failure of the tool."""
+        with pytest.raises(ValueError, match=DeviceLogProfilerQueries.DEVICE_LOG_FILE):
+            self._answer(tmp_path, ['"unclosed,row'])
+
+    def test_the_refusal_is_kept_and_recorded_as_one(self, tmp_path):
+        """The same bytes fail the same way, so the log is read once."""
+        write_device_log(tmp_path, MODERN_HEADER, ['"unclosed,row'])
+        registry = ReportRegistry()
+        load_report(registry, performance_path=str(tmp_path))
+        with (
+            patch.object(
+                DeviceLogProfilerQueries,
+                "read_capture_metadata",
+                wraps=DeviceLogProfilerQueries.read_capture_metadata,
+            ) as read,
+            patch.object(server, "record_event") as record,
+        ):
+            responses = [
+                server.handle_message(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": index,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "zone_timings",
+                            "arguments": {"handle": "report-1"},
+                        },
+                    },
+                    server._tool_table(registry),
+                )
+                for index in range(2)
+            ]
+
+        assert all(response["result"]["isError"] for response in responses)
+        assert read.call_count == 1
+        assert record.call_args.kwargs["outcome"] is McpToolOutcome.REFUSED
+
+
 class TestZoneTimingsRead:
     """`zone_timings` reads the log once per handle. #2248"""
 
     def test_the_log_is_read_once_per_handle(self, tmp_path):
-        registry = _zone_log(tmp_path, [("MATMUL", "BRISC", 100)])
-        calls = []
-        original = DeviceLogProfilerQueries.query_zone_summary
+        """A later call answers from the first read, its count of rows left out too."""
+        write_device_log(
+            tmp_path,
+            MODERN_HEADER,
+            [
+                modern_row(1, 1, 1, "BRISC", 0, "MATMUL", "ZONE_START"),
+                modern_row(1, 1, 1, "BRISC", 100, "MATMUL", "ZONE_END"),
+                modern_row(1, 1, 1, "BRISC", "x", "MATMUL", "ZONE_START"),
+            ],
+        )
+        registry = ReportRegistry()
+        load_report(registry, performance_path=str(tmp_path))
 
-        def counted(self):
-            calls.append(self)
-            return original(self)
-
-        with patch.object(DeviceLogProfilerQueries, "query_zone_summary", counted):
+        with _counting_zone_summary() as summary:
             first = tools.zone_timings(registry, "report-1")
             second = tools.zone_timings(registry, "report-1", limit=1)
 
-        assert len(calls) == 1
+        assert summary.call_count == 1
         assert second["zones"] == first["zones"]
+        assert second["caveat"] == first["caveat"] == _rows_left_out(1)
 
     def test_a_kept_read_answers_with_the_clock_it_was_read_at(self, tmp_path):
         registry = _zone_log(tmp_path, [("MATMUL", "BRISC", 1000)])
@@ -2540,22 +3021,19 @@ class TestZoneTimingsRead:
         )
         registry = ReportRegistry()
         load_report(registry, performance_path=str(tmp_path))
-        calls = []
-        original = DeviceLogProfilerQueries.query_zone_summary
-
-        def counted(self):
-            calls.append(self)
-            return original(self)
 
         refusals = []
-        with patch.object(DeviceLogProfilerQueries, "query_zone_summary", counted):
+        with _counting_zone_summary() as summary:
             for _ in range(2):
-                with pytest.raises(DataFormatError, match="core_y") as refusal:
+                with pytest.raises(ValueError, match="core_y") as raised:
                     tools.zone_timings(registry, "report-1")
-                refusals.append(str(refusal.value))
+                refusals.append(raised.value)
 
-        assert len(calls) == 1
-        assert refusals[0] == refusals[1]
+        assert summary.call_count == 1
+        assert str(refusals[0]) == str(refusals[1])
+        assert all(
+            isinstance(refusal.__cause__, DataFormatError) for refusal in refusals
+        )
 
     def test_the_architecture_is_read_as_zone_intervals_reads_it(self, tmp_path):
         """One reader for both tools, so a first line read two ways cannot give them
@@ -2591,12 +3069,115 @@ class TestPreRenameCaptures:
         instance = Instance(instance_id="pytest", performance_path=str(tmp_path))
 
         with DeviceLogProfilerQueries(instance, stream=True) as queries:
-            summary, pairing = queries.query_zone_summary()
+            read = queries.query_zone_summary()
 
-        assert summary[0]["occurrences"] == 1
-        assert summary[0]["total_cycles"] == 700
-        assert pairing == {
+        assert read.zones[0]["occurrences"] == 1
+        assert read.zones[0]["total_cycles"] == 700
+        assert read.pairing == {
             "unmatched_starts": 0,
+            "unmatched_ends": 0,
+            "dropped_starts": 0,
+        }
+
+
+class TestReplacedZoneStarts:
+    """A second start under one key before the first's end leaves the first unpaired,
+    which every zone tool counts. #2249"""
+
+    def test_zone_timings_counts_it_in_its_caveat(self, tmp_path):
+        rows = [
+            modern_row(0, 1, 1, "BRISC", 100, "LOOP", "ZONE_START"),
+            modern_row(0, 1, 1, "BRISC", 200, "LOOP", "ZONE_START"),
+            modern_row(0, 1, 1, "BRISC", 300, "LOOP", "ZONE_END"),
+        ]
+        result = tools.zone_timings(_loaded_log(tmp_path, rows), "report-1")
+
+        ((zone, occurrences, total),) = [
+            (entry["zone"], entry["occurrences"], entry["total_cycles"])
+            for entry in result["zones"]
+        ]
+        assert (zone, occurrences, total) == ("LOOP", 1, 100)
+        assert result["caveat"].startswith("1 zone starts and 0 ends did not pair")
+
+    def test_zone_timings_counts_one_across_traced_replays(self, tmp_path):
+        """Its key spans a run host ID's replays, so a replay that lost its end leaves a
+        start the next replay replaces."""
+        rows = []
+        for replay, lost_end in ((0, False), (1, True), (2, False)):
+            base = replay * 1000
+            rows += [
+                modern_row(0, 1, 1, "BRISC", base, "BRISC-KERNEL", "ZONE_START"),
+                modern_row(0, 1, 1, "BRISC", base + 100, "LOOP", "ZONE_START"),
+                *(
+                    []
+                    if lost_end
+                    else [modern_row(0, 1, 1, "BRISC", base + 200, "LOOP", "ZONE_END")]
+                ),
+                modern_row(0, 1, 1, "BRISC", base + 300, "BRISC-KERNEL", "ZONE_END"),
+            ]
+        result = tools.zone_timings(_loaded_log(tmp_path, rows), "report-1")
+
+        loop = next(entry for entry in result["zones"] if entry["zone"] == "LOOP")
+        assert (loop["occurrences"], loop["total_cycles"]) == (2, 200)
+        assert result["caveat"].startswith("1 zone starts and 0 ends did not pair")
+
+    def test_nested_zones_of_one_name_count_both_ways(self, tmp_path):
+        """The inner start replaces the outer, and the outer end then closes nothing."""
+        rows = [
+            modern_row(0, 1, 1, "BRISC", 100, "LOOP", "ZONE_START"),
+            modern_row(0, 1, 1, "BRISC", 200, "LOOP", "ZONE_START"),
+            modern_row(0, 1, 1, "BRISC", 300, "LOOP", "ZONE_END"),
+            modern_row(0, 1, 1, "BRISC", 400, "LOOP", "ZONE_END"),
+        ]
+        result = tools.zone_timings(_loaded_log(tmp_path, rows), "report-1")
+
+        assert result["caveat"].startswith("1 zone starts and 1 ends did not pair")
+
+    def test_starts_on_different_cores_are_not_replacements(self, tmp_path):
+        rows = [
+            modern_row(0, 1, 1, "BRISC", 100, "LOOP", "ZONE_START"),
+            modern_row(0, 2, 1, "BRISC", 150, "LOOP", "ZONE_START"),
+            modern_row(0, 1, 1, "BRISC", 300, "LOOP", "ZONE_END"),
+            modern_row(0, 2, 1, "BRISC", 350, "LOOP", "ZONE_END"),
+        ]
+
+        result = tools.zone_timings(_loaded_log(tmp_path, rows), "report-1")
+
+        assert "caveat" not in result
+        assert [entry["occurrences"] for entry in result["zones"]] == [2]
+
+    def test_the_pairer_counts_it_for_its_group_too(self):
+        pairer = csv_queries._ZonePairer(
+            "ZONE_START", "ZONE_END", group=lambda key: key[0]
+        )
+        pairer.offer(("a", 1), "ZONE_START", 100)
+        pairer.offer(("a", 1), "ZONE_START", 200)
+        pairer.offer(("b", 1), "ZONE_START", 300)
+
+        assert pairer.offer(("a", 1), "ZONE_END", 400) == 200
+        assert pairer.pairing("log")["unmatched_starts"] == 2
+        paired_otherwise = {"unmatched_ends": 0, "dropped_starts": 0}
+        assert pairer.pairing_by_group() == {
+            "a": {"unmatched_starts": 1, **paired_otherwise},
+            "b": {"unmatched_starts": 1, **paired_otherwise},
+        }
+
+    def test_each_replacement_counts_once(self):
+        pairer = csv_queries._ZonePairer("ZONE_START", "ZONE_END")
+        for cycles in (100, 200, 300):
+            pairer.offer(("a",), "ZONE_START", cycles)
+
+        assert pairer.offer(("a",), "ZONE_END", 400) == 300
+        assert pairer.pairing("log")["unmatched_starts"] == 2
+
+    def test_one_at_the_open_start_ceiling_is_replaced_not_dropped(self, monkeypatch):
+        monkeypatch.setattr(csv_queries, "MAX_OPEN_ZONE_STARTS", 1)
+        pairer = csv_queries._ZonePairer("ZONE_START", "ZONE_END")
+        pairer.offer(("a",), "ZONE_START", 100)
+        pairer.offer(("a",), "ZONE_START", 200)
+
+        assert pairer.pairing("log") == {
+            "unmatched_starts": 2,
             "unmatched_ends": 0,
             "dropped_starts": 0,
         }
@@ -2621,7 +3202,7 @@ class TestOpenZoneCeiling:
         instance = Instance(instance_id="pytest", performance_path=str(tmp_path))
 
         with DeviceLogProfilerQueries(instance, stream=True) as queries:
-            _summary, pairing = queries.query_zone_summary()
+            pairing = queries.query_zone_summary().pairing
 
         assert pairing["unmatched_starts"] == 2
         assert pairing["dropped_starts"] == 3
@@ -2663,10 +3244,6 @@ class TestZeroDuration:
 
 
 class TestTransport:
-    @pytest.fixture(autouse=True)
-    def _never_touch_the_real_event_log(self, event_log_directory):
-        """Any tools/call reaches the recorder now; none may write outside tmp_path."""
-
     def _table(self):
         return server._tool_table(ReportRegistry())
 
@@ -2888,6 +3465,16 @@ class TestTransport:
         assert "operation_id" in instructions
         # Long instructions get cut by clients, and the system prompt is every turn's.
         assert len(instructions) <= 2000
+
+    def test_every_tool_description_fits_what_a_client_reads_of_it(self):
+        """A sentence past the client's cut never reaches the agent. #2232"""
+        table = server._tool_table(ReportRegistry())
+
+        assert {
+            name: len(spec["description"])
+            for name, spec in table.items()
+            if len(spec["description"]) > _CLIENT_TOOL_DESCRIPTION_LIMIT
+        } == {}
 
     def test_the_instructions_name_only_registered_tools(self):
         """A tool renamed or removed must not live on in the system prompt."""
@@ -3322,6 +3909,342 @@ def test_main_serves_when_event_log_startup_raises(monkeypatch):
     server.main()
 
     assert order == ["serve"]
+
+
+class _OrderedExporter:
+    def __init__(self, order):
+        self._order = order
+
+    def start(self):
+        self._order.append("export-start")
+        return self
+
+    def stop(self):
+        self._order.append("export-stop")
+
+
+def _patch_main_for_export(monkeypatch, order, *, can_export=True, recording=True):
+    """Stub ``main()``'s collaborators so only its ordering and decisions run."""
+    handlers = []
+    monkeypatch.setattr(server, "compact_if_needed", lambda: order.append("compact"))
+    monkeypatch.setattr(server, "serve", lambda *args, **kwargs: order.append("serve"))
+    monkeypatch.setattr(server, "is_recording_enabled", lambda: recording)
+    monkeypatch.setattr(server, "get_event_log_path", lambda: "/tmp/events.log")
+    monkeypatch.setattr(server, "describe_opt_out", lambda: "opt-out")
+    monkeypatch.setattr(server, "get_recording_disabled_reason", lambda: "opt-out")
+
+    def _prepare():
+        order.append("prepare")
+        return SimpleNamespace(can_export=can_export)
+
+    monkeypatch.setattr(server, "prepare_usage_collection_config", _prepare)
+    monkeypatch.setattr(server, "describe_usage_collection", lambda *args, **kw: "")
+    monkeypatch.setattr(
+        server,
+        "start_usage_exporter",
+        lambda config: _OrderedExporter(order).start() if config.can_export else None,
+    )
+    monkeypatch.delenv("SERVER_MODE", raising=False)
+    # Never replace pytest's own SIGTERM handler.
+    monkeypatch.setattr(server.signal, "getsignal", lambda signum: signal.SIG_DFL)
+    monkeypatch.setattr(
+        server.signal,
+        "signal",
+        lambda signum, handler: handlers.append((signum, handler)) or signal.SIG_DFL,
+    )
+    return handlers
+
+
+def test_main_exports_around_serving_when_collection_can_export(monkeypatch):
+    """#2282: an agent-only user's usage is pushed without the app ever launching."""
+    order = []
+    handlers = _patch_main_for_export(monkeypatch, order)
+
+    server.main()
+
+    assert order == ["compact", "prepare", "export-start", "serve", "export-stop"]
+    # Installed for serving, deferred while the final push runs, so a repeated
+    # SIGTERM cannot raise inside ``stop()`` and drop it, then restored.
+    assert handlers == [
+        (signal.SIGTERM, server._exit_on_sigterm),
+        (signal.SIGTERM, server._defer_sigterm),
+        (signal.SIGTERM, signal.SIG_DFL),
+    ]
+
+
+def test_main_exits_without_interpreter_shutdown_after_sigterm(monkeypatch):
+    """Interpreter shutdown flushes stdout, which blocks for good on a full pipe."""
+    order = []
+    handlers = _patch_main_for_export(monkeypatch, order)
+
+    def _terminated(*_args, **_kwargs):
+        order.append("serve")
+        raise server._Terminated(0)
+
+    monkeypatch.setattr(server, "serve", _terminated)
+    monkeypatch.setattr(
+        server.os, "_exit", lambda code: order.append(f"os._exit({code})")
+    )
+
+    server.main()
+
+    assert order == [
+        "compact",
+        "prepare",
+        "export-start",
+        "serve",
+        "export-stop",
+        "os._exit(0)",
+    ]
+    assert handlers[-1] == (signal.SIGTERM, signal.SIG_DFL)
+
+
+def test_main_exits_normally_when_stdin_closes(monkeypatch):
+    order = []
+    _patch_main_for_export(monkeypatch, order)
+    monkeypatch.setattr(
+        server.os, "_exit", lambda code: order.append(f"os._exit({code})")
+    )
+
+    server.main()
+
+    assert "os._exit(0)" not in order
+
+
+def test_main_starts_no_exporter_without_an_endpoint(monkeypatch):
+    order = []
+    handlers = _patch_main_for_export(monkeypatch, order, can_export=False)
+
+    server.main()
+
+    assert order == ["compact", "prepare", "serve"]
+    # Behaviour without collection is unchanged: the default SIGTERM stays.
+    assert handlers == []
+
+
+def test_main_prepares_no_collection_under_the_recording_opt_out(monkeypatch):
+    order = []
+    handlers = _patch_main_for_export(monkeypatch, order, recording=False)
+
+    server.main()
+
+    assert order == ["serve"]
+    assert handlers == []
+
+
+def test_main_stops_the_exporter_when_serving_raises(monkeypatch):
+    order = []
+    _patch_main_for_export(monkeypatch, order)
+
+    def _broken_serve(*args, **kwargs):
+        order.append("serve")
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(server, "serve", _broken_serve)
+
+    with pytest.raises(KeyboardInterrupt):
+        server.main()
+
+    assert order[-2:] == ["serve", "export-stop"]
+
+
+@pytest.mark.parametrize("value", ["true", "1", "Ture", ""])
+def test_main_exports_nothing_under_server_mode(monkeypatch, value):
+    """Aggregate collection is local-only; an unreadable value counts as hosted.
+
+    That includes an empty one, which the app refuses to start on."""
+    order = []
+    handlers = _patch_main_for_export(monkeypatch, order)
+    monkeypatch.setenv("SERVER_MODE", value)
+
+    server.main()
+
+    assert order == ["compact", "serve"]
+    assert handlers == []
+
+
+@pytest.mark.parametrize("value", ["false", "0", None])
+def test_main_exports_when_server_mode_reads_as_local(monkeypatch, value):
+    order = []
+    _patch_main_for_export(monkeypatch, order)
+    if value is None:
+        monkeypatch.delenv("SERVER_MODE", raising=False)
+    else:
+        monkeypatch.setenv("SERVER_MODE", value)
+
+    server.main()
+
+    assert "export-start" in order
+
+
+def test_main_serves_when_preparing_collection_raises(monkeypatch):
+    order = []
+    _patch_main_for_export(monkeypatch, order)
+
+    def _no_home():
+        raise RuntimeError("Could not determine home directory.")
+
+    monkeypatch.setattr(server, "prepare_usage_collection_config", _no_home)
+
+    server.main()
+
+    assert order == ["compact", "serve"]
+
+
+def test_sigterm_handler_raises_a_clean_exit():
+    with pytest.raises(server._Terminated) as exit_info:
+        server._exit_on_sigterm(signal.SIGTERM, None)
+
+    assert isinstance(exit_info.value, SystemExit)
+    assert exit_info.value.code == 0
+
+
+_INITIALIZE_REQUEST = {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {
+        "protocolVersion": server.PROTOCOL_VERSION,
+        "capabilities": {},
+        "clientInfo": {"name": "test", "version": "0"},
+    },
+}
+
+
+def _start_exporting_server(tmp_path):
+    """Run the real MCP server opted in to collection, once its start push has landed.
+
+    Returns the process, the file the fake curl appends a line to per call, and the
+    collection config. Stdin stays open until the start push lands: closed at once, a
+    start push still running when ``stop()`` gives up joining would skip the exit push,
+    and how fast it runs depends on the machine.
+    """
+    home = tmp_path / "home"
+    usage_directory = home / ".ttnn-visualizer" / "usage"
+    usage_directory.mkdir(parents=True)
+    config_path = usage_directory / "collection.json"
+    config_path.write_text(
+        json.dumps(
+            {"enabled": True, "remote_write_endpoint": "http://127.0.0.1:9/v1/metrics"}
+        )
+    )
+    bin_directory = tmp_path / "bin"
+    bin_directory.mkdir()
+    calls_path = tmp_path / "curl-calls"
+    fake_curl = bin_directory / "curl"
+    # Answers on stdout as real curl does with ``write-out``: were curl's stdout
+    # inherited rather than captured, this would land in the protocol stream.
+    fake_curl.write_text(
+        f"#!/bin/sh\ncat > /dev/null\necho called >> '{calls_path}'\nprintf 200\n"
+    )
+    fake_curl.chmod(0o755)
+    # Built from scratch, so a developer's own opt-out or config cannot leak in.
+    environment = {
+        "HOME": str(home),
+        # This process's matplotlib cache rather than one under the fresh ``HOME``:
+        # importing the server builds the font cache, which on macOS runs
+        # ``system_profiler`` for several seconds per test, and counts against the
+        # start-push deadline below.
+        "MPLCONFIGDIR": matplotlib.get_configdir(),
+        "PATH": f"{bin_directory}{os.pathsep}{os.environ.get('PATH', '')}",
+        "PYTHONIOENCODING": "utf-8",
+    }
+    process = subprocess.Popen(
+        [sys.executable, "-m", "ttnn_visualizer.agent.server"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=environment,
+    )
+    deadline = time.monotonic() + 30
+    while not calls_path.exists():
+        if process.poll() is not None or time.monotonic() >= deadline:
+            process.kill()
+            _stdout, stderr = process.communicate()
+            pytest.fail(f"the start push never ran: {stderr}")
+        time.sleep(0.05)
+    return process, calls_path, config_path
+
+
+def _finish(process, finish):
+    """Run ``finish`` against ``process``, killing it if anything goes wrong."""
+    try:
+        return finish()
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.communicate()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="the fake curl is a shell script")
+def test_mcp_stdout_is_only_protocol_while_exporting(tmp_path):
+    """curl runs beside the protocol stream, so none of its output may reach stdout."""
+    process, calls_path, config_path = _start_exporting_server(tmp_path)
+
+    stdout, stderr = _finish(
+        process,
+        lambda: process.communicate(json.dumps(_INITIALIZE_REQUEST) + "\n", timeout=60),
+    )
+
+    assert process.returncode == 0, stderr
+    responses = [json.loads(line) for line in stdout.splitlines()]
+    assert [response["id"] for response in responses] == [1]
+    assert all(response["jsonrpc"] == "2.0" for response in responses)
+    # One push at start and one on exit.
+    assert calls_path.read_text().splitlines() == ["called", "called"]
+    assert "machine_id" in json.loads(config_path.read_text())
+    # The collection status is reported, on stderr.
+    assert "Aggregate usage collection is ENABLED" in stderr
+
+
+@pytest.mark.skipif(os.name == "nt", reason="SIGTERM and the fake curl are POSIX")
+def test_mcp_pushes_on_exit_after_sigterm(tmp_path):
+    """A host that terminates the server rather than closing stdin still gets the
+    final push: the signal must interrupt the blocked stdin read and reach the
+    ``finally``."""
+    process, calls_path, _config_path = _start_exporting_server(tmp_path)
+
+    def _terminate():
+        # Stdin stays open, so only the signal can end ``serve()``.
+        process.send_signal(signal.SIGTERM)
+        process.wait(timeout=30)
+        return process.stdout.read(), process.stderr.read()
+
+    stdout, stderr = _finish(process, _terminate)
+
+    assert process.returncode == 0, stderr
+    assert stdout == ""
+    assert calls_path.read_text().splitlines() == ["called", "called"]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="SIGTERM and the fake curl are POSIX")
+def test_mcp_sigterm_ends_a_server_whose_client_stopped_reading(tmp_path):
+    """With stdout's pipe full, a flush at interpreter exit would block for good, and
+    a SIGTERM still ignored after the final push could never end it."""
+    process, calls_path, _config_path = _start_exporting_server(tmp_path)
+    pings = "".join(
+        json.dumps({"jsonrpc": "2.0", "id": index, "method": "ping"}) + "\n"
+        for index in range(20_000)
+    )
+
+    def _send_without_reading():
+        try:
+            process.stdin.write(pings)
+            process.stdin.flush()
+        except (BrokenPipeError, OSError, ValueError):
+            pass
+
+    def _terminate():
+        sender = threading.Thread(target=_send_without_reading, daemon=True)
+        sender.start()
+        # Long enough for the replies to fill the pipe nobody reads.
+        time.sleep(2)
+        process.send_signal(signal.SIGTERM)
+        return process.wait(timeout=30)
+
+    assert _finish(process, _terminate) == 0
+    assert calls_path.read_text().splitlines() == ["called", "called"]
 
 
 class TestProjectRow:

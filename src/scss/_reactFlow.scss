@@ -1,0 +1,18 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+@use './definitions/colours' as *;
+
+// App-wide React Flow theme, the counterpart of `_blueprintjs.scss` for
+// Blueprint: colours every graph view shares. Layout — panel offsets, minimap
+// size — belongs in each view's own sheet, nested under its root class, so one
+// view's chrome never moves another's. #1899
+//
+// Unsuffixed, not `-props`: React Flow reads `-props` first, so a `-props`
+// value on `.react-flow` would shadow each view's own override below it.
+.react-flow {
+    --xy-controls-button-color: #{$tt-grey-2};
+    --xy-controls-button-color-hover: #{$tt-grey-2};
+    --xy-controls-button-background-color-hover: #{$tt-grey-6};
+}
