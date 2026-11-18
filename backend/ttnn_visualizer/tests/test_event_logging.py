@@ -23,6 +23,8 @@ from types import SimpleNamespace
 
 import pytest
 from ttnn_visualizer import event_logging
+from ttnn_visualizer.agent import server
+from ttnn_visualizer.agent.handles import ReportRegistry
 from ttnn_visualizer.event_logging import (
     _DETAIL_FIELD_ENUMS,
     _REQUIRED_FIELDS,
@@ -45,6 +47,7 @@ from ttnn_visualizer.event_logging import (
     get_application_version,
     get_deployment_mode,
     get_event_log_path,
+    get_event_log_root,
     get_launch_mode,
     is_recording_enabled,
     parse_known_event_fields,
@@ -166,7 +169,9 @@ def test_concurrent_batches_do_not_interleave(event_log_directory):
 def test_the_path_ignores_every_environment_derived_data_directory(monkeypatch):
     # The whole reason for not using get_app_data_directory(): a collector running as
     # root cannot read the user's shell environment, so the path has to be knowable
-    # from outside the process.
+    # from outside the process. Reads the production root, so it clears the conftest
+    # redirect; it only resolves the path and writes nothing.
+    monkeypatch.setattr(event_logging, "EVENT_LOG_DIRECTORY", None)
     monkeypatch.setenv("TT_METAL_HOME", "/somewhere/tt-metal")
     monkeypatch.setenv("APP_DATA_DIRECTORY", "/somewhere/else")
 
@@ -1776,3 +1781,27 @@ def test_record_events_writes_nothing_when_recording_is_disabled(
         is False
     )
     assert read_event_log_lines(event_log_directory) == []
+
+
+def test_a_test_that_opts_into_nothing_still_logs_inside_tmp_path(
+    tmp_path, monkeypatch
+):
+    """The conftest redirect is autouse: an unpatched tools/call from a test that asks
+    for no event-log fixture must land under ``tmp_path``, never in the developer's
+    ``~/.ttnn-visualizer/usage`` or ``/data/usage``. Three tests forgot the opt-in
+    before it was the default (#2278, #2279, #2288)."""
+    monkeypatch.delenv(RECORDING_DISABLED_ENV_VAR, raising=False)
+    for server_mode in (False, True):
+        assert get_event_log_root(server_mode).is_relative_to(tmp_path)
+
+    server.handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "load_report", "arguments": {}},
+        },
+        server._tool_table(ReportRegistry()),
+    )
+
+    assert get_event_log_path().is_file()

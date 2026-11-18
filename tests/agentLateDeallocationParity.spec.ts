@@ -51,7 +51,7 @@ describe('Buffer Summary late deallocations', () => {
             );
             const { reportsByOpId } = buildLateDeallocationReports({
                 tensorsByOperation: buildTensorsByOperationByAddress(
-                    operations as unknown as Pick<Operation, 'id' | 'inputs' | 'outputs'>[],
+                    operations as unknown as Pick<Operation, 'id' | 'name' | 'inputs' | 'outputs'>[],
                     uniqueBuffersByOperation,
                 ),
                 operationNamesById: new Map(operations.map(({ id, name }) => [id, name as string])),
