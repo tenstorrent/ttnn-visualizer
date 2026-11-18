@@ -6,8 +6,18 @@
 
 import json
 import os
+from unittest.mock import patch
 
 import pytest
+from ttnn_visualizer.app import _create_preloaded_instance, parse_args
+from ttnn_visualizer.exceptions import InvalidProfilerPath, InvalidReportPath
+from ttnn_visualizer.instances import (
+    KEY_MLIR_NAME,
+    KEY_NPE_NAME,
+    KEY_PERFORMANCE_NAME,
+    KEY_PROFILER_NAME,
+    create_instance_from_local_paths,
+)
 from ttnn_visualizer.models import InstanceTable
 
 ENDPOINT = "/api/instance/local-paths"
@@ -32,6 +42,12 @@ def report_dirs(tmp_path):
     (performance / "profile_log_device.csv").touch()
     (performance / "ops_perf_results_2026_08_19_16_47_08.csv").touch()
     return profiler, performance
+
+
+def _a_file(tmp_path):
+    path = tmp_path / "not_a_directory"
+    path.touch()
+    return path
 
 
 def _instance_count(app):
@@ -170,3 +186,133 @@ def test_a_hosted_app_opens_no_report_by_path(client, report_dirs):
     response = client.post(ENDPOINT, json={"profiler_path": str(profiler)})
 
     assert response.status_code == 403
+
+
+class TestCreateInstanceFromLocalPaths:
+    """The instance `ttnn-visualizer --memory-report-path` and this endpoint both store.
+
+    `tests/bootRestoredReportLoad.spec.tsx` restores the served form of this shape
+    (`TestCliPreload.test_it_returns_the_instance_the_browser_opens_on`) to pin that a
+    preloaded report records no load event. Its report selectors branch on the location
+    keys, so a location added here would leave that case testing a shape the app no
+    longer stores.
+
+    The missing locations are also why picking another report undoes this one (#2119).
+    Whoever fixes that should update the spec's fixture with it: the shape is pinned
+    here as current behaviour, not as a contract.
+    """
+
+    def test_it_names_the_folders_and_stores_no_location(self, app, report_dirs):
+        profiler, performance = report_dirs
+
+        with app.app_context():
+            instance = create_instance_from_local_paths(
+                profiler_path=str(profiler), performance_path=str(performance)
+            )
+
+            assert instance.active_report == {
+                KEY_PROFILER_NAME: "bge_m3",
+                KEY_PERFORMANCE_NAME: "2026_08_19_16_47_08",
+                KEY_NPE_NAME: None,
+                KEY_MLIR_NAME: None,
+            }
+            assert instance.profiler_path == f"{profiler}/db.sqlite"
+            assert instance.performance_path == str(performance)
+            assert instance.remote_connection is None
+            assert instance.remote_profiler_folder is None
+            assert instance.remote_performance_folder is None
+
+    def test_a_missing_half_is_named_empty(self, app, report_dirs):
+        _, performance = report_dirs
+
+        with app.app_context():
+            instance = create_instance_from_local_paths(
+                profiler_path=None, performance_path=str(performance)
+            )
+
+            assert instance.active_report[KEY_PROFILER_NAME] == ""
+            assert instance.profiler_path is None
+
+    @pytest.mark.parametrize(
+        "make_bad", [lambda tmp: tmp / "missing", _a_file], ids=["missing", "a_file"]
+    )
+    @pytest.mark.parametrize(
+        ("key", "error"),
+        [
+            ("profiler_path", InvalidReportPath),
+            ("performance_path", InvalidProfilerPath),
+        ],
+    )
+    def test_it_refuses_a_path_that_is_not_a_directory(
+        self, app, tmp_path, make_bad, key, error
+    ):
+        """`TestCliPreload` pins the exit message the CLI turns each of these into."""
+        paths = {"profiler_path": None, "performance_path": None}
+        paths[key] = str(make_bad(tmp_path))
+        before = _instance_count(app)
+
+        with app.app_context(), pytest.raises(error):
+            create_instance_from_local_paths(**paths)
+
+        assert _instance_count(app) == before
+
+
+class TestCliPreload:
+    """`ttnn-visualizer --memory-report-path` / `--performance-path` before serving."""
+
+    @pytest.fixture(autouse=True)
+    def create_app(self, app):
+        with patch("ttnn_visualizer.app.create_app", return_value=app) as create_app:
+            yield create_app
+
+    def test_without_either_flag_it_makes_no_instance(self, app, create_app):
+        """Nor builds an app: that runs migrations, delaying every plain launch."""
+        before = _instance_count(app)
+
+        assert _create_preloaded_instance(parse_args([])) is None
+        assert _instance_count(app) == before
+        create_app.assert_not_called()
+
+    def test_it_returns_the_instance_the_browser_opens_on(self, client, report_dirs):
+        profiler, performance = report_dirs
+        args = parse_args(
+            [
+                "--memory-report-path",
+                str(profiler),
+                "--performance-path",
+                str(performance),
+            ]
+        )
+
+        instance_id = _create_preloaded_instance(args)
+
+        # The whole served shape, as `makeOpenedByPathInstance` in
+        # tests/bootRestoredReportLoad.spec.tsx restores it: every location is null.
+        assert _instance(client, instance_id)["active_report"] == {
+            "profiler_name": "bge_m3",
+            "profiler_location": None,
+            "performance_name": "2026_08_19_16_47_08",
+            "performance_location": None,
+            "npe_name": None,
+            "npe_location": None,
+            "mlir_name": None,
+            "mlir_location": None,
+        }
+
+    @pytest.mark.parametrize(
+        ("flag", "message"),
+        [
+            ("--memory-report-path", "Invalid memory report path"),
+            ("--performance-path", "Invalid performance path"),
+        ],
+    )
+    def test_a_bad_path_exits_naming_its_own_flag(self, app, tmp_path, flag, message):
+        """The two exception names read swapped, so swapping the handlers is easy."""
+        missing = tmp_path / "missing"
+        before = _instance_count(app)
+
+        with pytest.raises(SystemExit) as exit_info:
+            _create_preloaded_instance(parse_args([flag, str(missing)]))
+
+        assert str(exit_info.value.code) == f"❌ {message}: {missing}"
+        assert _instance_count(app) == before
