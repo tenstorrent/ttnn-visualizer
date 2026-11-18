@@ -889,8 +889,8 @@ class TestMlirHostKeyVerdicts:
             statuses[0].model_dump()["hostKey"]["issue"] == HostKeyIssue.UNKNOWN.value
         )
 
-    def test_a_non_host_key_failure_carries_no_host_key_field(self, monkeypatch):
-        """The narrow model stays narrow: only a host-key verdict widens the line."""
+    def test_an_unclassified_failure_carries_neither_field(self, monkeypatch):
+        """The narrow model stays narrow: only a verdict or a reason widens the line."""
         from ttnn_visualizer.enums import ConnectionTestStates
         from ttnn_visualizer.exceptions import RemoteConnectionException
 
@@ -904,3 +904,22 @@ class TestMlirHostKeyVerdicts:
         statuses = run_mlir_server_connection_test(self._connection())
 
         assert "hostKey" not in statuses[0].model_dump()
+
+    def test_an_unreachable_server_carries_its_reason_and_no_host_key(
+        self, monkeypatch
+    ):
+        """The MLIR test shares the connection test's classes, so a host that never answers says so."""
+        from ttnn_visualizer.enums import RemoteConnectionFailureReason
+        from ttnn_visualizer.exceptions import UnreachableHostException
+
+        def refuse(self):
+            raise UnreachableHostException.for_host("work-gpu")
+
+        monkeypatch.setattr(SSHClient, "test_connection", refuse)
+
+        statuses = run_mlir_server_connection_test(self._connection())
+
+        assert len(statuses) == 1
+        line = statuses[0].model_dump(mode="json")
+        assert line["reason"] == RemoteConnectionFailureReason.UNREACHABLE.value
+        assert line["hostKey"] is None

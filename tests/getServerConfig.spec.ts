@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_SSH_PORT } from '../src/definitions/RemoteConnection';
 import { HOSTED_DEFAULT_MAX_CONTENT_LENGTH } from '../src/definitions/ServerConfig';
 import {
@@ -93,7 +93,28 @@ describe('isServerModeEnabled', () => {
     });
 });
 
+// Every `VITE_*` name `getServerConfig` reads; one it gains belongs here too.
+const DEV_ENV_NAMES = [
+    'VITE_SERVER_MODE',
+    'VITE_MAX_CONTENT_LENGTH',
+    'VITE_TT_METAL_HOME',
+    'VITE_REPORT_DATA_DIRECTORY',
+    'VITE_USERNAME',
+    'VITE_SSH_DEFAULT_PORT',
+    'VITE_SSH_DEFAULT_PERFORMANCE_PATH',
+    'VITE_SSH_DEFAULT_MEMORY_REPORT_PATH',
+    'VITE_SSH_DEFAULT_PROFILER_PATH',
+] as const;
+
 describe('getServerConfig (dev / Vite env)', () => {
+    // Vitest loads the developer's own `.env`, so any name `getServerConfig` reads left set
+    // there would decide these tests: the former memory report path warns in tests that assert
+    // silence, and a set `VITE_MAX_CONTENT_LENGTH` overrides the default under test. Every one
+    // is cleared, and each test that needs one stubs it itself.
+    beforeEach(() => {
+        DEV_ENV_NAMES.forEach((name) => vi.stubEnv(name, undefined));
+    });
+
     afterEach(() => {
         vi.unstubAllEnvs();
         vi.resetModules();

@@ -38,6 +38,7 @@ function OperationErrorTraces({ error, className, onExpandChange }: OperationErr
                     intent={Intent.DANGER}
                     hideSourceButton
                     isInline
+                    recordsExpansion
                 />
             )}
         </>

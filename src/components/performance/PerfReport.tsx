@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { JSX, useEffect, useMemo, useState } from 'react';
+import { Dispatch, JSX, SetStateAction, useCallback, useEffect, useMemo, useState } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
 import {
     Button,
@@ -27,6 +27,9 @@ import { ColumnKeys, Columns } from '../../definitions/PerfTable';
 import { TypedPerfTableRow } from '../../model/PerfTable';
 import { Signpost } from '../../model/Signpost';
 import { calcHighDispatchOps } from '../../functions/perfFunctions';
+import { recordPerfTableOptionToggled } from '../../functions/surfaceEvents';
+import { FilterSurface, PerfTableOption } from '../../definitions/EventLogEvent';
+import useRecordFilterUsed from '../../hooks/useRecordFilterUsed';
 import SearchField from '../SearchField';
 import PerfTable from './PerfTable';
 import {
@@ -151,6 +154,25 @@ const PerformanceReport = ({
     const [hiliteHighDispatch, setHiliteHighDispatch] = useState(false);
     const [selectedTabId, setSelectedTabId] = useState<TabId>(INITIAL_TAB_ID);
     const [useNormalisedData, setUseNormalisedData] = useState(true);
+    const recordOpCodeFilterUsed = useRecordFilterUsed(FilterSurface.PERF_OP_CODE);
+
+    // Works out the list a click leaves, so removing the last code counts as no filter. The
+    // setter still gets the update as given, so a functional one applies to the latest list.
+    // So a functional update runs twice, which is harmless while MultiSelectField's is pure.
+    const handleRawOpCodeFilterChange = useCallback(
+        (update: SetStateAction<TypedPerfTableRow['raw_op_code'][]>) => {
+            const next = typeof update === 'function' ? update(activeRawOpCodeFilterList) : update;
+
+            setActiveRawOpCodeFilterList(update);
+            recordOpCodeFilterUsed(next.length > 0);
+        },
+        [activeRawOpCodeFilterList, setActiveRawOpCodeFilterList, recordOpCodeFilterUsed],
+    );
+
+    const toggleTableOption = (setOption: Dispatch<SetStateAction<boolean>>, option: PerfTableOption) => () => {
+        setOption((isOn) => !isOn);
+        recordPerfTableOptionToggled(option);
+    };
     const filterableColumnKeys = useMemo(
         () => Columns.filter((column) => column.filterable).map((column) => column.key),
         [],
@@ -511,14 +533,14 @@ const PerformanceReport = ({
                         <ButtonGroup className='switch-group'>
                             <Switch
                                 label='Hide host ops'
-                                onChange={() => setHideHostOps(!hideHostOps)}
+                                onChange={toggleTableOption(setHideHostOps, PerfTableOption.HIDE_HOST_OPS)}
                                 checked={hideHostOps}
                                 className='option-switch'
                             />
 
                             <Switch
                                 label='Merge device rows'
-                                onChange={() => setMergeDevices(!mergeDevices)}
+                                onChange={toggleTableOption(setMergeDevices, PerfTableOption.MERGE_DEVICES)}
                                 checked={mergeDevices}
                                 className='option-switch'
                             />
@@ -529,7 +551,7 @@ const PerformanceReport = ({
                             >
                                 <Switch
                                     label='Tracing mode'
-                                    onChange={() => setTracingMode(!tracingMode)}
+                                    onChange={toggleTableOption(setTracingMode, PerfTableOption.TRACING_MODE)}
                                     checked={tracingMode}
                                     className='option-switch'
                                 />
@@ -565,7 +587,10 @@ const PerformanceReport = ({
                     >
                         <ButtonGroup className='select-group'>
                             <SearchField
-                                onQueryChanged={(value) => updateColumnFilter(ColumnKeys.OpCode, value)}
+                                onQueryChanged={(value) => {
+                                    updateColumnFilter(ColumnKeys.OpCode, value);
+                                    recordOpCodeFilterUsed(value !== '');
+                                }}
                                 placeholder='Filter by operation name'
                                 searchQuery={filters?.op_code || ''}
                             />
@@ -575,7 +600,7 @@ const PerformanceReport = ({
                                 options={rawOpCodeOptions}
                                 placeholder='Select Op Codes...'
                                 values={activeRawOpCodeFilterList}
-                                updateHandler={setActiveRawOpCodeFilterList}
+                                updateHandler={handleRawOpCodeFilterChange}
                             />
                         </ButtonGroup>
                     </FormGroup>
@@ -639,7 +664,7 @@ const PerformanceReport = ({
                             <ButtonGroup className='switch-group'>
                                 <Switch
                                     label='Matmul optimization analysis'
-                                    onChange={() => setProvideMatmulAdvice(!provideMatmulAdvice)}
+                                    onChange={toggleTableOption(setProvideMatmulAdvice, PerfTableOption.MATMUL_ADVICE)}
                                     checked={provideMatmulAdvice}
                                     className='option-switch'
                                     disabled={isStackedView}
@@ -647,7 +672,10 @@ const PerformanceReport = ({
 
                                 <Switch
                                     label='Highlight high dispatch ops'
-                                    onChange={() => setHiliteHighDispatch(!hiliteHighDispatch)}
+                                    onChange={toggleTableOption(
+                                        setHiliteHighDispatch,
+                                        PerfTableOption.HIGHLIGHT_HIGH_DISPATCH,
+                                    )}
                                     checked={hiliteHighDispatch}
                                     className='option-switch'
                                     disabled={isStackedView}
@@ -660,7 +688,10 @@ const PerformanceReport = ({
                                     <Switch
                                         label='Normalise data'
                                         disabled={!activeComparisonReportList || isStackedView}
-                                        onChange={() => setUseNormalisedData(!useNormalisedData)}
+                                        onChange={toggleTableOption(
+                                            setUseNormalisedData,
+                                            PerfTableOption.NORMALISE_DATA,
+                                        )}
                                         checked={useNormalisedData}
                                         className='option-switch'
                                     />

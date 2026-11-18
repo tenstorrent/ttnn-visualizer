@@ -137,15 +137,15 @@ Recorded by `ttnn-visualizer-mcp` when a registered tool reaches its handler, no
 
 `refused` is a tool declining a well-formed call it cannot answer (unknown handle, argument out of range). `error` is an unexpected failure the server did not anticipate.
 
-**Per-surface events.** The events below record what is used inside the Performance and NPE views, and across them. Each section names the #1819 question it answers. Most fire once per deliberate action, from the control itself: restoring persisted state, a reset by the application, a re-click on the option already selected, and anything continuous such as dragging or scrubbing record nothing. Two are tied to what is shown rather than to a control, and say so in their sections: `perf_chart_viewed` follows the scroll position, and `drilldown_opened` with `buffer_details` is recorded again when a reload restores the navigation that opened it. Read every count against the matching `report_loaded` count: a view nobody opens because nobody loaded that kind of report is not evidence that the feature is unwanted.
+**Per-surface events.** The events below record what is used inside the Performance and NPE views, and across them. Each section names the #1819 question it answers. Most fire once per deliberate action, from the control itself: restoring persisted state, a reset by the application, a re-click on the option already selected, and anything continuous such as dragging or scrubbing record nothing. One is tied to what is shown rather than to a control, and says so in its section: `perf_chart_viewed` follows the scroll position. Read every count against the matching `report_loaded` count: a view nobody opens because nobody loaded that kind of report is not evidence that the feature is unwanted.
 
 ### `perf_chart_viewed`
 
-Recorded the first time each performance chart becomes the chart in view, per visit to the Charts tab. It answers which charts to keep (Q4). Every chart renders on one scrolling page, so this means the chart was scrolled or jumped to, not that it was studied. The first chart counts on opening the tab.
+Recorded the first time each performance chart becomes the chart in view, per visit to the Charts tab. It answers which charts to keep (Q4). Every chart renders on one scrolling page, so this means the chart was scrolled or jumped to, not that it was studied. Opening the tab counts the chart in view: the first chart at the top of the page, or the one under the "Jump to chart" bar when the window is already scrolled. While the bar lies in the gap between two charts, no chart is in view until the next scroll.
 
 - `perf_chart`: `op_duration_histogram`, `op_count_vs_runtime`, `core_count_kernel_runtime`, `kernel_duration_vs_core_count`, `matmul_core_count_utilization`, `matmul_device_time`, `matmul_kernel_duration_utilization`, `matmul_utilization_vs_kernel_duration`, `conv_core_count_utilization`, `conv_device_time`, `conv_kernel_duration_utilization`, `conv_utilization_vs_kernel_duration`, `operation_types`.
 
-The matmul and conv charts show a placeholder when the report has no such operations, and still count when scrolled to.
+The matmul and conv charts show a placeholder when the report has no such operations, and record nothing while they do: a placeholder is not a chart. Reaching the bottom of the page, or a page short enough not to scroll, counts every chart whose top is then in view: the last charts may be too short to scroll up to the top, and on a tall screen several of them are. A chart passed over by a jump to a later one is not counted, unless the jump lands at the bottom with that chart's top in view.
 
 ### `perf_table_option_toggled`
 
@@ -182,17 +182,19 @@ Recorded when a detail surface is opened. It answers how deep use goes (Q4).
 - `drilldown_target`: `tensor_details`, `buffer_details`, `stack_trace`, `source_file`.
 
   - `tensor_details`: the tensor details drawer in the performance table, or a tensor's per-core allocation view.
-  - `buffer_details`: a buffer or tensor focused in a memory view, including through a "Buffer details" link. Reloading a page reached through that link records it again.
-  - `stack_trace`: a stack trace expanded, or an operation's error details opened.
-  - `source_file`: a source file opened from a stack trace.
+  - `buffer_details`: a buffer or tensor focused by a click in a memory view, or a "Buffer details" link clicked. A click on the buffer already focused records nothing, and neither does the focus that link's navigation applies, so a reload does not count it again.
+  - `stack_trace`: a stack trace expanded. Opening an operation's error records nothing until its trace is expanded, and expanding the error message never records. In the error overlay a trace opened after the message was expanded is shown expanded, so switching to it records, once, and only if the trace is long enough to expand. On the operation page, a trace that opens expanded because the previous operation's trace was left expanded records nothing: moving between operations carries the state over, and the expansion that set it was already counted.
+  - `source_file`: a source file opened, from a stack trace, an operation-list row, the Performance tensor drawer or the operation graph's info panel.
 
 Operation details are not a target: `view_opened` already counts them with `view` set to `operation_details`.
 
 ### `filter_used`
 
-Recorded the first time a filter's query becomes non-empty, per visit to the list, a visit being each time the list is opened. It answers which filters are used (Q4). The query text is never recorded.
+Recorded the first time per visit that a user's change leaves a filter's query non-empty, a visit being each time the list is opened. A filter restored on return records nothing, but editing one that was restored non-empty counts. It answers which filters are used (Q4). The query text is never recorded.
 
 - `filter_surface`: `operations`, `tensors`, `perf_op_code`.
+
+`perf_op_code` covers the Performance Table tab's op-name search and its raw op-code list, counted together as one filter. The Charts tab's op-code filter, and a chart click that filters the table, are not counted.
 
 ### `remote_connection_test`
 
@@ -200,7 +202,7 @@ Recorded when a remote connection test in the connection dialog finishes. It ans
 
 - `connection_test_result`: `success`, `auth_failed`, `host_key_rejected`, `unreachable`, `no_reports_found`, `report_path_failed`, `other`.
 
-`report_path_failed` means SSH connected but a configured report path is missing, not a directory, or unreadable. `no_reports_found` means the paths exist but hold no reports.
+`unreachable` includes a host that did not answer before the test timed out, and a connection lost during the SSH test itself or while a path was being searched. `report_path_failed` means SSH connected and the server marked a configured report path as missing, not a directory, or unreadable. `no_reports_found` means the paths exist but hold no reports. `other` is a failure the server does not classify, a search that ended before settling whether its path exists, a form value the server refuses that the dialog's own check does not catch, or a request that failed before the server answered; a path failure is never assumed. Trusting a host key from the dialog re-runs the test, so that flow records `host_key_rejected` and then the result of the second test.
 
 ## Information that is not recorded
 

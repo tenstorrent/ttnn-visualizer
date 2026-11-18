@@ -46,6 +46,8 @@ import { ALLOCATION_FAILURE_KIND_LABELS } from '../definitions/AllocationFailure
 import { TEST_IDS } from '../definitions/TestIds';
 import { getAllocationFailureDetail } from '../functions/parseAllocationFailure';
 import { AllocationFailure, AllocationFailureDetail } from '../model/AllocationFailure';
+import useRecordFilterUsed from '../hooks/useRecordFilterUsed';
+import { FilterSurface } from '../definitions/EventLogEvent';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -58,6 +60,7 @@ const OperationList = () => {
     const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
 
     const [filterQuery, setFilterQuery] = useAtom(operationListFilterAtom);
+    const recordListFilterUsed = useRecordFilterUsed(FilterSurface.OPERATIONS);
     const [shouldSortByID, setShouldSortByID] = useAtom(shouldSortByIDAtom);
     const [shouldSortDuration, setShouldSortDuration] = useAtom(shouldSortDurationAtom);
     const [focusedRow, setFocusedRow] = useState<number | null>(null);
@@ -369,7 +372,10 @@ const OperationList = () => {
                 <SearchField
                     placeholder='Filter operations'
                     searchQuery={filterQuery}
-                    onQueryChanged={(value) => setFilterQuery(value)}
+                    onQueryChanged={(value) => {
+                        setFilterQuery(value);
+                        recordListFilterUsed(value !== '');
+                    }}
                 />
 
                 <SimpleMultiselect

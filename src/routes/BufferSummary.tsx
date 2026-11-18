@@ -3,22 +3,20 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { Helmet } from 'react-helmet-async';
-import { AnchorButton, ButtonGroup, ButtonVariant, Intent, Size, Tab, Tabs } from '@blueprintjs/core';
+import { Size, Tab, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom } from 'jotai';
 import useBufferFocusDismissal from '../hooks/useBufferFocusDismissal';
-import { useActiveSection } from '../hooks/useActiveSection';
-import ROUTES from '../definitions/Routes';
 import BufferSummaryTab from '../components/buffer-summary/BufferSummaryTab';
 import 'styles/components/BufferSummary.scss';
-import { SECTION_IDS, TAB_IDS } from '../definitions/BufferSummary';
+import { TAB_IDS } from '../definitions/BufferSummary';
 import { selectedBufferSummaryTabAtom } from '../store/app';
 import L1PeakComposition from '../components/buffer-summary/L1PeakComposition';
+import BufferSummaryNavigation from '../components/buffer-summary/BufferSummaryNavigation';
 
 function BufferSummary() {
     useBufferFocusDismissal();
 
-    const activeSection = useActiveSection([SECTION_IDS.PLOT, SECTION_IDS.TABLE]);
     const [selectedTabId, setSelectedTabId] = useAtom(selectedBufferSummaryTabAtom);
 
     return (
@@ -29,27 +27,7 @@ function BufferSummary() {
 
             {/* Plot and Table are sections of the buffer-type panels; the peak composition
                 renders neither, so on that tab both anchors scroll to nothing. */}
-            {selectedTabId !== TAB_IDS.PEAK && (
-                <ButtonGroup className='sticky-nav'>
-                    <AnchorButton
-                        intent={Intent.PRIMARY}
-                        href={`${ROUTES.BUFFERS}#${SECTION_IDS.PLOT}`}
-                        icon={IconNames.HORIZONTAL_BAR_CHART}
-                        variant={activeSection !== SECTION_IDS.PLOT ? ButtonVariant.OUTLINED : undefined}
-                    >
-                        Plot view
-                    </AnchorButton>
-
-                    <AnchorButton
-                        intent={Intent.PRIMARY}
-                        href={`${ROUTES.BUFFERS}#${SECTION_IDS.TABLE}`}
-                        icon={IconNames.TH}
-                        variant={activeSection !== SECTION_IDS.TABLE ? ButtonVariant.OUTLINED : undefined}
-                    >
-                        Table view
-                    </AnchorButton>
-                </ButtonGroup>
-            )}
+            {selectedTabId !== TAB_IDS.PEAK && <BufferSummaryNavigation />}
 
             <Tabs
                 id='performance-tabs'

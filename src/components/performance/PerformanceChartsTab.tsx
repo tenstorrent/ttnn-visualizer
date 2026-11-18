@@ -6,12 +6,11 @@ import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import PerfChartFilter from './PerfChartFilter';
 import PerfCharts from './PerfCharts';
-import PerfChartsIndex from './PerfChartsIndex';
+import PerfChartsNavigation from './PerfChartsNavigation';
 import NonFilterablePerfCharts from './NonFilterablePerfCharts';
 import { Marker } from '../../definitions/PerfTable';
 import { TypedPerfTableRow } from '../../model/PerfTable';
 import { buildChartIndexEntries } from '../../functions/buildChartIndexEntries';
-import { useActiveSection } from '../../hooks/useActiveSection';
 import { usePrefilterPerfTableByOpCode } from '../../hooks/usePrefilterPerfTableByOpCode';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import 'styles/components/PerfCharts.scss';
@@ -25,8 +24,6 @@ interface PerformanceChartsTabProps {
     opCodeOptions: Marker[];
     updateOpCodes: (opCodes: Marker[]) => void;
 }
-
-export const PERF_CHARTS_NAV_OFFSET_PX = 60;
 
 const PerformanceChartsTab = ({
     filteredPerfData,
@@ -69,8 +66,6 @@ const PerformanceChartsTab = ({
         [comparisonReportList, hasConvData, hasMatmulData, performanceReport],
     );
 
-    const chartIndexIds = useMemo(() => chartIndexEntries.map((entry) => entry.id), [chartIndexEntries]);
-    const activeId = useActiveSection(chartIndexIds, PERF_CHARTS_NAV_OFFSET_PX);
     const prefilterPerfTableByOpCode = usePrefilterPerfTableByOpCode();
 
     return (
@@ -84,10 +79,7 @@ const PerformanceChartsTab = ({
             </aside>
 
             <div className='charts-column'>
-                <PerfChartsIndex
-                    entries={chartIndexEntries}
-                    activeId={activeId}
-                />
+                <PerfChartsNavigation entries={chartIndexEntries} />
 
                 <div className='charts'>
                     <PerfCharts
