@@ -225,8 +225,8 @@ def canonical_report(
     refused against the signposts already read for the handle, before the CSV is
     read again: an agent guessing names would otherwise pay a full read per guess.
 
-    Every read that misses the cache first checks the capture is the one the
-    handle pinned at the first read that found one; see `_require_same_source`.
+    Every read that misses the cache first checks the capture is the one
+    `_pin_source` pinned for the handle; see `_require_same_source`.
     Snapshots are kept per capture rather than per handle, so handles loaded on the
     same unchanged CSV share one. The rows are shared with them: copy a row before
     changing it.
@@ -329,12 +329,12 @@ def _pin_source(registry: ReportRegistry, handle: str) -> Optional[object]:
 def _require_same_source(
     registry: ReportRegistry, handle: str, instance: Instance
 ) -> None:
-    """Refuse to read a capture other than the one the handle has pinned.
+    """Refuse to read a capture other than the one `_pin_source` pinned for the handle.
 
-    The first read that finds one pins it, and the whole snapshot and the operation
-    link come from it; rows are matched to operations by CSV position. A
-    read of a rewritten or newer CSV would put its rows under the old link's
-    operation ids, so it is refused and a fresh handle asked for.
+    The whole snapshot and the operation link come from that capture, and rows are
+    matched to operations by CSV position. A read of a rewritten or newer CSV would
+    put its rows under the old link's operation ids, so it is refused and a fresh
+    handle asked for.
     """
     pinned = _pin_source(registry, handle)
     if pinned is not None and _source_now(instance) != pinned:

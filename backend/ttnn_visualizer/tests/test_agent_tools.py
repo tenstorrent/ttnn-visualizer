@@ -71,6 +71,7 @@ from ttnn_visualizer.tests.smoke_capture import (
     SIGNPOSTED_WINDOW_IDS,
     SMOKE_CAPTURE_DIR,
     append_unparsable_row,
+    load_before_csv,
     signpost,
     signposted_rows,
     smoke_rows,
@@ -196,12 +197,33 @@ def _rewrite_capture(directory):
 
 
 def _supersede_capture(directory):
-    """Add a newer ops_perf CSV beside the first, leaving the first untouched."""
+    """A newer ops_perf CSV beside the first, which stays untouched: touching it would
+    change the source `_require_same_source` compares, refusing for the wrong reason."""
     original = directory / "ops_perf_results.csv"
     newer = directory / "ops_perf_results_newer.csv"
     newer.write_text(original.read_text())
     _touch_after(original, newer, (time.time() + 1, time.time() + 1))
     assert newest_ops_perf_file(directory) == newer
+
+
+def _write_header_only(directory):
+    """The ops_perf CSV of a run that has written its header and no row yet."""
+    path = write_ops_perf(directory, signposted_rows())
+    path.write_text(path.read_text().splitlines(keepends=True)[0])
+
+
+# The window `signposted_rows()` bounds.
+_PERF_WINDOW = tools.SignpostRange("PERF_START", "PERF_END")
+
+
+def _read_whole(registry, handle):
+    """`top_ops` of the whole report: it pins the CSV in `canonical_report`."""
+    return tools.top_ops(registry, handle)
+
+
+def _read_window(registry, handle):
+    """`top_ops` of `_PERF_WINDOW`: it pins the CSV earlier, reading the signposts."""
+    return tools.top_ops(registry, handle, **_PERF_WINDOW.as_overrides())
 
 
 def _touch_in_order(older, newer):
@@ -1811,13 +1833,29 @@ class TestSignpostRangeEndToEnd:
             handle,
             by="total_percent",
             limit=MAX_LIMIT,
-            **{"start_signpost": "PERF_START", "end_signpost": "PERF_END", **overrides},
+            **{**_PERF_WINDOW.as_overrides(), **overrides},
         )
 
     @staticmethod
     def _report_ids(registry, handle, signposts=None):
         rows = tools.canonical_report(registry, handle, signposts)["report"]
         return {int(row["id"]) for row in rows}
+
+    @staticmethod
+    def _assert_reload_shares_snapshots(registry, first, second):
+        """`second`, loaded later on `first`'s unchanged capture, answers from the
+        whole and ranged snapshots `first` generated."""
+        with patch.object(
+            tools,
+            "_generate_canonical_report",
+            wraps=tools._generate_canonical_report,
+        ) as generate:
+            whole = tools.canonical_report(registry, first)
+            window = tools.canonical_report(registry, first, _PERF_WINDOW)
+
+            assert tools.canonical_report(registry, second) is whole
+            assert tools.canonical_report(registry, second, _PERF_WINDOW) is window
+        assert generate.call_count == 2
 
     def test_the_window_holds_the_rows_between_the_signposts_and_no_other(
         self, tmp_path
@@ -1828,9 +1866,7 @@ class TestSignpostRangeEndToEnd:
         handle = self._handle(registry, tmp_path)
 
         whole_ids = self._report_ids(registry, handle)
-        ranged_ids = self._report_ids(
-            registry, handle, tools.SignpostRange("PERF_START", "PERF_END")
-        )
+        ranged_ids = self._report_ids(registry, handle, _PERF_WINDOW)
 
         assert ranged_ids == whole_ids & set(SIGNPOSTED_WINDOW_IDS)
         assert ranged_ids
@@ -1849,9 +1885,7 @@ class TestSignpostRangeEndToEnd:
         registry = ReportRegistry()
         handle = self._handle(registry, tmp_path, rows)
 
-        report = tools.canonical_report(
-            registry, handle, tools.SignpostRange("PERF_START", "PERF_END")
-        )["report"]
+        report = tools.canonical_report(registry, handle, _PERF_WINDOW)["report"]
 
         assert any(
             row.get("op_type") == "signpost" and "PERF_INNER" in str(row.get("op_code"))
@@ -1911,7 +1945,7 @@ class TestSignpostRangeEndToEnd:
         handle = self._handle(registry, tmp_path)
         whole = tools.top_ops(registry, handle)
 
-        write_ops_perf(tmp_path / "signposted", signposted_rows()[:-1])
+        _rewrite_capture(tmp_path / "signposted")
 
         with pytest.raises(ValueError, match="has changed since it was first read"):
             self._ranged(registry, handle)
@@ -1921,39 +1955,54 @@ class TestSignpostRangeEndToEnd:
     @pytest.mark.parametrize(
         "change", [_rewrite_capture, _supersede_capture], ids=["rewritten", "newer"]
     )
+    @pytest.mark.parametrize(
+        "first, then",
+        [(_read_whole, _read_window), (_read_window, _read_whole)],
+        ids=["whole first", "window first"],
+    )
     def test_a_handle_loaded_before_its_csv_pins_the_first_one_read(
-        self, tmp_path, change
+        self, tmp_path, first, then, change
     ):
-        """With no CSV to pin at first, the first read that finds one pins it. #2227"""
+        """With no CSV to pin at first, the first read that finds one pins it: a whole
+        read as it generates the report, a window as it reads the signposts. #2227"""
         registry = ReportRegistry()
         directory = tmp_path / "signposted"
-        directory.mkdir()
-        handle = load_report(registry, performance_path=str(directory))["handle"]
-        # A miss keeps nothing, so a second one finds no error or empty pin held.
+        handle = load_before_csv(registry, directory)
+        # Repeated whole and ranged misses must leave it free to pin the next CSV.
         for _ in range(2):
-            with pytest.raises(FileNotFoundError):
-                tools.top_ops(registry, handle)
+            for read in (_read_whole, _read_window):
+                with pytest.raises(FileNotFoundError):
+                    read(registry, handle)
 
         write_ops_perf(directory, signposted_rows())
-        whole = tools.top_ops(registry, handle)
+        answer = first(registry, handle)
         change(directory)
 
         with pytest.raises(ValueError, match="has changed since it was first read"):
-            self._ranged(registry, handle)
-        assert tools.top_ops(registry, handle) == whole
+            then(registry, handle)
+        assert first(registry, handle) == answer
+
+    def test_a_header_only_csv_pins_the_handle_though_its_read_fails(self, tmp_path):
+        """The pin is taken before the read, so the complete CSV is then refused though
+        nothing was read from the first. Matched on purpose: #2306 is to settle it."""
+        registry = ReportRegistry()
+        directory = tmp_path / "signposted"
+        handle = load_before_csv(registry, directory)
+        _write_header_only(directory)
+        with pytest.raises(DataFormatError):
+            tools.top_ops(registry, handle)
+
+        write_ops_perf(directory, signposted_rows())
+
+        with pytest.raises(ValueError, match="has changed since it was first read"):
+            tools.top_ops(registry, handle)
 
     def test_a_newer_capture_beside_the_first_is_refused_too(self, tmp_path):
         registry = ReportRegistry()
         handle = self._handle(registry, tmp_path)
         self._ranged(registry, handle)
 
-        original = tmp_path / "signposted" / "ops_perf_results.csv"
-        newer = tmp_path / "signposted" / "ops_perf_results_newer.csv"
-        newer.write_text(original.read_text())
-        # Touching the original would change the source `_require_same_source`
-        # compares and refuse for the wrong reason, so only `newer` moves.
-        _touch_after(original, newer, (time.time() + 1, time.time() + 1))
-        assert newest_ops_perf_file(original.parent) == newer
+        _supersede_capture(tmp_path / "signposted")
 
         with pytest.raises(ValueError, match="has changed since it was first read"):
             tools.top_ops(registry, handle)
@@ -1965,23 +2014,23 @@ class TestSignpostRangeEndToEnd:
         second = load_report(registry, performance_path=str(tmp_path / "signposted"))[
             "handle"
         ]
-        ranged = tools.SignpostRange("PERF_START", "PERF_END")
 
-        with patch.object(
-            tools,
-            "_generate_canonical_report",
-            wraps=tools._generate_canonical_report,
-        ) as generate:
-            whole = tools.canonical_report(registry, first)
-            window = tools.canonical_report(registry, first, ranged)
+        self._assert_reload_shares_snapshots(registry, first, second)
 
-            assert tools.canonical_report(registry, second) is whole
-            assert tools.canonical_report(registry, second, ranged) is window
-        assert generate.call_count == 2
+    def test_a_handle_pinned_late_shares_its_snapshots_with_a_reload(self, tmp_path):
+        """Pinned to no capture, it would keep its snapshots to itself, and a reload
+        would generate them again. #2227"""
+        registry = ReportRegistry()
+        directory = tmp_path / "signposted"
+        first = load_before_csv(registry, directory)
+        with pytest.raises(FileNotFoundError):
+            tools.top_ops(registry, first)
+        write_ops_perf(directory, signposted_rows())
+        second = load_report(registry, performance_path=str(directory))["handle"]
 
-    @pytest.mark.parametrize(
-        "signposts", [None, tools.SignpostRange("PERF_START", "PERF_END")]
-    )
+        self._assert_reload_shares_snapshots(registry, first, second)
+
+    @pytest.mark.parametrize("signposts", [None, _PERF_WINDOW])
     def test_a_degraded_snapshot_is_not_shared_with_a_reload(self, tmp_path, signposts):
         """A swallowed failure (an EMFILE, a full temp dir) leaves rows without an
         op type. Kept under the capture, every reload would read them too."""

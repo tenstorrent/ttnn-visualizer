@@ -1518,6 +1518,36 @@ class TestLinkCache:
         assert second["operation_link"]["status"] == LinkStatus.LINKED.value
         assert {row["id"]: row["operation_id"] for row in second["ops"]}["3"] == 2
 
+    def test_a_handle_loaded_before_its_csv_links_once_a_read_finds_one(
+        self, linked, tmp_path
+    ):
+        """A link missed for want of the CSV is not kept as unavailable, and the read that
+        links pins the CSV its operation ids were matched against. #2227"""
+        registry, handle, generate = linked()
+        csv_path = tmp_path / "perf" / "ops_perf_results.csv"
+        report = _report_for(_CANONICAL_ROWS)
+
+        def once_written(instance, **overrides):
+            if not csv_path.exists():
+                raise FileNotFoundError(csv_path)
+            return report(instance, **overrides)
+
+        generate.side_effect = once_written
+        with pytest.raises(FileNotFoundError):
+            linking.top_ops(registry, handle)
+        missed = linking.operation_detail(registry, handle, operation_id=2)
+        write_ops_perf(tmp_path / "perf", smoke_rows())
+
+        result = linking.top_ops(registry, handle)
+
+        assert missed["operation_link"]["status"] == LinkStatus.UNAVAILABLE.value
+        assert result["operation_link"]["status"] == LinkStatus.LINKED.value
+        by_id = {row["id"]: row["operation_id"] for row in result["ops"]}
+        assert (by_id["3"], by_id["5"]) == (2, 3)
+        write_ops_perf(tmp_path / "perf", smoke_rows()[:-1])
+        with pytest.raises(ValueError, match="has changed since it was first read"):
+            linking.top_ops(registry, handle, start_signpost="signpost-start")
+
     def test_a_profiler_database_that_failed_once_is_read_again(self, linked):
         """A locked database raises the same `sqlite3.Error` a corrupt one does."""
         registry, handle, _ = linked()
