@@ -48,7 +48,9 @@ export function useActiveSection<TId extends string>(ids: TId[], offsetPx = 250)
                     }
 
                     const sectionHeight = element.offsetHeight;
-                    const sectionTop = element.offsetTop - offsetPx;
+                    // Measured from the top of the document, like scrollY: offsetTop is relative
+                    // to the nearest positioned ancestor, such as the Performance charts container.
+                    const sectionTop = element.getBoundingClientRect().top + scrollY - offsetPx;
 
                     if (scrollY > sectionTop && scrollY <= sectionTop + sectionHeight) {
                         current = id;

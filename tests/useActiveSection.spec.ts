@@ -8,17 +8,23 @@ import { useActiveSection } from '../src/hooks/useActiveSection';
 
 const SCROLL_OFFSET_PX = 250;
 
-function mockElement(top: number, height: number): HTMLDivElement {
+// `top` is the section's distance from the top of the document. jsdom has no layout, so the
+// viewport-relative rect is derived from it and the scroll position at the time of the call.
+// `offsetTop` defaults to `top`, as it is when no ancestor is positioned.
+function mockElement(top: number, height: number, offsetTop = top): HTMLDivElement {
     const element = document.createElement('div');
 
     Object.defineProperty(element, 'offsetTop', {
         configurable: true,
-        value: top,
+        value: offsetTop,
     });
     Object.defineProperty(element, 'offsetHeight', {
         configurable: true,
         value: height,
     });
+    vi.spyOn(element, 'getBoundingClientRect').mockImplementation(
+        () => ({ top: top - window.scrollY, height }) as DOMRect,
+    );
 
     return element;
 }
@@ -114,7 +120,37 @@ describe('useActiveSection', () => {
         expect(result.current).toBe('second');
     });
 
-    it('activates a section that sits flush with the top of the page (offsetTop === 0)', () => {
+    it('places a section inside a positioned ancestor by its top in the document', () => {
+        // Both sections sit in a container 800px down the page, so their offsetTop values are
+        // relative to it and 800px short of where they are in the document.
+        const CONTAINER_TOP_PX = 800;
+
+        vi.spyOn(document, 'getElementById').mockImplementation((id) => {
+            if (id === 'first') {
+                return mockElement(CONTAINER_TOP_PX, 400, 0);
+            }
+
+            if (id === 'second') {
+                return mockElement(CONTAINER_TOP_PX + 400, 400, 400);
+            }
+
+            return null;
+        });
+
+        const { result } = renderHook(() => useActiveSection(['first', 'second'], 60));
+
+        // 'second' spans (1140, 1540] in the document; offsetTop alone would put it at (340, 740].
+        scrollTo(600);
+        expect(result.current).toBe('first');
+
+        scrollTo(800);
+        expect(result.current).toBe('first');
+
+        scrollTo(1200);
+        expect(result.current).toBe('second');
+    });
+
+    it('activates a section that sits flush with the top of the page', () => {
         vi.spyOn(document, 'getElementById').mockImplementation((id) => {
             if (id === 'first') {
                 return mockElement(0, 400);
@@ -133,7 +169,7 @@ describe('useActiveSection', () => {
         scrollTo(800);
         expect(result.current).toBe('second');
 
-        // Back to the top: 'first' spans (-60, 340] and must still be reachable despite offsetTop === 0.
+        // Back to the top: 'first' spans (-60, 340] and must still be reachable from the very top.
         scrollTo(0);
         expect(result.current).toBe('first');
     });
