@@ -64,6 +64,8 @@ _SSH_DROPPED_CONNECTION_FRAGMENTS = (
     "connection reset",
     "broken pipe",
 )
+# OpenSSH's prefix for a failure before the key exchange finished.
+_SSH_HANDSHAKE_FRAGMENT = "kex_exchange_identification"
 
 
 # stderr fragments (lowercase) that mean the key we already trust no longer matches.
@@ -163,6 +165,10 @@ def raise_for_ssh_subprocess_error(
     if any(conn_err in stderr for conn_err in _SSH_CONNECTION_ERROR_FRAGMENTS):
         raise NoValidConnectionsError(f"SSH connection failed: {e.stderr}")
     if any(dropped in stderr for dropped in _SSH_DROPPED_CONNECTION_FRAGMENTS):
+        # A reset during the key exchange is a connection that never came up, so it keeps
+        # the refused-every-attempt advice: the hostname or port is the usual cause.
+        if _SSH_HANDSHAKE_FRAGMENT in stderr:
+            raise NoValidConnectionsError(f"SSH connection failed: {e.stderr}")
         raise ConnectionDroppedError(f"SSH connection lost: {e.stderr}")
     if "ssh:" in stderr or "protocol" in stderr:
         raise SSHException(f"SSH protocol error: {e.stderr}")

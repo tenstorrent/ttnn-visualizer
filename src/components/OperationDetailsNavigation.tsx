@@ -27,6 +27,7 @@ import StackTrace from './operation-details/StackTrace';
 import { recordDrilldownOpened } from '../functions/surfaceEvents';
 import { DrilldownTarget } from '../definitions/EventLogEvent';
 import { StackTraceLanguage } from '../definitions/StackTrace';
+import canStackTraceExpand from '../functions/canStackTraceExpand';
 
 enum TAB_IDS {
     ERROR = 'ERROR',
@@ -43,20 +44,28 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
     const [selectedTabId, setSelectedTabId] = useState<TabId>(TAB_IDS.ERROR);
     const [isErrorExpanded, setIsErrorExpanded] = useState(false);
 
-    // Both tabs share the expanded state, so a trace opened after the message was expanded
-    // mounts expanded, with no Expand click of its own to record it.
-    const handleErrorTabChange = (tabId: TabId) => {
-        setSelectedTabId(tabId);
-
-        if (tabId === TAB_IDS.STACK_TRACE && isErrorExpanded) {
-            recordDrilldownOpened(DrilldownTarget.STACK_TRACE);
-        }
-    };
-
     const navigate = useNavigate();
     const { operation } = useOperationDetails(operationId);
     const previousOperation = usePreviousOperation(operationId);
     const nextOperation = useNextOperation(operationId);
+
+    // Both tabs share the expanded state, so a trace opened after the message was expanded
+    // mounts expanded, with no Expand click of its own to record it. `Tabs` also calls this
+    // for the tab already open, and a trace that fits its preview has nothing to expand, so
+    // neither records.
+    const handleErrorTabChange = (tabId: TabId) => {
+        const isOpeningExpandedTrace =
+            tabId === TAB_IDS.STACK_TRACE &&
+            selectedTabId !== TAB_IDS.STACK_TRACE &&
+            isErrorExpanded &&
+            canStackTraceExpand(operation?.error?.stack_trace ?? '');
+
+        setSelectedTabId(tabId);
+
+        if (isOpeningExpandedTrace) {
+            recordDrilldownOpened(DrilldownTarget.STACK_TRACE);
+        }
+    };
 
     const navigateToPreviousOperation = useCallback(() => {
         void navigate(`${ROUTES.OPERATIONS}/${previousOperation?.id}`);

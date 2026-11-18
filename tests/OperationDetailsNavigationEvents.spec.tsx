@@ -15,7 +15,12 @@ import OperationDetailsNavigation from '../src/components/OperationDetailsNaviga
 import { DrilldownTarget, EventLogEvent } from '../src/definitions/EventLogEvent';
 import { TestProviders } from './helpers/TestProviders';
 
-const { recordEvent } = vi.hoisted(() => ({ recordEvent: vi.fn() }));
+const { recordEvent, errorTrace } = vi.hoisted(() => ({
+    recordEvent: vi.fn(),
+    errorTrace: { stackTrace: '' },
+}));
+
+const LONG_TRACE = 'frame 0\nframe 1\nframe 2';
 
 vi.mock('../src/functions/recordEvent', () => ({ default: recordEvent }));
 
@@ -29,7 +34,7 @@ vi.mock('../src/hooks/useAPI', () => ({
             error: {
                 error_type: 'RuntimeError',
                 error_message: 'boom\nmore detail\neven more detail',
-                stack_trace: 'frame 0\nframe 1\nframe 2',
+                stack_trace: errorTrace.stackTrace,
                 timestamp: '',
                 rank: 0,
             },
@@ -51,7 +56,21 @@ const renderNavigation = () =>
 
 beforeEach(() => {
     recordEvent.mockClear();
+    errorTrace.stackTrace = LONG_TRACE;
 });
+
+const STACK_TRACE_DRILLDOWN = {
+    event: EventLogEvent.DRILLDOWN_OPENED,
+    details: { drilldown_target: DrilldownTarget.STACK_TRACE },
+};
+
+const openTraceAfterExpandingMessage = async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'View operation error' }));
+    expect(await screen.findByRole('tab', { name: 'Error details', selected: true })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /expand/i }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Stack Trace' }));
+    expect(await screen.findByRole('tab', { name: 'Stack Trace', selected: true })).toBeInTheDocument();
+};
 
 // RTL auto-cleanup is off in this project.
 afterEach(cleanup);
@@ -84,26 +103,38 @@ describe('OperationDetailsNavigation error overlay events', () => {
         expect(await screen.findByRole('tab', { name: 'Stack Trace', selected: true })).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: /expand/i }));
 
-        expect(recordEvent).toHaveBeenCalledExactlyOnceWith({
-            event: EventLogEvent.DRILLDOWN_OPENED,
-            details: { drilldown_target: DrilldownTarget.STACK_TRACE },
-        });
+        expect(recordEvent).toHaveBeenCalledExactlyOnceWith(STACK_TRACE_DRILLDOWN);
     });
 
     it('records one stack-trace drill-down when the trace opens already expanded', async () => {
         renderNavigation();
 
         // The tabs share the expanded state, so the trace mounts expanded with no Expand click.
-        fireEvent.click(screen.getByRole('button', { name: 'View operation error' }));
-        expect(await screen.findByRole('tab', { name: 'Error details', selected: true })).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: /expand/i }));
-        fireEvent.click(screen.getByRole('tab', { name: 'Stack Trace' }));
-        expect(await screen.findByRole('tab', { name: 'Stack Trace', selected: true })).toBeInTheDocument();
+        await openTraceAfterExpandingMessage();
 
-        expect(recordEvent).toHaveBeenCalledExactlyOnceWith({
-            event: EventLogEvent.DRILLDOWN_OPENED,
-            details: { drilldown_target: DrilldownTarget.STACK_TRACE },
-        });
+        expect(recordEvent).toHaveBeenCalledExactlyOnceWith(STACK_TRACE_DRILLDOWN);
+    });
+
+    it('records nothing more for a click on the Stack Trace tab already open', async () => {
+        renderNavigation();
+
+        await openTraceAfterExpandingMessage();
+        fireEvent.click(screen.getByRole('tab', { name: 'Stack Trace' }));
+        fireEvent.click(screen.getByRole('tab', { name: 'Stack Trace' }));
+
+        expect(recordEvent).toHaveBeenCalledExactlyOnceWith(STACK_TRACE_DRILLDOWN);
+    });
+
+    it.each([
+        ['empty', ''],
+        ['short enough for the preview', 'frame 0\nframe 1'],
+    ])('records nothing on switching to a trace that is %s, which has nothing to expand', async (_case, trace) => {
+        errorTrace.stackTrace = trace;
+        renderNavigation();
+
+        await openTraceAfterExpandingMessage();
+
+        expect(recordEvent).not.toHaveBeenCalled();
     });
 
     it('records nothing when the trace is opened with the message collapsed', async () => {

@@ -175,14 +175,20 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
     );
     const { cbChartDataByOperation, chartData } = l1MemoryData;
 
+    // Every buffer and tensor focus on this page is a click, so each records a drill-down;
+    // focus records nothing unless asked, so one place keeps the five callers from drifting.
+    const focusBufferFromClick = (address?: number, tensorId?: number, colorVariance?: number): void => {
+        updateBufferFocus(address, tensorId, colorVariance, { recordDrilldown: true });
+    };
+
     const onDramDeltaClick = (event: Readonly<PlotMouseEventCustom>): void => {
         const { address, tensor } = event.points[0].data.memoryData;
-        updateBufferFocus(address, tensor?.id, undefined, { recordDrilldown: true });
+        focusBufferFromClick(address, tensor?.id);
     };
 
     const onDramBufferClick = (event: Readonly<PlotMouseEventCustom>): void => {
         const { address, tensor } = event.points[0].data.memoryData;
-        updateBufferFocus(address, tensor?.id, undefined, { recordDrilldown: true });
+        focusBufferFromClick(address, tensor?.id);
     };
 
     const onBufferClick = (event: Readonly<PlotMouseEventCustom>): void => {
@@ -192,16 +198,8 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
         const { address, tensor, colorVariance } = event.points[0].data.memoryData;
 
         if (!isCBSummary) {
-            updateBufferFocus(address, tensor?.id, colorVariance, { recordDrilldown: true });
+            focusBufferFromClick(address, tensor?.id, colorVariance);
         }
-    };
-
-    const onTensorClick = (address?: number, tensorId?: number): void => {
-        updateBufferFocus(address, tensorId, undefined, { recordDrilldown: true });
-    };
-
-    const onLegendClick = (address: number, tensorId?: number, colorVariance?: number) => {
-        updateBufferFocus(address, tensorId, colorVariance, { recordDrilldown: true });
     };
 
     const inputOutputList = details.inputs.concat(details.outputs);
@@ -441,7 +439,7 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
                                         showCircularBuffer={showCircularBuffer}
                                         showL1Small={showL1Small}
                                         onBufferClick={onBufferClick}
-                                        onLegendClick={onLegendClick}
+                                        onLegendClick={focusBufferFromClick}
                                     />
                                 </>
                             </>
@@ -457,7 +455,7 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
                                     zoomedInViewMainMemory={zoomedInViewMainMemory}
                                     onDramBufferClick={onDramBufferClick}
                                     onDramDeltaClick={onDramDeltaClick}
-                                    onLegendClick={onLegendClick}
+                                    onLegendClick={focusBufferFromClick}
                                 />
                             </>
                         )}
@@ -469,7 +467,7 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
                             plotZoomRangeStart={zoomRangeStart}
                             plotZoomRangeEnd={zoomRangeEnd}
                             zoomedInViewMainMemory={zoomedInViewMainMemory}
-                            onTensorClick={onTensorClick}
+                            onTensorClick={focusBufferFromClick}
                         />
 
                         {details.device_operations && (
@@ -487,7 +485,7 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
                                 <DeviceOperationsFullRender
                                     deviceOperations={details.device_operations}
                                     details={details}
-                                    onLegendClick={onLegendClick}
+                                    onLegendClick={focusBufferFromClick}
                                     hasRecordedError={!!operationDetails?.error}
                                 />
                             </>

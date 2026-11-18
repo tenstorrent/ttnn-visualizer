@@ -634,8 +634,9 @@ def connection_status_from_exception(error) -> StatusMessage:
 class ConnectionStatusMessage(StatusMessage):
     """A connection test's status line that carries a host-key verdict or a failure reason.
 
-    Used by the remote connection test and the MLIR server test alike; on the latter an
-    unreachable or timed-out line carries ``reason`` and a null ``hostKey``. Deliberately a
+    Used by the remote connection test and the MLIR server test alike; on the latter any
+    classified failure carries ``reason``, a host-key line its verdict as well, and every
+    other line a null ``hostKey``. Deliberately a
     subclass rather than fields on ``StatusMessage``: that model is also dumped as the NPE
     upload response and spread into every MLIR upload entry, neither of which has any
     business gaining either field.

@@ -266,6 +266,22 @@ def test_a_connection_lost_mid_command_is_classified_as_dropped(stderr):
         raise_for_ssh_subprocess_error(error, _connection())
 
 
+def test_a_reset_during_the_handshake_is_a_connection_that_never_came_up():
+    # Not a dropped connection: the hostname or port is the usual cause, which the
+    # refused advice names. Both carry ``UNREACHABLE``, so only the message differs.
+    error = subprocess.CalledProcessError(
+        255,
+        ["ssh"],
+        output="",
+        stderr="kex_exchange_identification: read: Connection reset by peer\r\n",
+    )
+
+    with pytest.raises(NoValidConnectionsError) as excinfo:
+        raise_for_ssh_subprocess_error(error, _connection())
+
+    assert not isinstance(excinfo.value, ConnectionDroppedError)
+
+
 def test_too_many_authentication_failures_is_an_auth_failure():
     # Common for anyone with many keys in ssh-agent: the server gives up before the right one.
     error = subprocess.CalledProcessError(

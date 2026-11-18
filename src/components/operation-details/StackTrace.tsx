@@ -10,6 +10,7 @@ import 'styles/components/StackTrace.scss';
 import { StackTraceLanguage } from '../../definitions/StackTrace';
 import hljs from '../../functions/highlightSource';
 import { getStackTraceFilePath, getStackTraceLineNumber } from '../../functions/stackTraceSource';
+import canStackTraceExpand, { STACK_TRACE_PREVIEW_LINES } from '../../functions/canStackTraceExpand';
 import SourceFileButton from './SourceFileButton';
 import { recordDrilldownOpened } from '../../functions/surfaceEvents';
 import { DrilldownTarget } from '../../definitions/EventLogEvent';
@@ -67,7 +68,7 @@ function StackTrace({
 
     const stackTracePreview = useMemo(() => getStackTracePreview(stackTraceWithHighlights), [stackTraceWithHighlights]);
     // A trace that fits in the preview has nothing more to show
-    const canExpand = stackTracePreview !== stackTraceWithHighlights;
+    const canExpand = useMemo(() => canStackTraceExpand(stackTrace), [stackTrace]);
 
     const handleToggleStackTrace = () => {
         setIsExpanded(!isExpanded);
@@ -138,7 +139,10 @@ function StackTrace({
 }
 
 function getStackTracePreview(stackTrace: string) {
-    const splitTrace: Array<string> = stackTrace.split('<span class="line-number">').splice(0, 3);
+    // The first element is what precedes the first line, so one more than the lines shown.
+    const splitTrace: Array<string> = stackTrace
+        .split('<span class="line-number">')
+        .splice(0, STACK_TRACE_PREVIEW_LINES + 1);
 
     return splitTrace.join('<span class="line-number">');
 }

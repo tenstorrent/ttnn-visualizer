@@ -145,6 +145,12 @@ describe('getRemoteConnectionTestResult', () => {
             [{ ...line(FAILED), reason: 'cosmic_rays' as RemoteConnectionFailureReason }],
             RemoteConnectionTestResult.OTHER,
         ],
+        // An inherited name: a plain index lookup would find `Object.prototype.constructor`.
+        [
+            'a reason that names an inherited property',
+            [{ ...line(FAILED), reason: 'constructor' as RemoteConnectionFailureReason }],
+            RemoteConnectionTestResult.OTHER,
+        ],
     ])('classifies %s', (_case, statuses, result) => {
         expect(getRemoteConnectionTestResult(statuses)).toBe(result);
     });
