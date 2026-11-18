@@ -27,6 +27,7 @@ from typing import (
     Optional,
     Sequence,
     Set,
+    Sized,
     Tuple,
     TypeVar,
     cast,
@@ -37,7 +38,11 @@ from ttnn_visualizer.agent.bounds import (
     MAX_DETAILED_LIMIT,
     MAX_LIMIT,
     bounded,
+    cut_op_code,
+    name_fits,
     require_choice,
+    require_name_fits,
+    shown_op_code,
 )
 from ttnn_visualizer.agent.cells import finite_number, whole_number
 from ttnn_visualizer.agent.handles import (
@@ -70,6 +75,7 @@ from ttnn_visualizer.csv_queries import (
     ZoneIntervalPass,
     ZoneIntervals,
     ZoneRepeats,
+    ZoneSummary,
     check_signpost_range,
     interval_statistics,
     read_signposts,
@@ -160,7 +166,7 @@ def share_percent(part: Optional[float], whole: float) -> Optional[float]:
 
 
 # Longer than any signpost a model emits, and short enough that a refusal or a
-# projection echoing the name stays small.
+# projection echoing the name stays small; in an answer's bytes, as `name_fits` counts.
 MAX_SIGNPOST_NAME_LENGTH = 256
 
 
@@ -189,11 +195,8 @@ class SignpostRange:
         not key a second snapshot of the same whole report.
         """
         for label, name in (("start_signpost", start), ("end_signpost", end)):
-            if name and len(name) > MAX_SIGNPOST_NAME_LENGTH:
-                raise ValueError(
-                    f"{label} is {len(name)} characters; a signpost name is at most "
-                    f"{MAX_SIGNPOST_NAME_LENGTH}"
-                )
+            if name:
+                require_name_fits(label, "signpost", name, MAX_SIGNPOST_NAME_LENGTH)
         start, end = start or None, end or None
         if start is None and end is None:
             return None
@@ -223,9 +226,10 @@ def canonical_report(
     read again: an agent guessing names would otherwise pay a full read per guess.
 
     Every read that misses the cache first checks the capture is the one the
-    handle's first read came from; see `_require_same_source`. Snapshots are kept
-    per capture rather than per handle, so handles loaded on the same unchanged
-    CSV share one. The rows are shared with them: copy a row before changing it.
+    handle pinned at the first read that found one; see `_require_same_source`.
+    Snapshots are kept per capture rather than per handle, so handles loaded on the
+    same unchanged CSV share one. The rows are shared with them: copy a row before
+    changing it.
     A report generated with swallowed errors is the exception: it is marked `degraded`
     and kept by the handle that read it alone, so loading the report again regenerates
     it. `keep=False` reads a report no tool has kept without keeping it.
@@ -266,14 +270,35 @@ def check_range(
     """Refuse a range this handle's signposts cannot honour, naming the handle.
 
     `diff_reports` asks it of every capture before generating any, so the
-    refusal has to say which one it is about.
+    refusal has to say which one it is about. A name the report lacks is refused
+    here, listing the names `load_report` lists rather than every one the CSV holds.
     """
+    resolved = _signposts(registry, handle)
+    if not signpost_range_ignored(resolved, signposts.start, signposts.end):
+        for name in (signposts.start, signposts.end):
+            if name and name not in resolved.positions_by_name:
+                raise InvalidSignpostRange(
+                    f"{handle!r}: {_unknown_signpost(name, resolved)}"
+                )
     try:
-        check_signpost_range(
-            _signposts(registry, handle), signposts.start, signposts.end
-        )
+        check_signpost_range(resolved, signposts.start, signposts.end)
     except InvalidSignpostRange as error:
         raise InvalidSignpostRange(f"{handle!r}: {error}") from error
+
+
+def _unknown_signpost(name: str, resolved: ResolvedSignposts) -> str:
+    named, listed, too_long = _listable_signposts(resolved)
+    refusal = f"no signpost named {name!r} in this report; " + (
+        f"it holds {', '.join(repr(known) for known, _ in listed)}"
+        if listed
+        else "none of its signpost names is short enough to list"
+    )
+    unlisted, too_long_note = _unlisted_names(
+        len(named), listed, too_long, MAX_SIGNPOST_NAME_LENGTH
+    )
+    if unlisted:
+        refusal += f" and {unlisted} more"
+    return refusal + too_long_note
 
 
 def _source_now(instance: Instance) -> Optional[object]:
@@ -288,16 +313,26 @@ def _source_now(instance: Instance) -> Optional[object]:
 
 
 def _pin_source(registry: ReportRegistry, handle: str) -> Optional[object]:
-    return registry.cached_report(handle, _source_now, variant=CacheVariant.SOURCE)
+    """The capture pinned by the handle's first read that finds one, or None until
+    then: a None is not kept, so a handle loaded before its CSV was written pins the
+    first CSV a read finds."""
+
+    def pin(instance: Instance) -> Optional[object]:
+        source = _source_now(instance)
+        if source is None:
+            raise UnkeptSnapshot(None)
+        return source
+
+    return registry.cached_report(handle, pin, variant=CacheVariant.SOURCE)
 
 
 def _require_same_source(
     registry: ReportRegistry, handle: str, instance: Instance
 ) -> None:
-    """Refuse to read a capture other than the one the handle first read.
+    """Refuse to read a capture other than the one the handle has pinned.
 
-    The whole snapshot and the operation link are pinned to the capture the
-    handle first read, and rows are matched to operations by CSV position. A
+    The first read that finds one pins it, and the whole snapshot and the operation
+    link come from it; rows are matched to operations by CSV position. A
     read of a rewritten or newer CSV would put its rows under the old link's
     operation ids, so it is refused and a fresh handle asked for.
     """
@@ -387,25 +422,33 @@ def _resolve_signposts(instance: Instance) -> ResolvedSignposts:
         return read_signposts(csv_file, low_memory=True)
 
 
-def _name_shown(name: str, max_length: int) -> bool:
-    """Whether a name the capture supplied is short enough to show an agent."""
-    return len(name) <= max_length
-
-
 def _shown_and_dropped(
     items: Iterable[_Item],
     shown: Callable[[_Item], bool],
     limit: Optional[int] = None,
 ) -> Tuple[List[_Item], int]:
     """Up to `limit` of the items `shown` keeps, in order, and how many it left out."""
+    kept, dropped, _ = _listing(items, shown, limit)
+    return kept, dropped
+
+
+def _listing(
+    items: Iterable[_Item],
+    shown: Callable[[_Item], bool],
+    limit: Optional[int] = None,
+) -> Tuple[List[_Item], int, int]:
+    """Up to `limit` of the items `shown` keeps, in order, how many it left out, and
+    how many it would keep but left out past `limit`."""
     kept: List[_Item] = []
-    dropped = 0
+    dropped = past_limit = 0
     for item in items:
         if not shown(item):
             dropped += 1
         elif limit is None or len(kept) < limit:
             kept.append(item)
-    return kept, dropped
+        else:
+            past_limit += 1
+    return kept, dropped, past_limit
 
 
 def _short_names(
@@ -414,8 +457,32 @@ def _short_names(
     """Up to `limit` names, with their counts and in order, short enough to show an
     agent, and how many were too long."""
     return _shown_and_dropped(
-        named, lambda entry: _name_shown(entry[0], max_length), limit
+        named, lambda entry: name_fits(entry[0], max_length), limit
     )
+
+
+def _unlisted_names(
+    total: int, listed: Sized, too_long: int, max_length: int
+) -> Tuple[int, str]:
+    """How many short names a refusal's list left out, and its note on the long ones."""
+    too_long_note = (
+        f"; {too_long} more have names past {max_length} bytes, which are not listed"
+        if too_long
+        else ""
+    )
+    return total - too_long - len(listed), too_long_note
+
+
+def _listable_signposts(
+    resolved: ResolvedSignposts,
+) -> Tuple[List[Tuple[str, int]], List[Tuple[str, int]], int]:
+    """Every signpost name with its occurrences, the ones `load_report` lists, and how
+    many are too long to list; an unknown name's refusal lists the same ones."""
+    named = resolved.occurrences()
+    listed, too_long = _short_names(
+        named, MAX_SIGNPOST_NAME_LENGTH, MAX_LISTED_SIGNPOSTS
+    )
+    return named, listed, too_long
 
 
 def with_signposts(
@@ -439,11 +506,8 @@ def with_signposts(
         return without_performance_csv(loaded, str(error))
     except (OSError, TypeError, ValueError) as error:
         return {**loaded, "signposts_problem": str(error)}
-    named = resolved.occurrences()
     # A longer name cannot be passed back as a bound, and is the capture's text, not ours.
-    usable, too_long = _short_names(
-        named, MAX_SIGNPOST_NAME_LENGTH, MAX_LISTED_SIGNPOSTS
-    )
+    named, usable, too_long = _listable_signposts(resolved)
     result: Dict[str, object] = {
         **loaded,
         "signpost_count": len(named),
@@ -563,7 +627,7 @@ def project_row(row: Dict, metric: str = DEFAULT_METRIC) -> Dict[str, object]:
     """
     return {
         "id": row.get("id"),
-        "op_code": _display_op_code(row),
+        **cut_op_code("op_code", _display_op_code(row)),
         metric: _rounded(finite_number(row.get(SORTABLE_METRICS[metric]))),
         "cores": finite_number(row.get("cores")),
         "bound": row.get("bound") or None,
@@ -726,6 +790,11 @@ class _ProgramCalls:
     first_repeat_miss_perf_id: Optional[str] = None
 
 
+def _program_calls_entry(entry: _ProgramCalls) -> Dict[str, object]:
+    fields = asdict(entry)
+    return {**cut_op_code("op_code", fields.pop("op_code")), **fields}
+
+
 def program_cache(
     registry: ReportRegistry, handle: str, limit: Optional[int] = None
 ) -> Dict[str, object]:
@@ -786,7 +855,7 @@ def program_cache(
         "op_code_count": len(entries),
         "returned": len(ranked),
         "grouped_by": "raw_op_code",
-        "op_codes": [asdict(entry) for entry in ranked],
+        "op_codes": [_program_calls_entry(entry) for entry in ranked],
         "projection": projection(None),
         "note": PROGRAM_CACHE_NOTE,
     }
@@ -819,8 +888,7 @@ class _ZoneTimingsRead:
     """`zone_timings`' read of the device log, kept per handle with the clock and
     architecture its first line named then. #2248"""
 
-    summary: List[Dict[str, object]]
-    pairing: Dict[str, int]
+    summary: ZoneSummary
     arch: Optional[str]
     clock_mhz: Optional[float]
 
@@ -829,10 +897,9 @@ def _zone_timings_read(registry: ReportRegistry, handle: str) -> _ZoneTimingsRea
     def read(instance: Instance) -> _ZoneTimingsRead:
         metadata = DeviceLogProfilerQueries.read_capture_metadata(instance)
         with DeviceLogProfilerQueries(instance, stream=True) as queries:
-            summary, pairing = queries.query_zone_summary()
+            summary = queries.query_zone_summary()
         return _ZoneTimingsRead(
             summary,
-            pairing,
             # As `zone_intervals` and `core_spread` read it, so the tools cannot differ.
             _log_architecture(instance),
             finite_number(metadata.get("CHIP_FREQ[MHz]")),
@@ -847,12 +914,13 @@ def zone_timings(
     """Per-zone, per-RISC totals from the device profiler log."""
     _require_performance_report(registry, handle)
     count = bounded(limit)
-    read = _zone_timings_read(registry, handle)
-    summary, pairing, clock_mhz = read.summary, read.pairing, read.clock_mhz
+    with _as_refusal():
+        read = _zone_timings_read(registry, handle)
+    summary, clock_mhz = read.summary, read.clock_mhz
     # Filtered whole, so the limit counts only entries whose names can be shown.
     listed, too_long = _shown_and_dropped(
-        summary,
-        lambda entry: _name_shown(cast(str, entry["zone"]), MAX_ZONE_NAME_LENGTH)
+        summary.zones,
+        lambda entry: name_fits(cast(str, entry["zone"]), MAX_ZONE_NAME_LENGTH)
         and _risc_shown(cast(str, entry["risc"])),
         count,
     )
@@ -892,7 +960,10 @@ def zone_timings(
     }
     if too_long:
         result["zones_unlisted_too_long"] = too_long
-    caveat = _pairing_caveat(pairing, "these totals")
+    caveats = [_pairing_caveat(summary.pairing, "these totals")]
+    if summary.malformed:
+        caveats.append(_unreadable_rows_caveat(summary.malformed))
+    caveat = " ".join(filter(None, caveats))
     if caveat:
         result["caveat"] = caveat
     return result
@@ -1147,6 +1218,16 @@ def _pairing_caveat(pairing: Dict[str, int], figures: str) -> Optional[str]:
     return caveat
 
 
+# The cells a zone read leaves a row out for, as its caveat and refusal name them.
+_UNREADABLE_CELLS = f"a slot, core, run or cycle count {UNREADABLE_NUMBER_REASON}"
+
+
+def _unreadable_rows_caveat(malformed: int) -> str:
+    """Say how many rows a zone read left out as unreadable, in the words
+    `zone_timings` and `zone_intervals` share."""
+    return f"{malformed} rows have {_UNREADABLE_CELLS}, and were left out."
+
+
 CORE_SPREAD_NOTE = (
     "A core's span runs from its first kernel start to its last kernel end across "
     "its RISCs, which is how tt-metal measures per-core kernel duration; by_risc "
@@ -1163,6 +1244,9 @@ CORE_SPREAD_NOTE = (
 
 # Enough to say where the stragglers sit without listing a 130-core grid.
 SLOWEST_CORES = 5
+# tt-metal's `RiscType` has 32 members and a Quasar Tensix core runs 24 of them;
+# more names than that are the capture's text.
+MAX_LISTED_RISCS = 32
 
 _PERF_PER_CORE_FIELDS = ("per_core_min_us", "per_core_max_us", "per_core_avg_us")
 
@@ -1191,7 +1275,9 @@ def _core_figures(cores: Dict[tuple, CoreSpan], clock_mhz: float) -> Dict[str, o
         for risc, cycles in span.risc_cycles.items():
             risc_us[risc].append(cycles / clock_mhz)
     slowest = sorted(core_us.items(), key=lambda item: item[1], reverse=True)
-    listed, too_long = _shown_and_dropped(sorted(risc_us), _risc_shown)
+    listed, too_long, past_cap = _listing(
+        sorted(risc_us), _risc_shown, MAX_LISTED_RISCS
+    )
     figures: Dict[str, object] = {
         "cores_in_log": len(cores),
         "core_span": _spread(list(core_us.values())),
@@ -1203,6 +1289,8 @@ def _core_figures(cores: Dict[tuple, CoreSpan], clock_mhz: float) -> Dict[str, o
     }
     if too_long:
         figures["by_risc_unlisted_too_long"] = too_long
+    if past_cap:
+        figures["by_risc_unlisted_past_cap"] = past_cap
     return figures
 
 
@@ -1240,12 +1328,13 @@ def _spread_rows(
     op_code = _display_op_code(row)
     if is_signpost_row(row):
         raise ValueError(
-            f"row {perf_id} is the signpost {op_code!r}, which runs on no core"
+            f"row {perf_id} is the signpost {shown_op_code(op_code)}, which runs on no "
+            "core"
         )
     if not _spannable(row):
         raise ValueError(
-            f"row {perf_id} ({op_code}) has no global call count or device, so it is "
-            "a host op with no zones in the device log"
+            f"row {perf_id} ({shown_op_code(op_code)}) has no global call count or "
+            "device, so it is a host op with no zones in the device log"
         )
     return [row]
 
@@ -1268,7 +1357,8 @@ def _span_request(row: Dict) -> SpanRequest:
 class _CoreSpreadIndex:
     """Every device op's spread, kept per handle so drilling in costs one log read.
 
-    A few hundred bytes an op, where the spans they come from are a core's each.
+    An op's figures grow with the RISCs it lists, to about 16 KB at
+    `MAX_LISTED_RISCS`.
     """
 
     figures: Dict[SpanRequest, Dict[str, object]]
@@ -1464,16 +1554,16 @@ def core_spread(
 
 # Zone names a refusal lists, most started first.
 MAX_LISTED_ZONES = MAX_LISTED_SIGNPOSTS
-# A zone name longer than this is the capture's text, not ours: no zone tool shows it, and
-# a zone asked for by such a name is refused, as a signpost's is.
+# A zone name past this many bytes is the capture's text, not ours: no zone tool shows
+# it, and a zone asked for by such a name is refused, as a signpost's is.
 MAX_ZONE_NAME_LENGTH = MAX_SIGNPOST_NAME_LENGTH
-# A RISC name longer than this is the capture's text too; tt-metal's longest,
-# QUASAR_NEO3_TRISC3, is 18 characters.
+# A RISC name past this many bytes is the capture's text too; tt-metal's longest,
+# QUASAR_NEO3_TRISC3, is 18.
 MAX_RISC_NAME_LENGTH = 32
 
 
 def _risc_shown(risc: str) -> bool:
-    return _name_shown(risc, MAX_RISC_NAME_LENGTH)
+    return name_fits(risc, MAX_RISC_NAME_LENGTH)
 
 
 ZONE_INTERVALS_NOTE = (
@@ -1579,8 +1669,8 @@ def _unreadable_zone(zone: str, read: ZoneIntervals) -> str:
     return (
         f"{zone!r} starts {read.zone_starts[zone]} times in "
         f"{DeviceLogProfilerQueries.DEVICE_LOG_FILE}, but none could be read: "
-        f"{read.malformed_starts} have a slot, core, run or cycle count "
-        f"{UNREADABLE_NUMBER_REASON}, and {read.untracked_starts} lie on core-RISC timelines "
+        f"{read.malformed_starts} have {_UNREADABLE_CELLS}, and "
+        f"{read.untracked_starts} lie on core-RISC timelines "
         f"past the {MAX_ZONE_TIMELINES} followed at once"
     )
 
@@ -1598,14 +1688,12 @@ def _unknown_zone(zone: str, read: ZoneIntervals) -> str:
         if named
         else "None of its zone names is short enough to list"
     )
-    unlisted = len(read.zone_starts) - too_long - len(listed)
+    unlisted, too_long_note = _unlisted_names(
+        len(read.zone_starts), listed, too_long, MAX_ZONE_NAME_LENGTH
+    )
     if unlisted:
         refusal += f", and {unlisted} more"
-    if too_long:
-        refusal += (
-            f"; {too_long} more have names longer than {MAX_ZONE_NAME_LENGTH} "
-            "characters, which are not listed"
-        )
+    refusal += too_long_note
     if read.zone_names_capped:
         refusal += (
             f"; the log names more zones than the {MAX_COUNTED_ZONE_NAMES} counted"
@@ -1625,11 +1713,7 @@ def zone_intervals(
     if not isinstance(zone, str) or not zone.strip():
         raise ValueError("zone must name a zone the device log records")
     name = zone.strip()
-    if len(name) > MAX_ZONE_NAME_LENGTH:
-        raise ValueError(
-            f"zone is {len(name)} characters; a zone name is at most "
-            f"{MAX_ZONE_NAME_LENGTH}"
-        )
+    require_name_fits("zone", "zone", name, MAX_ZONE_NAME_LENGTH)
     count = bounded(limit)
     instance = registry.get(handle)
     read, clock_mhz, arch = _zone_read(
@@ -1791,10 +1875,7 @@ def _zone_interval_caveats(zone: str, read: ZoneIntervals, recurring: int) -> Li
             "this log was written some other way, and those intervals are left out."
         )
     if read.malformed:
-        caveats.append(
-            f"{read.malformed} rows have a slot, core, run or cycle count "
-            f"{UNREADABLE_NUMBER_REASON}, and were left out."
-        )
+        caveats.append(_unreadable_rows_caveat(read.malformed))
     if read.untracked:
         caveats.append(
             f"{read.untracked} rows belong to core-RISC timelines past the "
@@ -2118,6 +2199,15 @@ def _breakdown_key(row: Dict, grouping: BreakdownGrouping) -> Optional[str]:
     return words[0] if words else None
 
 
+def _breakdown_group(
+    grouping: BreakdownGrouping, key: Optional[str]
+) -> Dict[str, object]:
+    # A category is one of tt-perf-report's own names, never the capture's text.
+    if grouping is BreakdownGrouping.OP_CATEGORY:
+        return {grouping.value: key}
+    return cut_op_code(grouping.value, key)
+
+
 def op_breakdown(
     registry: ReportRegistry,
     handle: str,
@@ -2180,7 +2270,9 @@ def op_breakdown(
         "returned": len(shown),
         "device_time_total": _rounded(device_time_total),
         "op_to_op_gap_total": _rounded(gap_total),
-        "groups": [{grouping.value: share.key, **entry(share)} for share in shown],
+        "groups": [
+            {**_breakdown_group(grouping, share.key), **entry(share)} for share in shown
+        ],
         "projection": projection(signposts, bool(report.get("signpost_range_ignored"))),
         "note": OP_BREAKDOWN_NOTE,
     }
@@ -2206,6 +2298,7 @@ __all__ = [
     "CANONICAL_PROJECTION",
     "CORE_SPREAD_NOTE",
     "DEFAULT_METRIC",
+    "MAX_LISTED_RISCS",
     "MAX_RISC_NAME_LENGTH",
     "MAX_SIGNPOST_NAME_LENGTH",
     "MAX_ZONE_NAME_LENGTH",

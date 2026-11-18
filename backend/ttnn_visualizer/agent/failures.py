@@ -35,6 +35,7 @@ from ttnn_visualizer.agent.bounds import (
     MAX_LIMIT,
     GraphTooLargeError,
     bounded,
+    cut_text,
     ensure_graph_readable,
     normalised_choice,
     require_choice,
@@ -166,15 +167,14 @@ L1_PEAK_NOTE = (
 )
 LATE_DEALLOCATIONS_NOTE = (
     "Buffer Summary's late-deallocation rule: a buffer in an operation's post-op "
-    "snapshot belongs to the last tensor seen at its address, and that tensor is held "
-    "late when its last consumer other than a deallocate call came earlier. The app "
-    "applies it to L1 only; DRAM is the same rule, which the app does not show. "
-    "run_start_count is the count beside the app's L1 toggle. A hold is one tensor at "
-    "one address over consecutive operations with these buffers: operations that "
-    "recorded none do not end it, and operations_held counts only the others. A hold "
-    "that opens after its tensor's buffer left the snapshot or was deallocated is a "
-    "later tensor's buffer, so it is counted in unattributed_hold_count and left out "
-    "of everything else. ending: deallocated by a deallocate call naming the tensor, "
+    "snapshot belongs to the last tensor seen at its address, until a later snapshot "
+    "of these buffers lacks the address or a deallocate call frees the tensor, and "
+    "that tensor is held late when its last consumer other than a deallocate call "
+    "came earlier. The app applies it to L1 only; DRAM is the same rule, which the "
+    "app does not show. run_start_count is the count beside the app's L1 toggle. A "
+    "hold is one tensor at one address over consecutive operations with these "
+    "buffers: operations that recorded none do not end it, and operations_held counts "
+    "only the others. ending: deallocated by a deallocate call naming the tensor, "
     "freed_otherwise when it left the snapshot or its address went to another tensor "
     "without one, held_to_end when the capture ends first, which weights, outputs and "
     "caches often are by design; ended counts them. producer_operation_ids are the "
@@ -186,19 +186,6 @@ LATE_DEALLOCATIONS_NOTE = (
     "other tensor used its address, so it can count one held here as persistent; match "
     "a hold to l1_peak's peak by operation_id."
 )
-
-
-def _truncated(
-    field: str, text: Optional[str], cap: int = MAX_ERROR_TEXT_CHARS
-) -> Dict[str, object]:
-    if not text:
-        return {field: text}
-    if len(text) <= cap:
-        return {field: text}
-    return {
-        field: text[:cap],
-        f"{field}_full_length": len(text),
-    }
 
 
 def _error_records(
@@ -270,7 +257,7 @@ def _allocation_fields(message: Optional[str]) -> Dict[str, object]:
     shown = dict(failure)
     core_range = failure.get("core_range")
     if isinstance(core_range, str):
-        shown.update(_truncated("core_range", core_range))
+        shown.update(cut_text("core_range", core_range, MAX_ERROR_TEXT_CHARS))
     return {
         "allocation_failure": shown,
         "diagnosis": allocation_failures.diagnose(failure),
@@ -285,8 +272,8 @@ def _error_entry(
     entry: Dict[str, object] = {
         "error_type": error.error_type,
         "timestamp": error.timestamp,
-        **_truncated("error_message", error.error_message),
-        **_truncated("stack_trace", error.stack_trace),
+        **cut_text("error_message", error.error_message, MAX_ERROR_TEXT_CHARS),
+        **cut_text("stack_trace", error.stack_trace, MAX_ERROR_TEXT_CHARS),
     }
     if graph is not None:
         failed = failed_device_operation_names(graph)
@@ -808,12 +795,11 @@ def report_late_deallocations(
         call_sites=_call_sites(
             queries,
             scope,
-            {hold.last_use_operation_id for hold in holds if hold.attributed},
+            {hold.last_use_operation_id for hold in holds},
         ),
         producers={
             hold.tensor_id: report.producers_by_tensor_id.get(hold.tensor_id, [])
             for hold in holds
-            if hold.attributed
         },
         device_count=len(scoped_devices(queries, scope)),
     )
@@ -873,12 +859,7 @@ def _call_site_entry(site: Optional[Dict[str, object]]) -> Optional[Dict[str, ob
         return None
     entry: Dict[str, object] = {}
     for field in ("file", "line", "function", "code"):
-        value = site[field]
-        entry.update(
-            _truncated(field, value, MAX_CALL_SITE_TEXT_CHARS)
-            if isinstance(value, str)
-            else {field: value}
-        )
+        entry.update(cut_text(field, site[field], MAX_CALL_SITE_TEXT_CHARS))
     return entry
 
 
@@ -947,7 +928,7 @@ def _hold_entry(report: LateDeallocationReport, hold: late.Hold) -> Dict[str, ob
         "held_from_operation_id": hold.first_operation_id,
         "held_until_operation_id": hold.last_operation_id,
         "last_use_operation_id": hold.last_use_operation_id,
-        **_truncated(
+        **cut_text(
             "last_use_operation_name",
             report.names.get(hold.last_use_operation_id),
             MAX_OPERATION_NAME_CHARS,
@@ -967,10 +948,7 @@ def _hold_entry(report: LateDeallocationReport, hold: late.Hold) -> Dict[str, ob
 
 
 def _late_deallocation_caveats(
-    report: LateDeallocationReport,
-    buffer_type: str,
-    holds: Sequence[late.Hold],
-    unattributed: Sequence[late.Hold],
+    report: LateDeallocationReport, buffer_type: str
 ) -> List[str]:
     caveats: List[str] = []
     if report.buffered_operation_count == 0:
@@ -978,25 +956,18 @@ def _late_deallocation_caveats(
             f"This report records no {buffer_type} buffers under the type's number. "
             "One that stores buffer types by name reads none here or in the app (#2196)."
         )
-    if unattributed:
-        caveats.append(
-            f"{len(unattributed)} more holds, "
-            f"{sum(hold.byte_operations for hold in unattributed)} byte_operations, "
-            "are left out: each opened after its tensor's buffer had left the snapshot "
-            "or been deallocated, so the buffer at that address is a later tensor's "
-            "that the capture does not name. Buffer Summary hatches those rows under "
-            "the old tensor."
-        )
     unplaced = sum(
-        1 for hold in holds if report.call_sites.get(hold.last_use_operation_id) is None
+        1
+        for hold in report.holds
+        if report.call_sites.get(hold.last_use_operation_id) is None
     )
     if unplaced:
         caveats.append(
-            f"{unplaced} of the {len(holds)} holds have no call site: their last use "
-            "recorded no stack trace, which older reports omit, or none this tool "
-            "can read."
+            f"{unplaced} of the {len(report.holds)} holds have no call site: their "
+            "last use recorded no stack trace, which older reports omit, or none this "
+            "tool can read."
         )
-    bridged = sum(1 for hold in holds if hold.bridged)
+    bridged = sum(1 for hold in report.holds if hold.bridged)
     if bridged:
         unbuffered = report.operation_count - report.buffered_operation_count
         caveats.append(
@@ -1039,24 +1010,21 @@ def late_deallocations(
             key=resolved,
         )
 
-    holds = [hold for hold in report.holds if hold.attributed]
-    unattributed = [hold for hold in report.holds if not hold.attributed]
-    call_sites = _call_site_groups(report, holds)
+    call_sites = _call_site_groups(report, report.holds)
     response: Dict[str, object] = {
         "handle": handle,
         "buffer_type": wanted,
         "size_unit": BUFFER_SIZE_UNIT,
         "operation_count": report.operation_count,
         "run_start_count": report.run_start_count,
-        **_hold_totals(holds),
-        "unattributed_hold_count": len(unattributed),
+        **_hold_totals(report.holds),
         "call_site_count": len(call_sites),
         "returned": min(count, len(call_sites)),
         "call_sites": call_sites[:count],
         "top_holds": [
             _hold_entry(report, hold)
             for hold in sorted(
-                holds,
+                report.holds,
                 key=lambda hold: (
                     -hold.byte_operations,
                     hold.first_operation_id,
@@ -1068,11 +1036,7 @@ def late_deallocations(
         "note": LATE_DEALLOCATIONS_NOTE,
         **scope.as_response(),
     }
-    response.update(
-        caveat_field(
-            scope, *_late_deallocation_caveats(report, wanted, holds, unattributed)
-        )
-    )
+    response.update(caveat_field(scope, *_late_deallocation_caveats(report, wanted)))
     return response
 
 

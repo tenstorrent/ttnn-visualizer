@@ -18,7 +18,8 @@ answers from the same rows.
 """
 
 import random
-from typing import Dict, List, Mapping, Optional, Sequence
+from typing import Dict, List, Mapping, Optional, Sequence, Set
+from unittest.mock import patch
 
 from ttnn_visualizer.agent import late_deallocations as late
 from ttnn_visualizer.models import Tensor
@@ -242,7 +243,26 @@ def _curated_cases() -> List[Dict]:
             ],
             _snapshots(1, 6),
         ),
-        # A run that breaks at an operation holding other buffers, and resumes.
+        # A tensor named again at its address after its buffer left the snapshot is
+        # credited again from there.
+        _case(
+            [
+                _operation(1, outputs=[_tensor(10, 100, [3])]),
+                _operation(2),
+                _operation(3, inputs=[_tensor(10, 100, [3])]),
+                _operation(4),
+                _operation(5),
+            ],
+            {2: [_buffer(200, 64)], **_snapshots(3, 5)},
+        ),
+        # A snapshot of only address-0 or addressless buffers records none, so it
+        # keeps the tensor at its address.
+        _case(
+            [_operation(1, outputs=[produced]), used, _operation(3)],
+            {2: [_buffer(0, 64), _buffer(None, 32)], 3: [_buffer(100, 64)]},
+        ),
+        # A run that breaks where its buffer leaves the snapshot; one back at its
+        # address later is not its tensor's.
         _case(
             [_operation(1, outputs=[produced]), used]
             + [_operation(operation_id) for operation_id in range(3, 7)],
@@ -310,9 +330,41 @@ def _curated_cases() -> List[Dict]:
                 _operation(4),
             ],
             {
-                3: [_buffer(100, 64), _buffer(200, 32)],
+                3: [_buffer(100, 64), _buffer(200, 32), _buffer(300, 16)],
                 4: [_buffer(100, 64), _buffer(200, 32), _buffer(300, 16)],
             },
+        ),
+        # A deallocate call naming a tensor no longer at its address credits nothing
+        # and leaves the tensor that is there.
+        _case(
+            [
+                _operation(1, outputs=[_tensor(10, 100, [2, 5])]),
+                _operation(2, inputs=[_tensor(10, 100, [2, 5])]),
+                _operation(3, outputs=[_tensor(11, 100, [4])]),
+                _operation(4, inputs=[_tensor(11, 100, [4])]),
+                _operation(5, "ttnn.deallocate", inputs=[_tensor(10, 100, [2, 5])]),
+                _operation(6),
+            ],
+            _snapshots(1, 6),
+        ),
+        # A deallocate call naming its tensor with no address leaves the tensor there.
+        _case(
+            [
+                _operation(1, outputs=[_tensor(10, 100, [2, 3])]),
+                _operation(2, inputs=[_tensor(10, 100, [2, 3])]),
+                _operation(3, "ttnn.deallocate", inputs=[_tensor(10, None, [2, 3])]),
+                _operation(4),
+            ],
+            _snapshots(1, 4),
+        ),
+        # A tensor first named at the deallocate call that frees it is never credited.
+        _case(
+            [
+                _operation(1),
+                _operation(2, "ttnn.deallocate", inputs=[_tensor(10, 100, [1, 2])]),
+                _operation(3),
+            ],
+            _snapshots(1, 3),
         ),
     ]
 
@@ -392,6 +444,38 @@ def test_the_golden_reaches_each_rule():
     assert any(len(held) >= 3 for case in expected for _, held in case["held"])
     assert sum(1 for case in expected if not case["held"]) >= 5
     assert {0, 16, 32, 64} <= {entry["size"] for entry in entries}
+
+
+def test_the_golden_reaches_each_way_a_holder_is_forgotten():
+    """A buffer back at an address after its tensor's buffer left a snapshot, and
+    after a deallocate call freed it, so a change to the cases cannot drop either."""
+    forget = late._forget_gone_holders
+    forgotten: Dict[int, str] = {}
+    reached: Set[str] = set()
+
+    def recording(holder_by_address, sizes, deallocated):
+        reached.update(
+            forgotten.pop(address) for address in list(forgotten) if address in sizes
+        )
+        before = set(holder_by_address)
+        forget(holder_by_address, sizes, deallocated)
+        for address in before - set(holder_by_address):
+            forgotten[address] = (
+                "snapshot" if sizes and address not in sizes else "deallocate"
+            )
+
+    def per_case(*args):
+        forgotten.clear()
+        return held_tensors_by_operation(*args)
+
+    held_tensors_by_operation = late.held_tensors_by_operation
+    with (
+        patch.object(late, "_forget_gone_holders", recording),
+        patch.object(late, "held_tensors_by_operation", per_case),
+    ):
+        _generate_golden()
+
+    assert reached == {"snapshot", "deallocate"}
 
 
 def test_the_ts_spec_reads_this_golden():

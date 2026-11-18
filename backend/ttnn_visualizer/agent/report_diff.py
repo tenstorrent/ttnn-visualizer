@@ -8,13 +8,13 @@ medians over repeated captures.
 Pure: `tools.diff_reports` reads the reports, and this decides what their totals say.
 """
 
-import hashlib
 from dataclasses import dataclass
 from enum import Enum
 from fractions import Fraction
 from statistics import median
 from typing import Callable, Dict, FrozenSet, Hashable, List, Optional, Tuple, cast
 
+from ttnn_visualizer.agent.bounds import cut_op_code, cut_text, shown_in_text
 from ttnn_visualizer.agent.cells import finite_number
 
 
@@ -71,8 +71,6 @@ DEFAULT_MIN_PERCENT = 5.0
 MAX_CAPTURES_PER_SIDE = 5
 # A local MoE expert op's 30 tensors run to 1,550 characters of signature.
 MAX_SIGNATURE_CHARS = 300
-# 64 bits: two of a report's signatures sharing a digest is vanishingly unlikely.
-SIGNATURE_DIGEST_CHARS = 16
 # Enough for any number or handle list an agent means to pass.
 _MAX_ECHOED_CHARS = 64
 # Every figure an answer gives, and every comparison of them, is to the nanosecond.
@@ -112,10 +110,7 @@ def as_answered(figure: float) -> float:
 
 def _echoed(value: object) -> str:
     """`value` as a refusal names it, cut so an argument cannot fill the answer."""
-    shown = repr(value)
-    if len(shown) <= _MAX_ECHOED_CHARS:
-        return shown
-    return f"{shown[:_MAX_ECHOED_CHARS]}... ({len(shown)} characters)"
+    return shown_in_text(repr(value), _MAX_ECHOED_CHARS)
 
 
 @dataclass(frozen=True)
@@ -406,24 +401,17 @@ def classify(before: Side, after: Side, thresholds: Thresholds) -> Comparison:
     )
 
 
-def _cut(name: str, text: str) -> Dict[str, object]:
-    """`text` under `name`, cut at `MAX_SIGNATURE_CHARS` with its length and a digest:
-    two texts can share a cut and a length, and differ only past the cut."""
-    fields: Dict[str, object] = {name: text[:MAX_SIGNATURE_CHARS] or None}
-    if len(text) > MAX_SIGNATURE_CHARS:
-        fields[f"{name}_full_length"] = len(text)
-        digest = hashlib.sha256(text.encode()).hexdigest()
-        fields[f"{name}_digest"] = digest[:SIGNATURE_DIGEST_CHARS]
-    return fields
-
-
 def group_fields(key: Hashable, match: DiffMatch) -> Dict[str, object]:
     """A group as an answer names it. A signature's code is the raw one, which
-    tt-perf-report has not suffixed with a matmul's shapes or a conv's config."""
+    tt-perf-report has not suffixed with a matmul's shapes or a conv's config. An empty
+    code or signature is answered as None, which each field here asks for itself."""
     if match is DiffMatch.OP_CODE:
-        return _cut("op_code", cast(str, key))
+        return cut_op_code("op_code", cast(str, key) or None)
     raw_op_code, signature = cast(Tuple[str, str], key)
-    return {**_cut("raw_op_code", raw_op_code), **_cut("signature", signature)}
+    return {
+        **cut_op_code("raw_op_code", raw_op_code or None),
+        **cut_text("signature", signature or None, MAX_SIGNATURE_CHARS, digest=True),
+    }
 
 
 def _listed(facts: List[str], conjunction: str) -> str:
@@ -483,7 +471,6 @@ __all__ = [
     "MAX_CAPTURES_PER_SIDE",
     "MAX_SIGNATURE_CHARS",
     "PADDED_TENSOR_SIZES",
-    "SIGNATURE_DIGEST_CHARS",
     "SIGNATURE_NOISE_CAVEAT",
     "TENSOR_SIZES",
     "CaptureTotals",

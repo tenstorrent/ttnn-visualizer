@@ -14,7 +14,9 @@ It is a read-only surface over the same report readers the web application uses.
 no web server, opens no port, and writes nothing to a report. By default it appends usage
 events to `~/.ttnn-visualizer/usage/events.log` (tool name and outcome only). Set
 `USAGE_RECORDING_DISABLED=true` or create the marker file under that directory to opt out;
-see the [event logging](./event-logging.md) reference.
+see the [event logging](./event-logging.md) reference. When [aggregate
+collection](./event-logging.md#aggregate-collection) is opted in, the server pushes the same
+aggregate counters the app does, without the app being launched.
 
 ## Running it
 
@@ -100,8 +102,8 @@ another rank's operation under the same id.
 | `core_spread` | How evenly one operation's kernel time fell across the cores that ran it, or the costliest operations': the minimum, median and maximum per-core span and per RISC, the imbalance between them, the slowest cores by coordinate, and how many cores recorded zones against the row's core count. |
 | `diff_reports` | Per-operation-code deltas between two reports, largest movement first, over the whole reports or one signpost range in every capture: only moves past a noise threshold count as changes, operations one report lacks are listed apart, and repeated captures of either side are compared by their median. `match: signature` groups by raw op code and tensors instead. |
 | `find_operations` | Operations matching a name substring or a call-stack substring, with the ids `operation_detail` takes. |
-| `operation_detail` | One operation: its input and output tensors with shape, dtype, layout and memory config, what it had allocated, and the circular buffers each of its device operations allocated, with size per core, core range and device count, with its error and likely DRAM fallback when it has one, and its per-device `l1_pressure` (`fullness_pct`, `free_segments`, `largest_free_block`, `largest_free_pct`). With a linked performance report, also the performance rows it launched, their device time and share of the report's, and the operation's total and slowest row, with the same `include` as `top_ops`. |
-| `memory_profile` | Memory footprint per operation, keyed by buffer type and ranked within each, with each type's largest footprint, the device's L1 geometry, and `l1_pressure` ranking operations by smallest `largest_free_block` on the most constrained device. A floor rather than the peak — see below. |
+| `operation_detail` | One operation: its input and output tensors with shape, dtype, layout and memory config, what it had allocated, and the circular buffers each of its device operations allocated, with size per core, core range and device count, with its error and likely DRAM fallback when it has one, and `l1_pressure` on its most constrained device (`fullness_pct`, `free_segments`, `largest_free_block`, `largest_free_pct`). With a linked performance report, also the performance rows it launched, their device time and share of the report's, and the operation's total and slowest row, with the same `include` as `top_ops`. |
+| `memory_profile` | Memory footprint per operation, keyed by buffer type and ranked within each, with each type's largest footprint, the device's L1 geometry, and `l1_pressure` ranking operations by smallest `largest_free_block` on the most constrained device, with `operations_at_top` counting those that share the first row's `largest_free_block`. A floor rather than the peak — see below. |
 | `tensor_flow` | Which operation produced a tensor and which ones consumed it. |
 | `operation_provenance` | What one operation was called with, and where in the model code it came from. |
 | `errors` | The errors the run recorded, including an operation that started and never completed: which operation, the device operations whose launch failed, and for an allocation failure its figures and why it did not fit. |
@@ -158,21 +160,30 @@ first call, which refuses one that is not a readable tt-npe trace.
   resolves them, with how often each occurs — one name bounds both ends of a range only if
   it occurs twice — and `signpost_count` counts them all, since the list stops at 20. Both
   are absent when the performance CSV cannot be reported on, and empty when it holds no
-  signposts. A name longer than 256 characters, which a range cannot take, is counted but
-  left out of the list, and `signposts_unlisted_too_long` says how many were. A CSV whose
-  lines look sound but that pandas cannot tokenise when it reads the signposts, such as
-  one with a quote left open, has its parse error in `performance_csv_problem`, with those
-  five tools listed as unanswerable; when it parses but its signposts cannot be
-  read, `signposts_problem` says why. Loading reads the signposts, so a handle answers
-  from the CSV it was loaded on: one rewritten or superseded after that is refused, and
+  signposts. A name longer than 256 bytes as an answer writes it, which a range cannot
+  take, is counted but left out of the list, and `signposts_unlisted_too_long` says how
+  many were. Bytes as an answer writes it means UTF-8 with JSON's escapes, so a four-byte
+  character counts four and a control character or a lone surrogate six; every *name* bound
+  on this page counts that way. A range naming a signpost the report lacks is refused with
+  the names this list holds. A CSV whose lines look sound but that pandas cannot tokenise
+  when it reads the signposts, such as one with a quote left open, has its parse error in
+  `performance_csv_problem`, with those five tools listed as unanswerable; when it parses
+  but its signposts cannot be read, `signposts_problem` says why. Loading reads the
+  signposts, so a handle answers from the CSV it was loaded on: one rewritten or superseded
+  after that is refused, and
   `load_report` again gives a fresh handle.
+  A handle loaded before its CSV was written answers from the first one a read finds.
 - `arch` and `device_count` are keyed by the file each was read from, since a handle's two
-  reports can come from different runs. `arch.device_log` is the device profiler log's
-  header, which `capture` also returns whole; `arch.cluster_descriptor` is what the `arch`
-  mapping in rank 0's `cluster_descriptor.yaml`, beside the memory report database, names — as
-  written, since older descriptors spell Wormhole `Wormhole` and newer ones
-  `wormhole_b0`, and joined with commas if its chips differ. The memory report database itself
-  records no architecture. `device_count.performance_csv` counts the devices the
+  reports can come from different runs. `arch.device_log` is the `ARCH` field of the device
+  profiler log's header. `capture` returns the header's fields, leaving out any whose name
+  or value runs past 64 characters, which tt-metal never writes, and any after the first 16
+  it keeps. An architecture name longer than 64 characters reads as none everywhere, and
+  so does the end of a longer field name such as `MY_ARCH`.
+  `arch.cluster_descriptor` is what the `arch` mapping in rank 0's
+  `cluster_descriptor.yaml`, beside the memory report database, names — as written, since
+  older descriptors spell Wormhole `Wormhole` and newer ones `wormhole_b0`, and joined
+  with commas if its chips differ. The memory report database itself records no
+  architecture. `device_count.performance_csv` counts the devices the
   performance CSV has rows for, which no other answer shows because rows are merged across
   devices; it is read with the signposts, so it is absent whenever they are.
   `device_count.profiler` counts the memory report database's devices, every rank's.
@@ -186,6 +197,18 @@ Five properties are deliberate, and worth knowing before you act on a number.
 **Every tool returns an aggregate or a bounded slice, never the table.** A performance
 report runs to tens of thousands of rows of about thirty-five fields. Limits are capped
 server-side, so asking for more returns the cap rather than the report.
+
+An op code longer than 256 characters is the capture's text, not tt-perf-report's; the
+longest a tool shows across 67 local captures is a signpost's, at 91. Every tool that
+shows one cuts it there: `top_ops`, `operation_detail` and `core_spread` rows, and
+`program_cache` and `diff_reports` entries. A cut one carries `op_code_full_length`, its
+length, and `op_code_digest`, a digest of the whole code, so two codes cut alike are told
+apart; groups are still kept by the whole code. `op_breakdown` cuts its `op` key the same
+way, with `op_full_length` and `op_digest`; an `op_category` is one of tt-perf-report's own
+names, so it is never cut. A refusal that quotes an op code cuts it too. A signpost name is
+the exception: past 256 characters it is counted rather than shown, both in `load_report`'s
+list and in the names a refusal of an unknown signpost lists, since a cut name could not be
+passed back as a range's bound.
 
 **No rows are hidden from you.** The web application's performance view hides host
 operations by default and can narrow to a signpost range. Those are display choices, and an
@@ -210,14 +233,14 @@ answer cut down — it is what the signposted run reports.
 A range the report cannot honour is refused rather than answered from other rows: a name
 the report does not hold (the refusal lists the names it does), one name for both bounds
 when it occurs only once, an end that falls before the start, or a name longer than 256
-characters. A report with no signposts at all is read whole, because tt-perf-report then
-uses the whole file rather than some other window, and the response's `projection` says so
-with `signpost_range_ignored`. Every ranged response's `projection` names the range, so a
-windowed answer cannot be taken for a whole-report one. `diff_reports` applies one range to
-every capture it compares, and refuses when only some of them hold signposts: a window
-compared against a whole report would show every row outside the window as a change. It
-checks the range against every capture before generating any, and a refusal names the
-report it is about.
+bytes as an answer writes it. A report with no signposts at all is read whole, because
+tt-perf-report then uses the whole file rather than some other window, and the response's
+`projection` says so with `signpost_range_ignored`. Every ranged response's `projection`
+names the range, so a windowed answer cannot be taken for a whole-report one.
+`diff_reports` applies one range to every capture it compares, and refuses when only some
+of them hold signposts: a window compared against a whole report would show every row
+outside the window as a change. It checks the range against every capture before
+generating any, and a refusal names the report it is about.
 
 One filter is applied, deliberately: per-device rows are **merged**, so an operation that
 ran on eight devices is one row rather than eight. That is the unit an operation is
@@ -585,13 +608,13 @@ two-call shapes of one op code moved by 9–18% while the op code as a whole mov
 the answer's caveat quotes that before a signature's move is read as a change. A signature
 past 300 characters is cut, `signature_full_length` gives its length, and `signature_digest`
 a digest of the whole signature, so two signatures cut alike are told apart. An op code past
-it is cut the same way, with `op_code_full_length` and `op_code_digest`
-(`raw_op_code_full_length` and `raw_op_code_digest` with signatures). With signatures
-`changes` is capped at 25 rather than 100. A capture whose CSV has no tensor columns, or
-cannot be read, is refused. Older captures record a tile-padded size alone, where newer
-ones record `padded[logical]`, so an operation on a padded tensor has a different signature
-in each; `mismatched` names `tensor_sizes` when the captures differ in it, as `padded` or
-`padded[logical]` by handle.
+256 characters is cut the same way, as every tool cuts one, with `op_code_full_length` and
+`op_code_digest` (`raw_op_code_full_length` and `raw_op_code_digest` with signatures).
+With signatures `changes` is capped at 25 rather than 100. A capture whose CSV has no
+tensor columns, or cannot be read, is refused. Older captures record a tile-padded size
+alone, where newer ones record `padded[logical]`, so an operation on a padded tensor has a
+different signature in each; `mismatched` names `tensor_sizes` when the captures differ in
+it, as `padded` or `padded[logical]` by handle.
 
 When the captures' device logs name different architectures, clocks or compute core
 counts, or their CSVs hold rows for different numbers of devices, `mismatched` lists the
@@ -673,31 +696,35 @@ host, and two for some.
 Each hold's `ending` says how it stopped, and `ended` counts them: `deallocated` by a
 deallocate call naming the tensor, `freed_otherwise` when it left the snapshot or its
 address went to another tensor without one, or `held_to_end` when the capture ended first,
-as weights, outputs and caches often do by design. The app's address map keeps crediting an
-address to the last tensor seen there after that tensor is gone, so a later buffer at the
-same address reads as the old tensor held again. A hold that opens after its tensor's
-buffer left the snapshot, or after its deallocate call, is that case: it is counted in
-`unattributed_hold_count`, left out of everything else, and named in the caveat. On one
-local capture that is 95 of 123 L1 holds. `run_start_count` is the count beside Buffer
-Summary's L1 toggle: the operations where at least one run starts, those included. An
+as weights, outputs and caches often do by design. A buffer belongs to the last tensor
+seen at its address only until a later operation with buffers of the type no longer has
+that address, or a deallocate call frees the tensor. An operation that recorded none of
+these buffers leaves the address with the old tensor, so where L1 empties and refills, a
+later buffer there can still read as that tensor held (#2284). `run_start_count` is the
+count beside Buffer Summary's L1 toggle: the operations where at least one run starts. An
 operation that recorded none of these buffers ends every run in the app but no hold here,
 so the app counts the next operation with buffers as a start again, and `operations_held`
-counts only operations with buffers; the caveat says when that happened. The tool reads the
-same tables the overlay does, so it answers on any capture with `buffers`, not only the
-ones that recorded `tensor_lifetime`. `l1_peak` counts a tensor stale only where no other
-tensor used its address, so it can call a tensor held here persistent: on the llama capture
-it counts all three tensors held at its peak as persistent. Match a hold to `l1_peak`'s
-peak by operation id.
+counts only operations with buffers; the caveat says when that happened. The tool reads
+the same tables the overlay does, so it answers on any capture with `buffers`, not only
+the ones that recorded `tensor_lifetime`. `l1_peak` counts a tensor stale only where no
+other tensor used its address, so it can call a tensor held here persistent: on the llama
+capture it counts all three tensors held at its peak as persistent. Match a hold to
+`l1_peak`'s peak by operation id.
 
 `zone_timings` carries a caveat of its own: cycles are summed across every core that ran
 the zone, so they measure occupancy rather than wall-clock duration. A core is counted per
 device — the captures we test against span 8 and 32 PCIe slots, and coordinates alone
 repeat on each — so a zone can report thousands of cores on a multi-device run. Durations
 need the device log's `type` column to pair zone starts with ends; a capture without it
-reports occurrence counts only, and a capture that stopped mid-zone reports how many starts
-and ends failed to pair so a partial total does not read as a complete one. The first call
-on a handle reads the device log once, and later calls answer from that read, with the
-clock it was read at.
+reports occurrence counts only, and a capture that stopped mid-zone reports how many
+starts and ends failed to pair so a partial total does not read as a complete one; a start
+that a second start replaced before its end counts as unpaired. A row whose slot, core,
+run or cycle count is not a whole number or does not fit a 64-bit integer, or whose cycle
+count is negative, is left out and counted in a caveat. `zone_intervals` and
+`core_spread` apply the same rule, each counting only the rows it would have used. The
+rule is about negative cells, not totals: a zone whose end was recorded before its start
+still pairs, and its `total_cycles` is negative. The first call on a handle reads the
+device log once, and later calls answer from that read, with the clock it was read at.
 
 `core_spread` reads each operation on one device only, never pooling devices, since each
 runs its own clock. A performance row's global call count is the device log's `run host ID`
@@ -726,11 +753,12 @@ covers only the cores that did. Dropped markers cause that, and tt-metal reports
 profiler buffer in its host log only, never in the device log. When more cores recorded
 zones than the row reports, as a DRAM-sharded matmul's helper cores do, the median and
 `imbalance` mix cores with different roles, while the maximum and `slowest_cores` still
-name the cores that set the time; a caveat says so. Unpaired zones are counted per call
-count and device, not per replay, so an unpaired zone in one replay is reported on every
-replay of that operation. A kernel row whose slot, core or cycle count is not a number or
-does not fit a 64-bit integer, or whose cycle count is negative, is left out and counted in
-a caveat rather than failing the call. The first call on a handle reads the whole device
+name the cores that set the time; a caveat says so. A start that a second start replaced
+before its end counts as unpaired, and unpaired zones are counted per call count and
+device, not per replay, so an unpaired zone in one replay is reported on every replay of
+that operation. A kernel row whose slot, core or cycle count is not a whole number or does
+not fit a 64-bit integer, or whose cycle count is negative, is left out and counted in a
+caveat rather than failing the call. The first call on a handle reads the whole device
 log once for every operation in the report, and later calls answer from that read, with
 the clock it was read at.
 
@@ -766,32 +794,37 @@ says so. Starts and ends of the zone that did not pair are counted in a caveat, 
 interval across a dropped start spans two occurrences. A zone pairs only within its run,
 except a firmware zone, which starts before the kernel start that opens its run, and a
 start replaced before its end counts as unpaired. A zone the log does not start is refused
-with the zones it does, most started first, leaving out any name longer than 256
-characters, which is the capture's text, not the tool's; a zone asked for by a longer name
-is refused. A row whose slot, core, run or cycle count is not a number or does not fit a
-64-bit integer, or whose cycle count is negative, is left out and counted in a caveat, and
-a zone whose every start was left out is refused with how many were unreadable that way
-and how many lay past the 200,000 core-RISC timelines followed at once. The first call on
-a handle reads the device log once for every zone, and later calls, for any zone and the
-refusal of one the log does not start included, answer from that read, with the clock it
-was read at; a log that cannot be read is refused until `load_report` loads it again. A log
-that one pass cannot read as each zone's own read would has the zone asked for read alone
-on every call, the first after the pass: one past those caps counted across all its zones,
-naming more than 1,000 zones or holding more than 4,000,000 intervals, one where a RISC's
-run host ID comes back before its next kernel start, and one whose cycle counts run past
-what a float holds exactly where a cell is not a whole number. A zone also named on rows
-that neither start nor end one is read alone the same way. The server's log says when and
-why the pass gave up.
+with the zones it does, most started first, leaving out any name longer than 256 bytes,
+which is the capture's text, not the tool's; a zone asked for by a longer name is
+refused. A row whose slot, core, run or cycle count is not a whole number or does not
+fit a 64-bit integer, or whose cycle count is negative, is left out and counted in a
+caveat, and a zone whose every start was left out is refused with how many were unreadable
+that way and how many lay past the 200,000 core-RISC timelines followed at once. The first
+call on a handle reads the device log once for every zone, and later calls, for any zone
+and the refusal of one the log does not start included, answer from that read, with the
+clock it was read at; a log that cannot be read is refused until `load_report` loads it
+again. A log that one pass cannot read as each zone's own read would has the zone asked
+for read alone on every call, the first after the pass: one past those caps counted across
+all its zones, naming more than 1,000 zones or holding more than 4,000,000 intervals, one
+where a RISC's run host ID comes back before its next kernel start, and one whose cycle
+counts run past what a float holds exactly where a cell is not a whole number. A zone also
+named on rows that neither start nor end one is read alone the same way. The server's log
+says when and why the pass gave up.
 
-No zone tool shows a zone name longer than 256 characters or a RISC name longer than 32
-characters: such a name is the capture's text, not the tool's, and tt-metal's longest RISC
-name, `QUASAR_NEO3_TRISC3`, is 18. `zone_timings` leaves an entry with one out, counted in
-`zones_unlisted_too_long`, and `limit` counts only the entries listed. Both count
+No zone tool shows a zone name longer than 256 bytes or a RISC name longer than 32 bytes:
+such a name is the capture's text, not the tool's, and tt-metal's longest RISC name,
+`QUASAR_NEO3_TRISC3`, is 18. These bounds, like the signposts', count bytes as an answer
+writes it, so a name of four-byte characters is held to a quarter as many characters, and
+one of control characters to a sixth. `zone_timings` leaves an entry with one out, counted
+in `zones_unlisted_too_long`, and `limit` counts only the entries listed. Both count
 zone-and-RISC entries, not names, so a long zone name on five RISCs counts five.
 `core_spread` leaves such a RISC out of `by_risc`, counted in `by_risc_unlisted_too_long`,
 though its kernels still count in their cores' spans. `zone_intervals` leaves such a
 timeline out of `by_core_risc`, counted in `by_core_risc_unlisted_too_long`, though its
-intervals still count in `by_device` and `timeline_count`.
+intervals still count in `by_device` and `timeline_count`. `core_spread` also lists at
+most 32 RISCs an operation in `by_risc`, the first by name, counting the rest in
+`by_risc_unlisted_past_cap`, since tt-metal has 32 RISC types; their kernels too still
+count in their cores' spans.
 
 **`noc_congestion` reads tt-npe's simulation of the NoC, not a measurement.** Its figures
 are percentages of a link's bandwidth per timestep of `cycles_per_timestep` device cycles.
@@ -819,15 +852,28 @@ index of it when that index is built and current, and from the trace itself othe
 tool never builds the index, so it writes nothing beside the trace. The visualizer builds
 its index beside the copy it opens, which for an upload is its own copy under its report
 data directory, so an `npe_path` naming that copy reuses the index, in a fraction of the
-time and memory a parse takes. Otherwise the first call on a handle parses the whole
-trace: a trace of tens of thousands of timesteps and millions of link rows takes seconds
-to tens of seconds and several GB at its peak, as building the visualizer's index does,
-and the server process can keep much of that memory afterwards. A trace whose JSON passes
-1 GiB, summed over every zstd frame, or a `.zst` file itself past that size, is refused
-rather than parsed, and so is a `.zst` with a frame that does not declare its size. Later
-calls answer from the first read, and so does every handle on the same unchanged file. A
-handle stays with the trace it first read: if the file changes or goes away afterwards,
-its answers say so in their caveat, and a fresh `load_report` reads the new one.
+time and memory a parse takes. Otherwise the first call on a handle reads the trace itself
+a timestep at a time: a trace of tens of thousands of timesteps and millions of link rows
+takes seconds to tens of seconds and about twice its JSON's size at its peak, against
+several times that for building the visualizer's index
+([#2302](https://github.com/tenstorrent/ttnn-visualizer/issues/2302)). That bound assumes
+the trace's bulk is spread over its timesteps, as tt-npe writes it: each value is read
+whole, so a single timestep or `common_info` holding most of the trace costs more than a
+whole parse ([#2320](https://github.com/tenstorrent/ttnn-visualizer/issues/2320)). A trace
+past 64 MiB of JSON is read in a process of its own, so that memory goes back to the
+system when the read ends rather than staying with the server; starting it adds about half
+a second ([#2319](https://github.com/tenstorrent/ttnn-visualizer/issues/2319)), and it
+ends with the server if the server is stopped mid-read. That process imports the calling
+script again, so a script that calls the tool on such a trace needs its top level under
+`if __name__ == "__main__":`. A trace whose JSON passes 1 GiB, summed over every zstd
+frame, or a `.zst` file itself past that size, is refused rather than read, and so is a
+`.zst` with a frame that does not declare its size. A trace nested more than 1,024 arrays
+and objects deep is refused, as the visualizer's own parse refuses it, and so is one that
+names `timestep_data` twice, whose first list has been read by the time the second is
+found. Later calls answer from the first read, and so does every handle on the same
+unchanged file. A handle stays with the trace it first read: if the file changes or goes
+away afterwards, its answers say so in their caveat, and a fresh `load_report` reads the
+new one.
 
 **A performance row and a memory report operation are linked by order, not by a shared id.**
 Neither report records the other's id, so when a handle is loaded with both, the tools
@@ -893,7 +939,8 @@ kept, so the next call tries again. A handle keeps answering from the capture it
 read, so it never mixes two. A read that needs the CSV again after it was rewritten, or
 after a newer `ops_perf_results` file appeared — a range not asked before, or one dropped
 from the cache — is refused rather than lined up against operations linked from the old
-capture; call `load_report` again for a fresh handle.
+capture; call `load_report` again for a fresh handle. A handle loaded before its CSV was
+written stays with the first CSV a read of it finds.
 
 **`critical_path` and `subgraph_between` read the graph's edges as the graph view does.**
 An edge runs from the operation that produced a tensor to each operation that consumed it,
@@ -975,19 +1022,28 @@ called through helpers rather than only those it called directly.
 Accuracy questions are not answerable. Both tensor-comparison tables exist in every
 local capture and are empty in every one, so there is nothing to build a PCC tool on.
 
-Page-level memory questions — the per-bank, per-page detail behind the web
-application's memory plot — are not exposed, because `buffer_pages` runs to millions of
-rows on an ordinary capture and needs a different shape than a tool response. Per-operation
-L1 fullness, free-segment counts and the largest free block are derived from `buffers` and
+Page-level memory questions — the per-bank, per-page detail behind the web application's
+memory plot — are not exposed, because `buffer_pages` runs to millions of rows on an
+ordinary capture and needs a different shape than a tool response. Per-operation L1
+fullness, free-segment counts and the largest free block are derived from `buffers` and
 `devices` instead (bounded per device to `[address_at_first_l1_cb_buffer,
 address_at_first_l1_cb_buffer + l1_bank_size)`, capped at `worker_l1_size`, and reporting
 the most constrained device — the one with the smallest largest free block — with
-free-space figures marked as an upper bound because circular buffers and intra-op tensors
-are absent) and exposed as `l1_pressure` on `operation_detail` and `memory_profile`. Its
-figures are bytes per bank (`size_unit`), so a whole-tensor size in `bytes` is not
-comparable to them. It is null, with a caveat saying why, for an operation with no
-`buffers` rows, a report whose devices record no L1 geometry, or a report holding more
-than one rank whose `devices` table carries no `rank`. A `device_id` with more than one
+`largest_free_block` and `largest_free_pct` marked as an upper bound and
+`allocated_bytes`, `fullness_pct` and `high_water_bytes` as a floor, because circular
+buffers and intra-op tensors are absent; `free_segments` is bounded neither way) and
+exposed as `l1_pressure` on `operation_detail` and `memory_profile`. `high_water_bytes` is
+where the highest recorded tensor ends above the window's start, not a peak: it often
+equals `usable_bytes` with most of L1 free. `l1_pressure`'s figures are bytes per bank
+(`size_unit`), so a whole-tensor size in `bytes` is not comparable to them.
+`memory_profile`'s `operations_at_top` counts the operations that share the first row's
+`largest_free_block`, however full, as `operations_at_peak` counts a footprint's, and
+those rows come fullest first: 60 of 255 share it on the `sentence_bert` demo.
+`l1_pressure` is null, with a caveat saying why, for an operation with no `buffers` rows,
+a report whose devices record no L1 geometry, or a report holding more than one rank whose
+`devices` table carries no `rank`. `memory_profile`'s is also null, with no caveat, under
+any `buffer_type` but `L1` and for a report holding no L1 buffers, where `buffer_type`
+`L1` is refused if the report holds other buffer types. A `device_id` with more than one
 row is read as its last row, as the web application reads it, for `l1_pressure` and the
 `device` block alike, and `device.devices` counts distinct ids.
 
