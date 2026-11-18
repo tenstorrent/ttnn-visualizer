@@ -224,6 +224,7 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
                                 language={StackTraceLanguage.PYTHON}
                                 isInitiallyExpanded={showFullStackTrace}
                                 onExpandChange={() => setShowFullStackTrace(!showFullStackTrace)}
+                                recordsExpansion
                             />
                         )}
                         <div className='chart-controls'>

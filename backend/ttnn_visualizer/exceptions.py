@@ -187,6 +187,19 @@ class UnreachableHostException(RemoteConnectionException):
             detail=detail,
         )
 
+    @classmethod
+    def for_dropped_connection(
+        cls, host: str, detail: Optional[str] = None
+    ) -> "UnreachableHostException":
+        """The advice for a connection that was established and then lost."""
+        return cls(
+            message=(
+                f"The SSH connection to {host} was lost. "
+                "Please check network connectivity and test again."
+            ),
+            detail=detail,
+        )
+
 
 class InvalidRequestPayload(Exception):
     """A request body failed model validation.
@@ -297,6 +310,17 @@ class HostKeyVerificationException(SSHException):
 
 class NoValidConnectionsError(SSHException):
     """Raised when SSH connection cannot be established"""
+
+    pass
+
+
+class ConnectionDroppedError(NoValidConnectionsError):
+    """Raised when an established SSH connection is lost partway through a command.
+
+    A subclass so every handler that treats an unreachable host as such still does;
+    one of its own so the advice can say the connection dropped rather than that the
+    host refused every attempt.
+    """
 
     pass
 

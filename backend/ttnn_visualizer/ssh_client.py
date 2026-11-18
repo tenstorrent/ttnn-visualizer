@@ -13,6 +13,7 @@ from ttnn_visualizer.enums import ConnectionTestStates, HostKeyIssue
 from ttnn_visualizer.exceptions import (
     AuthenticationException,
     AuthenticationFailedException,
+    ConnectionDroppedError,
     HostKeyVerificationException,
     HostKeyVerificationFailedException,
     NoValidConnectionsError,
@@ -55,6 +56,12 @@ _SSH_CONNECTION_ERROR_FRAGMENTS = (
     "could not resolve hostname",
     "connection timed out",
     "nodename nor servname provided",
+)
+# stderr fragments (lowercase) for a connection that was up and then lost: the host
+# went away mid-command, which says nothing about the command or the path it read.
+_SSH_DROPPED_CONNECTION_FRAGMENTS = (
+    "connection reset",
+    "broken pipe",
 )
 
 
@@ -154,6 +161,8 @@ def raise_for_ssh_subprocess_error(
         raise AuthenticationException(SSH_AUTH_FAILURE_MESSAGE)
     if any(conn_err in stderr for conn_err in _SSH_CONNECTION_ERROR_FRAGMENTS):
         raise NoValidConnectionsError(f"SSH connection failed: {e.stderr}")
+    if any(dropped in stderr for dropped in _SSH_DROPPED_CONNECTION_FRAGMENTS):
+        raise ConnectionDroppedError(f"SSH connection lost: {e.stderr}")
     if "ssh:" in stderr or "protocol" in stderr:
         raise SSHException(f"SSH protocol error: {e.stderr}")
     raise SSHException(f"SSH command failed: {e.stderr}")

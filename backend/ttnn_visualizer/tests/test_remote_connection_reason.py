@@ -11,6 +11,7 @@ failure to its class, keep the field off the upload responses that share
 """
 
 import re
+import subprocess
 from http import HTTPStatus
 from pathlib import Path
 from unittest.mock import patch
@@ -25,6 +26,7 @@ from ttnn_visualizer.enums import (
 from ttnn_visualizer.exceptions import (
     AuthenticationException,
     AuthenticationFailedException,
+    ConnectionDroppedError,
     HostKeyVerificationException,
     HostKeyVerificationFailedException,
     NoValidConnectionsError,
@@ -46,7 +48,7 @@ from ttnn_visualizer.sftp_operations import (
     RemoteSearchRootState,
     check_remote_path_for_reports,
 )
-from ttnn_visualizer.ssh_client import SSHClient
+from ttnn_visualizer.ssh_client import SSHClient, raise_for_ssh_subprocess_error
 
 _CONNECTION_STATUS_TS = (
     Path(__file__).resolve().parents[3] / "src" / "definitions" / "ConnectionStatus.ts"
@@ -212,6 +214,11 @@ def test_the_route_returns_the_reason_on_the_connection_line(
             id="unreachable",
         ),
         pytest.param(
+            ConnectionDroppedError("Connection reset by peer"),
+            RemoteConnectionFailureReason.UNREACHABLE,
+            id="dropped",
+        ),
+        pytest.param(
             IOError("[Errno -2] Name or service not known"),
             RemoteConnectionFailureReason.UNREACHABLE,
             id="unresolvable_host",
@@ -236,6 +243,29 @@ def test_the_remote_exception_handler_classifies_each_failure(app, raised, reaso
             operation(_connection())
 
     assert excinfo.value.reason == reason
+
+
+@pytest.mark.parametrize(
+    "stderr",
+    [
+        "Connection reset by peer\r\n",
+        "client_loop: send disconnect: Broken pipe\r\n",
+    ],
+)
+def test_a_connection_lost_mid_command_is_classified_as_dropped(stderr):
+    error = subprocess.CalledProcessError(255, ["ssh"], output="", stderr=stderr)
+
+    with pytest.raises(ConnectionDroppedError):
+        raise_for_ssh_subprocess_error(error, _connection())
+
+
+def test_a_dropped_connection_says_it_was_lost_not_refused():
+    error = UnreachableHostException.for_dropped_connection("work-gpu")
+
+    assert error.reason == RemoteConnectionFailureReason.UNREACHABLE
+    assert "lost" in error.message
+    assert "hostname" not in error.message
+    assert not error.is_connection_verdict
 
 
 def test_an_unreachable_host_names_the_host_and_its_class():

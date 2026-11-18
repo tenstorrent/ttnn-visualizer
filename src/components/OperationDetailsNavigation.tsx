@@ -206,6 +206,7 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
                                     onExpandChange={(state) => setIsErrorExpanded(!state)}
                                     hideSourceButton
                                     isInline
+                                    recordsExpansion
                                 />
                             }
                         />

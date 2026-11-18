@@ -13,12 +13,13 @@ const { recordEvent } = vi.hoisted(() => ({ recordEvent: vi.fn() }));
 
 vi.mock('../src/functions/recordEvent', () => ({ default: recordEvent }));
 
-const renderStackTrace = (stackTrace: string) =>
+const renderStackTrace = (stackTrace: string, recordsExpansion = true) =>
     render(
         <StackTrace
             stackTrace={stackTrace}
             language={StackTraceLanguage.CPP}
             hideSourceButton
+            recordsExpansion={recordsExpansion}
         />,
     );
 
@@ -74,6 +75,14 @@ describe('StackTrace drill-down event', () => {
         expect(recordEvent.mock.calls).toEqual([[stackTraceOpened], [stackTraceOpened]]);
     });
 
+    it('records nothing for text that is not a trace, such as an error message', () => {
+        renderStackTrace('line 1\nline 2\nline 3', false);
+
+        fireEvent.click(screen.getByRole('button', { name: /expand/i }));
+
+        expect(recordEvent).not.toHaveBeenCalled();
+    });
+
     it('records nothing for a trace shown expanded from the start', () => {
         render(
             <StackTrace
@@ -81,6 +90,7 @@ describe('StackTrace drill-down event', () => {
                 language={StackTraceLanguage.CPP}
                 isInitiallyExpanded
                 hideSourceButton
+                recordsExpansion
             />,
         );
 

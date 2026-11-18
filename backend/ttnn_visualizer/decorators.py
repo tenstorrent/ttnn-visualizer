@@ -12,6 +12,7 @@ from ttnn_visualizer.enums import ConnectionTestStates, RemoteConnectionFailureR
 from ttnn_visualizer.exceptions import (
     AuthenticationException,
     AuthenticationFailedException,
+    ConnectionDroppedError,
     HostKeyVerificationException,
     HostKeyVerificationFailedException,
     NoValidConnectionsError,
@@ -101,6 +102,15 @@ def remote_exception_handler(func):
             raise RemoteConnectionException(
                 status=ConnectionTestStates.FAILED,
                 message=f"Unable to open path: {str(err)}",
+            )
+        except ConnectionDroppedError as err:
+            # Ahead of its parent below: the host answered and then went away, so the
+            # refused-every-attempt advice would send the user to check the hostname.
+            current_app.logger.warning(
+                f"SSH connection lost for {connection.username}@{connection.host}: {str(err)}"
+            )
+            raise UnreachableHostException.for_dropped_connection(
+                connection.host, detail=str(err)
             )
         except NoValidConnectionsError as err:
             current_app.logger.warning(

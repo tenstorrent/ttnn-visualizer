@@ -26,6 +26,9 @@ interface StackTraceProps {
     onExpandChange?: (isVisible: boolean) => void;
     className?: string;
     intent?: Intent;
+    // Set where the text is a stack trace, so expanding it records a drill-down. Off by
+    // default because the component also shows error messages, which are not traces.
+    recordsExpansion?: boolean;
 }
 
 function StackTrace({
@@ -39,6 +42,7 @@ function StackTrace({
     onExpandChange,
     className,
     intent = Intent.NONE,
+    recordsExpansion = false,
 }: StackTraceProps) {
     const [isExpanded, setIsExpanded] = useState(isInitiallyExpanded || false);
     const filePath = useMemo(() => getStackTraceFilePath(stackTrace), [stackTrace]);
@@ -70,7 +74,7 @@ function StackTrace({
 
         // Expanding only: collapsing a trace is not a drill-down, and one shown expanded
         // from the start was never opened.
-        if (!isExpanded) {
+        if (recordsExpansion && !isExpanded) {
             recordDrilldownOpened(DrilldownTarget.STACK_TRACE);
         }
 

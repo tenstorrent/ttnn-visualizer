@@ -65,11 +65,23 @@ describe('OperationDetailsNavigation error overlay events', () => {
         expect(recordEvent).not.toHaveBeenCalled();
     });
 
+    it('records nothing when the error message in the overlay is expanded', async () => {
+        renderNavigation();
+
+        fireEvent.click(screen.getByRole('button', { name: 'View operation error' }));
+        expect(await screen.findByRole('tab', { name: 'Error details', selected: true })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /expand/i }));
+
+        expect(recordEvent).not.toHaveBeenCalled();
+    });
+
     it('records one stack-trace drill-down when the trace in the overlay is expanded', async () => {
         renderNavigation();
 
         fireEvent.click(screen.getByRole('button', { name: 'View operation error' }));
-        fireEvent.click(await screen.findByRole('button', { name: /expand/i }));
+        fireEvent.click(await screen.findByRole('tab', { name: 'Stack Trace' }));
+        expect(await screen.findByRole('tab', { name: 'Stack Trace', selected: true })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /expand/i }));
 
         expect(recordEvent).toHaveBeenCalledExactlyOnceWith({
             event: EventLogEvent.DRILLDOWN_OPENED,

@@ -11,7 +11,12 @@ from typing import Optional
 from unittest.mock import patch
 
 import pytest
-from ttnn_visualizer.enums import ConnectionTestStates, HostKeyIssue, SyncMethod
+from ttnn_visualizer.enums import (
+    ConnectionTestStates,
+    HostKeyIssue,
+    RemoteConnectionFailureReason,
+    SyncMethod,
+)
 from ttnn_visualizer.exceptions import (
     AuthenticationFailedException,
     HostKeyVerificationFailedException,
@@ -46,6 +51,7 @@ from ttnn_visualizer.sftp_operations import (
     get_remote_profiler_folders,
     read_remote_report_last_modified,
 )
+from ttnn_visualizer.ssh_client import raise_for_ssh_subprocess_error
 from ttnn_visualizer.tests.test_ssh_host_key_errors import CHANGED_HOST_STDERR
 from ttnn_visualizer.views import (
     _apply_requested_performance_name,
@@ -1512,21 +1518,31 @@ class TestConnectionTestReportStatuses:
         """
         app.config["SERVER_MODE"] = False
 
+        # Through the shared classifier, as the real search's subprocess error is.
+        with pytest.raises(SSHException) as reset_mid_search:
+            raise_for_ssh_subprocess_error(
+                subprocess.CalledProcessError(
+                    255, ["ssh"], output="", stderr="Connection reset by peer\r\n"
+                ),
+                RemoteConnection(**_remote_connection_payload()),
+            )
+
         response = self._run_connection_test_with_searches(
             client,
             _remote_connection_payload(),
-            searches=[
-                _found(["/a"]),
-                SSHException("SSH command failed: Connection reset by peer"),
-            ],
+            searches=[_found(["/a"]), reset_mid_search.value],
         )
 
         assert response.status_code == HTTPStatus.OK
         messages = self._messages(response)
         assert len(messages) == 3
         assert messages[:2] == ["SSH connection established", "Found 1 memory report"]
-        assert "Connection reset by peer" in messages[2]
-        assert response.get_json()[-1]["status"] == ConnectionTestStates.FAILED.value
+        assert "connection to remote.example.com was lost" in messages[2]
+        line = response.get_json()[-1]
+        assert line["status"] == ConnectionTestStates.FAILED.value
+        # The connection's failure, not the path's: a path line with no reason is
+        # read as a misconfigured path.
+        assert line["reason"] == RemoteConnectionFailureReason.UNREACHABLE.value
 
     def test_both_paths_failing_are_both_reported(self, app, client):
         """Fixing one path and re-testing to find the other broken is two round trips."""
