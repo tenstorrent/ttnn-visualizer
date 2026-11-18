@@ -242,13 +242,14 @@ class TestNormalisation:
         assert time.process_time() - started < _ONE_PASS_CPU_SECONDS
         assert normalised == crafted
 
-    @pytest.mark.parametrize("prefix", ["device_id: 1, ", "device_id:1\n"])
+    @pytest.mark.parametrize("lead", ["", "device_id:1\nMeshCoordinate("])
     def test_device_prefixes_whose_coordinate_never_closes_are_read_in_one_pass(
-        self, prefix
+        self, lead
     ):
-        """A coordinate read past a '(' rescanned the line from each prefix: 52 s on
-        these 928 KB of current prefixes."""
-        crafted = f"{prefix}MeshCoordinate(" * 32_000
+        """A coordinate read past a '(' rescanned the line from each current prefix:
+        52 s on these 928 KB. Older prefixes end their line, so only a line of current
+        ones is slow, led by an older prefix or not."""
+        crafted = lead + "device_id: 1, MeshCoordinate(" * 32_000
 
         started = time.process_time()
         normalised = configurations.normalised_value(crafted)
@@ -457,8 +458,8 @@ class TestGrouping:
         assert result["left_out"] == [{"op": "b'ttnn.add'", "calls": 1}]
 
     def test_numbers_kept_where_text_belongs_are_grouped_by_their_text(self, tmp_path):
-        """A repr is normalised once per read, keyed by its text, which tells apart
-        equal values such as 0.0 and -0.0."""
+        """Pins the read's cache key, the text, which tells apart equal values such as
+        0.0 and -0.0; it would pass with no cache at all."""
         values = [0.0, -0.0, 1, 1.0]
         registry, handle = load_memory_report(
             tmp_path,
@@ -860,10 +861,15 @@ class TestDeviceTime:
         assert result["report_device_time_total"] == 10.0
         assert result["device_time_unit"] == linking.DEVICE_TIME_UNIT
         assert result["projection"] == tools.projection(None)
-        assert [(row["op"], row["device_time"]) for row in result["ops"]] == [
-            ("ttnn.add", 9.0),
-            ("ttnn.matmul", 1.0),
-        ]
+        assert [
+            (
+                row["op"],
+                row["device_time"],
+                row["device_time_share_percent"],
+                row["untimed_calls"],
+            )
+            for row in result["ops"]
+        ] == [("ttnn.add", 9.0, 90.0, 0), ("ttnn.matmul", 1.0, 10.0, 1)]
         assert "1 of these 3 calls launched no performance row" in result["caveat"]
 
     def test_device_time_sums_every_call_and_every_configuration(

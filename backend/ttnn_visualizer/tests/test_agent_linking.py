@@ -1919,6 +1919,8 @@ class TestCriticalPath:
         assert result["device_time_share_percent"] == tools.share_percent(
             16.0, report_total
         )
+        assert result["report_device_time_total"] == round(report_total, 3)
+        assert result["device_time_unit"] == linking.DEVICE_TIME_UNIT
 
     def test_it_states_the_projection_its_weights_were_read_through(self, path_report):
         registry, handle = path_report()

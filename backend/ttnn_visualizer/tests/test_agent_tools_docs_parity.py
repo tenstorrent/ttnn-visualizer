@@ -255,7 +255,10 @@ def test_the_op_configurations_rules_the_page_names_are_the_restated_ones():
     named = re.findall(r"`([a-z_]+)`", sentence.group(2))
     assert set(named) == op_configurations.TRACER_EXCLUDED_ARGUMENTS
     assert len(named) == len(op_configurations.TRACER_EXCLUDED_ARGUMENTS)
-    assert sentence.group(1) == "two"
+    assert sentence.group(1) == "two", (
+        f"the page counts the {len(named)} dropped arguments in words, so a change to "
+        "TRACER_EXCLUDED_ARGUMENTS changes that word too"
+    )
     revision = f"`{op_configurations.TRACER_REVISION}`"
     assert f"at tt-metal {revision}" in page
     assert revision in _AGENT_README.read_text(encoding="utf-8")

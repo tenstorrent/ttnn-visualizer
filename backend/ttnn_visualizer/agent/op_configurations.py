@@ -74,7 +74,7 @@ TRACER_EXCLUDED_ARGUMENTS = frozenset(
 )
 # The tracer records `ttnn` operations only, and of those only the ones its sweep list
 # (`Allops.txt`) names; that list moves with tt-metal's ops, so it is not restated here.
-TRACED_PREFIX = "ttnn."
+_TRACED_PREFIX = "ttnn."
 
 # The tracer's `_strip_object_addresses`.
 _OBJECT_ADDRESS = re.compile(r" at 0x[0-9a-fA-F]+")
@@ -167,7 +167,8 @@ class DeviceTime(NamedTuple):
 
     by_operation_id: Mapping[int, float]
     report_total: float
-    # The unit, projection and report total, as every linked tool states them.
+    # The unit, projection and `report_total` rounded, as every linked tool states them;
+    # built from the same link as `report_total`, so the two must agree.
     header: Mapping[str, object]
     caveat: Optional[str] = None
 
@@ -178,7 +179,7 @@ def normalised_op_name(name: Optional[str]) -> str:
 
 
 def is_traced(op: str) -> bool:
-    return op.startswith(TRACED_PREFIX) and op not in TRACER_EXCLUDED_OPERATIONS
+    return op.startswith(_TRACED_PREFIX) and op not in TRACER_EXCLUDED_OPERATIONS
 
 
 def _without_previews(text: str) -> str:
@@ -265,10 +266,12 @@ def _as_text(name: object) -> str:
     return "" if name is None else str(name)
 
 
-def read_configurations(queries: DatabaseQueries, scope: RankScope) -> Configurations:
-    """Every call at `scope`'s rank, grouped."""
-    # A repr repeated across calls is normalised once, keyed by the text it is read as,
-    # since equal values can print apart (0.0 and -0.0).
+def _arguments_by_operation_id(
+    queries: DatabaseQueries, scope: RankScope
+) -> Dict[int, List[Argument]]:
+    """Each call's arguments the tracer keeps, normalised."""
+    # A repr repeated across calls is normalised once, keyed by its text, since equal
+    # values can print apart (0.0 and -0.0); the cache ends with this read.
     normalised = lru_cache(maxsize=None)(normalised_value)
     arguments_by_operation_id: Dict[int, List[Argument]] = defaultdict(list)
     for argument in queries.query_operation_arguments(
@@ -280,7 +283,12 @@ def read_configurations(queries: DatabaseQueries, scope: RankScope) -> Configura
             arguments_by_operation_id[argument.operation_id].append(
                 (name, normalised(text))
             )
+    return arguments_by_operation_id
 
+
+def read_configurations(queries: DatabaseQueries, scope: RankScope) -> Configurations:
+    """Every call at `scope`'s rank, grouped."""
+    arguments_by_operation_id = _arguments_by_operation_id(queries, scope)
     operation_ids_by_configuration: Dict[_CalledWith, List[int]] = {}
     left_out: Counter[str] = Counter()
     for operation in queries.query_operations(
@@ -622,7 +630,6 @@ __all__ = [
     "MEMORY_CONFIG_CAVEAT",
     "NOTE",
     "REMOVED_FROM_TEXT",
-    "TRACED_PREFIX",
     "TRACER_EXCLUDED_ARGUMENTS",
     "TRACER_EXCLUDED_OPERATIONS",
     "TRACER_REVISION",
