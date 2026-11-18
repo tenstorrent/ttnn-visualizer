@@ -19,7 +19,7 @@ import pytest
 from ttnn_visualizer.agent import linking
 from ttnn_visualizer.agent import op_configurations as configurations
 from ttnn_visualizer.agent import server, tools
-from ttnn_visualizer.agent.bounds import MAX_LIMIT
+from ttnn_visualizer.agent.bounds import DEFAULT_LIMIT, MAX_LIMIT
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
 from ttnn_visualizer.agent.linking import LinkStatus, MatchedOn, OperationLink
 from ttnn_visualizer.agent.operations import RankScope, profiler_db, rank_scope
@@ -661,6 +661,101 @@ class TestListing:
         result = _listing(tmp_path, calls, limit=MAX_LIMIT)
 
         assert result["returned"] == configurations.MAX_LISTED_CONFIGURATIONS
+        assert result["next_offset"] == configurations.MAX_LISTED_CONFIGURATIONS
+
+    @staticmethod
+    def _past_a_page() -> List[Call]:
+        """One operation with more configurations than a listing holds, each called once,
+        so they rank in call order."""
+        return [
+            ("ttnn.conv2d", [("0", _tensor(f"[1, {width}]"))])
+            for width in range(configurations.MAX_LISTED_CONFIGURATIONS + 8)
+        ]
+
+    def test_offset_pages_to_every_configuration_and_its_digest(self, tmp_path):
+        calls = self._past_a_page()
+        registry, handle = _capture(tmp_path, calls)
+
+        pages: List[dict] = []
+        offset: Optional[int] = 0
+        # Bounded, so a next_offset that never moves fails rather than spins.
+        while offset is not None and len(pages) <= len(calls):
+            pages.append(
+                linking.op_configurations(
+                    registry,
+                    handle,
+                    name_contains="conv2d",
+                    limit=MAX_LIMIT,
+                    offset=offset,
+                )
+            )
+            offset = pages[-1]["next_offset"]
+
+        listed = [row for page in pages for row in page["configurations"]]
+        assert [(page["offset"], page["returned"]) for page in pages] == [
+            (0, configurations.MAX_LISTED_CONFIGURATIONS),
+            (configurations.MAX_LISTED_CONFIGURATIONS, 8),
+        ]
+        assert [row["operation_ids"] for row in listed] == [
+            [operation_id] for operation_id in range(1, len(calls) + 1)
+        ]
+        last = linking.op_configurations(
+            registry, handle, config_digest=listed[-1]["config_digest"]
+        )
+        assert last["operation_ids"] == [len(calls)]
+
+    def test_a_listing_starts_at_the_top_unless_given_an_offset(self, tmp_path):
+        registry, handle = _capture(tmp_path, self._past_a_page())
+
+        unset = linking.op_configurations(registry, handle)
+
+        assert unset == linking.op_configurations(registry, handle, offset=0)
+        assert (unset["offset"], unset["returned"], unset["next_offset"]) == (
+            0,
+            DEFAULT_LIMIT,
+            DEFAULT_LIMIT,
+        )
+
+    def test_an_offset_past_the_end_lists_nothing_and_says_where(self, tmp_path):
+        result = _listing(tmp_path, self._CALLS, offset=50)
+
+        assert (result["offset"], result["returned"], result["next_offset"]) == (
+            3,
+            0,
+            None,
+        )
+        assert result["configurations"] == []
+        assert result["configuration_count"] == 3
+        assert len(result["ops"]) == 2
+
+    @pytest.mark.parametrize(
+        "offset, refusal",
+        [(-1, "offset must be 0 or more"), ("two", "offset must be a whole number")],
+    )
+    def test_an_offset_below_0_or_not_a_number_is_refused(
+        self, tmp_path, offset, refusal
+    ):
+        registry, handle = _capture(tmp_path, self._CALLS)
+
+        result, outcome = tool_call(
+            registry, "op_configurations", {"handle": handle, "offset": offset}
+        )
+
+        assert result.get("isError")
+        assert refusal in result["content"][0]["text"]
+        assert outcome.value == "refused"
+
+    def test_a_digest_answers_whatever_the_offset(self, tmp_path):
+        registry, handle = _capture(tmp_path, self._CALLS)
+        digest = linking.op_configurations(registry, handle)["configurations"][0][
+            "config_digest"
+        ]
+
+        result = linking.op_configurations(
+            registry, handle, config_digest=digest, offset=99
+        )
+
+        assert result["config_digest"] == digest
 
     def test_a_listing_shows_the_first_arguments_cut_short(self, tmp_path):
         long_value = "v" * (configurations.LISTED_VALUE_CHARS + 50)
@@ -1275,7 +1370,7 @@ class TestServer:
 
         assert configurations.REMOVED_FROM_TEXT in configurations.GROUPING
         assert configurations.GROUPING in description
-        for rule in configurations.TRACER_RULES:
+        for rule in (*configurations.TRACER_RULES, configurations.PAGING):
             assert rule in description
             assert rule in configurations.NOTE
 

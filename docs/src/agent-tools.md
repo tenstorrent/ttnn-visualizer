@@ -865,17 +865,20 @@ the 10 left-out operations with the most calls, and `left_out_op_count` and
 `left_out_calls` count them all. A listing shows up to 20 configurations (`limit`), each
 with its first 8 arguments, positional ones first, cut at 224 characters, which is far
 enough for a tensor's shape, dtype, layout, memory layout and buffer type, and its first 5
-operation ids. A configuration's `config_digest` asks for it alone: every argument up to
-32, each cut at 1,500 characters, and up to 100 of its operation ids, which
-`operation_provenance` turns into call sites. A `config_digest` is the first 16 hex digits
-of the SHA-256 of the configuration's grouped text, so the same configuration in another
-capture written by the same ttnn has the same digest. It is not the tracer's `config_hash`,
-which hashes the tracer's JSON, so a sweep is matched by the arguments themselves. Older
-captures write a tensor's shape, dtype and layout without its memory config, so calls that
-differ only in a tensor's memory config share a configuration there, and the caveat says
-so. Arguments are read a row at a time. A read stops and is refused once the argument names
-and values it has read pass 1,073,741,824 characters, a sanity bound rather than a memory
-guard: the most any local capture holds is 54 million characters.
+operation ids. A listing is a page of the ranking from `offset`, 0 unless given, which it
+states with how many it `returned`; `next_offset` starts the next page and is null on the
+last, so every configuration and its digest can be reached. An `offset` past the end lists
+none. A configuration's `config_digest` asks for it alone: every argument up to 32, each
+cut at 1,500 characters, and up to 100 of its operation ids, which `operation_provenance`
+turns into call sites. A `config_digest` is the first 16 hex digits of the SHA-256 of the
+configuration's grouped text, so the same configuration in another capture written by the
+same ttnn has the same digest. It is not the tracer's `config_hash`, which hashes the
+tracer's JSON, so a sweep is matched by the arguments themselves. Older captures write a
+tensor's shape, dtype and layout without its memory config, so calls that differ only in a
+tensor's memory config share a configuration there, and the caveat says so. Arguments are
+read a row at a time. A read stops and is refused once the argument names and values it has
+read pass 1,073,741,824 characters, a sanity bound rather than a memory guard: the most any
+local capture holds is 54 million characters.
 
 **`noc_congestion` reads tt-npe's simulation of the NoC, not a measurement.** Its figures
 are percentages of a link's bandwidth per timestep of `cycles_per_timestep` device cycles.

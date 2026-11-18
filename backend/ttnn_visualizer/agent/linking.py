@@ -882,6 +882,7 @@ def op_configurations(
     config_digest: Optional[str] = None,
     limit: Optional[int] = None,
     rank: Optional[int] = None,
+    offset: Optional[int] = None,
 ) -> Dict[str, object]:
     """Each operation's distinct argument combinations, with device time when linked."""
     instance = registry.get(handle)
@@ -913,6 +914,7 @@ def op_configurations(
         name_contains=name_contains,
         config_digest=config_digest,
         limit=limit,
+        offset=offset,
     )
 
 

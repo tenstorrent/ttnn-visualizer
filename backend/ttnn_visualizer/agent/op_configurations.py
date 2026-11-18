@@ -145,10 +145,14 @@ MACHINE_RULE = (
     "load_report gives this capture's architecture and device count."
 )
 TRACER_RULES = (LEFT_OUT_RULE, DIGEST_RULE, SWEEP_LIST_RULE, MACHINE_RULE)
+PAGING = (
+    "A listing is a page: pass its next_offset as offset for the next, so every "
+    "configuration and its digest can be reached."
+)
 NOTE = (
     f"{DIGEST_RULE} operation_ids are memory report database ids, for "
     f"operation_provenance and operation_detail. {LEFT_OUT_RULE} {SWEEP_LIST_RULE} "
-    f"{MACHINE_RULE}"
+    f"{MACHINE_RULE} {PAGING}"
 )
 MEMORY_CONFIG_CAVEAT = (
     "This capture writes tensors without their memory config, so calls that differ "
@@ -507,6 +511,21 @@ def _parsed_digest(config_digest_text: str) -> str:
     return wanted
 
 
+def _parsed_offset(offset: Optional[int]) -> int:
+    """Where a listing starts in the ranking, 0 unless given."""
+    if offset is None:
+        return 0
+    try:
+        start = int(offset)
+    except (TypeError, ValueError):
+        raise ValueError(
+            f"offset must be a whole number, not {echoed(offset)}"
+        ) from None
+    if start < 0:
+        raise ValueError(f"offset must be 0 or more, not {echoed(offset)}")
+    return start
+
+
 def _untimed_caveat(untimed_calls: int, calls: int, whose: str) -> str:
     return (
         f"{untimed_calls} of {whose} {calls} calls launched no performance row with a "
@@ -523,8 +542,10 @@ def answer_configurations(
     name_contains: Optional[str] = None,
     config_digest: Optional[str] = None,
     limit: Optional[int] = None,
+    offset: Optional[int] = None,
 ) -> Dict[str, object]:
-    """A ranked listing of the configurations, or one configuration by its digest."""
+    """A ranked listing of the configurations from `offset` on, or one configuration by
+    its digest."""
     # A name_contains or config_digest that is not a string fails instead of being
     # refused (#2347).
     needle = normalised_op_name(name_contains).strip().lower()
@@ -540,7 +561,7 @@ def answer_configurations(
             if needle in configuration.op.lower()
         ]
         body = _listing(
-            read, matching, needle, device_time, caveats, name_contains, limit
+            read, matching, needle, device_time, caveats, name_contains, limit, offset
         )
     else:
         body = _one(read, _parsed_digest(config_digest), needle, device_time, caveats)
@@ -567,8 +588,10 @@ def _listing(
     caveats: List[str],
     name_contains: Optional[str],
     limit: Optional[int],
+    offset: Optional[int],
 ) -> Dict[str, object]:
-    """The configurations ranked, adding the listing's caveats to `caveats`."""
+    """The configurations ranked, a page from `offset` listed, adding the listing's
+    caveats to `caveats`."""
     timed = sorted(
         (_timed(configuration, device_time) for configuration in matching),
         key=_ranking,
@@ -581,13 +604,18 @@ def _listing(
         ((op, count) for op, count in read.left_out.items() if needle in op.lower()),
         key=lambda pair: (-pair[1], pair[0]),
     )
-    listed = timed[: bounded(limit, MAX_LISTED_CONFIGURATIONS)]
+    # An offset past the end starts at the end, so the page is empty and says where.
+    start = min(_parsed_offset(offset), len(timed))
+    listed = timed[start : start + bounded(limit, MAX_LISTED_CONFIGURATIONS)]
+    end = start + len(listed)
     return {
         **cut_text("name_contains", name_contains or None, MAX_OPERATION_NAME_CHARS),
         "calls": calls,
         "configuration_count": len(timed),
         "op_count": len({entry.configuration.op for entry in timed}),
+        "offset": start,
         "returned": len(listed),
+        "next_offset": end if end < len(timed) else None,
         "configurations": [
             _configuration_fields(
                 entry,
@@ -674,6 +702,7 @@ __all__ = [
     "MAX_LISTED_OPS",
     "MEMORY_CONFIG_CAVEAT",
     "NOTE",
+    "PAGING",
     "REMOVED_FROM_TEXT",
     "SWEEP_LIST_RULE",
     "TRACER_EXCLUDED_ARGUMENTS",

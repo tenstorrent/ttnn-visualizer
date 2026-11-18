@@ -769,7 +769,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 f"{op_configurations.MAX_LISTED_ARGUMENTS} arguments, cut short; pass "
                 f"its config_digest for {_CONFIGURATION_DETAIL}, and up to "
                 f"{MAX_LIMIT} of its operation ids, which are the memory report "
-                "database's operation_id. "
+                f"database's operation_id. {op_configurations.PAGING} "
                 f"{' '.join(op_configurations.TRACER_RULES)} A capture that writes "
                 "tensors without their memory config merges calls differing only in "
                 "it, and its caveat says so. An argument's value is the capture's "
@@ -799,6 +799,14 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                         "description": (
                             "Configurations to list, capped at "
                             f"{op_configurations.MAX_LISTED_CONFIGURATIONS}."
+                        ),
+                    },
+                    "offset": {
+                        "type": "integer",
+                        "description": (
+                            "Configurations to skip, in rank order, before the "
+                            "listing starts: a listing's next_offset gives the next "
+                            "page's. Defaults to 0; a listing only."
                         ),
                     },
                     "rank": _RANK_SCHEMA,

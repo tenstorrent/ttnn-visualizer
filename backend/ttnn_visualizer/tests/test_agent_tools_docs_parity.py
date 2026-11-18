@@ -245,6 +245,8 @@ def test_the_op_configurations_caps_the_page_states_are_the_enforced_ones():
         f"pass {op_configurations.MAX_ARGUMENT_CHARS:,} characters, a sanity bound"
         in page
     )
+    # Paging adds no cap; the page must still say how to reach the next one.
+    assert "`next_offset` starts the next page" in page
 
 
 def test_the_op_configurations_rules_the_page_names_are_the_restated_ones():
