@@ -10,6 +10,7 @@ import json
 import re
 import sqlite3
 import time
+import tracemalloc
 from pathlib import Path
 from typing import List, Optional, Sequence, Tuple
 from unittest.mock import patch
@@ -21,8 +22,9 @@ from ttnn_visualizer.agent import server, tools
 from ttnn_visualizer.agent.bounds import MAX_LIMIT
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
 from ttnn_visualizer.agent.linking import LinkStatus, MatchedOn, OperationLink
-from ttnn_visualizer.agent.operations import RankScope
+from ttnn_visualizer.agent.operations import RankScope, profiler_db, rank_scope
 from ttnn_visualizer.agent.tool_names import McpToolName
+from ttnn_visualizer.queries import DatabaseQueries
 from ttnn_visualizer.tests.mcp_calls import tool_call
 from ttnn_visualizer.tests.memory_report_db import load_memory_report
 
@@ -77,6 +79,15 @@ def _older_tensor(data: str, shape: str = "[4096, 1024]") -> str:
     return (
         f"ttnn.Tensor([[ {data},  ...,  0.00365],\n             [ 0.00101,  ...]], "
         f"shape=Shape({shape}), dtype=DataType::BFLOAT16, layout=Layout::TILE)"
+    )
+
+
+def _spread(tensor_id: int, devices: int) -> str:
+    """A tensor as a mesh capture writes it: a copy per device, each led by its id."""
+    return "\n".join(
+        f"device_id: {device}, MeshCoordinate([0, {device}])\n"
+        + _tensor(tensor_id=tensor_id, device_id=device)
+        for device in range(devices)
     )
 
 
@@ -455,8 +466,8 @@ class TestGrouping:
         assert result["left_out"] == [{"op": "b'ttnn.add'", "calls": 1}]
 
     def test_numbers_kept_where_text_belongs_are_grouped_by_their_text(self, tmp_path):
-        """Pins the read's cache key, the text, which tells apart equal values such as
-        0.0 and -0.0; it would pass with no cache at all."""
+        """Values are compared as the text they print as, so numbers equal as values,
+        such as 0.0 and -0.0, stay apart."""
         values = [0.0, -0.0, 1, 1.0]
         registry, handle = load_memory_report(
             tmp_path,
@@ -480,6 +491,74 @@ class TestGrouping:
         digest = configurations.configuration_digest("ttnn.add", (("0", "\ud800"),))
 
         assert re.fullmatch(r"[0-9a-f]{16}", digest)
+
+
+class TestReadBounds:
+    _CALLS: List[Call] = [
+        ("ttnn.relu", [("0", "x" * 10)]),
+        ("ttnn.add", [("0", "y" * 5)]),
+    ]
+
+    def test_arguments_past_the_cap_are_refused_unread(self, tmp_path):
+        registry, handle = _capture(tmp_path, self._CALLS)
+
+        with (
+            patch.object(configurations, "MAX_ARGUMENT_CHARS", 14),
+            patch.object(DatabaseQueries, "iter_operation_arguments") as streamed,
+        ):
+            with pytest.raises(
+                ValueError, match="15 characters of operation arguments, past the 14"
+            ):
+                linking.op_configurations(registry, handle)
+
+        streamed.assert_not_called()
+
+    def test_arguments_at_the_cap_are_read_once_a_refusal_has_passed(self, tmp_path):
+        registry, handle = _capture(tmp_path, self._CALLS)
+
+        with patch.object(configurations, "MAX_ARGUMENT_CHARS", 14):
+            with pytest.raises(ValueError, match="past the 14"):
+                linking.op_configurations(registry, handle)
+        with patch.object(configurations, "MAX_ARGUMENT_CHARS", 15):
+            result = linking.op_configurations(registry, handle)
+
+        assert result["calls"] == 2
+
+    def test_the_cap_counts_the_rank_read(self, tmp_path):
+        """A multi-host report whose rank fits is read, whatever another rank holds."""
+        path = _write_ranked_profiler(tmp_path / "ranked", _GRAPHS)
+        _add_arguments(path, [(2, "0", "x", 0), (2, "0", "y" * 50, 1)], ranked=True)
+        registry = ReportRegistry()
+        handle = load_report(registry, profiler_path=path)["handle"]
+
+        with patch.object(configurations, "MAX_ARGUMENT_CHARS", 10):
+            assert linking.op_configurations(registry, handle, rank=0)["rank"] == 0
+            with pytest.raises(ValueError, match="50 characters"):
+                linking.op_configurations(registry, handle, rank=1)
+
+    def test_a_read_holds_neither_its_rows_nor_a_copy_per_call(self, tmp_path):
+        """Tensors that differ only in their ids normalise alike, so the read holds their
+        text once. Holding every row and a copy per call, it peaked at twice this text.
+        """
+        calls: List[Call] = [
+            ("ttnn.add", [("0", _spread(tensor_id, devices=16))])
+            for tensor_id in range(1, 1001)
+        ]
+        text = sum(len(value or "") for _, arguments in calls for _, value in arguments)
+        registry, handle = _capture(tmp_path, calls)
+
+        with profiler_db(registry.get(handle)) as queries:
+            scope = rank_scope(queries, None)
+            tracemalloc.start()
+            try:
+                before = tracemalloc.get_traced_memory()[0]
+                read = configurations.read_configurations(queries, scope)
+                peak = tracemalloc.get_traced_memory()[1] - before
+            finally:
+                tracemalloc.stop()
+
+        assert len(read.configurations) == 1
+        assert peak < text / 4
 
 
 class TestListing:
@@ -624,6 +703,23 @@ class TestListing:
         assert configurations.MEMORY_CONFIG_CAVEAT in older.get("caveat", "")
         assert configurations.MEMORY_CONFIG_CAVEAT not in current.get("caveat", "")
 
+    def test_the_memory_config_caveat_speaks_of_the_capture_not_the_selection(
+        self, tmp_path
+    ):
+        """Its text says the capture writes tensors so; an operation selected away still
+        decides it."""
+        result = _listing(
+            tmp_path,
+            [
+                ("ttnn.matmul", [("0", _older_tensor("0.1"))]),
+                ("ttnn.add", [("0", _tensor())]),
+            ],
+            name_contains="add",
+        )
+
+        assert [row["op"] for row in result["configurations"]] == ["ttnn.add"]
+        assert configurations.MEMORY_CONFIG_CAVEAT in result["caveat"]
+
     def test_it_states_how_calls_were_grouped(self, tmp_path):
         result = _listing(tmp_path, self._CALLS)
 
@@ -650,13 +746,56 @@ class TestListing:
             tensors_without_memory_config=False,
         )
 
-        result = configurations.answer(
+        result = configurations.answer_configurations(
             "handle", read, RankScope(multi_host=False, rank=None), None, {}
         )
 
         assert [row["operation_ids"] for row in result["configurations"]] == [
             [1, 2],
             [3, 4],
+        ]
+
+    @staticmethod
+    def _two_configurations() -> configurations.Configurations:
+        """One call at operation 1 and two at 2 and 3, so first-call order alone would
+        put the single call first."""
+        single, double = (
+            configurations.Configuration(
+                op="ttnn.add",
+                arguments=(("0", shape),),
+                operation_ids=ids,
+                digest=digest,
+            )
+            for shape, ids, digest in [
+                ("[1]", (1,), "a" * 16),
+                ("[2]", (2, 3), "b" * 16),
+            ]
+        )
+        return configurations.Configurations(
+            configurations=(single, double),
+            left_out={},
+            tensors_without_memory_config=False,
+        )
+
+    @pytest.mark.parametrize(
+        "times", [{1: 4.0, 2: 2.0, 3: 2.0}, {}], ids=["equal-time", "untimed"]
+    )
+    def test_configurations_alike_in_time_rank_more_calls_first(self, times):
+        device_time = configurations.DeviceTime(
+            by_operation_id=times, report_total=8.0, header={}
+        )
+
+        result = configurations.answer_configurations(
+            "handle",
+            self._two_configurations(),
+            RankScope(multi_host=False, rank=None),
+            device_time,
+            {},
+        )
+
+        assert [row["operation_ids"] for row in result["configurations"]] == [
+            [2, 3],
+            [1],
         ]
 
 
@@ -796,8 +935,11 @@ class TestOneConfiguration:
             "config_digest"
         ]
 
-        with pytest.raises(ValueError, match="no configuration with config_digest"):
+        with pytest.raises(
+            ValueError, match="no configuration with config_digest"
+        ) as unfiltered:
             linking.op_configurations(registry, handle, config_digest="0" * 16)
+        assert "name_contains" not in str(unfiltered.value)
         with pytest.raises(ValueError, match="matching name_contains"):
             linking.op_configurations(
                 registry, handle, config_digest=digest, name_contains="matmul"
@@ -1030,6 +1172,7 @@ class TestDeviceTime:
         )
 
         assert (result["device_time"], result["untimed_calls"]) == (1.0, 1)
+        assert result["device_time_share_percent"] == 10.0
         assert "1 of its 2 calls launched no performance row" in result["caveat"]
 
     def test_a_rank_other_than_the_linked_one_carries_no_device_time(
@@ -1095,12 +1238,26 @@ class TestServer:
         assert "16 hexadecimal digits" in result["content"][0]["text"]
         assert outcome.value == "refused"
 
-    def test_the_description_states_what_the_grouping_removes(self):
+    def test_the_description_states_the_rules_every_answer_states(self):
+        """Each rule is written once, so the description and an answer cannot part."""
         table = server._tool_table(ReportRegistry())
         description = table[McpToolName.OP_CONFIGURATIONS]["description"]
 
-        assert configurations.REMOVED_FROM_TEXT in description
         assert configurations.REMOVED_FROM_TEXT in configurations.GROUPING
+        assert configurations.GROUPING in description
+        for rule in configurations.TRACER_RULES:
+            assert rule in description
+            assert rule in configurations.NOTE
+
+    def test_the_description_states_the_caps_a_digest_answers_by(self):
+        entry = server._tool_table(ReportRegistry())[McpToolName.OP_CONFIGURATIONS]
+        detail = (
+            f"every argument, up to {configurations.MAX_DETAIL_ARGUMENTS}, at up to "
+            f"{configurations.DETAIL_VALUE_CHARS:,} characters"
+        )
+
+        assert detail in entry["description"]
+        assert detail in entry["schema"]["properties"]["config_digest"]["description"]
 
     def test_load_report_lists_it_only_with_the_arguments_table(self, tmp_path):
         _capture(tmp_path / "with", [("ttnn.relu", [])])
@@ -1124,7 +1281,7 @@ class TestServer:
         registry, handle = _capture(tmp_path, [("ttnn.relu", [("0", "x")])])
 
         with patch.object(
-            configurations,
+            linking,
             "read_configurations",
             wraps=configurations.read_configurations,
         ) as read:
@@ -1146,7 +1303,7 @@ class TestServer:
         signature = inspect.signature(configurations.read_configurations)
 
         with patch.object(
-            configurations,
+            linking,
             "read_configurations",
             wraps=configurations.read_configurations,
         ) as read:
@@ -1220,6 +1377,13 @@ class TestAnswerSize:
         assert result["returned"] == configurations.MAX_LISTED_CONFIGURATIONS
         assert len(result["ops"]) == configurations.MAX_LISTED_OPS
         assert len(result["left_out"]) == configurations.MAX_LISTED_LEFT_OUT
+        assert result["op_count"] == configurations.MAX_LISTED_OPS + 5
+        assert result["configuration_count"] == 2 * (configurations.MAX_LISTED_OPS + 5)
+        assert (
+            result["left_out_op_count"]
+            == result["left_out_calls"]
+            == configurations.MAX_LISTED_LEFT_OUT + 5
+        )
         assert ("untimed_calls" in result["ops"][0]) is timed
 
     @pytest.mark.parametrize("timed", [False, True])

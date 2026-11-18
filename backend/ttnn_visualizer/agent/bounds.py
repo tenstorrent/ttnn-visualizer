@@ -113,6 +113,12 @@ def cut_op_code(field: str, op_code: object) -> Dict[str, object]:
     return cut_text(field, op_code, MAX_OP_CODE_CHARS, digest=True)
 
 
+def cut_operation_name(field: str, name: object) -> Dict[str, object]:
+    """An operation's name where a tool groups by it: past `MAX_OPERATION_NAME_CHARS`,
+    cut and told apart by its digest from another cut alike."""
+    return cut_text(field, name, MAX_OPERATION_NAME_CHARS, digest=True)
+
+
 def shown_op_code(op_code: object) -> str:
     """An op code as a refusal quotes it: cut before it is quoted, so the cut and the
     length it gives are the code's own."""
@@ -188,6 +194,7 @@ __all__ = [
     "answer_size",
     "bounded",
     "cut_op_code",
+    "cut_operation_name",
     "cut_text",
     "echoed",
     "ensure_graph_readable",

@@ -36,9 +36,6 @@ from typing import Dict, List, NamedTuple, Optional, Sequence, Set, Tuple
 from tt_perf_report.perf_report import HOST_OP_MARKER
 from ttnn_visualizer.agent import (
     failures,
-)
-from ttnn_visualizer.agent import op_configurations as configurations
-from ttnn_visualizer.agent import (
     op_graph,
     operations,
     perf_detail,
@@ -53,6 +50,11 @@ from ttnn_visualizer.agent.bounds import (
 )
 from ttnn_visualizer.agent.captured_graph import UnreadableGraphError, parse_graph
 from ttnn_visualizer.agent.handles import CacheVariant, ReportRegistry
+from ttnn_visualizer.agent.op_configurations import (
+    DeviceTime,
+    answer_configurations,
+    read_configurations,
+)
 from ttnn_visualizer.agent.scope_outcomes import is_device_operation, scope_pairing
 from ttnn_visualizer.models import Instance
 
@@ -907,18 +909,18 @@ def op_configurations(
             CacheVariant.OP_CONFIGURATIONS,
             queries,
             scope,
-            configurations.read_configurations,
+            read_configurations,
         )
     link = _link_at_rank(operation_link(registry, handle), scope.rank, "the grouping")
     device_time = None
     if link.status is LinkStatus.LINKED:
-        device_time = configurations.DeviceTime(
+        device_time = DeviceTime(
             by_operation_id=link.device_time_by_operation,
             report_total=link.report_device_time_total,
-            header=_device_time_header(link),
+            header=_device_time_header(link, with_report_total=False),
             caveat=link.partitioned_caveat,
         )
-    return configurations.answer(
+    return answer_configurations(
         handle,
         read,
         scope,

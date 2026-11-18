@@ -18,7 +18,7 @@ from unittest.mock import patch
 import pytest
 from ttnn_visualizer.agent import failures
 from ttnn_visualizer.agent import late_deallocations as late
-from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT
+from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_OPERATION_NAME_CHARS
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
 from ttnn_visualizer.agent.operations import BUFFER_SIZE_UNIT
 from ttnn_visualizer.models import BufferType, Tensor
@@ -971,13 +971,9 @@ class TestCallSites:
             "code": "c" * cap,
             "code_full_length": 400,
         }
-        assert site["last_use_operation_names"] == [
-            name[: failures.MAX_OPERATION_NAME_CHARS]
-        ]
+        assert site["last_use_operation_names"] == [name[:MAX_OPERATION_NAME_CHARS]]
         hold = result["top_holds"][0]
-        assert (
-            hold["last_use_operation_name"] == name[: failures.MAX_OPERATION_NAME_CHARS]
-        )
+        assert hold["last_use_operation_name"] == name[:MAX_OPERATION_NAME_CHARS]
         assert hold["last_use_operation_name_full_length"] == len(name)
         assert hold["last_use_location"] == f"{file[:cap]}:10"
 

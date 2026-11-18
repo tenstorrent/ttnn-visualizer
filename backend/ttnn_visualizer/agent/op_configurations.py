@@ -16,7 +16,7 @@ import json
 import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass
-from functools import lru_cache
+from functools import cached_property
 from typing import Dict, List, Mapping, NamedTuple, Optional, Tuple
 
 from ttnn_visualizer.agent.bounds import (
@@ -24,6 +24,7 @@ from ttnn_visualizer.agent.bounds import (
     MAX_LIMIT,
     MAX_OPERATION_NAME_CHARS,
     bounded,
+    cut_operation_name,
     cut_text,
     echoed,
     short_digest,
@@ -96,7 +97,7 @@ _DEVICE_PREFIX = re.compile(
 )
 
 # A listing shows each configuration's first arguments, cut past a tensor's buffer type (199 at
-# most locally, 218 for 6-D); a worst case JSON need not escape stays inside the answer budget.
+# most locally, 218 for 6-D); escaped text can pass the answer budget, as for every tool (#2298).
 MAX_LISTED_CONFIGURATIONS = 20
 MAX_LISTED_ARGUMENTS = 8
 LISTED_VALUE_CHARS = 224
@@ -108,10 +109,14 @@ MAX_ARGUMENT_NAME_CHARS = 48
 MAX_LISTED_OPERATION_IDS = 5
 MAX_LISTED_OPS = 20
 MAX_LISTED_LEFT_OUT = 10
+# The argument text one read streams through. The largest real total across 100 local
+# captures is 53.9 MB, so this refuses a pathological file, never a real one.
+MAX_ARGUMENT_CHARS = 1 << 30
 
 _DIGEST = re.compile(rf"[0-9a-f]{{{CUT_DIGEST_CHARS}}}")
 
-# What the grouping removes from an argument's text; the tool description quotes it.
+# The tracer's rules as the tool description and every answer state them, written once so
+# a rule moved with `TRACER_REVISION` cannot reach one and miss the other.
 REMOVED_FROM_TEXT = (
     "object addresses, an unset allowed_worker_cores, and a tensor's id, device id, "
     "is_allocated and data preview"
@@ -122,13 +127,28 @@ GROUPING = (
     f"tracer's semaphore arguments dropped, and {REMOVED_FROM_TEXT} removed from "
     "the text"
 )
-NOTE = (
+LEFT_OUT_RULE = (
+    "left_out counts the calls of the operations the tracer excludes, such as data "
+    "movement, deallocate and from_torch, and of names outside ttnn."
+)
+DIGEST_RULE = (
     "config_digest names a configuration's grouped text, so the same configuration "
     "written the same way in another capture has the same digest; it is not the model "
-    "tracer's config_hash, which hashes its JSON. operation_ids are memory report "
-    "database ids, for operation_provenance and operation_detail. left_out counts the "
-    "calls of the operations the tracer excludes and of names outside ttnn. The tracer's "
-    "sweep list is not applied, so a listed operation may have no sweep at all."
+    "tracer's config_hash, which hashes its JSON."
+)
+SWEEP_LIST_RULE = (
+    "The tracer's sweep list is not applied, so a listed operation may have no sweep "
+    "at all."
+)
+MACHINE_RULE = (
+    "The tracer also tells configurations apart by the machine and mesh they ran on; "
+    "load_report gives this capture's architecture and device count."
+)
+TRACER_RULES = (LEFT_OUT_RULE, DIGEST_RULE, SWEEP_LIST_RULE, MACHINE_RULE)
+NOTE = (
+    f"{DIGEST_RULE} operation_ids are memory report database ids, for "
+    f"operation_provenance and operation_detail. {LEFT_OUT_RULE} {SWEEP_LIST_RULE} "
+    f"{MACHINE_RULE}"
 )
 MEMORY_CONFIG_CAVEAT = (
     "This capture writes tensors without their memory config, so calls that differ "
@@ -161,14 +181,22 @@ class Configurations:
     left_out: Mapping[str, int]
     tensors_without_memory_config: bool
 
+    @cached_property
+    def by_digest(self) -> Mapping[str, Tuple[Configuration, ...]]:
+        """Each digest's configurations in first-call order, so a digest is looked up."""
+        by_digest: Dict[str, List[Configuration]] = defaultdict(list)
+        for configuration in self.configurations:
+            by_digest[configuration.digest].append(configuration)
+        return {digest: tuple(found) for digest, found in by_digest.items()}
+
 
 class DeviceTime(NamedTuple):
     """Device time per operation from a linked performance report."""
 
     by_operation_id: Mapping[int, float]
     report_total: float
-    # The unit, projection and `report_total` rounded, as every linked tool states them;
-    # built from the same link as `report_total`, so the two must agree.
+    # The unit and projection, as every linked tool states them. `answer` adds
+    # `report_total`, rounded as each device time is, so the total is held once.
     header: Mapping[str, object]
     caveat: Optional[str] = None
 
@@ -267,28 +295,37 @@ def _as_text(name: object) -> str:
 
 
 def _arguments_by_operation_id(
-    queries: DatabaseQueries, scope: RankScope
+    queries: DatabaseQueries, filters: Dict[str, object]
 ) -> Dict[int, List[Argument]]:
-    """Each call's arguments the tracer keeps, normalised."""
-    # A repr repeated across calls is normalised once, keyed by its text, since equal
-    # values can print apart (0.0 and -0.0); the cache ends with this read.
-    normalised = lru_cache(maxsize=None)(normalised_value)
+    """Each call's arguments the tracer keeps, normalised, streamed a row at a time."""
+    # Each text once rather than once per call: calls repeat names, and values printed
+    # apart, as tensors with their own ids are, normalise alike.
+    canonical: Dict[str, str] = {}
     arguments_by_operation_id: Dict[int, List[Argument]] = defaultdict(list)
-    for argument in queries.query_operation_arguments(
-        filters=scoped(queries, "operation_arguments", scope)
-    ):
+    for argument in queries.iter_operation_arguments(filters=filters):
         name = _as_text(argument.name)
-        if name not in TRACER_EXCLUDED_ARGUMENTS:
-            text = None if argument.value is None else str(argument.value)
-            arguments_by_operation_id[argument.operation_id].append(
-                (name, normalised(text))
+        if name in TRACER_EXCLUDED_ARGUMENTS:
+            continue
+        value = normalised_value(argument.value)
+        arguments_by_operation_id[argument.operation_id].append(
+            (
+                canonical.setdefault(name, name),
+                None if value is None else canonical.setdefault(value, value),
             )
+        )
     return arguments_by_operation_id
 
 
 def read_configurations(queries: DatabaseQueries, scope: RankScope) -> Configurations:
-    """Every call at `scope`'s rank, grouped."""
-    arguments_by_operation_id = _arguments_by_operation_id(queries, scope)
+    """Every call at `scope`'s rank, grouped; refused past `MAX_ARGUMENT_CHARS`."""
+    filters = scoped(queries, "operation_arguments", scope)
+    size = queries.query_operation_arguments_size(filters=filters)
+    if size > MAX_ARGUMENT_CHARS:
+        raise ValueError(
+            f"this capture holds {size:,} characters of operation arguments, past the "
+            f"{MAX_ARGUMENT_CHARS:,} op_configurations will read"
+        )
+    arguments_by_operation_id = _arguments_by_operation_id(queries, filters)
     operation_ids_by_configuration: Dict[_CalledWith, List[int]] = {}
     left_out: Counter[str] = Counter()
     for operation in queries.query_operations(
@@ -379,6 +416,16 @@ def _device_time_fields(
     }
 
 
+def _device_time_header(device_time: Optional[DeviceTime]) -> Dict[str, object]:
+    """The unit, projection and report total a linked answer states."""
+    if device_time is None:
+        return {}
+    return {
+        **device_time.header,
+        "report_device_time_total": round(device_time.report_total, 3),
+    }
+
+
 def _argument(name: str, value: Optional[str], value_chars: int) -> Dict[str, object]:
     entry = cut_text("name", name, MAX_ARGUMENT_NAME_CHARS)
     if value is None:
@@ -406,7 +453,7 @@ def _configuration_fields(
     """A configuration as a listing and a digest give it; only the caps differ."""
     configuration = entry.configuration
     return {
-        **cut_text("op", configuration.op, MAX_OPERATION_NAME_CHARS, digest=True),
+        **cut_operation_name("op", configuration.op),
         "calls": configuration.calls,
         "config_digest": configuration.digest,
         "operation_ids": list(configuration.operation_ids[:ids]),
@@ -448,7 +495,7 @@ def _op_rows(
     )
     return [
         {
-            **cut_text("op", op, MAX_OPERATION_NAME_CHARS, digest=True),
+            **cut_operation_name("op", op),
             "calls": calls_by_op[op],
             "configurations": configuration_count_by_op[op],
             **_device_time_fields(
@@ -476,7 +523,7 @@ def _untimed_caveat(untimed_calls: int, calls: int, whose: str) -> str:
     )
 
 
-def answer(
+def answer_configurations(
     handle: str,
     read: Configurations,
     scope: RankScope,
@@ -487,31 +534,30 @@ def answer(
     limit: Optional[int] = None,
 ) -> Dict[str, object]:
     """A ranked listing of the configurations, or one configuration by its digest."""
-    # A name_contains that is not a string fails here instead of being refused (#2347).
+    # A name_contains or config_digest that is not a string fails instead of being
+    # refused (#2347).
     needle = normalised_op_name(name_contains).strip().lower()
-    matching = [
-        configuration
-        for configuration in read.configurations
-        if needle in configuration.op.lower()
-    ]
     caveats: List[str] = []
     if read.tensors_without_memory_config:
         caveats.append(MEMORY_CONFIG_CAVEAT)
     if device_time is not None and device_time.caveat:
         caveats.append(device_time.caveat)
     if config_digest is None:
+        matching = [
+            configuration
+            for configuration in read.configurations
+            if needle in configuration.op.lower()
+        ]
         body = _listing(
             read, matching, needle, device_time, caveats, name_contains, limit
         )
     else:
-        body = _one(
-            matching, _parsed_digest(config_digest), bool(needle), device_time, caveats
-        )
+        body = _one(read, _parsed_digest(config_digest), needle, device_time, caveats)
     return {
         "handle": handle,
         **body,
         "grouping": GROUPING,
-        **(device_time.header if device_time is not None else {}),
+        **_device_time_header(device_time),
         **scope.as_response(),
         **caveat_field(scope, *caveats),
         "operation_link": operation_link,
@@ -562,7 +608,7 @@ def _listing(
         "left_out_op_count": len(left_out),
         "left_out": [
             {
-                **cut_text("op", op, MAX_OPERATION_NAME_CHARS, digest=True),
+                **cut_operation_name("op", op),
                 "calls": count,
             }
             for op, count in left_out[:MAX_LISTED_LEFT_OUT]
@@ -572,26 +618,26 @@ def _listing(
 
 
 def _one(
-    matching: List[Configuration],
+    read: Configurations,
     wanted: str,
-    filtered: bool,
+    needle: str,
     device_time: Optional[DeviceTime],
     caveats: List[str],
 ) -> Dict[str, object]:
-    """One configuration, every argument at length, with up to MAX_LIMIT of its calls,
-    adding its caveats to `caveats`."""
+    """One configuration, cut by MAX_DETAIL_ARGUMENTS and DETAIL_VALUE_CHARS, with up to
+    MAX_LIMIT of its calls, adding its caveats to `caveats`."""
     found = sorted(
         (
             _timed(configuration, device_time)
-            for configuration in matching
-            if configuration.digest == wanted
+            for configuration in read.by_digest.get(wanted, ())
+            if needle in configuration.op.lower()
         ),
         key=_ranking,
     )
     if not found:
         raise ValueError(
             f"no configuration with config_digest {wanted}"
-            + (" among operations matching name_contains" if filtered else "")
+            + (" among operations matching name_contains" if needle else "")
             + "; a listing gives each configuration's digest"
         )
     entry = found[0]
@@ -617,9 +663,13 @@ __all__ = [
     "Configuration",
     "Configurations",
     "DETAIL_VALUE_CHARS",
+    "DIGEST_RULE",
     "DeviceTime",
     "GROUPING",
+    "LEFT_OUT_RULE",
     "LISTED_VALUE_CHARS",
+    "MACHINE_RULE",
+    "MAX_ARGUMENT_CHARS",
     "MAX_ARGUMENT_NAME_CHARS",
     "MAX_DETAIL_ARGUMENTS",
     "MAX_LISTED_ARGUMENTS",
@@ -630,10 +680,12 @@ __all__ = [
     "MEMORY_CONFIG_CAVEAT",
     "NOTE",
     "REMOVED_FROM_TEXT",
+    "SWEEP_LIST_RULE",
     "TRACER_EXCLUDED_ARGUMENTS",
     "TRACER_EXCLUDED_OPERATIONS",
     "TRACER_REVISION",
-    "answer",
+    "TRACER_RULES",
+    "answer_configurations",
     "configuration_digest",
     "is_traced",
     "normalised_op_name",
