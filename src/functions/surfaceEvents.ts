@@ -30,7 +30,8 @@ import recordEvent from './recordEvent';
  *   restores that navigation records it again.
  *
  * Follow one of those only for an event that is likewise about what is shown, and say so
- * in its docs section. None may run per frame, per render or per row.
+ * in its docs section and in the docs' "Per-surface events" intro, which lists every
+ * exception too. None may run per frame, per render or per row.
  */
 
 // Exhaustive, so a new chart fails type-checking until it is given an exported label.
@@ -52,9 +53,7 @@ const PERF_CHART_BY_CHART_ID: Readonly<Record<PerfChartId, PerfChartLabel>> = Ob
 
 const PERF_CHART_IDS = new Set<string>(Object.values(PerfChartId));
 
-// Bucket upper bounds, inclusive. Anything above the last is `THREE_OR_MORE`.
-const ONE_COMPARISON_REPORT = 1;
-const TWO_COMPARISON_REPORTS = 2;
+const OPERATION_TYPES_CHART_ID_PREFIX = `${PerfChartId.OperationTypes}-`;
 
 /**
  * The exported chart for a chart section's DOM id, or `null` for an id that is not a chart.
@@ -67,7 +66,11 @@ export function getPerfChartForChartId(chartId: string): PerfChartLabel | null {
         return PERF_CHART_BY_CHART_ID[chartId as PerfChartId];
     }
 
-    if (chartId.startsWith(`${PerfChartId.OperationTypes}-`)) {
+    // A suffix is required: the bare prefix is no report's section.
+    if (
+        chartId.startsWith(OPERATION_TYPES_CHART_ID_PREFIX) &&
+        chartId.length > OPERATION_TYPES_CHART_ID_PREFIX.length
+    ) {
         return PerfChartLabel.OPERATION_TYPES;
     }
 
@@ -76,18 +79,19 @@ export function getPerfChartForChartId(chartId: string): PerfChartLabel | null {
 
 /**
  * A comparison's size, bucketed so no raw count is ever recorded, or `null` when there is no
- * comparison to count: an empty one is not a use.
+ * comparison to count: an empty one is not a use, and a count that is not a whole number of
+ * reports is no comparison at all. The buckets are the enum's own: one, two, then the rest.
  */
 export function getComparisonReportCountBucket(comparisonReportCount: number): ComparisonReportCountBucket | null {
-    if (comparisonReportCount < ONE_COMPARISON_REPORT) {
+    if (!Number.isInteger(comparisonReportCount) || comparisonReportCount < 1) {
         return null;
     }
 
-    if (comparisonReportCount === ONE_COMPARISON_REPORT) {
+    if (comparisonReportCount === 1) {
         return ComparisonReportCountBucket.ONE;
     }
 
-    if (comparisonReportCount === TWO_COMPARISON_REPORTS) {
+    if (comparisonReportCount === 2) {
         return ComparisonReportCountBucket.TWO;
     }
 

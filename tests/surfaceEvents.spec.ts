@@ -56,6 +56,8 @@ describe('getPerfChartForChartId', () => {
     it('returns null for an id that is not a chart', () => {
         expect(getPerfChartForChartId('buffer-summary-plot')).toBeNull();
         expect(getPerfChartForChartId('perf-chart-operation-typesX')).toBeNull();
+        // The bare prefix is no report's section: every one carries a suffix.
+        expect(getPerfChartForChartId(`${PerfChartId.OperationTypes}-`)).toBeNull();
     });
 });
 
@@ -67,13 +69,16 @@ describe('getComparisonReportCountBucket', () => {
         [2, ComparisonReportCountBucket.TWO],
         [3, ComparisonReportCountBucket.THREE_OR_MORE],
         [7, ComparisonReportCountBucket.THREE_OR_MORE],
-    ])('buckets %i comparison reports as %s', (reportCount, bucket) => {
+        // Not a whole number of reports, so not a comparison to count.
+        [Number.NaN, null],
+        [1.5, null],
+    ])('buckets %d comparison reports as %s', (reportCount, bucket) => {
         expect(getComparisonReportCountBucket(reportCount)).toBe(bucket);
     });
 });
 
 describe('recorders', () => {
-    it.each([
+    const recorderCases: [() => void, { event: EventLogEvent; details: object }][] = [
         [
             () => recordPerfChartViewed(PerfChartLabel.MATMUL_DEVICE_TIME),
             { event: EventLogEvent.PERF_CHART_VIEWED, details: { perf_chart: PerfChartLabel.MATMUL_DEVICE_TIME } },
@@ -112,11 +117,16 @@ describe('recorders', () => {
                 details: { connection_test_result: RemoteConnectionTestResult.UNREACHABLE },
             },
         ],
-    ])('posts the wire shape the server validates (%#)', (record, payload) => {
-        record();
+    ];
 
-        expect(recordEvent).toHaveBeenCalledExactlyOnceWith(payload);
-    });
+    it.each(recorderCases.map(([record, payload]) => ({ record, payload, event: payload.event })))(
+        'posts the wire shape the server validates for $event',
+        ({ record, payload }) => {
+            record();
+
+            expect(recordEvent).toHaveBeenCalledExactlyOnceWith(payload);
+        },
+    );
 
     it('records nothing for an empty comparison', () => {
         recordPerfComparisonUsed(0);

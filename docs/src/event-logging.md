@@ -157,7 +157,7 @@ Recorded when a switch above the performance table is flipped. It answers which 
 
 ### `perf_comparison_used`
 
-Recorded each time a comparison report is added or replaced in the Performance view. It answers whether comparison is worth its complexity (Q4). Removing one records nothing. Comparison is unavailable under `SERVER_MODE`, so the application never records this event there.
+Recorded each time a comparison report is added or replaced in the Performance view. It answers whether comparison is worth its complexity (Q4). Removing one records nothing. Comparison is unavailable under `SERVER_MODE`, so the endpoint refuses this event there.
 
 - `report_count_bucket`: `one`, `two`, `three_or_more`.
 
@@ -190,13 +190,13 @@ Operation details are not a target: `view_opened` already counts them with `view
 
 ### `filter_used`
 
-Recorded the first time a filter's query becomes non-empty, per visit to the list. It answers which filters are used (Q4). The query text is never recorded.
+Recorded the first time a filter's query becomes non-empty, per visit to the list, a visit being each time the list is opened. It answers which filters are used (Q4). The query text is never recorded.
 
 - `filter_surface`: `operations`, `tensors`, `perf_op_code`.
 
 ### `remote_connection_test`
 
-Recorded when a remote connection test in the connection dialog finishes. It answers how often SSH sync works, and how it fails (Q5). Form errors caught before a request is sent are not tests and record nothing. Remote sync is unavailable under `SERVER_MODE`, so the application never records this event there. Host, user and path are never recorded.
+Recorded when a remote connection test in the connection dialog finishes. It answers how often SSH sync works, and how it fails (Q5). Form errors caught before a request is sent are not tests and record nothing. Remote sync is unavailable under `SERVER_MODE`, so the endpoint refuses this event there. Host, user and path are never recorded.
 
 - `connection_test_result`: `success`, `auth_failed`, `host_key_rejected`, `unreachable`, `no_reports_found`, `report_path_failed`, `other`.
 

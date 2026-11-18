@@ -1836,3 +1836,16 @@ def test_a_test_that_opts_into_nothing_still_logs_inside_tmp_path(
     )
 
     assert get_event_log_path().is_file()
+
+
+def test_an_event_with_details_names_them_when_the_keys_are_wrong():
+    with pytest.raises(
+        EventLogEventRejected,
+        match=r"^Event view_opened expects exactly these details: view$",
+    ):
+        validate_client_event(
+            {
+                "event": EventLogEvent.VIEW_OPENED.value,
+                "details": {"view": "operations", "query": "matmul"},
+            }
+        )

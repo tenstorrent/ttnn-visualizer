@@ -96,13 +96,15 @@ export enum EventLogView {
 }
 
 // The vocabularies below serve the per-surface events from #1837. What each one counts,
-// and the caveats for reading it, live on its Python twin in `event_logging.py` and in
-// `docs/src/event-logging.md`.
+// and most caveats for reading it, live on its Python twin in `event_logging.py` and in
+// `docs/src/event-logging.md`. A caveat stays here only where it guards an invariant a
+// change on this side could break.
 
 /**
  * One member per `PerfChartId`: the DOM id without its `perf-chart-` prefix, in snake_case,
  * so the exported label does not move with markup. Named apart from the `PerfChart`
- * component, which renders a chart rather than labelling one.
+ * component, which renders a chart rather than labelling one. Not `PERF_CHART_LABELS`
+ * either: those are the titles shown to people, and these are never displayed.
  */
 export enum PerfChartLabel {
     OP_DURATION_HISTOGRAM = 'op_duration_histogram',
