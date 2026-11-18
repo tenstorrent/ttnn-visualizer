@@ -7,7 +7,6 @@ import {
     DrilldownTarget,
     EventLogEvent,
     FilterSurface,
-    MlirFileFormat,
     NpeMode,
     PerfChartLabel,
     PerfTableOption,
@@ -53,12 +52,6 @@ const PERF_CHART_BY_CHART_ID: Readonly<Record<PerfChartId, PerfChartLabel>> = Ob
 
 const PERF_CHART_IDS = new Set<string>(Object.values(PerfChartId));
 
-const MLIR_FILE_FORMAT_BY_EXTENSION: ReadonlyMap<string, MlirFileFormat> = new Map(
-    Object.values(MlirFileFormat)
-        .filter((format) => format !== MlirFileFormat.OTHER)
-        .map((format) => [`.${format}`, format]),
-);
-
 // Bucket upper bounds, inclusive. Anything above the last is `THREE_OR_MORE`.
 const ONE_COMPARISON_REPORT = 1;
 const TWO_COMPARISON_REPORTS = 2;
@@ -101,22 +94,6 @@ export function getComparisonReportCountBucket(comparisonReportCount: number): C
     return ComparisonReportCountBucket.THREE_OR_MORE;
 }
 
-/**
- * The format of an MLIR input, from the name of the file the user uploaded.
- *
- * Exact match on the final extension, so `.mlirbc` is never read as `.mlir`. Pass the
- * original upload name, never the converted graph's, which is always `.json`.
- */
-export function getMlirFileFormat(filename: string): MlirFileFormat {
-    const extensionStart = filename.lastIndexOf('.');
-
-    if (extensionStart < 0) {
-        return MlirFileFormat.OTHER;
-    }
-
-    return MLIR_FILE_FORMAT_BY_EXTENSION.get(filename.slice(extensionStart).toLowerCase()) ?? MlirFileFormat.OTHER;
-}
-
 export function recordPerfChartViewed(chart: PerfChartLabel): void {
     recordEvent({ event: EventLogEvent.PERF_CHART_VIEWED, details: { perf_chart: chart } });
 }
@@ -142,14 +119,6 @@ export function recordNpePlaybackStarted(): void {
 
 export function recordNpeModeChanged(mode: NpeMode): void {
     recordEvent({ event: EventLogEvent.NPE_MODE_CHANGED, details: { npe_mode: mode } });
-}
-
-export function recordMlirFileLoaded(filename: string): void {
-    recordEvent({ event: EventLogEvent.MLIR_FILE_LOADED, details: { mlir_format: getMlirFileFormat(filename) } });
-}
-
-export function recordMlirSplitViewUsed(): void {
-    recordEvent({ event: EventLogEvent.MLIR_SPLIT_VIEW_USED, details: {} });
 }
 
 export function recordDrilldownOpened(target: DrilldownTarget): void {

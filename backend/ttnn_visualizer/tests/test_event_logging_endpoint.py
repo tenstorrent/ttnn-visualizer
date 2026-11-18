@@ -439,8 +439,8 @@ def test_accepted_batch_totals_the_way_the_collector_reads_it(
         ),
         pytest.param(
             {
-                "event": EventLogEvent.MLIR_SPLIT_VIEW_USED.value,
-                "details": {"view": "mlir"},
+                "event": EventLogEvent.NPE_PLAYBACK_STARTED.value,
+                "details": {"npe_mode": "zones"},
             },
             id="detail_on_an_event_without_details",
         ),
@@ -460,10 +460,10 @@ def test_accepted_batch_totals_the_way_the_collector_reads_it(
         ),
         pytest.param(
             {
-                "event": EventLogEvent.MLIR_FILE_LOADED.value,
-                "details": {"mlir_format": ".tflite"},
+                "event": EventLogEvent.PERF_CHART_VIEWED.value,
+                "details": {"perf_chart": "perf-chart-op-duration-histogram"},
             },
-            id="mlir_format_with_its_dot",
+            id="perf_chart_as_its_dom_id",
         ),
         pytest.param({"details": {"view": "operations"}}, id="event_name_absent"),
     ],
@@ -517,8 +517,6 @@ ACCEPTED_EVENTS = {
     EventLogEvent.PERF_COMPARISON_USED: {"report_count_bucket": "three_or_more"},
     EventLogEvent.NPE_PLAYBACK_STARTED: {},
     EventLogEvent.NPE_MODE_CHANGED: {"npe_mode": "cycles_scale"},
-    EventLogEvent.MLIR_FILE_LOADED: {"mlir_format": "mlirbc"},
-    EventLogEvent.MLIR_SPLIT_VIEW_USED: {},
     EventLogEvent.DRILLDOWN_OPENED: {"drilldown_target": "source_file"},
     EventLogEvent.FILTER_USED: {"filter_surface": "perf_op_code"},
     EventLogEvent.REMOTE_CONNECTION_TEST: {

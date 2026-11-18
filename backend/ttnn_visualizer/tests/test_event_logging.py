@@ -43,7 +43,6 @@ from ttnn_visualizer.event_logging import (
     EventLogEventRejected,
     EventLogView,
     LaunchMode,
-    MlirFileFormat,
     ReportKind,
     ReportLoadFailureReason,
     get_application_version,
@@ -58,7 +57,6 @@ from ttnn_visualizer.event_logging import (
     record_events,
     validate_client_event,
 )
-from ttnn_visualizer.mlir import MLIR_SERVER_ACCEPTED_EXTENSIONS
 from ttnn_visualizer.settings import DefaultConfig
 from ttnn_visualizer.tests.event_log_readers import (
     parse_event_log_line,
@@ -1785,18 +1783,6 @@ def test_record_events_writes_nothing_when_recording_is_disabled(
         is False
     )
     assert read_event_log_lines(event_log_directory) == []
-
-
-def test_mlir_file_formats_are_exactly_the_accepted_extensions():
-    """A newly accepted extension must gain a format, or every load of it reads ``other``.
-
-    Nothing else would notice: ``other`` is a valid value, so the drift stays silent.
-    """
-    assert {
-        f".{member.value}"
-        for member in MlirFileFormat
-        if member is not MlirFileFormat.OTHER
-    } == set(MLIR_SERVER_ACCEPTED_EXTENSIONS)
 
 
 @pytest.mark.parametrize(
