@@ -2,11 +2,14 @@
 #
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-"""Regression tests for mixed local/remote active_report path resolution (issue #1359)."""
+"""Regression tests for how an instance resolves, names and checks its report paths."""
 
 import logging
+import os
 from pathlib import Path
 
+import pytest
+from ttnn_visualizer.exceptions import InvalidProfilerPath, InvalidReportPath
 from ttnn_visualizer.extensions import db
 from ttnn_visualizer.instances import (
     KEY_MLIR_LOCATION,
@@ -15,6 +18,7 @@ from ttnn_visualizer.instances import (
     KEY_PERFORMANCE_NAME,
     KEY_PROFILER_LOCATION,
     KEY_PROFILER_NAME,
+    create_instance_from_local_paths,
     update_existing_instance,
 )
 from ttnn_visualizer.models import (
@@ -203,3 +207,59 @@ def test_a_report_directly_under_the_root_is_still_named():
     assert _report_name(Path("/report")) == "report"
     assert _report_name(Path("/work/generated/ttnn/reports/bge_m3")) == "bge_m3"
     assert _report_name(None) == ""
+
+
+@pytest.fixture
+def unreadable_dir(tmp_path):
+    """A report folder whose parent can't be searched, as `chmod 000` leaves it."""
+    locked = tmp_path / "locked"
+    report = locked / "report"
+    report.mkdir(parents=True)
+    locked.chmod(0)
+    try:
+        if os.access(report, os.F_OK):
+            pytest.skip("this user reaches a folder whatever its parent's mode")
+        yield report
+    finally:
+        locked.chmod(0o755)
+
+
+@pytest.fixture(params=["missing", "a_file", "unreadable"])
+def bad_path(request, tmp_path):
+    """A path the check refuses: absent, a regular file, or unreadable."""
+    if request.param == "missing":
+        return tmp_path / "missing"
+    if request.param == "a_file":
+        path = tmp_path / "a_file"
+        path.touch()
+        return path
+    return request.getfixturevalue("unreadable_dir")
+
+
+@pytest.mark.parametrize(
+    ("key", "error"),
+    [("profiler_path", InvalidReportPath), ("performance_path", InvalidProfilerPath)],
+)
+def test_a_path_that_is_not_a_readable_folder_is_refused(app, bad_path, key, error):
+    """`main()` exits cleanly on these; an unreadable one used to be a traceback."""
+    paths = {"profiler_path": None, "performance_path": None, key: str(bad_path)}
+
+    with app.app_context():
+        with pytest.raises(error):
+            create_instance_from_local_paths(**paths)
+
+        assert InstanceTable.query.count() == 0
+
+
+def test_a_good_memory_report_beside_a_bad_performance_path_makes_no_instance(
+    app, tmp_path, bad_path
+):
+    """Both paths are checked before the row is written."""
+    memory_report = tmp_path / "memory_report"
+    memory_report.mkdir()
+
+    with app.app_context():
+        with pytest.raises(InvalidProfilerPath):
+            create_instance_from_local_paths(str(memory_report), str(bad_path))
+
+        assert InstanceTable.query.count() == 0

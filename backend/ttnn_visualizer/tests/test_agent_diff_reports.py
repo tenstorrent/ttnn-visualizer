@@ -16,7 +16,12 @@ from unittest.mock import patch
 
 import pytest
 from ttnn_visualizer.agent import op_signatures, report_diff, server, tools
-from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_LIMIT
+from ttnn_visualizer.agent.bounds import (
+    CUT_DIGEST_CHARS,
+    MAX_DETAILED_LIMIT,
+    MAX_LIMIT,
+    MAX_OP_CODE_CHARS,
+)
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
 from ttnn_visualizer.csv_queries import (
     DegradedPerformanceReport,
@@ -1466,9 +1471,7 @@ class TestSignatures:
         assert "record tensor sizes differently" in result["caveat"]
         assert (result["new"], result["missing"]) == ([], [])
 
-    def test_an_unreadable_csv_is_refused_for_signatures_too(
-        self, tmp_path, event_log_directory
-    ):
+    def test_an_unreadable_csv_is_refused_for_signatures_too(self, tmp_path):
         """As it is when matching by op code: the agent's to fix, not a crash."""
         registry = self._registry(tmp_path, smoke_rows(), smoke_rows())
         csv_path = tmp_path / "after" / "ops_perf_results.csv"
@@ -1666,7 +1669,7 @@ class TestSignatures:
         (change,) = result["changes"]
         assert len(change["signature"]) == report_diff.MAX_SIGNATURE_CHARS
         assert change["signature_full_length"] > report_diff.MAX_SIGNATURE_CHARS
-        assert len(change["signature_digest"]) == report_diff.SIGNATURE_DIGEST_CHARS
+        assert len(change["signature_digest"]) == CUT_DIGEST_CHARS
 
     def test_signatures_cut_alike_are_told_apart_by_their_digests(self, tmp_path):
         """A last output's height moved from 32 to 64 keeps the cut and the length, so
@@ -1741,8 +1744,9 @@ class TestSignatureKeys:
         for listed in ("changes", "new", "missing", "unmeasured"):
             assert result[listed] == []
 
-    def test_an_op_code_past_the_cut_is_cut_as_a_signature_is(self, tmp_path):
-        long_code = "Matmul" + "x" * report_diff.MAX_SIGNATURE_CHARS
+    def test_an_op_code_past_the_cut_is_cut_as_every_tool_cuts_one(self, tmp_path):
+        """262 characters, in the 257–300 that the signature's cut let through. #2208"""
+        long_code = "Matmul" + "x" * MAX_OP_CODE_CHARS
         rows = {
             "report-1": [_row(op_code=long_code, device_time="10.0")],
             "report-2": [_row(op_code=long_code, device_time="20.0")],
@@ -1750,16 +1754,48 @@ class TestSignatureKeys:
 
         (change,) = _diff(_registry(tmp_path), rows)["changes"]
 
-        assert change["op_code"] == long_code[: report_diff.MAX_SIGNATURE_CHARS]
+        assert change["op_code"] == long_code[:MAX_OP_CODE_CHARS]
         assert change["op_code_full_length"] == len(long_code)
-        assert len(change["op_code_digest"]) == report_diff.SIGNATURE_DIGEST_CHARS
+        assert len(change["op_code_digest"]) == CUT_DIGEST_CHARS
+
+    def test_two_op_codes_cut_alike_are_two_changes_told_apart(self, tmp_path):
+        long_code = "Matmul" + "x" * MAX_OP_CODE_CHARS
+        twin = long_code[:-1] + "y"
+        rows = {
+            "report-1": [
+                _row(id="2", op_code=long_code, device_time="10.0"),
+                _row(id="3", op_code=twin, device_time="10.0"),
+            ],
+            "report-2": [
+                _row(id="2", op_code=long_code, device_time="20.0"),
+                _row(id="3", op_code=twin, device_time="30.0"),
+            ],
+        }
+
+        changes = _diff(_registry(tmp_path), rows)["changes"]
+
+        assert len(changes) == 2
+        assert {change["op_code"] for change in changes} == {
+            long_code[:MAX_OP_CODE_CHARS]
+        }
+        assert {change["op_code_full_length"] for change in changes} == {len(long_code)}
+        assert len({change["op_code_digest"] for change in changes}) == 2
+
+    def test_a_raw_op_code_past_the_cut_is_cut_in_a_signatures_group(self, tmp_path):
+        long_code = "Matmul" + "x" * MAX_OP_CODE_CHARS
+        rows = {
+            "report-1": [_row(raw_op_code=long_code, device_time="10.0")],
+            "report-2": [_row(raw_op_code=long_code, device_time="20.0")],
+        }
+
+        (change,) = self._diff(tmp_path, rows)["changes"]
+
+        assert change["raw_op_code"] == long_code[:MAX_OP_CODE_CHARS]
+        assert change["raw_op_code_full_length"] == len(long_code)
+        assert len(change["raw_op_code_digest"]) == CUT_DIGEST_CHARS
 
 
 class TestAnswerBudget:
-    @pytest.fixture(autouse=True)
-    def _never_touch_the_real_event_log(self, event_log_directory):
-        """Any tools/call reaches the recorder; none may write outside tmp_path."""
-
     @pytest.mark.parametrize("match", sorted(report_diff.DIFF_MATCHES))
     def test_every_list_full_fits_the_budget(self, tmp_path, match):
         """Every list at its cap, every change partly measured, op codes as long as a
@@ -1862,9 +1898,7 @@ class TestSchema:
         for side in ("repeats_a", "repeats_b"):
             assert properties[side]["maxItems"] == report_diff.MAX_CAPTURES_PER_SIDE - 1
 
-    def test_thresholds_reach_the_tool_by_the_names_the_schema_gives(
-        self, tmp_path, event_log_directory
-    ):
+    def test_thresholds_reach_the_tool_by_the_names_the_schema_gives(self, tmp_path):
         """A rename on one side of the schema and the tool's arguments fails here."""
         with patch.object(
             tools,
@@ -1897,9 +1931,7 @@ class TestSchema:
             "min_delta_unit": "us",
         }
 
-    def test_a_malformed_argument_comes_back_as_a_refusal(
-        self, tmp_path, event_log_directory
-    ):
+    def test_a_malformed_argument_comes_back_as_a_refusal(self, tmp_path):
         response = server.handle_message(
             {
                 "jsonrpc": "2.0",

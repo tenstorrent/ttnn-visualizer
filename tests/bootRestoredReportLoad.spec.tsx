@@ -5,6 +5,7 @@
 import '@testing-library/jest-dom/vitest';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { AxiosError, HttpStatusCode } from 'axios';
+import { useAtomValue } from 'jotai';
 import { Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TestProviders } from './helpers/TestProviders';
@@ -14,15 +15,20 @@ import { minimalValidNpeData, npeWindow, summary } from './helpers/npeFixtures';
 import { noSshConfigResult } from './helpers/sshConfigFixtures';
 import mockProfilerFolderList from './data/mockProfilerFolderList.json';
 import mockPerformanceReportFolders from './data/mockPerformanceReportFolders.json';
+import FooterInfobar from '../src/components/FooterInfobar';
 import ProtectedRoute from '../src/components/ProtectedRoute';
 import Home from '../src/routes/Home';
 import NPE from '../src/routes/NPE';
+import Performance from '../src/routes/Performance';
+import { L1PressureStatus } from '../src/model/L1Pressure';
 import ROUTES, { ROUTE_PATTERNS } from '../src/definitions/Routes';
 import Endpoints from '../src/definitions/Endpoints';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { ReportKind, ReportSource } from '../src/definitions/EventLogEvent';
 import { ReportLocation } from '../src/definitions/Reports';
+import { TARGET_DB_VERSION_MAX } from '../src/definitions/Versions';
 import { RemoteConnection, RemoteFolder } from '../src/model/RemoteConnection';
+import { activePerformanceReportAtom, activeProfilerReportAtom } from '../src/store/app';
 import {
     LOCAL_STORAGE_KEY_CONNECTIONS,
     LOCAL_STORAGE_KEY_SELECTED,
@@ -32,14 +38,21 @@ import {
 
 // Boot restoration must not count as a user-initiated report load. Unlike the hook-level
 // cases in useRestoreInstance.spec, these mount the real report-selection surface (Home's
-// local and remote selectors, the NPE route and its windowed view) behind ProtectedRoute,
-// so recording moved into a broad active-report or loaded-data effect anywhere in that
-// tree fails here.
+// local and remote selectors, the Performance route, the NPE route and its windowed view)
+// behind ProtectedRoute, so recording moved into a broad active-report or loaded-data
+// effect anywhere in that tree fails here. A report opened by path, by launching with
+// --memory-report-path or --performance-path or by following an agent tool's link,
+// restores through the same hook but with no report location, so it has cases of its own.
 
 const h = vi.hoisted(() => ({
     serverMode: false as boolean,
     instance: null as unknown,
+    reportMetadataResponse: (() => undefined) as () => Promise<unknown> | undefined,
+    performanceReportResponse: (() => undefined) as () => Promise<unknown> | undefined,
 }));
+
+// A request still in flight: the state before a restored report's data arrives.
+const pending = () => new Promise<never>(() => {});
 
 const {
     recordReportLoaded,
@@ -48,6 +61,7 @@ const {
     mockAxiosPost,
     mockUseNpe,
     mockUseNpeSummary,
+    mockAxiosGet,
     useSshConfigHostsMock,
 } = vi.hoisted(() => ({
     recordReportLoaded: vi.fn(),
@@ -56,6 +70,7 @@ const {
     mockAxiosPost: vi.fn(),
     mockUseNpe: vi.fn(),
     mockUseNpeSummary: vi.fn(),
+    mockAxiosGet: vi.fn(),
     useSshConfigHostsMock: vi.fn(),
 }));
 
@@ -76,7 +91,21 @@ vi.mock('../src/hooks/useAPI', async () => {
         useReportFolderList: () => ({ data: mockProfilerFolderList }),
         usePerfFolderList: () => ({ data: mockPerformanceReportFolders }),
         useGetClusterDescription: () => ({ data: null }),
-        useReportMetadata: () => ({ data: undefined, error: null }),
+        // The footer's data hooks: its range slider is where a failed performance report is handled.
+        useGetLatestAppVersion: () => ({ data: undefined, isPending: false, isError: false }),
+        useOperationsList: () => ({ data: undefined }),
+        useGetDeviceOperationListPerf: () => [],
+        useOperationListRange: () => null,
+        // The Performance route's other data hooks, settled so only the report itself can
+        // fail. useReportMetadata and usePerformanceReport run for real, against the
+        // tripwire below, so recording added in their fetches fails here too.
+        usePerformanceComparisonReport: () => ({ data: undefined }),
+        usePerformanceRange: () => null,
+        useOpToPerfIdFiltered: () => [],
+        useOpToPerfIdForPerfTable: () => [],
+        useL1PressureByOperation: () => ({ status: L1PressureStatus.Unavailable, data: null }),
+        usePerfMeta: () => ({ data: undefined, isLoading: false }),
+        usePerfMetas: () => [],
         useNpe: (fileName: string | null) => mockUseNpe(fileName),
         useNPETimelineFile: () => ({ data: undefined, isLoading: false, error: null }),
         useNpeSummary: (fileName: string | null) => mockUseNpeSummary(fileName),
@@ -86,14 +115,24 @@ vi.mock('../src/hooks/useAPI', async () => {
 });
 
 // Tripwire: a request the useAPI overrides miss surfaces as a mock call, not a real fetch.
-vi.mock('../src/libs/axiosInstance', () => ({
+vi.mock('../src/libs/axiosInstance', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../src/libs/axiosInstance')>()),
     default: {
         post: (...args: unknown[]) => mockAxiosPost(...args),
-        get: vi.fn(),
+        get: (...args: unknown[]) => mockAxiosGet(...args),
     },
 }));
 
 vi.mock('../src/hooks/useSshConfigHosts', () => ({ default: useSshConfigHostsMock }));
+
+vi.mock('../src/hooks/useAllocationFailures', () => ({
+    useAllocationFailures: () => ({ listings: [], allocationFailureByOpId: new Map() }),
+}));
+
+vi.mock('../src/hooks/useDramFallbacks', () => ({ useDramFallbacks: () => new Map() }));
+
+// The footer's report-link badge reads linked-report data and records nothing.
+vi.mock('../src/components/ReportLinkStatus', () => ({ default: () => null }));
 
 vi.mock('../src/components/npe/NPEViewComponent', () => ({
     default: () => <div data-testid={TEST_IDS.NPE_VIEW} />,
@@ -140,6 +179,59 @@ const makeInstance = (location: ReportLocation, profiler: string, performance: s
     remote_profiler_folder: null,
 });
 
+// The shape create_instance_from_local_paths stores for a report opened by path, whether
+// by --memory-report-path, --performance-path or an agent tool's link: folder basenames
+// with no *_location, so neither selector claims the restored report and both pickers
+// show no report, unlike the makeInstance cases.
+// Pinned as served by test_it_returns_the_instance_the_browser_opens_on in
+// backend/ttnn_visualizer/tests/test_instance_local_paths.py.
+const makeOpenedByPathInstance = (profiler: string, performance: string) => ({
+    active_report: {
+        profiler_name: profiler,
+        profiler_location: null,
+        performance_name: performance,
+        performance_location: null,
+        npe_name: null,
+        npe_location: null,
+        mlir_name: null,
+        mlir_location: null,
+    },
+    remote_profiler_folder: null,
+});
+
+// The pickers show no report for a location-less restore, so read the atoms directly to
+// prove restoration ran before asserting it recorded nothing.
+const ACTIVE_REPORTS_PROBE_ID = 'active-reports-probe';
+const ActiveReportsProbe = () => {
+    const profiler = useAtomValue(activeProfilerReportAtom);
+    const performance = useAtomValue(activePerformanceReportAtom);
+
+    return <div data-testid={ACTIVE_REPORTS_PROBE_ID}>{`${profiler?.path ?? ''}|${performance?.path ?? ''}`}</div>;
+};
+
+const waitForRestoredReports = () =>
+    waitFor(() =>
+        expect(screen.getByTestId(ACTIVE_REPORTS_PROBE_ID)).toHaveTextContent(
+            `${RESTORED_PROFILER.path}|${RESTORED_PERFORMANCE.path}`,
+        ),
+    );
+
+// Both instance shapes a local restore can carry: one picked from Home (with a location)
+// and one opened by path (without), since the selectors branch on it. Without a
+// location the memory picker shows LocalFolderPicker's default label, not the report.
+const RESTORED_SHAPES = [
+    {
+        shape: 'selected',
+        instance: () => makeInstance(ReportLocation.LOCAL, RESTORED_PROFILER.path, RESTORED_PERFORMANCE.path),
+        memoryPickerLabel: RESTORED_PROFILER.reportName,
+    },
+    {
+        shape: 'opened-by-path',
+        instance: () => makeOpenedByPathInstance(RESTORED_PROFILER.path, RESTORED_PERFORMANCE.path),
+        memoryPickerLabel: 'Select a report...',
+    },
+];
+
 const seedRemoteConnection = () => {
     window.localStorage.setItem(LOCAL_STORAGE_KEY_CONNECTIONS, JSON.stringify([REMOTE_CONNECTION]));
     window.localStorage.setItem(LOCAL_STORAGE_KEY_SELECTED, JSON.stringify(REMOTE_CONNECTION));
@@ -151,6 +243,7 @@ const renderRestored = (path: string) =>
     render(
         <TestProviders initialEntries={[path]}>
             <ProtectedRoute>
+                <ActiveReportsProbe />
                 <Routes>
                     <Route
                         path='/'
@@ -160,7 +253,14 @@ const renderRestored = (path: string) =>
                         path={ROUTE_PATTERNS.NPE}
                         element={<NPE />}
                     />
+                    <Route
+                        path={ROUTES.PERFORMANCE}
+                        element={<Performance />}
+                    />
                 </Routes>
+                {/* Layout's footer keeps the range slider mounted while a report is active, and
+                    that slider handles a failed performance report on every route. */}
+                <FooterInfobar />
             </ProtectedRoute>
         </TestProviders>,
     );
@@ -195,6 +295,20 @@ beforeEach(() => {
     mockUpdateInstance.mockResolvedValue({});
     mockUseNpe.mockImplementation(settledNpe);
     mockUseNpeSummary.mockImplementation(settledNpeSummary);
+    h.reportMetadataResponse = pending;
+    h.performanceReportResponse = pending;
+    mockAxiosGet.mockImplementation((endpoint: string) => {
+        if (endpoint === Endpoints.REPORT_METADATA) {
+            return h.reportMetadataResponse();
+        }
+
+        if (endpoint === Endpoints.PERFORMANCE_RESULTS_REPORT) {
+            return h.performanceReportResponse();
+        }
+
+        // As the bare vi.fn() returned before these two hooks ran for real.
+        return undefined;
+    });
     mockAxiosPost.mockImplementation((endpoint: string) => {
         if (endpoint === Endpoints.REMOTE_LOCAL_PROFILER_REPORTS) {
             return Promise.resolve({ status: 200, data: [REMOTE_PROFILER] });
@@ -248,22 +362,104 @@ describe('boot-restored reports on Home', () => {
         expectNothingRecorded();
     });
 
-    it('still records a user selection made after restoration', async () => {
-        const nextProfiler = mockProfilerFolderList[1];
+    it('records no load when reports opened by path are restored', async () => {
+        h.instance = makeOpenedByPathInstance(RESTORED_PROFILER.path, RESTORED_PERFORMANCE.path);
 
         renderRestored(ROUTES.HOME);
 
-        await waitFor(() => expect(getAllButtonsWithText(RESTORED_PROFILER.reportName)).toHaveLength(1));
+        await waitForRestoredReports();
+        await screen.findAllByText('Memory report');
         await settle();
+
         expectNothingRecorded();
-
-        await openPopover(getAllButtonsWithText(RESTORED_PROFILER.reportName)[0]);
-        (await screen.findByText(nextProfiler.reportName)).click();
-
-        await waitFor(() => expect(recordReportLoaded).toHaveBeenCalledTimes(1));
-        expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.PROFILER, ReportSource.LOCAL_TT_METAL);
-        expect(recordReportLoadFailed).not.toHaveBeenCalled();
     });
+
+    // The positive control for every no-load case above: after either restore shape, the
+    // next pick is still counted. Without the opened-by-path run, suppressing all recording
+    // would pass every opened-by-path case, since that restore starts with both pickers empty.
+    it.each(RESTORED_SHAPES)(
+        'still records a user selection made after the $shape restore',
+        async ({ instance, memoryPickerLabel }) => {
+            const nextProfiler = mockProfilerFolderList[1];
+            h.instance = instance();
+
+            renderRestored(ROUTES.HOME);
+
+            await waitForRestoredReports();
+            await settle();
+            expectNothingRecorded();
+
+            // The memory report picker renders before the performance one.
+            await openPopover(getAllButtonsWithText(memoryPickerLabel)[0]);
+            (await screen.findByText(nextProfiler.reportName)).click();
+
+            await waitFor(() => expect(recordReportLoaded).toHaveBeenCalledTimes(1));
+            expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.PROFILER, ReportSource.LOCAL_TT_METAL);
+            expect(recordReportLoadFailed).not.toHaveBeenCalled();
+        },
+    );
+});
+
+describe('boot-restored memory and performance reports that fail to load', () => {
+    it.each(RESTORED_SHAPES)(
+        'records no failure when the $shape memory report metadata fails to load',
+        async ({ instance }) => {
+            h.instance = instance();
+            h.reportMetadataResponse = () => Promise.reject(makeHttpError(HttpStatusCode.NotFound, 'missing report'));
+
+            renderRestored(ROUTES.HOME);
+
+            await waitForRestoredReports();
+            await screen.findAllByText('Memory report');
+            await settle();
+
+            expectNothingRecorded();
+        },
+    );
+
+    it.each(RESTORED_SHAPES)(
+        'records no failure when the $shape memory report has an unsupported version',
+        async ({ instance }) => {
+            h.instance = instance();
+            h.reportMetadataResponse = () =>
+                Promise.resolve({ data: { schema_version: `${TARGET_DB_VERSION_MAX + 1}.0.0` } });
+
+            renderRestored(ROUTES.HOME);
+
+            await waitForRestoredReports();
+            await waitFor(() =>
+                expect(
+                    screen.getAllByTestId(TEST_IDS.TOAST_FILENAME).map((toastFileName) => toastFileName.textContent),
+                ).toContainEqual(expect.stringContaining(`v${TARGET_DB_VERSION_MAX + 1}.0.0`)),
+            );
+            await settle();
+
+            expectNothingRecorded();
+        },
+    );
+
+    it.each(RESTORED_SHAPES)(
+        'records no failure when the $shape performance report cannot be parsed',
+        async ({ instance }) => {
+            h.instance = instance();
+            h.performanceReportResponse = () =>
+                Promise.reject(makeHttpError(HttpStatusCode.UnprocessableEntity, 'unsupported format'));
+
+            renderRestored(ROUTES.PERFORMANCE);
+
+            await waitForRestoredReports();
+            // The route renders its 422 banner and the footer toasts and unloads the report in
+            // the same commit, so only the toast outlasts it, as in the app.
+            expect(await screen.findByText(/^Error loading report: /)).toBeInTheDocument();
+            await settle();
+
+            expect(mockAxiosGet).toHaveBeenCalledWith(
+                Endpoints.PERFORMANCE_RESULTS_REPORT,
+                expect.objectContaining({ params: expect.objectContaining({ name: RESTORED_PERFORMANCE.path }) }),
+            );
+            expectNothingRecorded();
+        },
+    );
 });
 
 // Both paths render the same NPEViewComponent stub, so each case also pins which data

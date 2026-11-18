@@ -32,7 +32,12 @@ from ttnn_visualizer.agent import (
     server,
     tools,
 )
-from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_LIMIT
+from ttnn_visualizer.agent.bounds import (
+    CUT_DIGEST_CHARS,
+    MAX_DETAILED_LIMIT,
+    MAX_LIMIT,
+    MAX_OP_CODE_CHARS,
+)
 from ttnn_visualizer.agent.handles import CacheVariant, ReportRegistry, load_report
 from ttnn_visualizer.agent.linking import (
     DeviceOperation,
@@ -1200,6 +1205,17 @@ class TestOperationDetailLink:
         # The rows and their shares come from the canonical report, merged per device.
         assert result["projection"] == tools.CANONICAL_PROJECTION
 
+    def test_a_perf_row_cuts_its_op_code_as_every_tool_does(self, linked):
+        code = "Matmul" + "x" * MAX_OP_CODE_CHARS
+        graph = _graph("ttnn.matmul", code, nested=False)
+        registry, handle, _ = linked(graphs={2: graph}, rows=[_perf_row(code, 0)])
+
+        (row,) = linking.operation_detail(registry, handle, operation_id=2)["perf_rows"]
+
+        assert row["op_code"] == code[:MAX_OP_CODE_CHARS]
+        assert row["op_code_full_length"] == len(code)
+        assert len(row["op_code_digest"]) == CUT_DIGEST_CHARS
+
     def test_perf_rows_are_capped_and_the_full_count_kept(self, linked):
         count = MAX_LIMIT + 5
         rows = [_perf_row("Matmul", index) for index in range(count)]
@@ -1385,10 +1401,6 @@ class TestOperationDetailLink:
 
 class TestServerRouting:
     """Reverting either handler to its unlinked tool must fail something."""
-
-    @pytest.fixture(autouse=True)
-    def _never_touch_the_real_event_log(self, event_log_directory):
-        """Any tools/call reaches the recorder; none may write outside tmp_path."""
 
     def _call(self, registry, name, arguments):
         response = server.handle_message(
