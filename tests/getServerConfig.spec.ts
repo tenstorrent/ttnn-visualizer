@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_SSH_PORT } from '../src/definitions/RemoteConnection';
 import { HOSTED_DEFAULT_MAX_CONTENT_LENGTH } from '../src/definitions/ServerConfig';
 import {
@@ -94,6 +94,15 @@ describe('isServerModeEnabled', () => {
 });
 
 describe('getServerConfig (dev / Vite env)', () => {
+    // Vitest loads the developer's own `.env`. Either name of the memory report path left set
+    // there would decide these tests: the former one warns in tests that assert silence, and
+    // the current one wins over the former in the test of the fallback. Each test that needs
+    // one stubs it itself.
+    beforeEach(() => {
+        vi.stubEnv('VITE_SSH_DEFAULT_PROFILER_PATH', undefined);
+        vi.stubEnv('VITE_SSH_DEFAULT_MEMORY_REPORT_PATH', undefined);
+    });
+
     afterEach(() => {
         vi.unstubAllEnvs();
         vi.resetModules();
