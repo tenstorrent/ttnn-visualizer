@@ -4,7 +4,7 @@
 
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useActiveSection } from '../src/hooks/useActiveSection';
+import { useActiveSection, useScrollSpy } from '../src/hooks/useActiveSection';
 
 const SCROLL_OFFSET_PX = 250;
 
@@ -249,6 +249,51 @@ describe('useActiveSection', () => {
             scrollTo(0);
 
             expect(result.current).toBe('first');
+        });
+
+        describe('useScrollSpy', () => {
+            beforeEach(() => {
+                vi.spyOn(document.documentElement, 'scrollHeight', 'get').mockReturnValue(PAGE_HEIGHT_PX);
+            });
+
+            it('lists every section whose top is in view, though only the last becomes active', () => {
+                const { result } = renderHook(() => useScrollSpy(['first', 'second', 'third']));
+
+                scrollTo(BOTTOM_SCROLL_Y);
+
+                // 'second' never reaches the offset line, so this list is its only way to count.
+                expect(result.current).toEqual({ activeId: 'third', sectionsInViewAtBottom: ['second', 'third'] });
+            });
+
+            it('lists nothing away from the bottom', () => {
+                const { result } = renderHook(() => useScrollSpy(['first', 'second', 'third']));
+
+                scrollTo(BOTTOM_SCROLL_Y);
+                scrollTo(100);
+
+                expect(result.current.sectionsInViewAtBottom).toEqual([]);
+            });
+
+            it('drops a listed section that leaves the id set', () => {
+                const { result, rerender } = renderHook(({ ids }) => useScrollSpy(ids), {
+                    initialProps: { ids: ['first', 'second', 'third'] },
+                });
+
+                scrollTo(BOTTOM_SCROLL_Y);
+                rerender({ ids: ['first', 'third'] });
+
+                expect(result.current.sectionsInViewAtBottom).toEqual(['third']);
+            });
+
+            it('keeps the same list between scrolls that leave the same sections in view', () => {
+                const { result } = renderHook(() => useScrollSpy(['first', 'second', 'third']));
+
+                scrollTo(BOTTOM_SCROLL_Y);
+                const listed = result.current.sectionsInViewAtBottom;
+                scrollTo(BOTTOM_SCROLL_Y);
+
+                expect(result.current.sectionsInViewAtBottom).toBe(listed);
+            });
         });
     });
 

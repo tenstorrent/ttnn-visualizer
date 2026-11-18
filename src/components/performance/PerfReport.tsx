@@ -156,12 +156,13 @@ const PerformanceReport = ({
     const [useNormalisedData, setUseNormalisedData] = useState(true);
     const recordOpCodeFilterUsed = useRecordFilterUsed(FilterSurface.PERF_OP_CODE);
 
-    // Works out the list a click leaves, so removing the last code counts as no filter.
+    // Works out the list a click leaves, so removing the last code counts as no filter. The
+    // setter still gets the update as given, so a functional one applies to the latest list.
     const handleRawOpCodeFilterChange = useCallback(
         (update: SetStateAction<TypedPerfTableRow['raw_op_code'][]>) => {
             const next = typeof update === 'function' ? update(activeRawOpCodeFilterList) : update;
 
-            setActiveRawOpCodeFilterList(next);
+            setActiveRawOpCodeFilterList(update);
             recordOpCodeFilterUsed(next.length > 0);
         },
         [activeRawOpCodeFilterList, setActiveRawOpCodeFilterList, recordOpCodeFilterUsed],

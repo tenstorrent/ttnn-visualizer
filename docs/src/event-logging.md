@@ -145,7 +145,7 @@ Recorded the first time each performance chart becomes the chart in view, per vi
 
 - `perf_chart`: `op_duration_histogram`, `op_count_vs_runtime`, `core_count_kernel_runtime`, `kernel_duration_vs_core_count`, `matmul_core_count_utilization`, `matmul_device_time`, `matmul_kernel_duration_utilization`, `matmul_utilization_vs_kernel_duration`, `conv_core_count_utilization`, `conv_device_time`, `conv_kernel_duration_utilization`, `conv_utilization_vs_kernel_duration`, `operation_types`.
 
-The matmul and conv charts show a placeholder when the report has no such operations, and record nothing while they do: a placeholder is not a chart. Reaching the bottom of the page counts the last chart, which may be too short to scroll to the top. A chart passed over by a jump to a later one is not counted.
+The matmul and conv charts show a placeholder when the report has no such operations, and record nothing while they do: a placeholder is not a chart. Reaching the bottom of the page counts every chart whose top is then in view: the last charts may be too short to scroll up to the top, and on a tall screen several of them are. A chart passed over by a jump to a later one is not counted, unless the jump lands at the bottom with that chart's top in view.
 
 ### `perf_table_option_toggled`
 
@@ -190,9 +190,11 @@ Operation details are not a target: `view_opened` already counts them with `view
 
 ### `filter_used`
 
-Recorded the first time a filter's query becomes non-empty, per visit to the list, a visit being each time the list is opened. It answers which filters are used (Q4). The query text is never recorded.
+Recorded the first time per visit that a user's change leaves a filter's query non-empty, a visit being each time the list is opened. A filter restored on return records nothing, but editing one that was restored non-empty counts. It answers which filters are used (Q4). The query text is never recorded.
 
 - `filter_surface`: `operations`, `tensors`, `perf_op_code`.
+
+`perf_op_code` covers the Performance Table tab's op-name search and its raw op-code list, counted together as one filter. The Charts tab's op-code filter, and a chart click that filters the table, are not counted.
 
 ### `remote_connection_test`
 

@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render } from '@testing-library/react';
+import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PerformanceChartsTab from '../src/components/performance/PerformanceChartsTab';
 import { EventLogEvent, PerfChartLabel } from '../src/definitions/EventLogEvent';
@@ -35,7 +35,11 @@ beforeEach(() => {
     recordEvent.mockClear();
 });
 
-afterEach(cleanup);
+afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: 0, writable: true });
+});
 
 describe('PerformanceChartsTab on arrival', () => {
     it('records the chart the tab opens on, once, without scrolling', () => {
@@ -49,7 +53,7 @@ describe('PerformanceChartsTab on arrival', () => {
         });
     });
 
-    it('records no further chart when a comparison report adds sections', () => {
+    it('records only the chart it opens on when a comparison report is present from mount', () => {
         render(
             <TestProviders
                 initialAtomValues={[
@@ -65,5 +69,44 @@ describe('PerformanceChartsTab on arrival', () => {
             event: EventLogEvent.PERF_CHART_VIEWED,
             details: { perf_chart: PerfChartLabel.OP_DURATION_HISTOGRAM },
         });
+    });
+});
+
+describe('PerformanceChartsTab at the bottom of the page', () => {
+    const VIEWPORT_HEIGHT_PX = 800;
+    const PAGE_HEIGHT_PX = 2000;
+
+    it('records the charts in view but never a matmul or conv placeholder', () => {
+        // Every id resolves to a rendered section near the bottom of the viewport, the matmul and
+        // conv placeholders included, so only the tab's list of charts can keep them out.
+        vi.spyOn(document, 'getElementById').mockImplementation(() => {
+            const element = document.createElement('div');
+
+            Object.defineProperty(element, 'offsetHeight', { configurable: true, value: 100 });
+            vi.spyOn(element, 'getBoundingClientRect').mockReturnValue({ top: 600, height: 100 } as DOMRect);
+
+            return element;
+        });
+        vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(VIEWPORT_HEIGHT_PX);
+        vi.spyOn(document.documentElement, 'scrollHeight', 'get').mockReturnValue(PAGE_HEIGHT_PX);
+        Object.defineProperty(window, 'scrollY', {
+            configurable: true,
+            value: PAGE_HEIGHT_PX - VIEWPORT_HEIGHT_PX,
+            writable: true,
+        });
+
+        render(<TestProviders>{tab()}</TestProviders>);
+        act(() => {
+            window.dispatchEvent(new Event('scroll'));
+        });
+
+        const recordedCharts = recordEvent.mock.calls.map(([event]) => event.details.perf_chart);
+
+        expect(recordedCharts).toEqual([
+            PerfChartLabel.OP_DURATION_HISTOGRAM,
+            PerfChartLabel.OP_COUNT_VS_RUNTIME,
+            PerfChartLabel.CORE_COUNT_KERNEL_RUNTIME,
+            PerfChartLabel.KERNEL_DURATION_VS_CORE_COUNT,
+        ]);
     });
 });

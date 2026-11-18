@@ -16,13 +16,15 @@ import { TestProviders } from './helpers/TestProviders';
 
 const { recordEvent, activeSection } = vi.hoisted(() => ({
     recordEvent: vi.fn(),
-    activeSection: { id: null as string | null },
+    activeSection: { id: null as string | null, inViewAtBottom: [] as string[] },
 }));
 
 vi.mock('../src/functions/recordEvent', () => ({ default: recordEvent }));
 
 // The scroll-spy is covered by its own spec; here it is the input the tab reacts to.
-vi.mock('../src/hooks/useActiveSection', () => ({ useActiveSection: () => activeSection.id }));
+vi.mock('../src/hooks/useActiveSection', () => ({
+    useScrollSpy: () => ({ activeId: activeSection.id, sectionsInViewAtBottom: activeSection.inViewAtBottom }),
+}));
 
 vi.mock('../src/hooks/usePrefilterPerfTableByOpCode', () => ({ usePrefilterPerfTableByOpCode: () => vi.fn() }));
 
@@ -72,8 +74,9 @@ function renderChartsTab() {
     );
     const view = render(tree());
 
-    const showSection = (id: string) => {
+    const showSection = (id: string, inViewAtBottom: string[] = []) => {
         activeSection.id = id;
+        activeSection.inViewAtBottom = inViewAtBottom;
         view.rerender(tree());
     };
 
@@ -83,6 +86,7 @@ function renderChartsTab() {
 beforeEach(() => {
     recordEvent.mockClear();
     activeSection.id = null;
+    activeSection.inViewAtBottom = [];
 });
 
 afterEach(cleanup);
@@ -100,13 +104,31 @@ describe('PerformanceChartsTab usage events', () => {
         activeSection.id = PerfChartId.OpDurationHistogram;
         const { showSection } = renderChartsTab();
 
-        showSection(PerfChartId.MatmulDeviceTime);
+        // Charts every report has, so the tab could show them with the empty data it is given.
+        showSection(PerfChartId.OpCountVsRuntime);
         showSection(PerfChartId.OpDurationHistogram);
-        showSection(PerfChartId.MatmulDeviceTime);
+        showSection(PerfChartId.OpCountVsRuntime);
 
         expect(recordEvent.mock.calls).toEqual([
             [chartViewed(PerfChartLabel.OP_DURATION_HISTOGRAM)],
-            [chartViewed(PerfChartLabel.MATMUL_DEVICE_TIME)],
+            [chartViewed(PerfChartLabel.OP_COUNT_VS_RUNTIME)],
+        ]);
+    });
+
+    it('records every chart in view at the bottom of the page, each once', () => {
+        activeSection.id = PerfChartId.OpDurationHistogram;
+        const { showSection } = renderChartsTab();
+
+        showSection(PerfChartId.KernelDurationVsCoreCount, [
+            PerfChartId.CoreCountKernelRuntime,
+            PerfChartId.KernelDurationVsCoreCount,
+        ]);
+        showSection(PerfChartId.KernelDurationVsCoreCount, [PerfChartId.KernelDurationVsCoreCount]);
+
+        expect(recordEvent.mock.calls).toEqual([
+            [chartViewed(PerfChartLabel.OP_DURATION_HISTOGRAM)],
+            [chartViewed(PerfChartLabel.CORE_COUNT_KERNEL_RUNTIME)],
+            [chartViewed(PerfChartLabel.KERNEL_DURATION_VS_CORE_COUNT)],
         ]);
     });
 
@@ -163,8 +185,6 @@ describe('ComparisonReportSelector usage events', () => {
         [['report-c', 'report-d'], 2, ComparisonReportCountBucket.THREE_OR_MORE],
         // Replacing the report in a slot is a use too, and leaves the count as it was.
         [['report-c'], 0, ComparisonReportCountBucket.ONE],
-        // Filling a slot past an empty one counts the reports, not the slots.
-        [['report-c'], 3, ComparisonReportCountBucket.TWO],
     ])('buckets a pick into %j at %i by the resulting count', (comparisonReports, reportIndex, bucket) => {
         renderSelector(comparisonReports, reportIndex);
 

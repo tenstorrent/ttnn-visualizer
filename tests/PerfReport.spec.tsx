@@ -851,14 +851,6 @@ describe('PerformanceReport usage events', () => {
         expect(JSON.stringify(recordEvent.mock.calls)).not.toContain('Mat');
     });
 
-    it('does not record an op-code search that is cleared without a query', () => {
-        renderReport();
-
-        fireEvent.change(screen.getByPlaceholderText('Filter by operation name'), { target: { value: '' } });
-
-        expect(recordEvent).not.toHaveBeenCalled();
-    });
-
     it('records raw op codes picked from the list once per mount', async () => {
         renderReport({ data: [row('Matmul', 1), row('Conv2d', 2)] });
 

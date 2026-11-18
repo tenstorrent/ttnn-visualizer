@@ -58,10 +58,11 @@ const ComparisonReportSelector = ({
 
                         setComparisonReportList(updatedReports);
 
-                        // Re-picking the report already in this slot changes nothing. Count the
-                        // filled slots, not the length, which a gap before this one would pad.
+                        // Re-picking the report already in this slot changes nothing. The list
+                        // has no gaps: the only empty slot is the one after the last report, and
+                        // removing a report closes its slot up.
                         if (!isSameReport) {
-                            recordPerfComparisonUsed(updatedReports.filter(Boolean).length);
+                            recordPerfComparisonUsed(updatedReports.length);
                         }
                     }}
                 />
