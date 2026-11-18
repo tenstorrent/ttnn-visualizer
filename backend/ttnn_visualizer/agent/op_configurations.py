@@ -30,7 +30,7 @@ from ttnn_visualizer.agent.bounds import (
     short_digest,
 )
 from ttnn_visualizer.agent.operations import RankScope, caveat_field, scoped
-from ttnn_visualizer.agent.tools import share_percent
+from ttnn_visualizer.agent.tools import device_time_header, share_percent
 from ttnn_visualizer.queries import DatabaseQueries
 
 # The tt-metal commit (2026-10-30) the tracer's rules below restate; a parity test holds
@@ -109,8 +109,8 @@ MAX_ARGUMENT_NAME_CHARS = 48
 MAX_LISTED_OPERATION_IDS = 5
 MAX_LISTED_OPS = 20
 MAX_LISTED_LEFT_OUT = 10
-# The argument text one read streams through. The largest real total across 100 local
-# captures is 53.9 MB, so this refuses a pathological file, never a real one.
+# A sanity bound on the argument names and values a read streams, not a memory guard: rows
+# cost more than their text. The largest local total is 53.9 million characters.
 MAX_ARGUMENT_CHARS = 1 << 30
 
 _DIGEST = re.compile(rf"[0-9a-f]{{{CUT_DIGEST_CHARS}}}")
@@ -195,9 +195,6 @@ class DeviceTime(NamedTuple):
 
     by_operation_id: Mapping[int, float]
     report_total: float
-    # The unit and projection, as every linked tool states them. `answer` adds
-    # `report_total`, rounded as each device time is, so the total is held once.
-    header: Mapping[str, object]
     caveat: Optional[str] = None
 
 
@@ -297,16 +294,25 @@ def _as_text(name: object) -> str:
 def _arguments_by_operation_id(
     queries: DatabaseQueries, filters: Dict[str, object]
 ) -> Dict[int, List[Argument]]:
-    """Each call's arguments the tracer keeps, normalised, streamed a row at a time."""
-    # Each text once rather than once per call: calls repeat names, and values printed
-    # apart, as tensors with their own ids are, normalise alike.
+    """Each call's arguments the tracer keeps, normalised, streamed a row at a time and
+    refused once they pass `MAX_ARGUMENT_CHARS`."""
+    # Each text is kept once: tensors printed apart by their ids normalise alike. Caching by
+    # raw text would cut the largest local first read by a sixth and double its peak.
     canonical: Dict[str, str] = {}
     arguments_by_operation_id: Dict[int, List[Argument]] = defaultdict(list)
+    characters = 0
     for argument in queries.iter_operation_arguments(filters=filters):
         name = _as_text(argument.name)
+        text = None if argument.value is None else str(argument.value)
+        characters += len(name) + len(text or "")
+        if characters > MAX_ARGUMENT_CHARS:
+            raise ValueError(
+                "this capture's operation arguments pass the "
+                f"{MAX_ARGUMENT_CHARS:,} characters op_configurations will read"
+            )
         if name in TRACER_EXCLUDED_ARGUMENTS:
             continue
-        value = normalised_value(argument.value)
+        value = normalised_value(text)
         arguments_by_operation_id[argument.operation_id].append(
             (
                 canonical.setdefault(name, name),
@@ -317,15 +323,10 @@ def _arguments_by_operation_id(
 
 
 def read_configurations(queries: DatabaseQueries, scope: RankScope) -> Configurations:
-    """Every call at `scope`'s rank, grouped; refused past `MAX_ARGUMENT_CHARS`."""
-    filters = scoped(queries, "operation_arguments", scope)
-    size = queries.query_operation_arguments_size(filters=filters)
-    if size > MAX_ARGUMENT_CHARS:
-        raise ValueError(
-            f"this capture holds {size:,} characters of operation arguments, past the "
-            f"{MAX_ARGUMENT_CHARS:,} op_configurations will read"
-        )
-    arguments_by_operation_id = _arguments_by_operation_id(queries, filters)
+    """Every call at `scope`'s rank, grouped."""
+    arguments_by_operation_id = _arguments_by_operation_id(
+        queries, scoped(queries, "operation_arguments", scope)
+    )
     operation_ids_by_configuration: Dict[_CalledWith, List[int]] = {}
     left_out: Counter[str] = Counter()
     for operation in queries.query_operations(
@@ -413,16 +414,6 @@ def _device_time_fields(
         "device_time": round(total, 3) if total is not None else None,
         "device_time_share_percent": share_percent(total, device_time.report_total),
         "untimed_calls": untimed_calls,
-    }
-
-
-def _device_time_header(device_time: Optional[DeviceTime]) -> Dict[str, object]:
-    """The unit, projection and report total a linked answer states."""
-    if device_time is None:
-        return {}
-    return {
-        **device_time.header,
-        "report_device_time_total": round(device_time.report_total, 3),
     }
 
 
@@ -557,7 +548,11 @@ def answer_configurations(
         "handle": handle,
         **body,
         "grouping": GROUPING,
-        **_device_time_header(device_time),
+        **(
+            device_time_header(device_time.report_total)
+            if device_time is not None
+            else {}
+        ),
         **scope.as_response(),
         **caveat_field(scope, *caveats),
         "operation_link": operation_link,

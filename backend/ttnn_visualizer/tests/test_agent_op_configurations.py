@@ -24,7 +24,6 @@ from ttnn_visualizer.agent.handles import ReportRegistry, load_report
 from ttnn_visualizer.agent.linking import LinkStatus, MatchedOn, OperationLink
 from ttnn_visualizer.agent.operations import RankScope, profiler_db, rank_scope
 from ttnn_visualizer.agent.tool_names import McpToolName
-from ttnn_visualizer.queries import DatabaseQueries
 from ttnn_visualizer.tests.mcp_calls import tool_call
 from ttnn_visualizer.tests.memory_report_db import load_memory_report
 
@@ -494,35 +493,52 @@ class TestGrouping:
 
 
 class TestReadBounds:
+    # Names and values: 1 + 10 characters, then 1 + 5.
     _CALLS: List[Call] = [
         ("ttnn.relu", [("0", "x" * 10)]),
         ("ttnn.add", [("0", "y" * 5)]),
     ]
 
-    def test_arguments_past_the_cap_are_refused_unread(self, tmp_path):
+    def test_the_read_stops_at_the_row_that_passes_the_cap(self, tmp_path):
         registry, handle = _capture(tmp_path, self._CALLS)
 
         with (
-            patch.object(configurations, "MAX_ARGUMENT_CHARS", 14),
-            patch.object(DatabaseQueries, "iter_operation_arguments") as streamed,
+            patch.object(configurations, "MAX_ARGUMENT_CHARS", 16),
+            patch.object(
+                configurations,
+                "normalised_value",
+                wraps=configurations.normalised_value,
+            ) as normalised,
         ):
             with pytest.raises(
-                ValueError, match="15 characters of operation arguments, past the 14"
+                ValueError, match="arguments pass the 16 characters op_configurations"
             ):
                 linking.op_configurations(registry, handle)
 
-        streamed.assert_not_called()
+        assert normalised.call_count == 1
 
     def test_arguments_at_the_cap_are_read_once_a_refusal_has_passed(self, tmp_path):
         registry, handle = _capture(tmp_path, self._CALLS)
 
-        with patch.object(configurations, "MAX_ARGUMENT_CHARS", 14):
-            with pytest.raises(ValueError, match="past the 14"):
+        with patch.object(configurations, "MAX_ARGUMENT_CHARS", 16):
+            with pytest.raises(ValueError, match="pass the 16 characters"):
                 linking.op_configurations(registry, handle)
-        with patch.object(configurations, "MAX_ARGUMENT_CHARS", 15):
+        with patch.object(configurations, "MAX_ARGUMENT_CHARS", 17):
             result = linking.op_configurations(registry, handle)
 
         assert result["calls"] == 2
+
+    def test_a_refusal_reaches_the_agent_as_one(self, tmp_path):
+        registry, handle = _capture(tmp_path, self._CALLS)
+
+        with patch.object(configurations, "MAX_ARGUMENT_CHARS", 16):
+            result, outcome = tool_call(
+                registry, "op_configurations", {"handle": handle}
+            )
+
+        assert result.get("isError")
+        assert "pass the 16 characters" in result["content"][0]["text"]
+        assert outcome.value == "refused"
 
     def test_the_cap_counts_the_rank_read(self, tmp_path):
         """A multi-host report whose rank fits is read, whatever another rank holds."""
@@ -533,12 +549,12 @@ class TestReadBounds:
 
         with patch.object(configurations, "MAX_ARGUMENT_CHARS", 10):
             assert linking.op_configurations(registry, handle, rank=0)["rank"] == 0
-            with pytest.raises(ValueError, match="50 characters"):
+            with pytest.raises(ValueError, match="pass the 10 characters"):
                 linking.op_configurations(registry, handle, rank=1)
 
     def test_a_read_holds_neither_its_rows_nor_a_copy_per_call(self, tmp_path):
-        """Tensors that differ only in their ids normalise alike, so the read holds their
-        text once. Holding every row and a copy per call, it peaked at twice this text.
+        """Tensors differing only in their ids normalise alike, so the read holds their
+        text once; holding every row and a copy per call, it peaked at twice the text.
         """
         calls: List[Call] = [
             ("ttnn.add", [("0", _spread(tensor_id, devices=16))])
@@ -781,9 +797,7 @@ class TestListing:
         "times", [{1: 4.0, 2: 2.0, 3: 2.0}, {}], ids=["equal-time", "untimed"]
     )
     def test_configurations_alike_in_time_rank_more_calls_first(self, times):
-        device_time = configurations.DeviceTime(
-            by_operation_id=times, report_total=8.0, header={}
-        )
+        device_time = configurations.DeviceTime(by_operation_id=times, report_total=8.0)
 
         result = configurations.answer_configurations(
             "handle",
@@ -998,7 +1012,7 @@ class TestDeviceTime:
         ] == [("ttnn.add", 1, 9.0, 0), ("ttnn.matmul", 2, 1.0, 1)]
         assert result["configurations"][0]["device_time_share_percent"] == 90.0
         assert result["report_device_time_total"] == 10.0
-        assert result["device_time_unit"] == linking.DEVICE_TIME_UNIT
+        assert result["device_time_unit"] == tools.DEVICE_TIME_UNIT
         assert result["projection"] == tools.projection(None)
         assert [
             (
@@ -1010,6 +1024,22 @@ class TestDeviceTime:
             for row in result["ops"]
         ] == [("ttnn.add", 9.0, 90.0, 0), ("ttnn.matmul", 1.0, 10.0, 1)]
         assert "1 of these 3 calls launched no performance row" in result["caveat"]
+
+    def test_the_report_total_is_stated_once_rounded_as_each_device_time(
+        self, linked, tmp_path
+    ):
+        rows = [
+            {**_perf_row("MatmulDeviceOperation", 1), "device_time": "1.0004"},
+            {**_perf_row("MatmulDeviceOperation", 2), "device_time": ""},
+            {**_perf_row("BinaryNgDeviceOperation", 3), "device_time": "9.0003"},
+        ]
+        registry, handle = self._linked_capture(linked, tmp_path, rows=rows)
+
+        result, _ = tool_call(registry, "op_configurations", {"handle": handle})
+        text = result["content"][0]["text"]
+
+        assert json.loads(text)["report_device_time_total"] == 10.001
+        assert text.count('"report_device_time_total"') == 1
 
     def test_device_time_sums_every_call_and_every_configuration(
         self, linked, tmp_path

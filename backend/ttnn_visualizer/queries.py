@@ -528,14 +528,22 @@ class DatabaseQueries:
         )
         return int(rows[0][0]) if rows else 0
 
-    def query_operation_arguments(
-        self, filters: Optional[Dict[str, Union[Any, List[Any]]]] = None
-    ) -> Generator[OperationArgument, None, None]:
+    def _operation_arguments_query(
+        self, filters: Optional[Dict[str, Union[Any, List[Any]]]]
+    ) -> Tuple[str, List[Any]]:
+        """The query both argument reads run, and its parameters."""
         select_clause = self._dataclass_select_clause(
             "operation_arguments", OperationArgument
         )
-        rows = self._query_table(
+        return self._table_query(
             "operation_arguments", filters, select_clause=select_clause
+        )
+
+    def query_operation_arguments(
+        self, filters: Optional[Dict[str, Union[Any, List[Any]]]] = None
+    ) -> Generator[OperationArgument, None, None]:
+        rows = self.query_runner.execute_query(
+            *self._operation_arguments_query(filters)
         )
         for row in rows:
             yield OperationArgument(*row)
@@ -545,26 +553,10 @@ class DatabaseQueries:
     ) -> Iterator[OperationArgument]:
         """`query_operation_arguments`, streamed: a caller reading every argument of a
         capture holds one row at a time rather than all of them at once."""
-        select_clause = self._dataclass_select_clause(
-            "operation_arguments", OperationArgument
-        )
-        query, params = self._table_query(
-            "operation_arguments", filters, select_clause=select_clause
-        )
-        for row in self.query_runner.iter_query(query, params):
+        for row in self.query_runner.iter_query(
+            *self._operation_arguments_query(filters)
+        ):
             yield OperationArgument(*row)
-
-    def query_operation_arguments_size(
-        self, filters: Optional[Dict[str, Union[Any, List[Any]]]] = None
-    ) -> int:
-        """Characters of argument value the same `filters` would read, without reading
-        any, as `query_captured_graph_size` measures captured graph."""
-        rows = self._query_table(
-            "operation_arguments",
-            filters,
-            select_clause="COALESCE(SUM(LENGTH(value)), 0)",
-        )
-        return int(rows[0][0]) if rows else 0
 
     def query_operations(
         self, filters: Optional[Dict[str, Any]] = None

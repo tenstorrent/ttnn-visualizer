@@ -60,9 +60,6 @@ from ttnn_visualizer.models import Instance
 
 logger = logging.getLogger(__name__)
 
-# Microseconds, as tt-perf-report writes `device_time`.
-DEVICE_TIME_UNIT = "us"
-
 
 class LinkStatus(str, Enum):
     LINKED = "linked"
@@ -681,20 +678,6 @@ def _summed(timed: Sequence[Tuple[Dict, float]]) -> Optional[float]:
     return sum(device_time for _, device_time in timed) if timed else None
 
 
-def _device_time_header(
-    link: OperationLink, *, with_report_total: bool = True
-) -> Dict[str, object]:
-    """The unit and projection of the device times an answer reads from `link`, and the
-    total its shares divide by, built in one place so the tools stating them agree."""
-    header: Dict[str, object] = {
-        "device_time_unit": DEVICE_TIME_UNIT,
-        "projection": tools.projection(None),
-    }
-    if with_report_total:
-        header["report_device_time_total"] = round(link.report_device_time_total, 3)
-    return header
-
-
 def _device_time_summary(
     rows: Sequence[Dict], report_total: float
 ) -> Dict[str, object]:
@@ -752,7 +735,9 @@ def operation_detail(
         result["perf_row_count"] = len(rows)
         # The unit is stated because this response's other duration is host seconds,
         # and the two invite being compared; the total only beside shares it divides.
-        result.update(_device_time_header(link, with_report_total=bool(rows)))
+        result.update(
+            tools.device_time_header(link.report_device_time_total if rows else None)
+        )
         result.update(perf_detail.summary(groups, empty))
         flagged = perf_flags.flagged_rows(
             rows, flag_inputs, key=("operation", link.rank, int(operation_id))
@@ -865,7 +850,7 @@ def critical_path(
         "device_time_share_percent": tools.share_percent(
             path.total, link.report_device_time_total
         ),
-        **_device_time_header(link),
+        **tools.device_time_header(link.report_device_time_total),
         "operations": [
             {
                 "operation_id": operation_id,
@@ -917,7 +902,6 @@ def op_configurations(
         device_time = DeviceTime(
             by_operation_id=link.device_time_by_operation,
             report_total=link.report_device_time_total,
-            header=_device_time_header(link, with_report_total=False),
             caveat=link.partitioned_caveat,
         )
     return answer_configurations(
@@ -961,7 +945,6 @@ def program_cache(
 
 __all__ = [
     "CRITICAL_PATH_PROJECTION",
-    "DEVICE_TIME_UNIT",
     "PROGRAM_CACHE_LINK_NOTE",
     "TOP_OPS_LINK_NOTE",
     "DeviceOperation",

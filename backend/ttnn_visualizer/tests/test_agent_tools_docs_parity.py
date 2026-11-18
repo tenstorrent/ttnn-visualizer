@@ -242,7 +242,8 @@ def test_the_op_configurations_caps_the_page_states_are_the_enforced_ones():
         "operations with the most calls"
     ) in page
     assert (
-        f"passes {op_configurations.MAX_ARGUMENT_CHARS:,} characters is refused" in page
+        f"pass {op_configurations.MAX_ARGUMENT_CHARS:,} characters, a sanity bound"
+        in page
     )
 
 

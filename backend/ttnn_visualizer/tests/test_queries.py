@@ -282,18 +282,6 @@ class TestDatabaseQueries(unittest.TestCase):
         )
         self.assertEqual(len(streamed), 2)
 
-    def test_query_operation_arguments_size_counts_the_values_the_filters_read(self):
-        self.assertEqual(self.db_queries.query_operation_arguments_size(), 0)
-        self.connection.executemany(
-            "INSERT INTO operation_arguments VALUES (?, ?, ?)",
-            [(1, "a", "xyz"), (1, "b", None), (2, "a", "yy")],
-        )
-
-        self.assertEqual(
-            self.db_queries.query_operation_arguments_size({"operation_id": 1}), 3
-        )
-        self.assertEqual(self.db_queries.query_operation_arguments_size(), 5)
-
     def test_query_operations(self):
         self.connection.execute("INSERT INTO operations VALUES (1, 'op1', 2.0)")
         results = list(self.db_queries.query_operations(filters={"operation_id": 1}))

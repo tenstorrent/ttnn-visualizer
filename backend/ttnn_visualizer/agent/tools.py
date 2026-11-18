@@ -165,6 +165,22 @@ def share_percent(part: Optional[float], whole: float) -> Optional[float]:
     return float(f"{part / whole * 100:.3g}")
 
 
+# Microseconds, as tt-perf-report writes `device_time`.
+DEVICE_TIME_UNIT = "us"
+
+
+def device_time_header(report_total: Optional[float] = None) -> Dict[str, object]:
+    """The unit and projection of the device times an answer states and, given one, the
+    total its shares divide by, rounded as each device time is."""
+    header: Dict[str, object] = {
+        "device_time_unit": DEVICE_TIME_UNIT,
+        "projection": projection(None),
+    }
+    if report_total is not None:
+        header["report_device_time_total"] = round(report_total, 3)
+    return header
+
+
 # Longer than any signpost a model emits, and short enough that a refusal or a
 # projection echoing the name stays small; in an answer's bytes, as `name_fits` counts.
 MAX_SIGNPOST_NAME_LENGTH = 256
@@ -2298,6 +2314,7 @@ __all__ = [
     "CANONICAL_PROJECTION",
     "CORE_SPREAD_NOTE",
     "DEFAULT_METRIC",
+    "DEVICE_TIME_UNIT",
     "MAX_LISTED_RISCS",
     "MAX_RISC_NAME_LENGTH",
     "MAX_SIGNPOST_NAME_LENGTH",
@@ -2312,6 +2329,7 @@ __all__ = [
     "is_ranged",
     "core_spread",
     "countable_device_time",
+    "device_time_header",
     "diff_reports",
     "empty_detail_fields",
     "is_signpost_row",
