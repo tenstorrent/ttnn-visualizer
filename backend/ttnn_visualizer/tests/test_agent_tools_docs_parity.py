@@ -41,6 +41,7 @@ _REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 _AGENT_DOCS = _REPOSITORY_ROOT / "docs" / "src" / "agent-tools.md"
 _DOCS_INDEX = _REPOSITORY_ROOT / "docs" / "index.rst"
 _AGENTS = _REPOSITORY_ROOT / "AGENTS.md"
+_AGENT_README = _REPOSITORY_ROOT / "backend" / "ttnn_visualizer" / "agent" / "README.md"
 
 
 def _read(path: Path) -> str:
@@ -233,6 +234,31 @@ def test_the_op_configurations_caps_the_page_states_are_the_enforced_ones():
         "its operation ids"
     ) in page
     assert f"first {CUT_DIGEST_CHARS} hex digits of the SHA-256" in page
+    assert (
+        f"`ops` lists the first {op_configurations.MAX_LISTED_OPS} operations" in page
+    )
+    assert (
+        f"`left_out` lists the {op_configurations.MAX_LISTED_LEFT_OUT} left-out "
+        "operations with the most calls"
+    ) in page
+
+
+def test_the_op_configurations_rules_the_page_names_are_the_restated_ones():
+    """The page names the tracer's dropped arguments and the commit its rules come from
+    by hand, so nothing else ties them to the code on the next re-sync."""
+    page = " ".join(_read(_AGENT_DOCS).split())
+    sentence = re.search(
+        r"The tracer's (\w+) semaphore keyword arguments, (.+?), are dropped", page
+    )
+
+    assert sentence is not None
+    named = re.findall(r"`([a-z_]+)`", sentence.group(2))
+    assert set(named) == op_configurations.TRACER_EXCLUDED_ARGUMENTS
+    assert len(named) == len(op_configurations.TRACER_EXCLUDED_ARGUMENTS)
+    assert sentence.group(1) == "two"
+    revision = f"`{op_configurations.TRACER_REVISION}`"
+    assert f"at tt-metal {revision}" in page
+    assert revision in _AGENT_README.read_text(encoding="utf-8")
 
 
 def test_the_signpost_name_limit_the_page_states_is_the_enforced_one():

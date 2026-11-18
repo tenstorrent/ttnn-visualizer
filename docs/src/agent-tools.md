@@ -854,7 +854,12 @@ memory-config hash has no counterpart in the text.
 Configurations rank by device time when the performance report links, summed over the rows
 each call launched as `operation_detail` sums them, with `untimed_calls` counting the calls
 that launched none; otherwise they rank by calls. `ops` gives each operation's calls and
-configuration count, the first look at what a sweep must cover. A listing shows up to 20
+configuration count, the first look at what a sweep must cover, and, when the report links,
+its configurations' device time, share and `untimed_calls` summed, so an operation with an
+untimed configuration says how many calls its time leaves out. `ops` lists the first 20
+operations, ranked as configurations are, and `op_count` counts them all; `left_out` lists
+the 10 left-out operations with the most calls, and `left_out_op_count` and
+`left_out_calls` count them all. A listing shows up to 20
 configurations (`limit`), each with its first 8 arguments, positional ones first, cut at
 224 characters, which is far enough for a tensor's shape, dtype, layout, memory layout and
 buffer type, and its first 5 operation ids. A configuration's `config_digest` asks for it

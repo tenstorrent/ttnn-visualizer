@@ -679,6 +679,20 @@ def _summed(timed: Sequence[Tuple[Dict, float]]) -> Optional[float]:
     return sum(device_time for _, device_time in timed) if timed else None
 
 
+def _device_time_header(
+    link: OperationLink, *, with_report_total: bool = True
+) -> Dict[str, object]:
+    """The unit and projection of the device times an answer reads from `link`, and the
+    total its shares divide by, built in one place so the tools stating them agree."""
+    header: Dict[str, object] = {
+        "device_time_unit": DEVICE_TIME_UNIT,
+        "projection": tools.projection(None),
+    }
+    if with_report_total:
+        header["report_device_time_total"] = round(link.report_device_time_total, 3)
+    return header
+
+
 def _device_time_summary(
     rows: Sequence[Dict], report_total: float
 ) -> Dict[str, object]:
@@ -734,10 +748,9 @@ def operation_detail(
             for row in rows[: tools.row_limit(MAX_LIMIT, groups)]
         ]
         result["perf_row_count"] = len(rows)
-        # Stated because this response's other duration is host seconds, and the two
-        # invite being compared.
-        result["device_time_unit"] = DEVICE_TIME_UNIT
-        result["projection"] = tools.projection(None)
+        # The unit is stated because this response's other duration is host seconds,
+        # and the two invite being compared; the total only beside shares it divides.
+        result.update(_device_time_header(link, with_report_total=bool(rows)))
         result.update(perf_detail.summary(groups, empty))
         flagged = perf_flags.flagged_rows(
             rows, flag_inputs, key=("operation", link.rank, int(operation_id))
@@ -745,7 +758,6 @@ def operation_detail(
         result.update(perf_flags.summary(flag_inputs, flagged))
         if rows:
             result.update(_device_time_summary(rows, link.report_device_time_total))
-            result["report_device_time_total"] = round(link.report_device_time_total, 3)
             if link.partitioned_caveat:
                 result["caveat"] = operations.joined_caveat(
                     result.get("caveat"), link.partitioned_caveat
@@ -848,11 +860,10 @@ def critical_path(
         "handle": handle,
         "path_length": len(path.operation_ids),
         "device_time": round(path.total, 3),
-        "device_time_unit": DEVICE_TIME_UNIT,
         "device_time_share_percent": tools.share_percent(
             path.total, link.report_device_time_total
         ),
-        "report_device_time_total": round(link.report_device_time_total, 3),
+        **_device_time_header(link),
         "operations": [
             {
                 "operation_id": operation_id,
@@ -869,7 +880,6 @@ def critical_path(
         "uncosted_operation_count": len(uncosted),
         "uncosted_operation_ids": uncosted[:MAX_LIMIT],
         "has_cycle": path.has_cycle,
-        "projection": tools.projection(None),
         "graph_projection": CRITICAL_PATH_PROJECTION,
         **scope.as_response(),
         **operations.caveat_field(scope, *caveats),
@@ -905,8 +915,7 @@ def op_configurations(
         device_time = configurations.DeviceTime(
             by_operation_id=link.device_time_by_operation,
             report_total=link.report_device_time_total,
-            unit=DEVICE_TIME_UNIT,
-            projection=tools.projection(None),
+            header=_device_time_header(link),
             caveat=link.partitioned_caveat,
         )
     return configurations.answer(

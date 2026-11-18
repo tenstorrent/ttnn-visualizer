@@ -9,13 +9,14 @@ The tracer (`model_tracer/generic_ops_tracer.py`) compares cleaned JSON argument
 report keeps each argument as the text of its repr, so the tracer's rules are applied to that
 text, with the ones only text needs: a tensor's repr carries its id, its device and, in older
 captures, a preview of its data, none of which the tracer's JSON holds. The rules restate the
-tracer at tt-metal `4bf156f6ea` (2026-10-30).
+tracer at tt-metal `TRACER_REVISION`.
 """
 
 import json
 import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Dict, List, Mapping, NamedTuple, Optional, Tuple
 
 from ttnn_visualizer.agent.bounds import (
@@ -31,6 +32,9 @@ from ttnn_visualizer.agent.operations import RankScope, caveat_field, scoped
 from ttnn_visualizer.agent.tools import share_percent
 from ttnn_visualizer.queries import DatabaseQueries
 
+# The tt-metal commit (2026-10-30) the tracer's rules below restate; a parity test holds
+# the docs to it.
+TRACER_REVISION = "4bf156f6ea"
 # tt-metal's `get_excluded_operations`: data movement, memory management and examples the
 # tracer never records, so no sweep covers them.
 TRACER_EXCLUDED_OPERATIONS = frozenset(
@@ -85,8 +89,10 @@ _TENSOR_RUNTIME_FIELDS = re.compile(
 )
 # A tensor spread over devices is printed once per device, each copy led by its id:
 # `device_id: N, MeshCoordinate(...)` now, `device_id:N` on its own line in older ttnn.
+# A coordinate holds no '(', so each lookahead stops by the next prefix's: a crafted
+# line of prefixes reads in linear time.
 _DEVICE_PREFIX = re.compile(
-    r"device_id: ?\d+(?:, |\n)(?=(?:MeshCoordinate\([^)\n]*\)\n)?ttnn\.Tensor\()"
+    r"device_id: ?\d+(?:, |\n)(?=(?:MeshCoordinate\([^()\n]*\)\n)?ttnn\.Tensor\()"
 )
 
 # A listing shows each configuration's first arguments, cut past a tensor's buffer type (199 at
@@ -130,6 +136,8 @@ MEMORY_CONFIG_CAVEAT = (
 )
 
 Argument = Tuple[str, Optional[str]]
+# An op and every argument it was called with: what one configuration's calls share.
+_CalledWith = Tuple[str, Tuple[Argument, ...]]
 
 
 @dataclass(frozen=True)
@@ -159,8 +167,8 @@ class DeviceTime(NamedTuple):
 
     by_operation_id: Mapping[int, float]
     report_total: float
-    unit: str
-    projection: Mapping[str, object]
+    # The unit, projection and report total, as every linked tool states them.
+    header: Mapping[str, object]
     caveat: Optional[str] = None
 
 
@@ -259,18 +267,22 @@ def _as_text(name: object) -> str:
 
 def read_configurations(queries: DatabaseQueries, scope: RankScope) -> Configurations:
     """Every call at `scope`'s rank, grouped."""
-    arguments: Dict[int, List[Argument]] = defaultdict(list)
+    # A repr repeated across calls is normalised once, keyed by the text it is read as,
+    # since equal values can print apart (0.0 and -0.0).
+    normalised = lru_cache(maxsize=None)(normalised_value)
+    arguments_by_operation_id: Dict[int, List[Argument]] = defaultdict(list)
     for argument in queries.query_operation_arguments(
         filters=scoped(queries, "operation_arguments", scope)
     ):
         name = _as_text(argument.name)
         if name not in TRACER_EXCLUDED_ARGUMENTS:
-            arguments[argument.operation_id].append(
-                (name, normalised_value(argument.value))
+            text = None if argument.value is None else str(argument.value)
+            arguments_by_operation_id[argument.operation_id].append(
+                (name, normalised(text))
             )
 
-    grouped: Dict[Tuple[str, Tuple[Argument, ...]], List[int]] = {}
-    left_out: Counter = Counter()
+    operation_ids_by_configuration: Dict[_CalledWith, List[int]] = {}
+    left_out: Counter[str] = Counter()
     for operation in queries.query_operations(
         filters=scoped(queries, "operations", scope)
     ):
@@ -279,9 +291,14 @@ def read_configurations(queries: DatabaseQueries, scope: RankScope) -> Configura
             left_out[op] += 1
             continue
         called_with = tuple(
-            sorted(arguments.get(operation.operation_id, ()), key=_argument_order)
+            sorted(
+                arguments_by_operation_id.get(operation.operation_id, ()),
+                key=_argument_order,
+            )
         )
-        grouped.setdefault((op, called_with), []).append(operation.operation_id)
+        operation_ids_by_configuration.setdefault((op, called_with), []).append(
+            operation.operation_id
+        )
 
     configurations = tuple(
         Configuration(
@@ -290,7 +307,7 @@ def read_configurations(queries: DatabaseQueries, scope: RankScope) -> Configura
             operation_ids=tuple(sorted(operation_ids)),
             digest=configuration_digest(op, called_with),
         )
-        for (op, called_with), operation_ids in grouped.items()
+        for (op, called_with), operation_ids in operation_ids_by_configuration.items()
     )
     return Configurations(
         configurations=configurations,
@@ -391,39 +408,47 @@ def _configuration_fields(
     }
 
 
-def _op_rows(timed: List[_Timed]) -> List[Dict[str, object]]:
-    """Calls and configurations per operation, ranked as the configurations are."""
-    calls: Counter = Counter()
-    configuration_counts: Counter = Counter()
-    device_times: Dict[str, float] = {}
-    first_ids: Dict[str, int] = {}
+def _op_rows(
+    timed: List[_Timed], device_time: Optional[DeviceTime]
+) -> List[Dict[str, object]]:
+    """Calls and configurations per operation, ranked as the configurations are, with
+    the device time fields a configuration carries, summed."""
+    calls_by_op: Counter[str] = Counter()
+    configuration_count_by_op: Counter[str] = Counter()
+    untimed_calls_by_op: Counter[str] = Counter()
+    device_time_by_op: Dict[str, float] = {}
+    first_operation_id_by_op: Dict[str, int] = {}
     for entry in timed:
         op = entry.configuration.op
-        calls[op] += entry.configuration.calls
-        configuration_counts[op] += 1
-        first_ids[op] = min(
-            first_ids.get(op, entry.configuration.operation_ids[0]),
-            entry.configuration.operation_ids[0],
+        first_operation_id = entry.configuration.operation_ids[0]
+        calls_by_op[op] += entry.configuration.calls
+        configuration_count_by_op[op] += 1
+        untimed_calls_by_op[op] += entry.untimed_calls
+        first_operation_id_by_op[op] = min(
+            first_operation_id_by_op.get(op, first_operation_id), first_operation_id
         )
         if entry.device_time is not None:
-            device_times[op] = device_times.get(op, 0.0) + entry.device_time
+            device_time_by_op[op] = device_time_by_op.get(op, 0.0) + entry.device_time
     ranked = sorted(
-        calls, key=lambda op: _rank(device_times.get(op), calls[op], op, first_ids[op])
+        calls_by_op,
+        key=lambda op: _rank(
+            device_time_by_op.get(op),
+            calls_by_op[op],
+            op,
+            first_operation_id_by_op[op],
+        ),
     )
-    timed_any = any(entry.device_time is not None for entry in timed)
-    rows = []
-    for op in ranked[:MAX_LISTED_OPS]:
-        row: Dict[str, object] = {
+    return [
+        {
             **cut_text("op", op, MAX_OPERATION_NAME_CHARS, digest=True),
-            "calls": calls[op],
-            "configurations": configuration_counts[op],
+            "calls": calls_by_op[op],
+            "configurations": configuration_count_by_op[op],
+            **_device_time_fields(
+                device_time_by_op.get(op), untimed_calls_by_op[op], device_time
+            ),
         }
-        if timed_any:
-            row["device_time"] = (
-                round(device_times[op], 3) if op in device_times else None
-            )
-        rows.append(row)
-    return rows
+        for op in ranked[:MAX_LISTED_OPS]
+    ]
 
 
 def _parsed_digest(config_digest_text: str) -> str:
@@ -474,15 +499,11 @@ def answer(
         body = _one(
             matching, _parsed_digest(config_digest), bool(needle), device_time, caveats
         )
-    common: Dict[str, object] = {"grouping": GROUPING}
-    if device_time is not None:
-        common["projection"] = dict(device_time.projection)
-        common["device_time_unit"] = device_time.unit
-        common["report_device_time_total"] = round(device_time.report_total, 3)
     return {
         "handle": handle,
         **body,
-        **common,
+        "grouping": GROUPING,
+        **(device_time.header if device_time is not None else {}),
         **scope.as_response(),
         **caveat_field(scope, *caveats),
         "operation_link": operation_link,
@@ -528,7 +549,7 @@ def _listing(
             )
             for entry in listed
         ],
-        "ops": _op_rows(timed),
+        "ops": _op_rows(timed, device_time),
         "left_out_calls": sum(count for _, count in left_out),
         "left_out_op_count": len(left_out),
         "left_out": [
@@ -584,16 +605,27 @@ def _one(
 
 
 __all__ = [
+    "Argument",
     "Configuration",
     "Configurations",
+    "DETAIL_VALUE_CHARS",
     "DeviceTime",
     "GROUPING",
+    "LISTED_VALUE_CHARS",
+    "MAX_ARGUMENT_NAME_CHARS",
     "MAX_DETAIL_ARGUMENTS",
     "MAX_LISTED_ARGUMENTS",
     "MAX_LISTED_CONFIGURATIONS",
+    "MAX_LISTED_LEFT_OUT",
+    "MAX_LISTED_OPERATION_IDS",
+    "MAX_LISTED_OPS",
+    "MEMORY_CONFIG_CAVEAT",
+    "NOTE",
     "REMOVED_FROM_TEXT",
+    "TRACED_PREFIX",
     "TRACER_EXCLUDED_ARGUMENTS",
     "TRACER_EXCLUDED_OPERATIONS",
+    "TRACER_REVISION",
     "answer",
     "configuration_digest",
     "is_traced",

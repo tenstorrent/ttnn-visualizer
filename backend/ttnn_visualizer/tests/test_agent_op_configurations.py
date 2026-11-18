@@ -4,6 +4,8 @@
 
 """`op_configurations`: calls grouped as tt-metal's model tracer groups them. #2156"""
 
+import contextlib
+import inspect
 import json
 import re
 import sqlite3
@@ -18,18 +20,20 @@ from ttnn_visualizer.agent import op_configurations as configurations
 from ttnn_visualizer.agent import server, tools
 from ttnn_visualizer.agent.bounds import MAX_LIMIT
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
-from ttnn_visualizer.agent.linking import LinkStatus
+from ttnn_visualizer.agent.linking import LinkStatus, MatchedOn, OperationLink
 from ttnn_visualizer.agent.operations import RankScope
 from ttnn_visualizer.agent.tool_names import McpToolName
 from ttnn_visualizer.tests.mcp_calls import tool_call
 from ttnn_visualizer.tests.memory_report_db import load_memory_report
-from ttnn_visualizer.tests.test_agent_linking import (  # noqa: F401
+
+# A pytest fixture: tests take it by name from their signature, so nothing reads it here.
+from ttnn_visualizer.tests.test_agent_linking import linked  # noqa: F401
+from ttnn_visualizer.tests.test_agent_linking import (
     _GRAPHS,
     _graph,
     _perf_row,
     _write_profiler,
     _write_ranked_profiler,
-    linked,
 )
 from ttnn_visualizer.tests.test_agent_perf_detail import ANSWER_BUDGET_BYTES
 
@@ -42,6 +46,10 @@ Call = Tuple[str, Sequence[Tuple[str, Optional[str]]]]
 
 # As a local CCL capture writes a semaphore.
 _SEMAPHORE = "<ttnn._ttnn.global_semaphore.global_semaphore object at 0x{:x}>"
+
+# CPU time, which a loaded runner does not stretch as it does wall-clock time. Each crafted
+# text reads in milliseconds, and took 52 s or more read quadratically.
+_ONE_PASS_CPU_SECONDS = 5
 
 
 def _tensor(
@@ -228,10 +236,24 @@ class TestNormalisation:
         """The regex form took 158 s on 960 KB of openings with no '=' after them."""
         crafted = "ttnn.Tensor(" * 80_000 + tail
 
-        started = time.perf_counter()
+        started = time.process_time()
         normalised = configurations.normalised_value(crafted)
 
-        assert time.perf_counter() - started < 5
+        assert time.process_time() - started < _ONE_PASS_CPU_SECONDS
+        assert normalised == crafted
+
+    @pytest.mark.parametrize("prefix", ["device_id: 1, ", "device_id:1\n"])
+    def test_device_prefixes_whose_coordinate_never_closes_are_read_in_one_pass(
+        self, prefix
+    ):
+        """A coordinate read past a '(' rescanned the line from each prefix: 52 s on
+        these 928 KB of current prefixes."""
+        crafted = f"{prefix}MeshCoordinate(" * 32_000
+
+        started = time.process_time()
+        normalised = configurations.normalised_value(crafted)
+
+        assert time.process_time() - started < _ONE_PASS_CPU_SECONDS
         assert normalised == crafted
 
     def test_a_missing_value_stays_missing(self):
@@ -434,6 +456,28 @@ class TestGrouping:
         assert re.fullmatch(r"[0-9a-f]{16}", row["config_digest"])
         assert result["left_out"] == [{"op": "b'ttnn.add'", "calls": 1}]
 
+    def test_numbers_kept_where_text_belongs_are_grouped_by_their_text(self, tmp_path):
+        """A repr is normalised once per read, keyed by its text, which tells apart
+        equal values such as 0.0 and -0.0."""
+        values = [0.0, -0.0, 1, 1.0]
+        registry, handle = load_memory_report(
+            tmp_path,
+            _SCHEMA.replace("value text", "value"),
+            [
+                *(("operations", (index, "ttnn.add", 0.1)) for index in range(1, 5)),
+                *(
+                    ("operation_arguments", (index, "0", value))
+                    for index, value in enumerate(values, start=1)
+                ),
+            ],
+        )
+
+        result = linking.op_configurations(registry, handle)
+
+        assert sorted(
+            row["arguments"][0]["value"] for row in result["configurations"]
+        ) == ["-0.0", "0.0", "1", "1.0"]
+
     def test_a_lone_surrogate_is_digested_rather_than_failing(self):
         digest = configurations.configuration_digest("ttnn.add", (("0", "\ud800"),))
 
@@ -479,6 +523,17 @@ class TestListing:
         assert [row["op"] for row in result["ops"]] == ["ttnn.matmul"]
         assert result["left_out"] == []
         assert result["name_contains"] == " MatMul "
+
+    def test_a_name_contains_of_spaces_alone_lists_every_operation(self, tmp_path):
+        """Echoed as given, as `find_operations` echoes it."""
+        registry, handle = _capture(tmp_path, self._CALLS)
+
+        unfiltered = linking.op_configurations(registry, handle)
+        spaces = linking.op_configurations(registry, handle, name_contains="   ")
+
+        assert unfiltered.pop("name_contains") is None
+        assert spaces.pop("name_contains") == "   "
+        assert spaces == unfiltered
 
     def test_name_contains_reads_cpp_separators_as_dots(self, tmp_path):
         calls = [
@@ -643,6 +698,27 @@ class TestOneConfiguration:
         )
 
         assert result["config_digest"] == digest
+
+    def test_a_digest_is_answered_under_a_name_contains_that_matches_it(self, tmp_path):
+        registry, handle = _capture(tmp_path, TestListing._CALLS)
+        matmul = next(
+            row
+            for row in linking.op_configurations(registry, handle)["configurations"]
+            if row["op"] == "ttnn.matmul"
+        )
+
+        result = linking.op_configurations(
+            registry,
+            handle,
+            config_digest=matmul["config_digest"],
+            name_contains="MATMUL",
+        )
+
+        assert (result["op"], result["config_digest"], result["calls"]) == (
+            "ttnn.matmul",
+            matmul["config_digest"],
+            matmul["calls"],
+        )
 
     def test_the_same_configuration_has_the_same_digest_in_another_capture(
         self, tmp_path
@@ -819,8 +895,70 @@ class TestDeviceTime:
             (row["calls"], row["device_time"]) for row in result["configurations"]
         ] == [(1, 4.0), (2, 3.0)]
         assert result["ops"] == [
-            {"op": "ttnn.matmul", "calls": 3, "configurations": 2, "device_time": 7.0}
+            {
+                "op": "ttnn.matmul",
+                "calls": 3,
+                "configurations": 2,
+                "device_time": 7.0,
+                "device_time_share_percent": 100.0,
+                "untimed_calls": 0,
+            }
         ]
+
+    def test_an_op_with_an_untimed_configuration_counts_its_untimed_calls(
+        self, linked, tmp_path
+    ):
+        """The op's device time is its timed configuration's alone, so its row says
+        how many calls that time leaves out."""
+        registry, handle = self._linked_capture(
+            linked,
+            tmp_path,
+            operations=[(1, "ttnn.matmul"), (2, "ttnn.matmul")],
+            graphs={
+                operation_id: _graph("ttnn.matmul", "MatmulDeviceOperation")
+                for operation_id in (1, 2)
+            },
+            rows=[
+                {**_perf_row("MatmulDeviceOperation", 1), "device_time": "2.0"},
+                {**_perf_row("MatmulDeviceOperation", 2), "device_time": ""},
+            ],
+            arguments=[(1, "0", _tensor("[32, 32]")), (2, "0", _tensor("[64, 32]"))],
+        )
+
+        result = linking.op_configurations(registry, handle)
+
+        assert [
+            (row["calls"], row["device_time"], row["untimed_calls"])
+            for row in result["configurations"]
+        ] == [(1, 2.0, 0), (1, None, 1)]
+        assert result["ops"] == [
+            {
+                "op": "ttnn.matmul",
+                "calls": 2,
+                "configurations": 2,
+                "device_time": 2.0,
+                "device_time_share_percent": 100.0,
+                "untimed_calls": 1,
+            }
+        ]
+
+    def test_a_single_call_configuration_is_timed_as_operation_detail_times_it(
+        self, linked, tmp_path
+    ):
+        """`operation_device_time` promises the tools agree."""
+        registry, handle = self._linked_capture(linked, tmp_path)
+        add = next(
+            row
+            for row in linking.op_configurations(registry, handle)["configurations"]
+            if row["op"] == "ttnn.add"
+        )
+
+        detail = linking.operation_detail(
+            registry, handle, operation_id=add["operation_ids"][0]
+        )
+
+        assert add["calls"] == 1
+        assert add["device_time"] == detail["device_time"] == 9.0
 
     def test_untimed_configurations_rank_after_timed_ones(self, linked, tmp_path):
         relus = (2, 3, 4)
@@ -856,10 +994,15 @@ class TestDeviceTime:
             )
             for row in result["configurations"]
         ] == [("ttnn.add", 9.0, 100.0, 0), ("ttnn.relu", None, None, 3)]
-        assert result["ops"] == [
-            {"op": "ttnn.add", "calls": 1, "configurations": 1, "device_time": 9.0},
-            {"op": "ttnn.relu", "calls": 3, "configurations": 1, "device_time": None},
-        ]
+        assert [
+            (
+                row["op"],
+                row["device_time"],
+                row["device_time_share_percent"],
+                row["untimed_calls"],
+            )
+            for row in result["ops"]
+        ] == [("ttnn.add", 9.0, 100.0, 0), ("ttnn.relu", None, None, 3)]
 
     def test_a_partitioned_run_carries_its_caveat(self, linked, tmp_path):
         """Shares divide by a total that assumes the sub-devices ran one after another."""
@@ -941,12 +1084,13 @@ class TestServer:
     def test_a_digest_that_is_not_one_is_an_error_naming_the_form(self, tmp_path):
         registry, handle = _capture(tmp_path, [("ttnn.relu", [])])
 
-        result, _ = tool_call(
+        result, outcome = tool_call(
             registry, "op_configurations", {"handle": handle, "config_digest": "abc"}
         )
 
         assert result.get("isError")
         assert "16 hexadecimal digits" in result["content"][0]["text"]
+        assert outcome.value == "refused"
 
     def test_the_description_states_what_the_grouping_removes(self):
         table = server._tool_table(ReportRegistry())
@@ -996,6 +1140,7 @@ class TestServer:
         _add_arguments(path, [(2, "0", "x", 0), (2, "0", "x", 1)], ranked=True)
         registry = ReportRegistry()
         handle = load_report(registry, profiler_path=path)["handle"]
+        signature = inspect.signature(configurations.read_configurations)
 
         with patch.object(
             configurations,
@@ -1005,12 +1150,16 @@ class TestServer:
             for rank in (0, 1, 0, 1):
                 linking.op_configurations(registry, handle, rank=rank)
 
-        assert [call.args[1].rank for call in read.call_args_list] == [0, 1]
+        assert [
+            signature.bind(*call.args, **call.kwargs).arguments["scope"].rank
+            for call in read.call_args_list
+        ] == [0, 1]
 
 
 class TestAnswerSize:
     """Every cap reached at once, each text past its cut, in ASCII JSON need not escape,
-    as reprs are; escaped text can pass the budget, as #2298 tracks for every tool."""
+    as reprs are; escaped text can pass the budget, as #2298 tracks for every tool.
+    Timed, every row carries its device time fields too."""
 
     @staticmethod
     def _arguments(count: int, value_chars: int, variant: int):
@@ -1019,6 +1168,21 @@ class TestAnswerSize:
             for position in range(count)
         ]
 
+    @staticmethod
+    def _timed(timed: bool, call_count: int):
+        """With `timed`, a link timing each of `call_count` calls."""
+        if not timed:
+            return contextlib.nullcontext()
+        operation_ids = range(1, call_count + 1)
+        link = OperationLink(
+            LinkStatus.LINKED,
+            matched_on=MatchedOn.FUNCTION_START_COLLAPSED,
+            operation_by_perf_id={str(index): index for index in operation_ids},
+            device_time_by_operation={index: 1234567.891 for index in operation_ids},
+            report_device_time_total=1234567.891 * call_count,
+        )
+        return patch.object(linking, "operation_link", return_value=link)
+
     def _answer(self, registry, handle, **arguments) -> str:
         result, _ = tool_call(
             registry, "op_configurations", {"handle": handle, **arguments}
@@ -1026,7 +1190,8 @@ class TestAnswerSize:
         assert not result.get("isError")
         return result["content"][0]["text"]
 
-    def test_the_most_a_listing_can_hold_stays_inside_the_budget(self, tmp_path):
+    @pytest.mark.parametrize("timed", [False, True])
+    def test_the_most_a_listing_can_hold_stays_inside_the_budget(self, tmp_path, timed):
         arguments = configurations.MAX_LISTED_ARGUMENTS + 1
         value_chars = configurations.LISTED_VALUE_CHARS + 100
         calls: List[Call] = [
@@ -1044,32 +1209,36 @@ class TestAnswerSize:
         )
         registry, handle = _capture(tmp_path, calls)
 
-        text = self._answer(registry, handle, limit=MAX_LIMIT)
+        with self._timed(timed, len(calls)):
+            text = self._answer(registry, handle, limit=MAX_LIMIT)
 
         assert len(text.encode()) < ANSWER_BUDGET_BYTES
         result = json.loads(text)
         assert result["returned"] == configurations.MAX_LISTED_CONFIGURATIONS
         assert len(result["ops"]) == configurations.MAX_LISTED_OPS
         assert len(result["left_out"]) == configurations.MAX_LISTED_LEFT_OUT
+        assert ("untimed_calls" in result["ops"][0]) is timed
 
+    @pytest.mark.parametrize("timed", [False, True])
     def test_the_most_one_configuration_can_hold_stays_inside_the_budget(
-        self, tmp_path
+        self, tmp_path, timed
     ):
         arguments = self._arguments(
             configurations.MAX_DETAIL_ARGUMENTS + 1,
             configurations.DETAIL_VALUE_CHARS + 100,
             variant=0,
         )
-        registry, handle = _capture(
-            tmp_path, [("ttnn.op_" + "x" * 300, arguments)] * (MAX_LIMIT + 1)
-        )
+        calls = [("ttnn.op_" + "x" * 300, arguments)] * (MAX_LIMIT + 1)
+        registry, handle = _capture(tmp_path, calls)
         digest = json.loads(self._answer(registry, handle))["configurations"][0][
             "config_digest"
         ]
 
-        text = self._answer(registry, handle, config_digest=digest)
+        with self._timed(timed, len(calls)):
+            text = self._answer(registry, handle, config_digest=digest)
 
         assert len(text.encode()) < ANSWER_BUDGET_BYTES
         result = json.loads(text)
         assert len(result["arguments"]) == configurations.MAX_DETAIL_ARGUMENTS
         assert len(result["operation_ids"]) == MAX_LIMIT
+        assert ("untimed_calls" in result) is timed
