@@ -139,6 +139,11 @@ const NPE_MODE_BY_NOC_FILTER: Readonly<Record<NoCType | typeof ALL_NOCS_KEY, Npe
     [ALL_NOCS_KEY]: NpeMode.ALL_NOCS,
 });
 
+const NPE_MODE_BY_VISUALIZATION_MODE: Readonly<Record<VISUALIZATION_MODE, NpeMode>> = Object.freeze({
+    [VISUALIZATION_MODE.CONGESTION]: NpeMode.CONGESTION,
+    [VISUALIZATION_MODE.TRANSFERS]: NpeMode.TRANSFERS,
+});
+
 const NPE_MODE_BY_EVENT_TYPE_FILTER: Readonly<Record<EVENT_TYPE_FILTER, NpeMode>> = Object.freeze({
     [EVENT_TYPE_FILTER.ALL_EVENTS]: NpeMode.ALL_EVENTS,
     [EVENT_TYPE_FILTER.FABRIC_EVENTS]: NpeMode.FABRIC_EVENTS,
@@ -167,6 +172,7 @@ const NPEView = ({
     const [selectedTransferList, setSelectedTransferList] = useState<NoCTransfer[]>([]);
     const [selectedNode, setSelectedNode] = useState<SelectedNode | null>(null);
     const [playbackSpeed, setPlaybackSpeed] = useState<number>(0);
+    const isTimelinePlaying = playbackSpeed > 0;
     const [visualizationMode, setVisualizationMode] = useState<VISUALIZATION_MODE>(VISUALIZATION_MODE.CONGESTION);
     const [openZonesPanel, setOpenZonesPanel] = useState<boolean>(false);
     const [selectedZoneAddress, setSelectedZoneAddress] = useState<NPE_COORDINATES | null>(null);
@@ -323,9 +329,11 @@ const NPEView = ({
         return byChip;
     }, [transfers]);
 
-    const showNOCType = (value: NoCType) => {
+    // Each NoC's switch toggles it: switching one off shows only the other, and switching it
+    // back on shows both. The event-type switches follow the same rule.
+    const handleNocTypeToggle = (value: NoCType) => {
         const otherNoc = value === NoCType.NOC0 ? NoCType.NOC1 : NoCType.NOC0;
-        const nextNocFilter = nocFilter !== null && nocFilter !== value ? null : otherNoc;
+        const nextNocFilter = nocFilter === otherNoc ? null : otherNoc;
 
         setNocFilter(nextNocFilter);
         recordNpeModeChanged(NPE_MODE_BY_NOC_FILTER[nextNocFilter ?? ALL_NOCS_KEY]);
@@ -426,20 +434,12 @@ const NPEView = ({
 
     // Recorded here, from the buttons, never in `startAnimation` or its interval: those run
     // on every tick. 2x during playback changes speed rather than starting it.
-    const onPlay = () => {
-        if (playbackSpeed === 0) {
+    const onPlay = (speed: number = PLAYBACK_SPEED) => {
+        if (!isTimelinePlaying) {
             recordNpePlaybackStarted();
         }
 
-        startAnimation();
-    };
-
-    const onPlay2x = () => {
-        if (playbackSpeed === 0) {
-            recordNpePlaybackStarted();
-        }
-
-        startAnimation(PLAYBACK_SPEED_2X);
+        startAnimation(speed);
     };
 
     const handleVisualizationModeChange = (mode: VISUALIZATION_MODE) => {
@@ -448,7 +448,7 @@ const NPEView = ({
         }
 
         setVisualizationMode(mode);
-        recordNpeModeChanged(mode === VISUALIZATION_MODE.CONGESTION ? NpeMode.CONGESTION : NpeMode.TRANSFERS);
+        recordNpeModeChanged(NPE_MODE_BY_VISUALIZATION_MODE[mode]);
     };
 
     const handleScaleChange = (isTimestepsScale: boolean) => {
@@ -462,9 +462,21 @@ const NPEView = ({
 
     // Recorded here, never from the effect that resets the filter for a trace without
     // fabric events.
-    const handleEventTypeFilterChange = (nextFilter: EVENT_TYPE_FILTER) => {
+    const handleEventTypeToggle = (scope: EVENT_TYPE_FILTER.FABRIC_EVENTS | EVENT_TYPE_FILTER.LOCAL_EVENTS) => {
+        const otherScope =
+            scope === EVENT_TYPE_FILTER.FABRIC_EVENTS
+                ? EVENT_TYPE_FILTER.LOCAL_EVENTS
+                : EVENT_TYPE_FILTER.FABRIC_EVENTS;
+        const nextFilter = fabricEventsFilter === otherScope ? EVENT_TYPE_FILTER.ALL_EVENTS : otherScope;
+
         setFabricEventsFilter(nextFilter);
         recordNpeModeChanged(NPE_MODE_BY_EVENT_TYPE_FILTER[nextFilter]);
+    };
+
+    // Recorded whichever way it goes, and never for the saved preference applied at load.
+    const handleAltCongestionColorsToggle = () => {
+        setAltCongestionColors(!altCongestionColors);
+        recordNpeModeChanged(NpeMode.ALT_CONGESTION_COLOURS);
     };
 
     const handleOpenZonesPanel = () => {
@@ -584,7 +596,6 @@ const NPEView = ({
     const hasVisibleTransferOrigins = selectedTransferList.length > 0 || highlightedTransfer !== null;
 
     const switchWidth = canvasWidth - canvasWidth / npeData.timestep_data.length - RIGHT_MARGIN_OFFSET_PX;
-    const isTimelinePlaying = playbackSpeed > 0;
     const isActiveTransferDetailsOpen = !!(selectedNode && !isTimelinePlaying && selectedTransferList?.length > 0);
 
     return (
@@ -608,12 +619,12 @@ const NPEView = ({
                         <Button
                             icon={isTimelinePlaying ? IconNames.Pause : IconNames.Play}
                             intent={playbackSpeed === PLAYBACK_SPEED ? Intent.PRIMARY : Intent.NONE}
-                            onClick={isTimelinePlaying ? onPause : onPlay}
+                            onClick={isTimelinePlaying ? onPause : () => onPlay()}
                             title={isTimelinePlaying ? 'Pause' : 'Play'}
                         />
                         <Button
                             icon={IconNames.FastForward}
-                            onClick={onPlay2x}
+                            onClick={() => onPlay(PLAYBACK_SPEED_2X)}
                             intent={playbackSpeed === PLAYBACK_SPEED_2X ? Intent.PRIMARY : Intent.NONE}
                             title='Play 2x speed'
                         />
@@ -699,22 +710,19 @@ const NPEView = ({
                         <GlobalSwitch
                             label='Alternate congestion colors'
                             checked={altCongestionColors}
-                            onChange={() => {
-                                setAltCongestionColors(!altCongestionColors);
-                                recordNpeModeChanged(NpeMode.ALT_CONGESTION_COLOURS);
-                            }}
+                            onChange={handleAltCongestionColorsToggle}
                         />
                     </div>
                     <div className='npe-controls-line'>
                         <Switch
                             label='NOC0'
                             checked={nocFilter === NoCType.NOC0 || nocFilter === null}
-                            onChange={() => showNOCType(NoCType.NOC0)}
+                            onChange={() => handleNocTypeToggle(NoCType.NOC0)}
                         />
                         <Switch
                             label='NOC1'
                             checked={nocFilter === NoCType.NOC1 || nocFilter === null}
-                            onChange={() => showNOCType(NoCType.NOC1)}
+                            onChange={() => handleNocTypeToggle(NoCType.NOC1)}
                         />
                         <Switch
                             labelElement={
@@ -733,13 +741,7 @@ const NPEView = ({
                                 fabricEventsFilter === EVENT_TYPE_FILTER.ALL_EVENTS
                             }
                             disabled={!isFabricTransfersFilteringEnabled}
-                            onChange={() =>
-                                handleEventTypeFilterChange(
-                                    fabricEventsFilter === EVENT_TYPE_FILTER.LOCAL_EVENTS
-                                        ? EVENT_TYPE_FILTER.ALL_EVENTS
-                                        : EVENT_TYPE_FILTER.LOCAL_EVENTS,
-                                )
-                            }
+                            onChange={() => handleEventTypeToggle(EVENT_TYPE_FILTER.FABRIC_EVENTS)}
                         />
                         <Switch
                             labelElement={
@@ -758,13 +760,7 @@ const NPEView = ({
                                 fabricEventsFilter === EVENT_TYPE_FILTER.ALL_EVENTS
                             }
                             disabled={!isFabricTransfersFilteringEnabled}
-                            onChange={() =>
-                                handleEventTypeFilterChange(
-                                    fabricEventsFilter === EVENT_TYPE_FILTER.FABRIC_EVENTS
-                                        ? EVENT_TYPE_FILTER.ALL_EVENTS
-                                        : EVENT_TYPE_FILTER.FABRIC_EVENTS,
-                                )
-                            }
+                            onChange={() => handleEventTypeToggle(EVENT_TYPE_FILTER.LOCAL_EVENTS)}
                         />
 
                         <RemountOnResize>

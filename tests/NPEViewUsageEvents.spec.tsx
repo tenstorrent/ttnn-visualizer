@@ -12,7 +12,10 @@ import { altCongestionColorsAtom } from '../src/store/app';
 import { AtomProviderInitialValues } from './helpers/atomProvider';
 import { TestProviders } from './helpers/TestProviders';
 
-const { recordEvent } = vi.hoisted(() => ({ recordEvent: vi.fn() }));
+const { recordEvent, zonesPanel } = vi.hoisted(() => ({
+    recordEvent: vi.fn(),
+    zonesPanel: { onClose: null as (() => void) | null },
+}));
 
 vi.mock('../src/functions/recordEvent', () => ({ default: recordEvent }));
 
@@ -23,7 +26,13 @@ vi.mock('../src/components/npe/RouteOriginsRenderer', () => ({ RouteOriginsRende
 vi.mock('../src/components/npe/ActiveTransferDetails', () => ({ default: () => null }));
 vi.mock('../src/components/npe/NPEMetadata', () => ({ default: () => null }));
 vi.mock('../src/components/npe/EmptyChipRenderer', () => ({ EmptyChipRenderer: () => null }));
-vi.mock('../src/components/npe/NPEZoneFilterComponent', () => ({ default: () => null }));
+// Keeps the panel's close callback, so a test can close it the way its own button would.
+vi.mock('../src/components/npe/NPEZoneFilterComponent', () => ({
+    default: ({ onClose }: { onClose: () => void }) => {
+        zonesPanel.onClose = onClose;
+        return null;
+    },
+}));
 vi.mock('../src/functions/createToastNotification', async () => {
     const { toastNotificationModuleMock } = await import('./helpers/mockToastNotification');
 
@@ -69,12 +78,16 @@ const FABRIC_TRANSFER = {
     route: [],
 };
 
+const viewTree = (initialAtomValues: AtomProviderInitialValues, nocTransfers: unknown[]) => (
+    <TestProviders initialAtomValues={initialAtomValues}>
+        <NPEView npeData={makeNpeData(nocTransfers)} />
+    </TestProviders>
+);
+
 function renderView(initialAtomValues: AtomProviderInitialValues = [], nocTransfers: unknown[] = []) {
-    return render(
-        <TestProviders initialAtomValues={initialAtomValues}>
-            <NPEView npeData={makeNpeData(nocTransfers)} />
-        </TestProviders>,
-    );
+    const view = render(viewTree(initialAtomValues, nocTransfers));
+
+    return { ...view, showTrace: (transfers: unknown[]) => view.rerender(viewTree(initialAtomValues, transfers)) };
 }
 
 const click = (name: string) => fireEvent.click(screen.getByRole('button', { name }));
@@ -82,6 +95,7 @@ const click = (name: string) => fireEvent.click(screen.getByRole('button', { nam
 beforeEach(() => {
     vi.useFakeTimers();
     recordEvent.mockClear();
+    zonesPanel.onClose = null;
 });
 
 afterEach(() => {
@@ -94,6 +108,16 @@ describe('NPEView usage events', () => {
         renderView([[altCongestionColorsAtom, true]]);
 
         expect(recordEvent).not.toHaveBeenCalled();
+    });
+
+    it('records a start after playback was stopped by stepping', () => {
+        renderView();
+
+        click('Play');
+        click('Step forward');
+        click('Play');
+
+        expect(recordEvent.mock.calls).toEqual([[playbackStarted], [playbackStarted]]);
     });
 
     it('records a playback start once, and never per animation tick', () => {
@@ -167,11 +191,28 @@ describe('NPEView usage events', () => {
         ]);
     });
 
+    it('records the other NoC when the only one shown is switched off', () => {
+        renderView();
+
+        fireEvent.click(screen.getByLabelText('NOC1'));
+        fireEvent.click(screen.getByLabelText('NOC0'));
+
+        expect(recordEvent.mock.calls).toEqual([[modeChanged(NpeMode.NOC0)], [modeChanged(NpeMode.NOC1)]]);
+        expect(screen.getByLabelText('NOC0')).not.toBeChecked();
+        expect(screen.getByLabelText('NOC1')).toBeChecked();
+    });
+
     it('records the alternate congestion colours switch in either direction', () => {
         renderView();
 
-        fireEvent.click(screen.getByLabelText('Alternate congestion colors'));
-        fireEvent.click(screen.getByLabelText('Alternate congestion colors'));
+        const altColours = screen.getByLabelText<HTMLInputElement>('Alternate congestion colors');
+        // The preference is persisted, so read where it starts rather than assume it.
+        const wasOn = altColours.checked;
+
+        fireEvent.click(altColours);
+        expect(altColours.checked).toBe(!wasOn);
+        fireEvent.click(altColours);
+        expect(altColours.checked).toBe(wasOn);
 
         expect(recordEvent.mock.calls).toEqual([
             [modeChanged(NpeMode.ALT_CONGESTION_COLOURS)],
@@ -188,6 +229,16 @@ describe('NPEView usage events', () => {
         expect(recordEvent).toHaveBeenCalledExactlyOnceWith(modeChanged(NpeMode.ZONES));
     });
 
+    it('records opening the zones panel again after it was closed', () => {
+        renderView();
+
+        click('Zones');
+        act(() => zonesPanel.onClose?.());
+        click('Zones');
+
+        expect(recordEvent.mock.calls).toEqual([[modeChanged(NpeMode.ZONES)], [modeChanged(NpeMode.ZONES)]]);
+    });
+
     it('records the event filter state each switch leads to', () => {
         renderView([], [FABRIC_TRANSFER]);
 
@@ -202,5 +253,38 @@ describe('NPEView usage events', () => {
             [modeChanged(NpeMode.ALL_EVENTS)],
             [modeChanged(NpeMode.FABRIC_EVENTS)],
         ]);
+    });
+
+    it('records each event filter state, including from one scope straight to the other', () => {
+        renderView([], [FABRIC_TRANSFER]);
+        const fabric = screen.getByLabelText('Fabric events');
+        const local = screen.getByLabelText('Local events');
+
+        fireEvent.click(local);
+        expect([fabric, local].map((input) => (input as HTMLInputElement).checked)).toEqual([true, false]);
+        // Fabric only, so switching fabric off shows local instead of nothing.
+        fireEvent.click(fabric);
+        expect([fabric, local].map((input) => (input as HTMLInputElement).checked)).toEqual([false, true]);
+        fireEvent.click(local);
+        expect([fabric, local].map((input) => (input as HTMLInputElement).checked)).toEqual([true, false]);
+        fireEvent.click(local);
+        expect([fabric, local].map((input) => (input as HTMLInputElement).checked)).toEqual([true, true]);
+
+        expect(recordEvent.mock.calls).toEqual([
+            [modeChanged(NpeMode.FABRIC_EVENTS)],
+            [modeChanged(NpeMode.LOCAL_EVENTS)],
+            [modeChanged(NpeMode.FABRIC_EVENTS)],
+            [modeChanged(NpeMode.ALL_EVENTS)],
+        ]);
+    });
+
+    it('records nothing when a trace without fabric events resets the event filter', () => {
+        const { showTrace } = renderView([], [FABRIC_TRANSFER]);
+
+        fireEvent.click(screen.getByLabelText('Fabric events'));
+        showTrace([]);
+
+        expect(screen.getByLabelText('Fabric events')).toBeChecked();
+        expect(recordEvent).toHaveBeenCalledExactlyOnceWith(modeChanged(NpeMode.LOCAL_EVENTS));
     });
 });
