@@ -244,7 +244,8 @@ class TestNormalisation:
 
     def test_device_prefixes_whose_coordinate_never_closes_are_read_in_one_pass(self):
         """A coordinate read past a '(' rescanned the line from each prefix: 52 s on
-        these 928 KB. An older prefix ends its own line, so it was never slow."""
+        these 928 KB. A run of older prefixes needs no case: each ends its own line,
+        and the coordinate's class stops at a newline, so each line is read once."""
         crafted = "device_id: 1, MeshCoordinate(" * 32_000
 
         started = time.process_time()
