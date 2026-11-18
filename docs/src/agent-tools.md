@@ -170,10 +170,9 @@ first call, which refuses one that is not a readable tt-npe trace.
   when it reads the signposts, such as one with a quote left open, has its parse error in
   `performance_csv_problem`, with those five tools listed as unanswerable; when it parses
   but its signposts cannot be read, `signposts_problem` says why. Loading reads the
-  signposts, so a handle answers from the CSV it was loaded on: one rewritten or superseded
-  after that is refused, and
-  `load_report` again gives a fresh handle.
-  A handle loaded before its CSV was written answers from the first one a read finds.
+  signposts, so a handle answers from the CSV it was loaded on (or, if it was loaded before
+  one was written, the first one a read finds): one rewritten or superseded after that is
+  refused, and `load_report` again gives a fresh handle.
 - `arch` and `device_count` are keyed by the file each was read from, since a handle's two
   reports can come from different runs. `arch.device_log` is the `ARCH` field of the device
   profiler log's header. `capture` returns the header's fields, leaving out any whose name
