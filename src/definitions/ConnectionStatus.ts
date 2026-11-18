@@ -18,6 +18,7 @@ export enum RemoteConnectionFailureReason {
     AUTH_FAILED = 'auth_failed',
     HOST_KEY_REJECTED = 'host_key_rejected',
     UNREACHABLE = 'unreachable',
+    SEARCH_INCOMPLETE = 'search_incomplete',
 }
 
 export interface ConnectionStatus {
@@ -32,7 +33,8 @@ export interface ConnectionStatus {
     hostKey?: HostKeyStatus | null;
     /**
      * Why the connection failed, so nothing has to parse `message`, which is written for
-     * people and names the host. Absent for a failure that fits no class.
+     * people and names the host. On a path's line, a failure that was not about the path.
+     * Absent for a failure that fits no class, and for a path that is itself the problem.
      */
     reason?: RemoteConnectionFailureReason | null;
 }

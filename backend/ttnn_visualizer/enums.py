@@ -43,11 +43,17 @@ class RemoteConnectionFailureReason(str, enum.Enum):
     parse them; this is the machine-readable half. Absent means the failure has no class
     here: an unexpected SSH error, or a problem with one configured path rather than the
     connection. A timeout counts as ``UNREACHABLE``: the host never answered.
+
+    A path's line carries one too when its search failed for a reason other than the
+    path: ``UNREACHABLE`` for a transport error mid-search, ``SEARCH_INCOMPLETE`` when the
+    search ended without settling whether the path exists. Neither is a misconfigured
+    path, so neither may be read as one.
     """
 
     AUTH_FAILED = "auth_failed"
     HOST_KEY_REJECTED = "host_key_rejected"
     UNREACHABLE = "unreachable"
+    SEARCH_INCOMPLETE = "search_incomplete"
 
 
 class StackSourceOrigin(str, enum.Enum):

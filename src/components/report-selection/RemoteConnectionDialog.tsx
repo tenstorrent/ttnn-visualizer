@@ -48,7 +48,7 @@ import getServerConfig from '../../functions/getServerConfig';
 import getSshConfigHostPrefill from '../../functions/getSshConfigHostPrefill';
 import isConnectionSaveable from '../../functions/isConnectionSaveable';
 import useRemoteConnection from '../../hooks/useRemote';
-import getConnectionTestPrecheckFailure from '../../functions/getConnectionTestPrecheckFailure';
+import { isConnectionTestPrecheckFailure } from '../../functions/getConnectionTestPrecheckFailure';
 import useHostKey, { HostKeyTarget } from '../../hooks/useHostKey';
 import useSshConfigHostChoice from '../../hooks/useSshConfigHostChoice';
 import ConnectionTestResults from './ConnectionTestResults';
@@ -164,12 +164,13 @@ const RemoteConnectionDialog = ({
 
         setConnectionTests(tests);
 
-        // A form error caught before sending is not a test of the connection.
-        const isSentToServer = getConnectionTestPrecheckFailure(connection) === null;
         const settleConnectionTests = (statuses: ConnectionStatus[]) => {
             setConnectionTests(statuses);
 
-            if (isSentToServer) {
+            // A form error `testConnection` caught before sending is not a test of the
+            // connection. Asking what it returned, rather than re-running the check here,
+            // keeps one place deciding whether a request went out.
+            if (!isConnectionTestPrecheckFailure(statuses)) {
                 recordRemoteConnectionTest(getRemoteConnectionTestResult(statuses));
             }
         };

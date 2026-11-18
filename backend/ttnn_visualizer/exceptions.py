@@ -152,6 +152,42 @@ class HostKeyVerificationFailedException(RemoteConnectionException):
         self.host_key = host_key
 
 
+class UnreachableHostException(RemoteConnectionException):
+    """The host never answered: refused, unresolvable, or timed out.
+
+    A class of its own so every place that raises it carries ``UNREACHABLE``; passed by
+    hand at each raise site, a new one could leave it out and the test would read
+    ``other``.
+    """
+
+    def __init__(
+        self,
+        message,
+        status: ConnectionTestStates = ConnectionTestStates.FAILED,
+        detail: Optional[str] = None,
+    ):
+        super().__init__(
+            message=message,
+            status=status,
+            detail=detail,
+            reason=RemoteConnectionFailureReason.UNREACHABLE,
+        )
+
+    @classmethod
+    def for_host(
+        cls, host: str, detail: Optional[str] = None
+    ) -> "UnreachableHostException":
+        """The advice for a host that refused every connection attempt."""
+        return cls(
+            message=(
+                f"Unable to establish SSH connection to {host}. "
+                "Please check the hostname, port, and network connectivity. "
+                "Ensure SSH key-based authentication is properly configured."
+            ),
+            detail=detail,
+        )
+
+
 class InvalidRequestPayload(Exception):
     """A request body failed model validation.
 

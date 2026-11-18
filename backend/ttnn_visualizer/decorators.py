@@ -18,6 +18,7 @@ from ttnn_visualizer.exceptions import (
     RemoteConnectionException,
     RemoteFileReadException,
     SSHException,
+    UnreachableHostException,
     response_forbidden,
 )
 from ttnn_visualizer.instances import get_or_create_instance
@@ -106,39 +107,30 @@ def remote_exception_handler(func):
                 f"SSH connection failed for {connection.username}@{connection.host}: {str(err)}"
             )
 
-            # Provide user-friendly message for connection issues
-            user_message = (
-                f"Unable to establish SSH connection to {connection.host}. "
-                "Please check the hostname, port, and network connectivity. "
-                "Ensure SSH key-based authentication is properly configured."
-            )
-
-            raise RemoteConnectionException(
-                status=ConnectionTestStates.FAILED,
-                message=user_message,
-                reason=RemoteConnectionFailureReason.UNREACHABLE,
-            )
+            raise UnreachableHostException.for_host(connection.host)
 
         except IOError as err:
-            message = f"Error opening remote folder: {str(err)}"
-            reason = None
             if "Name or service not known" in str(err):
-                message = f"Unable to connect to {connection.host} - check hostname"
-                reason = RemoteConnectionFailureReason.UNREACHABLE
+                raise UnreachableHostException(
+                    f"Unable to connect to {connection.host} - check hostname"
+                )
             raise RemoteConnectionException(
                 status=ConnectionTestStates.FAILED,
-                message=message,
-                reason=reason,
+                message=f"Error opening remote folder: {str(err)}",
             )
         except SSHException as err:
+            reason = None
             if str(err) == "No existing session":
                 message = "SSH authentication failed. Please ensure SSH keys are configured and ssh-agent is running."
+                # No HTTP status, unlike `AuthenticationFailedException`: this arm has
+                # always answered as one failed line, and the class is all that changes.
+                reason = RemoteConnectionFailureReason.AUTH_FAILED
             else:
                 err_message = re.sub(r"\[.*?]", "", str(err)).strip()
                 message = f"SSH connection error to {connection.host}: {err_message}. Ensure SSH key-based authentication is properly configured."
 
             raise RemoteConnectionException(
-                status=ConnectionTestStates.FAILED, message=message
+                status=ConnectionTestStates.FAILED, message=message, reason=reason
             )
         except RemoteFileReadException:
             raise

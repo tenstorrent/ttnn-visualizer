@@ -183,7 +183,7 @@ Recorded when a detail surface is opened. It answers how deep use goes (Q4).
 
   - `tensor_details`: the tensor details drawer in the performance table, or a tensor's per-core allocation view.
   - `buffer_details`: a buffer or tensor focused in a memory view, including through a "Buffer details" link. Reloading a page reached through that link records it again.
-  - `stack_trace`: a stack trace expanded, or an operation's error details opened.
+  - `stack_trace`: a stack trace expanded. Opening an operation's error records nothing until its trace is expanded.
   - `source_file`: a source file opened from a stack trace.
 
 Operation details are not a target: `view_opened` already counts them with `view` set to `operation_details`.
@@ -202,7 +202,7 @@ Recorded when a remote connection test in the connection dialog finishes. It ans
 
 - `connection_test_result`: `success`, `auth_failed`, `host_key_rejected`, `unreachable`, `no_reports_found`, `report_path_failed`, `other`.
 
-`unreachable` includes a host that did not answer before the test timed out. `report_path_failed` means SSH connected but a configured report path is missing, not a directory, or unreadable. `no_reports_found` means the paths exist but hold no reports. `other` is a failure the server does not classify, or a request that failed before the server answered.
+`unreachable` includes a host that did not answer before the test timed out, and a connection lost while a path was being searched. `report_path_failed` means SSH connected but a configured report path is missing, not a directory, or unreadable. `no_reports_found` means the paths exist but hold no reports. `other` is a failure the server does not classify, a search that ended before settling whether its path exists, or a request that failed before the server answered.
 
 ## Information that is not recorded
 

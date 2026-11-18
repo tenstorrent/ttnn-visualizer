@@ -36,6 +36,7 @@ from ttnn_visualizer.decorators import (
 from ttnn_visualizer.enums import (
     ConnectionTestStates,
     HostKeyIssue,
+    RemoteConnectionFailureReason,
     StackSourceOrigin,
 )
 from ttnn_visualizer.event_logging import (
@@ -1975,17 +1976,23 @@ def _report_search_status(
     subject = label.capitalize()
 
     if outcome.error_message:
-        return StatusMessage(
-            status=ConnectionTestStates.FAILED.value,
-            message=outcome.error_message,
-            detail=outcome.error_detail,
+        return connection_status(
+            ConnectionTestStates.FAILED.value,
+            outcome.error_message,
+            outcome.error_detail,
+            reason=outcome.error_reason,
         )
 
     if outcome.root_state is not RemoteSearchRootState.PRESENT:
-        return StatusMessage(
-            status=ConnectionTestStates.FAILED.value,
-            message=_FAILURE_COPY_BY_ROOT_STATE[outcome.root_state].format(
-                subject=subject
+        return connection_status(
+            ConnectionTestStates.FAILED.value,
+            _FAILURE_COPY_BY_ROOT_STATE[outcome.root_state].format(subject=subject),
+            # A search that never settled the path says nothing about it, so it must
+            # not be counted as a misconfigured one.
+            reason=(
+                RemoteConnectionFailureReason.SEARCH_INCOMPLETE
+                if outcome.root_state is RemoteSearchRootState.UNKNOWN
+                else None
             ),
         )
 

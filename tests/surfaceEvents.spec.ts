@@ -115,6 +115,27 @@ describe('getRemoteConnectionTestResult', () => {
             [line(OK), line(WARNING), line(FAILED)],
             RemoteConnectionTestResult.REPORT_PATH_FAILED,
         ],
+        [
+            'a connection lost while a path was searched',
+            [line(OK), line(FAILED, RemoteConnectionFailureReason.UNREACHABLE)],
+            RemoteConnectionTestResult.UNREACHABLE,
+        ],
+        [
+            'a search that never settled its path',
+            [line(OK), line(FAILED, RemoteConnectionFailureReason.SEARCH_INCOMPLETE)],
+            RemoteConnectionTestResult.OTHER,
+        ],
+        [
+            'a missing path beside one whose search never settled',
+            [line(OK), line(FAILED), line(FAILED, RemoteConnectionFailureReason.SEARCH_INCOMPLETE)],
+            RemoteConnectionTestResult.REPORT_PATH_FAILED,
+        ],
+        [
+            'an empty path beside one whose search never settled',
+            [line(OK), line(WARNING), line(FAILED, RemoteConnectionFailureReason.SEARCH_INCOMPLETE)],
+            RemoteConnectionTestResult.OTHER,
+        ],
+        ['a connection with no path lines', [line(OK)], RemoteConnectionTestResult.OTHER],
         ['an unclassified SSH failure', [line(FAILED), line(FAILED)], RemoteConnectionTestResult.OTHER],
         ['no lines at all', [], RemoteConnectionTestResult.OTHER],
         [

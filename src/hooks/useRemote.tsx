@@ -87,6 +87,8 @@ const fetchRemoteFolderList = async (
 const useRemoteConnection = () => {
     const { getAppConfig, setAppConfig, deleteAppConfig } = useAppConfig();
 
+    // Any check that answers without sending belongs in `getConnectionTestPrecheckFailure`:
+    // the dialog tells a form error from a test that ran by that function's answer alone.
     const testConnection = async (connection: Partial<RemoteConnection>) => {
         const precheckFailure = getConnectionTestPrecheckFailure(connection);
 

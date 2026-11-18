@@ -9,11 +9,7 @@ from http import HTTPStatus
 from pathlib import Path
 from typing import List, NoReturn, Optional, Union
 
-from ttnn_visualizer.enums import (
-    ConnectionTestStates,
-    HostKeyIssue,
-    RemoteConnectionFailureReason,
-)
+from ttnn_visualizer.enums import ConnectionTestStates, HostKeyIssue
 from ttnn_visualizer.exceptions import (
     AuthenticationException,
     AuthenticationFailedException,
@@ -23,6 +19,7 @@ from ttnn_visualizer.exceptions import (
     RemoteConnectionException,
     RemoteFileReadException,
     SSHException,
+    UnreachableHostException,
 )
 from ttnn_visualizer.known_hosts import host_key_status
 from ttnn_visualizer.models import HostKeyStatus, HostKeyTarget, RemoteConnection
@@ -308,18 +305,9 @@ class SSHClient:
                 message=SSH_AUTH_FAILURE_MESSAGE, detail=raw_error
             )
         except NoValidConnectionsError as ssh_err:
-            user_message = (
-                f"Unable to establish SSH connection to {self.connection.host}. "
-                "Please check the hostname, port, and network connectivity. "
-                "Ensure SSH key-based authentication is properly configured."
-            )
             # Get the raw error details from the last SSH operation
-            raw_error = getattr(self, "_last_raw_error", None)
-            raise RemoteConnectionException(
-                message=user_message,
-                status=ConnectionTestStates.FAILED,
-                detail=raw_error,
-                reason=RemoteConnectionFailureReason.UNREACHABLE,
+            raise UnreachableHostException.for_host(
+                self.connection.host, detail=getattr(self, "_last_raw_error", None)
             )
         except SSHException as ssh_err:
             # Add debug logging to understand what we're getting
@@ -334,12 +322,7 @@ class SSHClient:
                 )
                 # Store timeout as raw error
                 raw_error = str(ssh_err)
-                raise RemoteConnectionException(
-                    message=timeout_message,
-                    status=ConnectionTestStates.FAILED,
-                    detail=raw_error,
-                    reason=RemoteConnectionFailureReason.UNREACHABLE,
-                )
+                raise UnreachableHostException(timeout_message, detail=raw_error)
             else:
                 # This should match the original SSHException handling:
                 # "SSH connection error to {host}: {str(ssh_err)}. Ensure SSH key-based authentication is properly configured."

@@ -4,6 +4,7 @@
 
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { HttpStatusCode } from 'axios';
 import { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RemoteConnectionDialog from '../src/components/report-selection/RemoteConnectionDialog';
@@ -35,6 +36,7 @@ import {
 } from '../src/definitions/SshConnectionFields';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import getButtonWithText from './helpers/getButtonWithText';
+import { FAILED_NO_CONNECTION } from '../src/functions/getConnectionTestPrecheckFailure';
 import { QueryProvider } from './helpers/queryClientProvider';
 import { MULTIHOST_CHECKBOX_NAME } from './helpers/multihostCheckbox';
 import { SshConfigHostsQueryResult, noSshConfigResult, sshConfigHostsResult } from './helpers/sshConfigFixtures';
@@ -1113,7 +1115,7 @@ describe('RemoteConnectionDialog usage event', () => {
             Object.assign(new Error('Unprocessable'), {
                 isAxiosError: true,
                 response: {
-                    status: 422,
+                    status: HttpStatusCode.UnprocessableEntity,
                     data: [
                         {
                             status: ConnectionTestStates.FAILED,
@@ -1143,9 +1145,7 @@ describe('RemoteConnectionDialog usage event', () => {
     });
 
     it('records nothing for a form error caught before the request is sent', async () => {
-        testConnectionMock.mockResolvedValue([
-            { status: ConnectionTestStates.FAILED, message: 'No connection provided' },
-        ]);
+        testConnectionMock.mockResolvedValue([FAILED_NO_CONNECTION]);
         render(
             <RemoteConnectionDialog
                 open
@@ -1157,7 +1157,17 @@ describe('RemoteConnectionDialog usage event', () => {
         fillName();
         fireEvent.click(getButtonWithText('Run tests'));
 
-        await waitFor(() => expect(screen.getByText('No connection provided')).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByText(FAILED_NO_CONNECTION.message)).toBeInTheDocument());
         expect(recordEvent).not.toHaveBeenCalled();
+    });
+
+    it('records a server line that shares a form error message, since the server ran it', async () => {
+        testConnectionMock.mockResolvedValue([{ ...FAILED_NO_CONNECTION }]);
+        renderRemoteConnectionDialog({ existing: EXISTING });
+
+        fireEvent.click(getButtonWithText('Run tests'));
+
+        await waitFor(() => expect(recordEvent).toHaveBeenCalled());
+        expect(recordEvent).toHaveBeenCalledExactlyOnceWith(testResult(RemoteConnectionTestResult.OTHER));
     });
 });

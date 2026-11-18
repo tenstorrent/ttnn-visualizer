@@ -105,18 +105,26 @@ const REMOTE_CONNECTION_TEST_RESULT_BY_REASON: Readonly<
     [RemoteConnectionFailureReason.AUTH_FAILED]: RemoteConnectionTestResult.AUTH_FAILED,
     [RemoteConnectionFailureReason.HOST_KEY_REJECTED]: RemoteConnectionTestResult.HOST_KEY_REJECTED,
     [RemoteConnectionFailureReason.UNREACHABLE]: RemoteConnectionTestResult.UNREACHABLE,
+    // A search that never settled its path says nothing about the path or the host.
+    [RemoteConnectionFailureReason.SEARCH_INCOMPLETE]: RemoteConnectionTestResult.OTHER,
 });
+
+const isPathFailure = (line: ConnectionStatus) => line.status === ConnectionTestStates.FAILED && !line.reason;
 
 /**
  * The outcome of a remote connection test, from its status lines alone — never their
  * messages, which name the host. The first line is the SSH connection; each later one is a
  * configured report path.
  *
- * In order: a classified failure; SSH up but a path failed; a path with no reports (the
- * only line the server marks `WARNING`); everything OK; anything else is `OTHER`.
+ * In order: a failure classified by its line's reason, on any line; SSH up but a path
+ * failed for no reason but the path; a path with no reports (the only line the server marks
+ * `WARNING`); everything OK; anything else, a search that never finished included, is
+ * `OTHER`. A test always sends at least one path, so a lone OK line is not a success.
  */
 export function getRemoteConnectionTestResult(statuses: readonly ConnectionStatus[]): RemoteConnectionTestResult {
-    const classified = statuses.find((line) => line.reason);
+    const classified = statuses.find(
+        (line) => line.reason && line.reason !== RemoteConnectionFailureReason.SEARCH_INCOMPLETE,
+    );
 
     if (classified?.reason) {
         return REMOTE_CONNECTION_TEST_RESULT_BY_REASON[classified.reason] ?? RemoteConnectionTestResult.OTHER;
@@ -124,9 +132,13 @@ export function getRemoteConnectionTestResult(statuses: readonly ConnectionStatu
 
     const [connectionLine, ...pathLines] = statuses;
 
-    if (connectionLine?.status === ConnectionTestStates.OK) {
-        if (pathLines.some((line) => line.status === ConnectionTestStates.FAILED)) {
+    if (connectionLine?.status === ConnectionTestStates.OK && pathLines.length > 0) {
+        if (pathLines.some(isPathFailure)) {
             return RemoteConnectionTestResult.REPORT_PATH_FAILED;
+        }
+
+        if (pathLines.some((line) => line.reason)) {
+            return RemoteConnectionTestResult.OTHER;
         }
 
         if (pathLines.some((line) => line.status === ConnectionTestStates.WARNING)) {

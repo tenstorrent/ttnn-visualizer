@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import OperationDetailsComponent from '../src/components/operation-details/OperationDetailsComponent';
 import SideNavigation from '../src/components/SideNavigation';
@@ -21,6 +21,11 @@ import {
     buildOperationDetailsData,
     buildTensor,
 } from './helpers/operationDetailsFixtures';
+import { DrilldownTarget, EventLogEvent } from '../src/definitions/EventLogEvent';
+
+const { recordEvent } = vi.hoisted(() => ({ recordEvent: vi.fn() }));
+
+vi.mock('../src/functions/recordEvent', () => ({ default: recordEvent }));
 
 const ADDRESS = 0x4000;
 const OPERATION_ID = 1;
@@ -90,6 +95,9 @@ vi.mock('../src/components/operation-details/DeviceOperationsGraphComponent', ()
 vi.mock('../src/components/operation-details/DeviceOperationsFullRender', () => ({ default: () => null }));
 vi.mock('../src/components/OperationArguments', () => ({ default: () => null }));
 vi.mock('../src/components/OperationDetailsNavigation', () => ({ default: () => null }));
+vi.mock('../src/components/tensor-sharding-visualization/TensorVisualisationComponent', () => ({
+    default: () => null,
+}));
 
 // The rail sits beside the page, as in `Layout`, so a click on it is one the page has to judge.
 const renderPage = (focus: AtomProviderInitialValues = BUFFER_FOCUS) =>
@@ -151,5 +159,18 @@ describe('OperationDetailsComponent and a focused buffer (#2042)', () => {
         pressAndRelease(screen.getByRole('heading', { name: `Tensor ${TENSOR_ID}` }));
 
         expect(getBufferFocusProbe()).toHaveTextContent('focused');
+    });
+});
+
+describe('OperationDetailsComponent tensor drill-down event', () => {
+    it('records opening the allocation per core of an L1 tensor', () => {
+        renderPage([]);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Tensor allocation per core' }));
+
+        expect(recordEvent).toHaveBeenCalledExactlyOnceWith({
+            event: EventLogEvent.DRILLDOWN_OPENED,
+            details: { drilldown_target: DrilldownTarget.TENSOR_DETAILS },
+        });
     });
 });

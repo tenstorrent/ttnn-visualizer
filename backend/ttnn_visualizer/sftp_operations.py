@@ -17,7 +17,11 @@ from typing import Callable, List, NamedTuple, NoReturn, Optional
 import yaml
 from flask import current_app
 from ttnn_visualizer.decorators import remote_exception_handler
-from ttnn_visualizer.enums import ConnectionTestStates, SyncMethod
+from ttnn_visualizer.enums import (
+    ConnectionTestStates,
+    RemoteConnectionFailureReason,
+    SyncMethod,
+)
 from ttnn_visualizer.exceptions import (
     AuthenticationException,
     HostKeyVerificationException,
@@ -1119,6 +1123,9 @@ class RemoteReportPathOutcome(NamedTuple):
     report_count: int = 0
     error_message: Optional[str] = None
     error_detail: Optional[str] = None
+    # The failure's class when it was not about the path, a transport error mid-search
+    # say, so the line does not read as a misconfigured path.
+    error_reason: Optional[RemoteConnectionFailureReason] = None
 
 
 class RemoteReportSearchResults(NamedTuple):
@@ -1173,6 +1180,7 @@ def _search_report_path(
             root_state=RemoteSearchRootState.UNKNOWN,
             error_message=err.message,
             error_detail=err.detail,
+            error_reason=err.reason,
         )
 
     return RemoteReportPathOutcome(

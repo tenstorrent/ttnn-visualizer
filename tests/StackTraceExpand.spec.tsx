@@ -48,9 +48,20 @@ describe('StackTrace drill-down event', () => {
         details: { drilldown_target: DrilldownTarget.STACK_TRACE },
     };
 
+    // Collapsing scrolls the trace back into view, which jsdom does not implement, so the
+    // stub is defined for these tests and the original (absent in jsdom) put back after.
+    const originalScrollIntoView = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollIntoView');
+
     beforeEach(() => {
-        // Collapsing scrolls the trace back into view, which jsdom does not implement.
         Element.prototype.scrollIntoView = vi.fn();
+    });
+
+    afterEach(() => {
+        if (originalScrollIntoView) {
+            Object.defineProperty(Element.prototype, 'scrollIntoView', originalScrollIntoView);
+        } else {
+            delete (Element.prototype as Partial<Element>).scrollIntoView;
+        }
     });
 
     it('records each expansion and never a collapse', () => {

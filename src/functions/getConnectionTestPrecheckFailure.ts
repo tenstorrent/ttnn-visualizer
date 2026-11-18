@@ -5,18 +5,18 @@
 import { ConnectionStatus, ConnectionTestStates } from '../definitions/ConnectionStatus';
 import { RemoteConnection } from '../model/RemoteConnection';
 
-const FAILED_NO_CONNECTION: ConnectionStatus = {
+export const FAILED_NO_CONNECTION: ConnectionStatus = {
     status: ConnectionTestStates.FAILED,
     message: 'No connection provided',
 };
-const FAILED_NO_PATH: ConnectionStatus = {
+export const FAILED_NO_PATH: ConnectionStatus = {
     status: ConnectionTestStates.FAILED,
     message: 'Please provide at least one folder path.',
 };
 
 /**
  * The failure a connection test reports without asking the server, or `null` when it would
- * be sent. Shared so a caller can tell a form error from a test that actually ran.
+ * be sent. `testConnection` is the one caller that gates on it.
  */
 export default function getConnectionTestPrecheckFailure(
     connection: Partial<RemoteConnection>,
@@ -30,4 +30,12 @@ export default function getConnectionTestPrecheckFailure(
     }
 
     return null;
+}
+
+/**
+ * Whether a connection test's result is a form error `testConnection` answered without
+ * sending. By reference, so a server line that happens to share a message never matches.
+ */
+export function isConnectionTestPrecheckFailure(statuses: readonly ConnectionStatus[]): boolean {
+    return statuses.length === 1 && (statuses[0] === FAILED_NO_CONNECTION || statuses[0] === FAILED_NO_PATH);
 }

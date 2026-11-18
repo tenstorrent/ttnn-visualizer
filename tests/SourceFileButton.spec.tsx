@@ -202,4 +202,18 @@ describe('SourceFileButton drill-down event', () => {
         await waitFor(() => expect(isSourceFileAvailable).toHaveBeenCalled());
         expect(recordEvent).not.toHaveBeenCalled();
     });
+
+    it('records a read that failed, since the overlay still opened to show why', async () => {
+        // `readRemoteFile` never rejects: a failed read comes back as an `error` the overlay shows.
+        readRemoteFile.mockResolvedValue({ data: null, resolvedPath: null, error: 'Permission denied' });
+        renderButton();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Source' }));
+
+        await waitFor(() => expect(recordEvent).toHaveBeenCalled());
+        expect(recordEvent).toHaveBeenCalledExactlyOnceWith({
+            event: EventLogEvent.DRILLDOWN_OPENED,
+            details: { drilldown_target: DrilldownTarget.SOURCE_FILE },
+        });
+    });
 });

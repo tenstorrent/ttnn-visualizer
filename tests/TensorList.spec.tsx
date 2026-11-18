@@ -10,14 +10,19 @@
  * any buffer type.
  */
 
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import TensorList from '../src/components/TensorList';
+import { EventLogEvent, FilterSurface } from '../src/definitions/EventLogEvent';
 import { Tensor } from '../src/model/APIData';
 import { BufferType } from '../src/model/BufferType';
 import { tensorBufferTypeFiltersAtom } from '../src/store/app';
 import { useGetTensorDeallocationReportByOperation, useOperationsList, useTensors } from '../src/hooks/useAPI';
 import { TestProviders } from './helpers/TestProviders';
+
+const { recordEvent } = vi.hoisted(() => ({ recordEvent: vi.fn() }));
+
+vi.mock('../src/functions/recordEvent', () => ({ default: recordEvent }));
 
 vi.mock('../src/hooks/useAPI', () => ({
     useOperationsList: vi.fn(),
@@ -88,6 +93,7 @@ const rowFor = (container: HTMLElement, shapeText: string) =>
 const memoryTagIn = (row: HTMLElement | undefined) => row?.querySelector('.memory-tag')?.textContent ?? null;
 
 beforeEach(() => {
+    recordEvent.mockClear();
     vi.mocked(useOperationsList).mockReturnValue({ data: [], isLoading: false } as unknown as ReturnType<
         typeof useOperationsList
     >);
@@ -153,5 +159,24 @@ describe('TensorList', () => {
         expect(rowFor(container, '111')).toBeUndefined();
         expect(rowFor(container, '222')).toBeDefined();
         expect(rowFor(container, '333')).toBeUndefined();
+    });
+});
+
+describe('TensorList filter event', () => {
+    const filterUsed = {
+        event: EventLogEvent.FILTER_USED,
+        details: { filter_surface: FilterSurface.TENSORS },
+    };
+
+    it('records the first query typed into the filter, once per mount', () => {
+        renderList();
+        const filter = screen.getByPlaceholderText('Filter tensors');
+
+        fireEvent.change(filter, { target: { value: 'a' } });
+        fireEvent.change(filter, { target: { value: 'ab' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Clear search query' }));
+        fireEvent.change(filter, { target: { value: 'c' } });
+
+        expect(recordEvent.mock.calls).toEqual([[filterUsed]]);
     });
 });
