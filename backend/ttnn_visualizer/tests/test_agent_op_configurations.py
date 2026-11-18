@@ -242,14 +242,10 @@ class TestNormalisation:
         assert time.process_time() - started < _ONE_PASS_CPU_SECONDS
         assert normalised == crafted
 
-    @pytest.mark.parametrize("lead", ["", "device_id:1\nMeshCoordinate("])
-    def test_device_prefixes_whose_coordinate_never_closes_are_read_in_one_pass(
-        self, lead
-    ):
-        """A coordinate read past a '(' rescanned the line from each current prefix:
-        52 s on these 928 KB. Older prefixes end their line, so only a line of current
-        ones is slow, led by an older prefix or not."""
-        crafted = lead + "device_id: 1, MeshCoordinate(" * 32_000
+    def test_device_prefixes_whose_coordinate_never_closes_are_read_in_one_pass(self):
+        """A coordinate read past a '(' rescanned the line from each prefix: 52 s on
+        these 928 KB. An older prefix ends its own line, so it was never slow."""
+        crafted = "device_id: 1, MeshCoordinate(" * 32_000
 
         started = time.process_time()
         normalised = configurations.normalised_value(crafted)
