@@ -1466,6 +1466,7 @@ def find_folders_by_files(
                 message=error_msg,
                 status=ConnectionTestStates.FAILED,
                 detail=stderr.strip() or None,
+                reason=RemoteConnectionFailureReason.REPORT_PATH_FAILED,
             )
         else:
             logger.error(f"Error finding folders: {stderr}")

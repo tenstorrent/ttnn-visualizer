@@ -47,6 +47,7 @@ _SSH_AUTH_ERROR_FRAGMENTS = (
     "authentication failed",
     "publickey",
     "password",
+    "too many authentication failures",
 )
 _SSH_CONNECTION_ERROR_FRAGMENTS = (
     "connection refused",

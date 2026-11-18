@@ -221,8 +221,12 @@ const PerformanceTable = ({
                         aria-label={`View tensor details for ${row.raw_op_code}`}
                         data-testid={TEST_IDS.PERF_TENSOR_DRAWER_OPEN_BUTTON}
                         onClick={() => {
+                            // The selected row's drawer is already open, so a re-click opens nothing.
+                            if (row.id !== selectedPerfRowId) {
+                                recordDrilldownOpened(DrilldownTarget.TENSOR_DETAILS);
+                            }
+
                             setSelectedPerfRowId(row.id);
-                            recordDrilldownOpened(DrilldownTarget.TENSOR_DETAILS);
                         }}
                     />
                 </span>

@@ -40,20 +40,19 @@ class RemoteConnectionFailureReason(str, enum.Enum):
     """Why a remote connection test failed, for a status line to carry without its message.
 
     Messages are written for people and carry the host, so nothing reading a result may
-    parse them; this is the machine-readable half. Absent means the failure has no class
-    here: an unexpected SSH error, or a problem with one configured path rather than the
-    connection. A timeout counts as ``UNREACHABLE``: the host never answered.
+    parse them; this is the machine-readable half. A timeout counts as ``UNREACHABLE``:
+    the host never answered, and so does a connection lost while a path was searched.
 
-    A path's line carries one too when its search failed for a reason other than the
-    path: ``UNREACHABLE`` for a transport error mid-search, ``SEARCH_INCOMPLETE`` when the
-    search ended without settling whether the path exists. Neither is a misconfigured
-    path, so neither may be read as one.
+    ``REPORT_PATH_FAILED`` is set only where the backend knows the configured path is the
+    problem: missing, not a directory, or unreadable. Absent means the failure has no
+    class, an unexpected SSH error or a search that never settled its path included, so a
+    failure nobody classified is never counted as a misconfigured path.
     """
 
     AUTH_FAILED = "auth_failed"
     HOST_KEY_REJECTED = "host_key_rejected"
     UNREACHABLE = "unreachable"
-    SEARCH_INCOMPLETE = "search_incomplete"
+    REPORT_PATH_FAILED = "report_path_failed"
 
 
 class StackSourceOrigin(str, enum.Enum):

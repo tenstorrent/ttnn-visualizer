@@ -966,6 +966,8 @@ class TestMultihostPerformanceDiscovery:
             )
 
         assert locked in excinfo.value.message
+        # The path's fault, which the connection test counts as `report_path_failed`.
+        assert excinfo.value.reason == RemoteConnectionFailureReason.REPORT_PATH_FAILED
 
     def test_candidates_the_glob_admits_but_cannot_be_ranked_are_dropped(self, app):
         """Glob syntax cannot say "digits only", so the regex has the final word.

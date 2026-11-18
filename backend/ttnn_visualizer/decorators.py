@@ -102,6 +102,7 @@ def remote_exception_handler(func):
             raise RemoteConnectionException(
                 status=ConnectionTestStates.FAILED,
                 message=f"Unable to open path: {str(err)}",
+                reason=RemoteConnectionFailureReason.REPORT_PATH_FAILED,
             )
         except ConnectionDroppedError as err:
             # Ahead of its parent below: the host answered and then went away, so the
@@ -120,27 +121,22 @@ def remote_exception_handler(func):
             raise UnreachableHostException.for_host(connection.host)
 
         except IOError as err:
+            message = f"Error opening remote folder: {str(err)}"
             if "Name or service not known" in str(err):
-                raise UnreachableHostException(
-                    f"Unable to connect to {connection.host} - check hostname"
-                )
+                message = f"Unable to connect to {connection.host} - check hostname"
             raise RemoteConnectionException(
                 status=ConnectionTestStates.FAILED,
-                message=f"Error opening remote folder: {str(err)}",
+                message=message,
             )
         except SSHException as err:
-            reason = None
             if str(err) == "No existing session":
                 message = "SSH authentication failed. Please ensure SSH keys are configured and ssh-agent is running."
-                # No HTTP status, unlike `AuthenticationFailedException`: this arm has
-                # always answered as one failed line, and the class is all that changes.
-                reason = RemoteConnectionFailureReason.AUTH_FAILED
             else:
                 err_message = re.sub(r"\[.*?]", "", str(err)).strip()
                 message = f"SSH connection error to {connection.host}: {err_message}. Ensure SSH key-based authentication is properly configured."
 
             raise RemoteConnectionException(
-                status=ConnectionTestStates.FAILED, message=message, reason=reason
+                status=ConnectionTestStates.FAILED, message=message
             )
         except RemoteFileReadException:
             raise

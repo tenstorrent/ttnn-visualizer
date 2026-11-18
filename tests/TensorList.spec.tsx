@@ -10,10 +10,10 @@
  * any buffer type.
  */
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import TensorList from '../src/components/TensorList';
-import { EventLogEvent, FilterSurface } from '../src/definitions/EventLogEvent';
+import { DrilldownTarget, EventLogEvent, FilterSurface } from '../src/definitions/EventLogEvent';
 import { Tensor } from '../src/model/APIData';
 import { BufferType } from '../src/model/BufferType';
 import { tensorBufferTypeFiltersAtom } from '../src/store/app';
@@ -178,5 +178,19 @@ describe('TensorList filter event', () => {
         fireEvent.change(filter, { target: { value: 'c' } });
 
         expect(recordEvent.mock.calls).toEqual([[filterUsed]]);
+    });
+});
+
+describe('TensorList buffer details event', () => {
+    it('records one drill-down for the "Buffer details" click itself', () => {
+        const { container } = renderList();
+        const row = rowFor(container, '111');
+
+        fireEvent.click(within(row!).getByRole('button', { name: /Buffer details/ }));
+
+        expect(recordEvent).toHaveBeenCalledExactlyOnceWith({
+            event: EventLogEvent.DRILLDOWN_OPENED,
+            details: { drilldown_target: DrilldownTarget.BUFFER_DETAILS },
+        });
     });
 });

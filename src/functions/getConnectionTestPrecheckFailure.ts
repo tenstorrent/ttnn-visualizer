@@ -9,6 +9,10 @@ export const FAILED_NO_CONNECTION: ConnectionStatus = {
     status: ConnectionTestStates.FAILED,
     message: 'No connection provided',
 };
+export const FAILED_NO_USERNAME: ConnectionStatus = {
+    status: ConnectionTestStates.FAILED,
+    message: 'Please provide a username.',
+};
 export const FAILED_NO_PATH: ConnectionStatus = {
     status: ConnectionTestStates.FAILED,
     message: 'Please provide at least one folder path.',
@@ -25,6 +29,11 @@ export default function getConnectionTestPrecheckFailure(
         return FAILED_NO_CONNECTION;
     }
 
+    // The server refuses an empty username too, but only after the request is sent.
+    if (!connection.username?.trim()) {
+        return FAILED_NO_USERNAME;
+    }
+
     if (!connection.profilerPath && !connection.performancePath) {
         return FAILED_NO_PATH;
     }
@@ -37,5 +46,8 @@ export default function getConnectionTestPrecheckFailure(
  * sending. By reference, so a server line that happens to share a message never matches.
  */
 export function isConnectionTestPrecheckFailure(statuses: readonly ConnectionStatus[]): boolean {
-    return statuses.length === 1 && (statuses[0] === FAILED_NO_CONNECTION || statuses[0] === FAILED_NO_PATH);
+    return (
+        statuses.length === 1 &&
+        (statuses[0] === FAILED_NO_CONNECTION || statuses[0] === FAILED_NO_USERNAME || statuses[0] === FAILED_NO_PATH)
+    );
 }

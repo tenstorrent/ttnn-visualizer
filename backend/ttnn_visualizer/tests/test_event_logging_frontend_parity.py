@@ -14,7 +14,7 @@ It lives in pytest rather than vitest because Python can introspect
 toolchain the frontend suite does not have. Parsing TypeScript with a regex is honest here
 only because the file it reads is a flat set of string-valued enums with no computation in
 it; a test that started failing to find members would fail loudly rather than pass hollowly
-(see :func:`_enum_values`).
+(see :func:`typescript_enum_values`).
 """
 
 import json
@@ -45,6 +45,7 @@ from ttnn_visualizer.event_logging import (
     ReportLoadFailureReason,
     ReportSource,
 )
+from ttnn_visualizer.tests.frontend_parity import typescript_enum_values
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 _DEFINITIONS = _REPOSITORY_ROOT / "src" / "definitions" / "EventLogEvent.ts"
@@ -112,29 +113,6 @@ def _require_match(
     return match
 
 
-def _enum_values(source: str, name: str) -> Set[str]:
-    """The string values of one TS enum, or a failure rather than an empty set.
-
-    An empty result would silently satisfy every comparison below against an enum that had
-    also been emptied, so a body that does not parse is an error in its own right.
-    """
-    body = _require_match(
-        rf"export enum {name} {{(.*?)^}}",
-        source,
-        re.DOTALL | re.MULTILINE,
-        f"No `export enum {name}` in {_DEFINITIONS.name}",
-    )
-
-    values = set(re.findall(r"=\s*'([^']+)'", body.group(1)))
-
-    if not values:
-        raise AssertionError(
-            f"`export enum {name}` in {_DEFINITIONS.name} declares no members"
-        )
-
-    return values
-
-
 def _payload_detail_keys(source: str, event: EventLogEvent) -> Set[str]:
     """The keys of the `details` object in the `EventLogEventPayload` branch for one event.
 
@@ -156,7 +134,7 @@ def _payload_detail_keys(source: str, event: EventLogEvent) -> Set[str]:
 
 @pytest.mark.parametrize("name, enumeration", sorted(_PAIRED_ENUMS.items()))
 def test_every_enum_matches_its_typescript_copy(name, enumeration):
-    values = _enum_values(_read(_DEFINITIONS), name)
+    values = typescript_enum_values(_DEFINITIONS, name)
 
     assert values == {member.value for member in enumeration}, (
         f"{name} has diverged from event_logging.py. The client would emit events this endpoint "

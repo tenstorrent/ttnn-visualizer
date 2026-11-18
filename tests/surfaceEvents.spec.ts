@@ -90,6 +90,7 @@ describe('getRemoteConnectionTestResult', () => {
         ...(reason ? { reason } : {}),
     });
     const { OK, FAILED, WARNING } = ConnectionTestStates;
+    const PATH_FAILED = RemoteConnectionFailureReason.REPORT_PATH_FAILED;
 
     it.each<[string, ConnectionStatus[], RemoteConnectionTestResult]>([
         ['every line passing', [line(OK), line(OK), line(OK)], RemoteConnectionTestResult.SUCCESS],
@@ -109,10 +110,14 @@ describe('getRemoteConnectionTestResult', () => {
             RemoteConnectionTestResult.UNREACHABLE,
         ],
         ['a path holding no reports', [line(OK), line(WARNING)], RemoteConnectionTestResult.NO_REPORTS_FOUND],
-        ['a path that failed', [line(OK), line(FAILED)], RemoteConnectionTestResult.REPORT_PATH_FAILED],
+        [
+            'a path the server marked as the problem',
+            [line(OK), line(FAILED, PATH_FAILED)],
+            RemoteConnectionTestResult.REPORT_PATH_FAILED,
+        ],
         [
             'a failed path beside an empty one',
-            [line(OK), line(WARNING), line(FAILED)],
+            [line(OK), line(WARNING), line(FAILED, PATH_FAILED)],
             RemoteConnectionTestResult.REPORT_PATH_FAILED,
         ],
         [
@@ -120,21 +125,18 @@ describe('getRemoteConnectionTestResult', () => {
             [line(OK), line(FAILED, RemoteConnectionFailureReason.UNREACHABLE)],
             RemoteConnectionTestResult.UNREACHABLE,
         ],
-        [
-            'a search that never settled its path',
-            [line(OK), line(FAILED, RemoteConnectionFailureReason.SEARCH_INCOMPLETE)],
-            RemoteConnectionTestResult.OTHER,
-        ],
+        ['a path failure nobody classified', [line(OK), line(FAILED)], RemoteConnectionTestResult.OTHER],
         [
             'a missing path beside one whose search never settled',
-            [line(OK), line(FAILED), line(FAILED, RemoteConnectionFailureReason.SEARCH_INCOMPLETE)],
+            [line(OK), line(FAILED, PATH_FAILED), line(FAILED)],
             RemoteConnectionTestResult.REPORT_PATH_FAILED,
         ],
         [
             'an empty path beside one whose search never settled',
-            [line(OK), line(WARNING), line(FAILED, RemoteConnectionFailureReason.SEARCH_INCOMPLETE)],
+            [line(OK), line(WARNING), line(FAILED)],
             RemoteConnectionTestResult.OTHER,
         ],
+        ['a path reason on the connection line', [line(FAILED, PATH_FAILED)], RemoteConnectionTestResult.OTHER],
         ['a connection with no path lines', [line(OK)], RemoteConnectionTestResult.OTHER],
         ['an unclassified SSH failure', [line(FAILED), line(FAILED)], RemoteConnectionTestResult.OTHER],
         ['no lines at all', [], RemoteConnectionTestResult.OTHER],

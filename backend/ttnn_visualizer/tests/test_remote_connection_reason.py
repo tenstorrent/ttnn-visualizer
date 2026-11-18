@@ -49,6 +49,7 @@ from ttnn_visualizer.sftp_operations import (
     check_remote_path_for_reports,
 )
 from ttnn_visualizer.ssh_client import SSHClient, raise_for_ssh_subprocess_error
+from ttnn_visualizer.tests.frontend_parity import typescript_enum_values
 
 _CONNECTION_STATUS_TS = (
     Path(__file__).resolve().parents[3] / "src" / "definitions" / "ConnectionStatus.ts"
@@ -77,16 +78,9 @@ def _remote_connection_payload():
 
 
 def test_the_typescript_reason_enum_matches():
-    body = re.search(
-        r"export enum RemoteConnectionFailureReason {(.*?)^}",
-        _CONNECTION_STATUS_TS.read_text(encoding="utf-8"),
-        re.DOTALL | re.MULTILINE,
-    )
-    assert body is not None, "No RemoteConnectionFailureReason in ConnectionStatus.ts"
-
-    assert set(re.findall(r"=\s*'([^']+)'", body.group(1))) == {
-        member.value for member in RemoteConnectionFailureReason
-    }
+    assert typescript_enum_values(
+        _CONNECTION_STATUS_TS, "RemoteConnectionFailureReason"
+    ) == {member.value for member in RemoteConnectionFailureReason}
 
 
 def test_the_connection_verdicts_carry_their_own_reason():
@@ -219,17 +213,13 @@ def test_the_route_returns_the_reason_on_the_connection_line(
             id="dropped",
         ),
         pytest.param(
-            IOError("[Errno -2] Name or service not known"),
-            RemoteConnectionFailureReason.UNREACHABLE,
-            id="unresolvable_host",
+            FileNotFoundError("/remote/profiler"),
+            RemoteConnectionFailureReason.REPORT_PATH_FAILED,
+            id="missing_path",
         ),
-        # A path the remote refused is about the path, not the connection.
-        pytest.param(IOError("Permission denied"), None, id="unreadable_path"),
-        pytest.param(
-            SSHException("No existing session"),
-            RemoteConnectionFailureReason.AUTH_FAILED,
-            id="no_session",
-        ),
+        # Nothing classifies an unexpected local or SSH error, so it is never read as a
+        # misconfigured path.
+        pytest.param(IOError("Permission denied"), None, id="unexpected_io_error"),
         pytest.param(SSHException("kex_exchange_identification"), None, id="other"),
     ],
 )
@@ -256,6 +246,19 @@ def test_a_connection_lost_mid_command_is_classified_as_dropped(stderr):
     error = subprocess.CalledProcessError(255, ["ssh"], output="", stderr=stderr)
 
     with pytest.raises(ConnectionDroppedError):
+        raise_for_ssh_subprocess_error(error, _connection())
+
+
+def test_too_many_authentication_failures_is_an_auth_failure():
+    # Common for anyone with many keys in ssh-agent: the server gives up before the right one.
+    error = subprocess.CalledProcessError(
+        255,
+        ["ssh"],
+        output="",
+        stderr="Received disconnect from 10.0.0.1 port 22:2: Too many authentication failures\r\n",
+    )
+
+    with pytest.raises(AuthenticationException):
         raise_for_ssh_subprocess_error(error, _connection())
 
 
@@ -306,25 +309,39 @@ def test_a_connection_lost_mid_search_keeps_its_class_on_the_path(app):
         ),
         pytest.param(
             RemoteReportPathOutcome(root_state=RemoteSearchRootState.UNKNOWN),
-            "search_incomplete",
+            None,
             id="search_never_settled",
         ),
         pytest.param(
             RemoteReportPathOutcome(root_state=RemoteSearchRootState.MISSING),
-            None,
+            "report_path_failed",
             id="missing_path",
+        ),
+        pytest.param(
+            RemoteReportPathOutcome(root_state=RemoteSearchRootState.NOT_A_DIRECTORY),
+            "report_path_failed",
+            id="not_a_directory",
         ),
         pytest.param(
             RemoteReportPathOutcome(
                 root_state=RemoteSearchRootState.UNKNOWN,
-                error_message="Error opening remote folder: Permission denied",
+                error_message="Permission denied accessing '/remote/profiler'.",
+                error_reason=RemoteConnectionFailureReason.REPORT_PATH_FAILED,
+            ),
+            "report_path_failed",
+            id="unreadable_path",
+        ),
+        pytest.param(
+            RemoteReportPathOutcome(
+                root_state=RemoteSearchRootState.UNKNOWN,
+                error_message="SSH connection error to work-gpu: odd.",
             ),
             None,
-            id="unreadable_path",
+            id="unclassified_failure",
         ),
     ],
 )
-def test_a_path_line_carries_a_reason_only_when_the_path_is_not_the_problem(
+def test_a_path_line_blames_the_path_only_when_the_search_settled_it(
     app, client, outcome, reason
 ):
     app.config["SERVER_MODE"] = False

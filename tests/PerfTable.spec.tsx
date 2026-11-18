@@ -193,6 +193,16 @@ describe('PerfTable tensor-drawer trigger column', () => {
         });
     });
 
+    it('records nothing for a re-click on the row whose drawer is already open', () => {
+        (useOpToPerfIdFiltered as Mock).mockReturnValue([{ opId: 11, perfId: '1' }]);
+        renderTable([matmulRow]);
+
+        fireEvent.click(screen.getByRole('button', { name: 'View tensor details for Matmul' }));
+        fireEvent.click(screen.getByRole('button', { name: 'View tensor details for Matmul' }));
+
+        expect(recordEvent).toHaveBeenCalledOnce();
+    });
+
     it('renders the trigger on the comparison sub-row that holds the active report (comparison-report tab)', () => {
         (useOpToPerfIdFiltered as Mock).mockReturnValue([{ opId: 11, perfId: '1' }]);
 

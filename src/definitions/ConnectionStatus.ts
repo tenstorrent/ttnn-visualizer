@@ -18,7 +18,7 @@ export enum RemoteConnectionFailureReason {
     AUTH_FAILED = 'auth_failed',
     HOST_KEY_REJECTED = 'host_key_rejected',
     UNREACHABLE = 'unreachable',
-    SEARCH_INCOMPLETE = 'search_incomplete',
+    REPORT_PATH_FAILED = 'report_path_failed',
 }
 
 export interface ConnectionStatus {

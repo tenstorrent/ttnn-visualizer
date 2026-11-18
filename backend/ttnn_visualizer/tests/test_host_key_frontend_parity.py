@@ -11,33 +11,13 @@ exists to remove. Follows the pattern ``test_event_logging_frontend_parity.py`` 
 the event-log vocabulary.
 """
 
-import re
 from pathlib import Path
-from typing import Set
 
 from ttnn_visualizer.enums import HostKeyIssue
+from ttnn_visualizer.tests.frontend_parity import typescript_enum_values
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _DEFINITIONS = _PROJECT_ROOT / "src" / "definitions" / "HostKey.ts"
-
-
-def _typescript_enum_values(name: str) -> Set[str]:
-    """The string values of one TS enum, or a failure rather than an empty set.
-
-    An empty result would satisfy the comparison below against an enum that had also been
-    emptied, so a body that does not parse is an error in its own right.
-    """
-    source = _DEFINITIONS.read_text(encoding="utf-8")
-    body = re.search(
-        rf"export enum {name} {{(.*?)^}}", source, re.DOTALL | re.MULTILINE
-    )
-
-    assert body is not None, f"No `export enum {name}` in {_DEFINITIONS.name}"
-
-    values = set(re.findall(r"=\s*'([^']+)'", body.group(1)))
-
-    assert values, f"`export enum {name}` in {_DEFINITIONS.name} declares no members"
-    return values
 
 
 def test_the_definitions_file_is_where_the_enum_is_declared():
@@ -46,6 +26,6 @@ def test_the_definitions_file_is_where_the_enum_is_declared():
 
 
 def test_host_key_issue_values_match_the_frontend_copy():
-    assert _typescript_enum_values("HostKeyIssue") == {
+    assert typescript_enum_values(_DEFINITIONS, "HostKeyIssue") == {
         issue.value for issue in HostKeyIssue
     }

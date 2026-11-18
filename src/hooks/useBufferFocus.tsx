@@ -46,8 +46,18 @@ const useBufferFocus = () => {
     const [selectedBufferColour, setSelectedBufferColour] = useAtom(selectedBufferColourAtom);
     const resetBufferFocus = useResetBufferFocus();
 
+    /**
+     * Focuses a buffer. Records a `buffer_details` drill-down unless `recordDrilldown` is
+     * false, which is for a focus that follows navigation rather than a click: the click
+     * that started that navigation records it, and the navigation can replay.
+     */
     const updateBufferFocus = useCallback(
-        (address?: number, tensorId?: number, colorVariance?: number): void => {
+        (
+            address?: number,
+            tensorId?: number,
+            colorVariance?: number,
+            { recordDrilldown = true }: { recordDrilldown?: boolean } = {},
+        ): void => {
             const previousToast = activeToast;
             let colour = getTensorColor(tensorId);
 
@@ -81,10 +91,9 @@ const useBufferFocus = () => {
             setActiveToast(toastInstance);
             setSelectedAddress(address ?? null);
             setSelectedTensorId(tensorId ?? null);
-            // Every caller is a click, or the "Buffer details" navigation that one started,
-            // so this is the single point for the drill-down. A reload that restores that
-            // navigation from history records it again.
-            recordDrilldownOpened(DrilldownTarget.BUFFER_DETAILS);
+            if (recordDrilldown) {
+                recordDrilldownOpened(DrilldownTarget.BUFFER_DETAILS);
+            }
         },
         [
             activeToast,

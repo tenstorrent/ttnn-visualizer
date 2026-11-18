@@ -37,4 +37,12 @@ describe('useBufferFocus drill-down event', () => {
             [{ event: EventLogEvent.DRILLDOWN_OPENED, details: { drilldown_target: DrilldownTarget.BUFFER_DETAILS } }],
         ]);
     });
+
+    it('records nothing for a focus that follows navigation', () => {
+        const { result } = renderHook(() => useBufferFocus(), { wrapper });
+
+        act(() => result.current.updateBufferFocus(1024, 3, undefined, { recordDrilldown: false }));
+
+        expect(recordEvent).not.toHaveBeenCalled();
+    });
 });

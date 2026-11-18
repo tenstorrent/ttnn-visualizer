@@ -1987,12 +1987,12 @@ def _report_search_status(
         return connection_status(
             ConnectionTestStates.FAILED.value,
             _FAILURE_COPY_BY_ROOT_STATE[outcome.root_state].format(subject=subject),
-            # A search that never settled the path says nothing about it, so it must
-            # not be counted as a misconfigured one.
+            # Only a root the search settled is the path's fault; one that never
+            # settled says nothing about it, so it is left unclassified.
             reason=(
-                RemoteConnectionFailureReason.SEARCH_INCOMPLETE
+                None
                 if outcome.root_state is RemoteSearchRootState.UNKNOWN
-                else None
+                else RemoteConnectionFailureReason.REPORT_PATH_FAILED
             ),
         )
 
