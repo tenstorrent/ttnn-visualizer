@@ -16,7 +16,7 @@ import TensorList from '../src/components/TensorList';
 import { DrilldownTarget, EventLogEvent, FilterSurface } from '../src/definitions/EventLogEvent';
 import { Tensor } from '../src/model/APIData';
 import { BufferType } from '../src/model/BufferType';
-import { tensorBufferTypeFiltersAtom } from '../src/store/app';
+import { tensorBufferTypeFiltersAtom, tensorListFilterAtom } from '../src/store/app';
 import { useGetTensorDeallocationReportByOperation, useOperationsList, useTensors } from '../src/hooks/useAPI';
 import { TestProviders } from './helpers/TestProviders';
 
@@ -78,9 +78,14 @@ const DRAM_TENSOR = tensor(1, 'Shape([1, 111])', BufferType.DRAM, 100);
 const UNADDRESSED_L1_TENSOR = tensor(2, 'Shape([1, 222])', BufferType.L1, null);
 const HOST_TENSOR = tensor(3, 'Shape([1, 333])', null, null);
 
-const renderList = (bufferTypeFilters: (BufferType | null)[] = []) =>
+const renderList = (bufferTypeFilters: (BufferType | null)[] = [], restoredQuery = '') =>
     render(
-        <TestProviders initialAtomValues={[[tensorBufferTypeFiltersAtom, bufferTypeFilters]]}>
+        <TestProviders
+            initialAtomValues={[
+                [tensorBufferTypeFiltersAtom, bufferTypeFilters],
+                [tensorListFilterAtom, restoredQuery],
+            ]}
+        >
             <TensorList />
         </TestProviders>,
     );
@@ -178,6 +183,15 @@ describe('TensorList filter event', () => {
         fireEvent.change(filter, { target: { value: 'c' } });
 
         expect(recordEvent.mock.calls).toEqual([[filterUsed]]);
+    });
+
+    it('records nothing for clearing a query restored on return, which leaves no filter', () => {
+        renderList([], 'add');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Clear search query' }));
+
+        expect(screen.getByPlaceholderText<HTMLInputElement>('Filter tensors').value).toBe('');
+        expect(recordEvent).not.toHaveBeenCalled();
     });
 });
 

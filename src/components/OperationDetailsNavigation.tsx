@@ -24,6 +24,8 @@ import LoadingSpinner from './LoadingSpinner';
 import { LoadingSpinnerSizes } from '../definitions/LoadingSpinner';
 import Overlay from './Overlay';
 import StackTrace from './operation-details/StackTrace';
+import { recordDrilldownOpened } from '../functions/surfaceEvents';
+import { DrilldownTarget } from '../definitions/EventLogEvent';
 import { StackTraceLanguage } from '../definitions/StackTrace';
 
 enum TAB_IDS {
@@ -40,6 +42,16 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
     const [errorIsOpen, setErrorIsOpen] = useState(false);
     const [selectedTabId, setSelectedTabId] = useState<TabId>(TAB_IDS.ERROR);
     const [isErrorExpanded, setIsErrorExpanded] = useState(false);
+
+    // Both tabs share the expanded state, so a trace opened after the message was expanded
+    // mounts expanded, with no Expand click of its own to record it.
+    const handleErrorTabChange = (tabId: TabId) => {
+        setSelectedTabId(tabId);
+
+        if (tabId === TAB_IDS.STACK_TRACE && isErrorExpanded) {
+            recordDrilldownOpened(DrilldownTarget.STACK_TRACE);
+        }
+    };
 
     const navigate = useNavigate();
     const { operation } = useOperationDetails(operationId);
@@ -170,7 +182,7 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
                 {operation?.error && (
                     <Tabs
                         selectedTabId={selectedTabId}
-                        onChange={setSelectedTabId}
+                        onChange={handleErrorTabChange}
                         size={Size.LARGE}
                         id='error-details-tabs'
                         className='report-tabs'

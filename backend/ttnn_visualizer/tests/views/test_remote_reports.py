@@ -1542,8 +1542,8 @@ class TestConnectionTestReportStatuses:
         assert "connection to remote.example.com was lost" in messages[2]
         line = response.get_json()[-1]
         assert line["status"] == ConnectionTestStates.FAILED.value
-        # The connection's failure, not the path's: a path line with no reason is
-        # read as a misconfigured path.
+        # The connection's failure, not the path's: without a reason the line would
+        # count as ``other``, losing the class.
         assert line["reason"] == RemoteConnectionFailureReason.UNREACHABLE.value
 
     def test_both_paths_failing_are_both_reported(self, app, client):

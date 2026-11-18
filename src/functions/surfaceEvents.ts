@@ -96,17 +96,27 @@ export function getComparisonReportCountBucket(comparisonReportCount: number): C
     return ComparisonReportCountBucket.THREE_OR_MORE;
 }
 
+type ConnectionFailureReason = Exclude<RemoteConnectionFailureReason, RemoteConnectionFailureReason.REPORT_PATH_FAILED>;
+
 // The reasons that are about the connection rather than one path, so they decide the
-// result from any line. `REPORT_PATH_FAILED` is the path's own and is read below.
-const REMOTE_CONNECTION_TEST_RESULT_BY_CONNECTION_REASON: Readonly<Record<string, RemoteConnectionTestResult>> =
-    Object.freeze({
-        [RemoteConnectionFailureReason.AUTH_FAILED]: RemoteConnectionTestResult.AUTH_FAILED,
-        [RemoteConnectionFailureReason.HOST_KEY_REJECTED]: RemoteConnectionTestResult.HOST_KEY_REJECTED,
-        [RemoteConnectionFailureReason.UNREACHABLE]: RemoteConnectionTestResult.UNREACHABLE,
-    });
+// result from any line. `REPORT_PATH_FAILED` is the path's own and is read below. Keyed by
+// every other reason, so a new one fails type-checking until it is given a result here.
+const REMOTE_CONNECTION_TEST_RESULT_BY_CONNECTION_REASON: Readonly<
+    Record<ConnectionFailureReason, RemoteConnectionTestResult>
+> = Object.freeze({
+    [RemoteConnectionFailureReason.AUTH_FAILED]: RemoteConnectionTestResult.AUTH_FAILED,
+    [RemoteConnectionFailureReason.HOST_KEY_REJECTED]: RemoteConnectionTestResult.HOST_KEY_REJECTED,
+    [RemoteConnectionFailureReason.UNREACHABLE]: RemoteConnectionTestResult.UNREACHABLE,
+});
+
+// An own-property check, so a reason such as "constructor" never resolves through the prototype.
+const isConnectionFailureReason = (reason: string): reason is ConnectionFailureReason =>
+    Object.hasOwn(REMOTE_CONNECTION_TEST_RESULT_BY_CONNECTION_REASON, reason);
 
 const getConnectionReasonResult = (line: ConnectionStatus): RemoteConnectionTestResult | undefined =>
-    line.reason ? REMOTE_CONNECTION_TEST_RESULT_BY_CONNECTION_REASON[line.reason] : undefined;
+    line.reason && isConnectionFailureReason(line.reason)
+        ? REMOTE_CONNECTION_TEST_RESULT_BY_CONNECTION_REASON[line.reason]
+        : undefined;
 
 /**
  * The outcome of a remote connection test, from its status lines alone — never their

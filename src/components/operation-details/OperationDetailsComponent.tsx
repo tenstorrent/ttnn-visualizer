@@ -177,12 +177,12 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
 
     const onDramDeltaClick = (event: Readonly<PlotMouseEventCustom>): void => {
         const { address, tensor } = event.points[0].data.memoryData;
-        updateBufferFocus(address, tensor?.id);
+        updateBufferFocus(address, tensor?.id, undefined, { recordDrilldown: true });
     };
 
     const onDramBufferClick = (event: Readonly<PlotMouseEventCustom>): void => {
         const { address, tensor } = event.points[0].data.memoryData;
-        updateBufferFocus(address, tensor?.id);
+        updateBufferFocus(address, tensor?.id, undefined, { recordDrilldown: true });
     };
 
     const onBufferClick = (event: Readonly<PlotMouseEventCustom>): void => {
@@ -192,16 +192,16 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
         const { address, tensor, colorVariance } = event.points[0].data.memoryData;
 
         if (!isCBSummary) {
-            updateBufferFocus(address, tensor?.id, colorVariance);
+            updateBufferFocus(address, tensor?.id, colorVariance, { recordDrilldown: true });
         }
     };
 
     const onTensorClick = (address?: number, tensorId?: number): void => {
-        updateBufferFocus(address, tensorId);
+        updateBufferFocus(address, tensorId, undefined, { recordDrilldown: true });
     };
 
     const onLegendClick = (address: number, tensorId?: number, colorVariance?: number) => {
-        updateBufferFocus(address, tensorId, colorVariance);
+        updateBufferFocus(address, tensorId, colorVariance, { recordDrilldown: true });
     };
 
     const inputOutputList = details.inputs.concat(details.outputs);

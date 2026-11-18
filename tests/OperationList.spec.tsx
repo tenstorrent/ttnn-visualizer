@@ -16,6 +16,7 @@ import { TEST_IDS } from '../src/definitions/TestIds';
 import { useGetUniqueDeviceOperationsList, useOperationsList, useReportErrors } from '../src/hooks/useAPI';
 import { OperationDescription, OperationError, ReportError } from '../src/model/APIData';
 import { TestProviders } from './helpers/TestProviders';
+import { operationListFilterAtom } from '../src/store/app';
 
 const { recordEvent } = vi.hoisted(() => ({ recordEvent: vi.fn() }));
 
@@ -89,7 +90,7 @@ const unattachedError: ReportError = {
     attached: false,
 };
 
-const renderList = (operations: OperationDescription[], reportErrors: ReportError[]) => {
+const renderList = (operations: OperationDescription[], reportErrors: ReportError[], restoredQuery = '') => {
     vi.mocked(useOperationsList).mockReturnValue({
         data: operations,
         error: null,
@@ -98,7 +99,7 @@ const renderList = (operations: OperationDescription[], reportErrors: ReportErro
     vi.mocked(useReportErrors).mockReturnValue({ data: reportErrors } as unknown as ReturnType<typeof useReportErrors>);
 
     return render(
-        <TestProviders>
+        <TestProviders initialAtomValues={[[operationListFilterAtom, restoredQuery]]}>
             <OperationList />
         </TestProviders>,
     );
@@ -161,5 +162,14 @@ describe('OperationList filter event', () => {
         fireEvent.change(filter, { target: { value: 'c' } });
 
         expect(recordEvent.mock.calls).toEqual([[filterUsed]]);
+    });
+
+    it('records nothing for clearing a query restored on return, which leaves no filter', () => {
+        renderList([operation(1, 'ttnn.add')], [], 'add');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Clear search query' }));
+
+        expect(screen.getByPlaceholderText<HTMLInputElement>('Filter operations').value).toBe('');
+        expect(recordEvent).not.toHaveBeenCalled();
     });
 });

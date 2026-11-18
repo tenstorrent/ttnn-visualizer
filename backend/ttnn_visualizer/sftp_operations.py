@@ -1123,8 +1123,9 @@ class RemoteReportPathOutcome(NamedTuple):
     report_count: int = 0
     error_message: Optional[str] = None
     error_detail: Optional[str] = None
-    # The failure's class when it was not about the path, a transport error mid-search
-    # say, so the line does not read as a misconfigured path.
+    # The failure's class: ``REPORT_PATH_FAILED`` where the search knows the path is the
+    # problem, or a connection reason such as a transport error mid-search. ``None`` for a
+    # failure nobody classified, which the client counts as ``other``.
     error_reason: Optional[RemoteConnectionFailureReason] = None
 
 

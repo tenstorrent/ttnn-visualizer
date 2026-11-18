@@ -632,11 +632,13 @@ def connection_status_from_exception(error) -> StatusMessage:
 
 
 class ConnectionStatusMessage(StatusMessage):
-    """A status line that may carry a host-key verdict.
+    """A connection test's status line that carries a host-key verdict or a failure reason.
 
-    Deliberately a subclass rather than a field on ``StatusMessage``: that model is
-    also dumped as the NPE upload response and spread into every MLIR upload entry,
-    neither of which has any business gaining a host-key field.
+    Used by the remote connection test and the MLIR server test alike; on the latter an
+    unreachable or timed-out line carries ``reason`` and a null ``hostKey``. Deliberately a
+    subclass rather than fields on ``StatusMessage``: that model is also dumped as the NPE
+    upload response and spread into every MLIR upload entry, neither of which has any
+    business gaining either field.
     """
 
     hostKey: Optional[HostKeyStatus] = None

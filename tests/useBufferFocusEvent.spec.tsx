@@ -25,11 +25,13 @@ beforeEach(() => {
 });
 
 describe('useBufferFocus drill-down event', () => {
-    it('records each buffer focused, and nothing for clearing it', () => {
+    const CLICK = { recordDrilldown: true };
+
+    it('records each buffer a click focuses, and nothing for clearing it', () => {
         const { result } = renderHook(() => useBufferFocus(), { wrapper });
 
-        act(() => result.current.updateBufferFocus(1024, 3));
-        act(() => result.current.updateBufferFocus(2048));
+        act(() => result.current.updateBufferFocus(1024, 3, undefined, CLICK));
+        act(() => result.current.updateBufferFocus(2048, undefined, undefined, CLICK));
         act(() => result.current.resetBufferFocus());
 
         expect(recordEvent.mock.calls).toEqual([
@@ -38,10 +40,28 @@ describe('useBufferFocus drill-down event', () => {
         ]);
     });
 
-    it('records nothing for a focus that follows navigation', () => {
+    it('records nothing for a click on the buffer already focused', () => {
         const { result } = renderHook(() => useBufferFocus(), { wrapper });
 
-        act(() => result.current.updateBufferFocus(1024, 3, undefined, { recordDrilldown: false }));
+        act(() => result.current.updateBufferFocus(1024, 3, undefined, CLICK));
+        act(() => result.current.updateBufferFocus(1024, 3, undefined, CLICK));
+
+        expect(recordEvent).toHaveBeenCalledOnce();
+    });
+
+    it('records a click on a buffer at the same address but for another tensor', () => {
+        const { result } = renderHook(() => useBufferFocus(), { wrapper });
+
+        act(() => result.current.updateBufferFocus(1024, 3, undefined, CLICK));
+        act(() => result.current.updateBufferFocus(1024, 4, undefined, CLICK));
+
+        expect(recordEvent).toHaveBeenCalledTimes(2);
+    });
+
+    it('records nothing for a focus set by code, such as one that follows navigation', () => {
+        const { result } = renderHook(() => useBufferFocus(), { wrapper });
+
+        act(() => result.current.updateBufferFocus(1024, 3));
 
         expect(recordEvent).not.toHaveBeenCalled();
     });

@@ -18,6 +18,9 @@ export const FAILED_NO_PATH: ConnectionStatus = {
     message: 'Please provide at least one folder path.',
 };
 
+// Every result the precheck can give, in one place for the reference check below.
+const PRECHECK_FAILURES: readonly ConnectionStatus[] = [FAILED_NO_CONNECTION, FAILED_NO_USERNAME, FAILED_NO_PATH];
+
 /**
  * The failure a connection test reports without asking the server, or `null` when it would
  * be sent. `testConnection` is the one caller that gates on it.
@@ -34,7 +37,9 @@ export default function getConnectionTestPrecheckFailure(
         return FAILED_NO_USERNAME;
     }
 
-    if (!connection.profilerPath && !connection.performancePath) {
+    // Trimmed like the username: a path of only spaces names no folder, and the server would
+    // search none.
+    if (!connection.profilerPath?.trim() && !connection.performancePath?.trim()) {
         return FAILED_NO_PATH;
     }
 
@@ -46,8 +51,5 @@ export default function getConnectionTestPrecheckFailure(
  * sending. By reference, so a server line that happens to share a message never matches.
  */
 export function isConnectionTestPrecheckFailure(statuses: readonly ConnectionStatus[]): boolean {
-    return (
-        statuses.length === 1 &&
-        (statuses[0] === FAILED_NO_CONNECTION || statuses[0] === FAILED_NO_USERNAME || statuses[0] === FAILED_NO_PATH)
-    );
+    return statuses.length === 1 && PRECHECK_FAILURES.includes(statuses[0]);
 }

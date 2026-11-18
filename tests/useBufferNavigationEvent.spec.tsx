@@ -9,12 +9,14 @@
  */
 
 import { cleanup, renderHook } from '@testing-library/react';
+import { useAtomValue } from 'jotai';
 import { Virtualizer } from '@tanstack/react-virtual';
 import { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import useBufferNavigation from '../src/hooks/useBufferNavigation';
 import { BufferType } from '../src/model/BufferType';
 import { TestProviders } from './helpers/TestProviders';
+import { selectedAddressAtom, selectedTensorIdAtom } from '../src/store/app';
 
 const { recordEvent } = vi.hoisted(() => ({ recordEvent: vi.fn() }));
 
@@ -37,12 +39,15 @@ const wrapper = ({ children }: { children: ReactNode }) => (
 
 const renderNavigation = () =>
     renderHook(
-        () =>
+        () => {
             useBufferNavigation({
                 buffersByOperation: [],
                 tensorListByOperation: new Map(),
                 virtualizer: {} as Virtualizer<HTMLDivElement, HTMLDivElement>,
-            }),
+            });
+
+            return { address: useAtomValue(selectedAddressAtom), tensorId: useAtomValue(selectedTensorIdAtom) };
+        },
         { wrapper },
     );
 
@@ -59,5 +64,11 @@ describe('useBufferNavigation drill-down event', () => {
         renderNavigation();
 
         expect(recordEvent).not.toHaveBeenCalled();
+    });
+
+    it('still focuses the buffer the link named', () => {
+        const { result } = renderNavigation();
+
+        expect(result.current).toEqual({ address: 1024, tensorId: 7 });
     });
 });

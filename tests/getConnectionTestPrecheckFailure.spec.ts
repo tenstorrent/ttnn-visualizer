@@ -21,6 +21,8 @@ describe('getConnectionTestPrecheckFailure', () => {
         ['no username', { host: 'work-box', port: 22, profilerPath: '/reports' }, FAILED_NO_USERNAME],
         ['a blank username', { ...COMPLETE, username: '  ', profilerPath: '/reports' }, FAILED_NO_USERNAME],
         ['no paths', COMPLETE, FAILED_NO_PATH],
+        ['paths of only spaces', { ...COMPLETE, profilerPath: '  ', performancePath: ' ' }, FAILED_NO_PATH],
+        ['one blank path beside a real one', { ...COMPLETE, profilerPath: '  ', performancePath: '/perf' }, null],
         ['a memory path only', { ...COMPLETE, profilerPath: '/reports' }, null],
         ['a performance path only', { ...COMPLETE, performancePath: '/perf' }, null],
     ])('answers %s', (_case, connection, failure) => {

@@ -32,9 +32,10 @@ export interface ConnectionStatus {
      */
     hostKey?: HostKeyStatus | null;
     /**
-     * Why the connection failed, so nothing has to parse `message`, which is written for
-     * people and names the host. On a path's line, a failure that was not about the path.
-     * Absent for a failure that fits no class, and for a path that is itself the problem.
+     * Why the line failed, so nothing has to parse `message`, which is written for people and
+     * names the host. `REPORT_PATH_FAILED` only where the server knows the configured path is
+     * the problem; a connection reason on any line, a path's included. Absent for a failure
+     * nobody classified, which counts as `other`, never as a misconfigured path.
      */
     reason?: RemoteConnectionFailureReason | null;
 }

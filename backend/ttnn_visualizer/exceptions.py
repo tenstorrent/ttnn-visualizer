@@ -153,7 +153,8 @@ class HostKeyVerificationFailedException(RemoteConnectionException):
 
 
 class UnreachableHostException(RemoteConnectionException):
-    """The host never answered: refused, unresolvable, or timed out.
+    """The host could not be reached: refused, unresolvable or timed out, or a connection
+    that was established and then lost.
 
     A class of its own so every place that raises it carries ``UNREACHABLE``; passed by
     hand at each raise site, a new one could leave it out and the test would read
@@ -195,7 +196,7 @@ class UnreachableHostException(RemoteConnectionException):
         return cls(
             message=(
                 f"The SSH connection to {host} was lost. "
-                "Please check network connectivity and test again."
+                "Please check network connectivity and try again."
             ),
             detail=detail,
         )

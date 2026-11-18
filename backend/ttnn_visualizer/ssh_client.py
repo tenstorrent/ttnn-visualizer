@@ -314,6 +314,12 @@ class SSHClient:
             raise AuthenticationFailedException(
                 message=SSH_AUTH_FAILURE_MESSAGE, detail=raw_error
             )
+        except ConnectionDroppedError:
+            # Ahead of its parent below: the host answered and then went away, so the
+            # refused-every-attempt advice would send the user to check the hostname.
+            raise UnreachableHostException.for_dropped_connection(
+                self.connection.host, detail=getattr(self, "_last_raw_error", None)
+            )
         except NoValidConnectionsError as ssh_err:
             # Get the raw error details from the last SSH operation
             raise UnreachableHostException.for_host(

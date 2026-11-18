@@ -23,7 +23,10 @@ import {
 } from './helpers/operationDetailsFixtures';
 import { DrilldownTarget, EventLogEvent } from '../src/definitions/EventLogEvent';
 
-const { recordEvent } = vi.hoisted(() => ({ recordEvent: vi.fn() }));
+const { recordEvent, stackTraceProps } = vi.hoisted(() => ({
+    recordEvent: vi.fn(),
+    stackTraceProps: [] as Record<string, unknown>[],
+}));
 
 vi.mock('../src/functions/recordEvent', () => ({ default: recordEvent }));
 
@@ -64,6 +67,7 @@ vi.mock('../src/hooks/useAPI', () => ({
                 inputs: [inputTensor()],
                 buffers: inputBuffers(),
                 buffersSummary: summariseOperationBuffers(inputBuffers()),
+                stack_trace: 'frame 0\nframe 1',
             }),
             isLoading: false,
             status: 'success',
@@ -90,7 +94,14 @@ vi.mock('../src/functions/createToastNotification', async () => {
 vi.mock('../src/components/operation-details/L1Plots', () => ({ default: () => null }));
 vi.mock('../src/components/operation-details/DRAMPlots', () => ({ default: () => null }));
 vi.mock('../src/components/operation-details/MemoryPlotRenderer', () => ({ default: () => null }));
-vi.mock('../src/components/operation-details/StackTrace', () => ({ default: () => null }));
+// Captures its props: the page's trace is the one most stack-trace drill-downs come from.
+vi.mock('../src/components/operation-details/StackTrace', () => ({
+    default: (props: Record<string, unknown>) => {
+        stackTraceProps.push(props);
+
+        return null;
+    },
+}));
 vi.mock('../src/components/operation-details/DeviceOperationsGraphComponent', () => ({ default: () => null }));
 vi.mock('../src/components/operation-details/DeviceOperationsFullRender', () => ({ default: () => null }));
 vi.mock('../src/components/OperationArguments', () => ({ default: () => null }));
@@ -172,5 +183,12 @@ describe('OperationDetailsComponent tensor drill-down event', () => {
             event: EventLogEvent.DRILLDOWN_OPENED,
             details: { drilldown_target: DrilldownTarget.TENSOR_DETAILS },
         });
+    });
+
+    it("marks the operation's stack trace as one whose expansion records a drill-down", () => {
+        stackTraceProps.length = 0;
+        renderPage([]);
+
+        expect(stackTraceProps.at(-1)).toMatchObject({ stackTrace: 'frame 0\nframe 1', recordsExpansion: true });
     });
 });

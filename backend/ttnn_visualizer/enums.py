@@ -40,8 +40,9 @@ class RemoteConnectionFailureReason(str, enum.Enum):
     """Why a remote connection test failed, for a status line to carry without its message.
 
     Messages are written for people and carry the host, so nothing reading a result may
-    parse them; this is the machine-readable half. A timeout counts as ``UNREACHABLE``:
-    the host never answered, and so does a connection lost while a path was searched.
+    parse them; this is the machine-readable half. The connection test's own timeout
+    counts as ``UNREACHABLE``, since the host never answered, and so does a connection
+    lost while a path was searched. A search that times out carries no reason.
 
     ``REPORT_PATH_FAILED`` is set only where the backend knows the configured path is the
     problem: missing, not a directory, or unreadable. Absent means the failure has no

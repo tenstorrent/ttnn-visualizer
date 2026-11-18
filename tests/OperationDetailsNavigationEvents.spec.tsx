@@ -4,7 +4,8 @@
 
 /**
  * Pins the usage events of the operation error overlay: opening it records nothing, so a
- * stack trace is counted once, by the trace itself when it is expanded.
+ * stack trace is counted once, by the trace itself when it is expanded, or on switching to
+ * it when it opens already expanded.
  */
 
 import '@testing-library/jest-dom/vitest';
@@ -87,5 +88,31 @@ describe('OperationDetailsNavigation error overlay events', () => {
             event: EventLogEvent.DRILLDOWN_OPENED,
             details: { drilldown_target: DrilldownTarget.STACK_TRACE },
         });
+    });
+
+    it('records one stack-trace drill-down when the trace opens already expanded', async () => {
+        renderNavigation();
+
+        // The tabs share the expanded state, so the trace mounts expanded with no Expand click.
+        fireEvent.click(screen.getByRole('button', { name: 'View operation error' }));
+        expect(await screen.findByRole('tab', { name: 'Error details', selected: true })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /expand/i }));
+        fireEvent.click(screen.getByRole('tab', { name: 'Stack Trace' }));
+        expect(await screen.findByRole('tab', { name: 'Stack Trace', selected: true })).toBeInTheDocument();
+
+        expect(recordEvent).toHaveBeenCalledExactlyOnceWith({
+            event: EventLogEvent.DRILLDOWN_OPENED,
+            details: { drilldown_target: DrilldownTarget.STACK_TRACE },
+        });
+    });
+
+    it('records nothing when the trace is opened with the message collapsed', async () => {
+        renderNavigation();
+
+        fireEvent.click(screen.getByRole('button', { name: 'View operation error' }));
+        fireEvent.click(await screen.findByRole('tab', { name: 'Stack Trace' }));
+        expect(await screen.findByRole('tab', { name: 'Stack Trace', selected: true })).toBeInTheDocument();
+
+        expect(recordEvent).not.toHaveBeenCalled();
     });
 });

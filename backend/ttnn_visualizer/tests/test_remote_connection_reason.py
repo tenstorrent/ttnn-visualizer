@@ -134,6 +134,22 @@ def test_each_test_connection_failure_is_classified(raised, reason):
     assert excinfo.value.reason == reason
 
 
+def test_a_connection_lost_during_the_test_says_it_was_lost_not_refused():
+    client = SSHClient(_connection())
+
+    with patch.object(
+        SSHClient,
+        "execute_command",
+        side_effect=ConnectionDroppedError("Connection reset by peer"),
+    ):
+        with pytest.raises(RemoteConnectionException) as excinfo:
+            client.test_connection()
+
+    assert excinfo.value.reason == RemoteConnectionFailureReason.UNREACHABLE
+    assert "lost" in excinfo.value.message
+    assert "hostname" not in excinfo.value.message
+
+
 def test_a_status_line_without_a_verdict_stays_a_plain_status_message():
     # `StatusMessage` is also the NPE upload response and part of every MLIR upload
     # entry; neither may gain the field.

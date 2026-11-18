@@ -182,9 +182,9 @@ Recorded when a detail surface is opened. It answers how deep use goes (Q4).
 - `drilldown_target`: `tensor_details`, `buffer_details`, `stack_trace`, `source_file`.
 
   - `tensor_details`: the tensor details drawer in the performance table, or a tensor's per-core allocation view.
-  - `buffer_details`: a buffer or tensor focused in a memory view, or a "Buffer details" link clicked. The focus that link's navigation applies records nothing more, so a reload does not count it again.
-  - `stack_trace`: a stack trace expanded. Opening an operation's error records nothing until its trace is expanded.
-  - `source_file`: a source file opened from a stack trace.
+  - `buffer_details`: a buffer or tensor focused by a click in a memory view, or a "Buffer details" link clicked. A click on the buffer already focused records nothing, and neither does the focus that link's navigation applies, so a reload does not count it again.
+  - `stack_trace`: a stack trace expanded. Opening an operation's error records nothing until its trace is expanded, and expanding the error message never records. In the error overlay a trace opened after the message was expanded is shown expanded, so switching to it records.
+  - `source_file`: a source file opened, from a stack trace, an operation-list row, the Performance tensor drawer or the operation graph's info panel.
 
 Operation details are not a target: `view_opened` already counts them with `view` set to `operation_details`.
 
@@ -202,7 +202,7 @@ Recorded when a remote connection test in the connection dialog finishes. It ans
 
 - `connection_test_result`: `success`, `auth_failed`, `host_key_rejected`, `unreachable`, `no_reports_found`, `report_path_failed`, `other`.
 
-`unreachable` includes a host that did not answer before the test timed out, and a connection lost while a path was being searched. `report_path_failed` means SSH connected and the server marked a configured report path as missing, not a directory, or unreadable. `no_reports_found` means the paths exist but hold no reports. `other` is a failure the server does not classify, a search that ended before settling whether its path exists, or a request that failed before the server answered; a path failure is never assumed. Trusting a host key from the dialog re-runs the test, so that flow records `host_key_rejected` and then the result of the second test.
+`unreachable` includes a host that did not answer before the test timed out, and a connection lost while a path was being searched. `report_path_failed` means SSH connected and the server marked a configured report path as missing, not a directory, or unreadable. `no_reports_found` means the paths exist but hold no reports. `other` is a failure the server does not classify, a search that ended before settling whether its path exists, a form value the server refuses that the dialog's own check does not catch, or a request that failed before the server answered; a path failure is never assumed. Trusting a host key from the dialog re-runs the test, so that flow records `host_key_rejected` and then the result of the second test.
 
 ## Information that is not recorded
 
