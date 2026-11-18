@@ -898,11 +898,16 @@ class TestRepeats:
         ):
             tools.diff_reports(registry, early, later)
 
-    def test_a_handle_never_read_before_its_csv_is_still_that_capture(self, tmp_path):
-        """The check that refuses one capture twice pins it too. #2227"""
+    def test_a_handle_whose_diff_missed_its_csv_is_then_that_capture(self, tmp_path):
+        """The check that refuses one capture twice reads the pin, so its miss must keep
+        none either. #2227"""
         registry = ReportRegistry()
+        write_ops_perf(tmp_path / "b", smoke_rows())
+        other = load_report(registry, performance_path=str(tmp_path / "b"))["handle"]
         (tmp_path / "a").mkdir()
         early = load_report(registry, performance_path=str(tmp_path / "a"))["handle"]
+        with pytest.raises(FileNotFoundError):
+            tools.diff_reports(registry, early, other)
         write_ops_perf(tmp_path / "a", smoke_rows())
         later = load_report(registry, performance_path=str(tmp_path / "a"))["handle"]
 
@@ -911,23 +916,29 @@ class TestRepeats:
         ):
             tools.diff_reports(registry, early, later)
 
-    def test_a_handle_loaded_before_its_csv_diffs_the_rows_written_after(
+    def test_a_handle_whose_diff_missed_its_csv_diffs_the_rows_written_after(
         self, tmp_path
     ):
-        """#2227"""
+        """And is held to them: once they are rewritten, a signature diff, which reads
+        the CSV again, is refused. #2227"""
         registry = ReportRegistry()
-        (tmp_path / "a").mkdir()
-        early = load_report(registry, performance_path=str(tmp_path / "a"))["handle"]
         before = _transpose_reshaped(smoke_rows())
-        write_ops_perf(tmp_path / "a", before)
         write_ops_perf(tmp_path / "b", _transpose_reshaped(before, duration_ns=37_000))
         other = load_report(registry, performance_path=str(tmp_path / "b"))["handle"]
+        (tmp_path / "a").mkdir()
+        early = load_report(registry, performance_path=str(tmp_path / "a"))["handle"]
+        with pytest.raises(FileNotFoundError):
+            tools.diff_reports(registry, early, other)
+        write_ops_perf(tmp_path / "a", before)
 
         result = tools.diff_reports(registry, early, other)
 
         (change,) = result["changes"]
         assert change["op_code"] == "Transpose"
         assert change["delta_percent"] == pytest.approx(25.0, abs=0.5)
+        write_ops_perf(tmp_path / "a", before[:-1])
+        with pytest.raises(ValueError, match="has changed since it was first read"):
+            tools.diff_reports(registry, early, other, match="signature")
 
     def test_a_capture_given_twice_is_refused_before_generating(self, tmp_path):
         """Counted twice it would sway a median; on both sides it diffs to nothing."""
