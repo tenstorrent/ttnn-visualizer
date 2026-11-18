@@ -130,13 +130,9 @@ enum VISUALIZATION_MODE {
     TRANSFERS,
 }
 
-// `null` in `nocFilter` means both NoCs are shown; a Record key cannot be null.
-const ALL_NOCS_KEY = 'all';
-
-const NPE_MODE_BY_NOC_FILTER: Readonly<Record<NoCType | typeof ALL_NOCS_KEY, NpeMode>> = Object.freeze({
+const NPE_MODE_BY_NOC: Readonly<Record<NoCType, NpeMode>> = Object.freeze({
     [NoCType.NOC0]: NpeMode.NOC0,
     [NoCType.NOC1]: NpeMode.NOC1,
-    [ALL_NOCS_KEY]: NpeMode.ALL_NOCS,
 });
 
 const NPE_MODE_BY_VISUALIZATION_MODE: Readonly<Record<VISUALIZATION_MODE, NpeMode>> = Object.freeze({
@@ -336,7 +332,8 @@ const NPEView = ({
         const nextNocFilter = nocFilter === otherNoc ? null : otherNoc;
 
         setNocFilter(nextNocFilter);
-        recordNpeModeChanged(NPE_MODE_BY_NOC_FILTER[nextNocFilter ?? ALL_NOCS_KEY]);
+        // A null filter shows both NoCs.
+        recordNpeModeChanged(nextNocFilter === null ? NpeMode.ALL_NOCS : NPE_MODE_BY_NOC[nextNocFilter]);
     };
 
     useEffect(() => {

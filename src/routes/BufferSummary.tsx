@@ -7,7 +7,7 @@ import { AnchorButton, ButtonGroup, ButtonVariant, Intent, Size, Tab, Tabs } fro
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom } from 'jotai';
 import useBufferFocusDismissal from '../hooks/useBufferFocusDismissal';
-import { useActiveSection } from '../hooks/useActiveSection';
+import { useScrollSpy } from '../hooks/useScrollSpy';
 import ROUTES from '../definitions/Routes';
 import BufferSummaryTab from '../components/buffer-summary/BufferSummaryTab';
 import 'styles/components/BufferSummary.scss';
@@ -18,7 +18,7 @@ import L1PeakComposition from '../components/buffer-summary/L1PeakComposition';
 function BufferSummary() {
     useBufferFocusDismissal();
 
-    const activeSection = useActiveSection([SECTION_IDS.PLOT, SECTION_IDS.TABLE]);
+    const { activeId: activeSection } = useScrollSpy([SECTION_IDS.PLOT, SECTION_IDS.TABLE]);
     const [selectedTabId, setSelectedTabId] = useAtom(selectedBufferSummaryTabAtom);
 
     return (

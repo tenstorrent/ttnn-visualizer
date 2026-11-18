@@ -141,11 +141,11 @@ Recorded by `ttnn-visualizer-mcp` when a registered tool reaches its handler, no
 
 ### `perf_chart_viewed`
 
-Recorded the first time each performance chart becomes the chart in view, per visit to the Charts tab. It answers which charts to keep (Q4). Every chart renders on one scrolling page, so this means the chart was scrolled or jumped to, not that it was studied. The first chart counts on opening the tab.
+Recorded the first time each performance chart becomes the chart in view, per visit to the Charts tab. It answers which charts to keep (Q4). Every chart renders on one scrolling page, so this means the chart was scrolled or jumped to, not that it was studied. Opening the tab counts the chart in view: the first chart at the top of the page, or the one under the "Jump to chart" bar when the window is already scrolled.
 
 - `perf_chart`: `op_duration_histogram`, `op_count_vs_runtime`, `core_count_kernel_runtime`, `kernel_duration_vs_core_count`, `matmul_core_count_utilization`, `matmul_device_time`, `matmul_kernel_duration_utilization`, `matmul_utilization_vs_kernel_duration`, `conv_core_count_utilization`, `conv_device_time`, `conv_kernel_duration_utilization`, `conv_utilization_vs_kernel_duration`, `operation_types`.
 
-The matmul and conv charts show a placeholder when the report has no such operations, and record nothing while they do: a placeholder is not a chart. Reaching the bottom of the page counts every chart whose top is then in view: the last charts may be too short to scroll up to the top, and on a tall screen several of them are. A chart passed over by a jump to a later one is not counted, unless the jump lands at the bottom with that chart's top in view.
+The matmul and conv charts show a placeholder when the report has no such operations, and record nothing while they do: a placeholder is not a chart. Reaching the bottom of the page, or a page short enough not to scroll, counts every chart whose top is then in view: the last charts may be too short to scroll up to the top, and on a tall screen several of them are. A chart passed over by a jump to a later one is not counted, unless the jump lands at the bottom with that chart's top in view.
 
 ### `perf_table_option_toggled`
 

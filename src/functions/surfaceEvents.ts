@@ -23,11 +23,13 @@ import recordEvent from './recordEvent';
  * from an effect on state: several of the states involved are persisted or written by
  * code, and an effect would count a load or a reset as use. One event is tied to what is
  * shown rather than to a control, and is the only exception: `perf_chart_viewed` follows
- * the scroll position, so it is recorded from an effect on the Charts tab's active section,
- * once per chart per visit.
+ * the scroll position, so it is recorded from an effect on the sections the Charts tab's
+ * scroll-spy reports in view: the active one, and at the bottom of the page every one whose
+ * top is in view. Once per chart per visit.
  *
  * Follow it only for an event that is likewise about what is shown, and say so in its docs
- * section and in the docs' "Per-surface events" intro, which lists every exception too. None may run per frame, per render or per row.
+ * section and in the docs' "Per-surface events" intro, which lists every exception too.
+ * None may run per frame, per render or per row.
  */
 
 // Exhaustive, so a new chart fails type-checking until it is given an exported label.

@@ -2,18 +2,15 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import PerfChartFilter from './PerfChartFilter';
 import PerfCharts from './PerfCharts';
-import PerfChartsIndex from './PerfChartsIndex';
+import PerfChartsNavigation from './PerfChartsNavigation';
 import NonFilterablePerfCharts from './NonFilterablePerfCharts';
 import { Marker } from '../../definitions/PerfTable';
 import { TypedPerfTableRow } from '../../model/PerfTable';
 import { buildChartIndexEntries } from '../../functions/buildChartIndexEntries';
-import { getPerfChartForChartId, recordPerfChartViewed } from '../../functions/surfaceEvents';
-import { PerfChartLabel } from '../../definitions/EventLogEvent';
-import { useScrollSpy } from '../../hooks/useActiveSection';
 import { usePrefilterPerfTableByOpCode } from '../../hooks/usePrefilterPerfTableByOpCode';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import 'styles/components/PerfCharts.scss';
@@ -27,8 +24,6 @@ interface PerformanceChartsTabProps {
     opCodeOptions: Marker[];
     updateOpCodes: (opCodes: Marker[]) => void;
 }
-
-export const PERF_CHARTS_NAV_OFFSET_PX = 60;
 
 const PerformanceChartsTab = ({
     filteredPerfData,
@@ -71,29 +66,7 @@ const PerformanceChartsTab = ({
         [comparisonReportList, hasConvData, hasMatmulData, performanceReport],
     );
 
-    const chartIndexIds = useMemo(() => chartIndexEntries.map((entry) => entry.id), [chartIndexEntries]);
-    const { activeId, sectionsInViewAtBottom } = useScrollSpy(chartIndexIds, PERF_CHARTS_NAV_OFFSET_PX);
     const prefilterPerfTableByOpCode = usePrefilterPerfTableByOpCode();
-
-    // Once per chart per mount, and this tab mounts only while it is the selected one, so a
-    // count means the chart was in view on a visit to the Charts tab. The first chart counts
-    // on arrival: it is what the tab opens on. At the bottom of the page every chart whose top
-    // is in view counts too, since on a tall screen the charts before the last never reach the
-    // offset line, and a jump to one of them lands at the bottom.
-    const recordedChartsRef = useRef<Set<PerfChartLabel>>(new Set());
-
-    useEffect(() => {
-        const chartIds = activeId ? [...sectionsInViewAtBottom, activeId] : sectionsInViewAtBottom;
-
-        chartIds.forEach((chartId) => {
-            const chart = getPerfChartForChartId(chartId);
-
-            if (chart && !recordedChartsRef.current.has(chart)) {
-                recordedChartsRef.current.add(chart);
-                recordPerfChartViewed(chart);
-            }
-        });
-    }, [activeId, sectionsInViewAtBottom]);
 
     return (
         <div className='charts-container'>
@@ -106,10 +79,7 @@ const PerformanceChartsTab = ({
             </aside>
 
             <div className='charts-column'>
-                <PerfChartsIndex
-                    entries={chartIndexEntries}
-                    activeId={activeId}
-                />
+                <PerfChartsNavigation entries={chartIndexEntries} />
 
                 <div className='charts'>
                     <PerfCharts

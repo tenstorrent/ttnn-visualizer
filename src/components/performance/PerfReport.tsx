@@ -158,6 +158,7 @@ const PerformanceReport = ({
 
     // Works out the list a click leaves, so removing the last code counts as no filter. The
     // setter still gets the update as given, so a functional one applies to the latest list.
+    // A functional update is so run twice, which is harmless while MultiSelectField's is pure.
     const handleRawOpCodeFilterChange = useCallback(
         (update: SetStateAction<TypedPerfTableRow['raw_op_code'][]>) => {
             const next = typeof update === 'function' ? update(activeRawOpCodeFilterList) : update;
