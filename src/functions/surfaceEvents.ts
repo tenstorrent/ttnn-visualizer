@@ -24,8 +24,10 @@ import recordEvent from './recordEvent';
  * shown rather than to a control, and are the only exceptions:
  *
  * - `perf_chart_viewed` follows the scroll position, so it is recorded from an effect on
- *   the sections the Charts tab's scroll-spy reports in view: the active one, and at the
- *   bottom of the page every one whose top is in view. Once per chart per visit.
+ *   the sections the Charts tab's scroll-spy reports in view: the one under the offset line
+ *   (the first while the line is above it, none while it is in a gap between charts), and,
+ *   at the bottom of the page or on a page that cannot scroll, every one whose top is in
+ *   view. Once per chart per visit.
  * - `drilldown_opened` with `buffer_details` is recorded wherever a buffer is focused,
  *   which includes the navigation a "Buffer details" link starts, so a reload that
  *   restores that navigation records it again.

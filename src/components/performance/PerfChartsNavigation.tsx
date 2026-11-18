@@ -25,10 +25,11 @@ function PerfChartsNavigation({ entries }: PerfChartsNavigationProps) {
     const { activeId, sectionsInView } = useScrollSpy(chartIds, PERF_CHARTS_NAV_OFFSET_PX);
 
     // Once per chart per mount, and this mounts only while the Charts tab is the selected one,
-    // so a count means the chart was in view on a visit to the tab. The first chart counts on
-    // arrival at the top: it is what the tab opens on. At the bottom of the page every chart
-    // whose top is in view counts too, since on a tall screen the charts before the last never
-    // reach the offset line, and a jump to one of them lands at the bottom.
+    // so a count means the chart was in view on a visit to the tab. The chart under the offset
+    // line counts, and the first chart while the line is above it: it is what the tab opens on.
+    // At the bottom of the page, or on a page that cannot scroll, every chart whose top is in
+    // view counts too, since on a tall screen the charts before the last never reach the offset
+    // line, and a jump to one of them lands at the bottom.
     const recordedChartsRef = useRef<Set<PerfChartLabel>>(new Set());
 
     useEffect(() => {

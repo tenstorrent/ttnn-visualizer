@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useCallback, useState } from 'react';
-import isScrolledToBottom from '../functions/isScrolledToBottom';
+import isScrolledToBottom, { SUBPIXEL_SCROLL_TOLERANCE_PX } from '../functions/isScrolledToBottom';
 
 interface UseScrollShade {
     hasScrolledFromTop: boolean;
@@ -12,8 +12,6 @@ interface UseScrollShade {
     resetScrollShade: () => void;
     shadeClasses: Record<'top' | 'bottom', string>;
 }
-
-const SCROLL_TOLERANCE_PX = 1; // Tolerance for sub-pixel rendering issues in Chrome
 
 const SHADE_CLASSES = {
     top: 'scroll-shade-top',
@@ -27,7 +25,7 @@ const useScrollShade = (): UseScrollShade => {
     const updateScrollShade = useCallback((scrollElement: HTMLElement) => {
         const { scrollTop, offsetHeight, scrollHeight } = scrollElement;
 
-        setHasScrolledFromTop(scrollTop > SCROLL_TOLERANCE_PX);
+        setHasScrolledFromTop(scrollTop > SUBPIXEL_SCROLL_TOLERANCE_PX);
         setHasScrolledToBottom(isScrolledToBottom(scrollTop, offsetHeight, scrollHeight));
     }, []);
 

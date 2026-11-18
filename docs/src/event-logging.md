@@ -141,7 +141,7 @@ Recorded by `ttnn-visualizer-mcp` when a registered tool reaches its handler, no
 
 ### `perf_chart_viewed`
 
-Recorded the first time each performance chart becomes the chart in view, per visit to the Charts tab. It answers which charts to keep (Q4). Every chart renders on one scrolling page, so this means the chart was scrolled or jumped to, not that it was studied. Opening the tab counts the chart in view: the first chart at the top of the page, or the one under the "Jump to chart" bar when the window is already scrolled.
+Recorded the first time each performance chart becomes the chart in view, per visit to the Charts tab. It answers which charts to keep (Q4). Every chart renders on one scrolling page, so this means the chart was scrolled or jumped to, not that it was studied. Opening the tab counts the chart in view: the first chart at the top of the page, or the one under the "Jump to chart" bar when the window is already scrolled. While the bar lies in the gap between two charts, no chart is in view until the next scroll.
 
 - `perf_chart`: `op_duration_histogram`, `op_count_vs_runtime`, `core_count_kernel_runtime`, `kernel_duration_vs_core_count`, `matmul_core_count_utilization`, `matmul_device_time`, `matmul_kernel_duration_utilization`, `matmul_utilization_vs_kernel_duration`, `conv_core_count_utilization`, `conv_device_time`, `conv_kernel_duration_utilization`, `conv_utilization_vs_kernel_duration`, `operation_types`.
 
