@@ -228,13 +228,14 @@ def test_the_route_returns_the_reason_on_the_connection_line(
             RemoteConnectionFailureReason.UNREACHABLE,
             id="dropped",
         ),
-        pytest.param(
-            FileNotFoundError("/remote/profiler"),
-            RemoteConnectionFailureReason.REPORT_PATH_FAILED,
-            id="missing_path",
-        ),
         # Nothing classifies an unexpected local or SSH error, so it is never read as a
-        # misconfigured path.
+        # misconfigured path. A file read that matches nothing is one: only sync and file
+        # reads raise it, never a connection test, so there is no path for it to blame.
+        pytest.param(
+            FileNotFoundError("No files found matching pattern"),
+            None,
+            id="file_read_found_nothing",
+        ),
         pytest.param(IOError("Permission denied"), None, id="unexpected_io_error"),
         pytest.param(SSHException("kex_exchange_identification"), None, id="other"),
     ],

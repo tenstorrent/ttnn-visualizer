@@ -8,7 +8,7 @@ from functools import wraps
 from typing import Any, Callable
 
 from flask import abort, request, session
-from ttnn_visualizer.enums import ConnectionTestStates, RemoteConnectionFailureReason
+from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import (
     AuthenticationException,
     AuthenticationFailedException,
@@ -102,7 +102,6 @@ def remote_exception_handler(func):
             raise RemoteConnectionException(
                 status=ConnectionTestStates.FAILED,
                 message=f"Unable to open path: {str(err)}",
-                reason=RemoteConnectionFailureReason.REPORT_PATH_FAILED,
             )
         except ConnectionDroppedError as err:
             # Ahead of its parent below: the host answered and then went away, so the
