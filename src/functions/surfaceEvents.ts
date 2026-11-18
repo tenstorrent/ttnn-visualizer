@@ -13,6 +13,7 @@ import {
     RemoteConnectionTestResult,
 } from '../definitions/EventLogEvent';
 import { PerfChartId } from '../definitions/PerformanceCharts';
+import { ConnectionStatus, ConnectionTestStates, RemoteConnectionFailureReason } from '../definitions/ConnectionStatus';
 import recordEvent from './recordEvent';
 
 /**
@@ -20,21 +21,16 @@ import recordEvent from './recordEvent';
  *
  * Call a control-driven event's recorder from the handler of the deliberate action, never
  * from an effect on state: several of the states involved are persisted or written by
- * code, and an effect would count a load or a reset as use. Two events are tied to what is
- * shown rather than to a control, and are the only exceptions:
+ * code, and an effect would count a load or a reset as use. One event is tied to what is
+ * shown rather than to a control, and is the only exception: `perf_chart_viewed` follows
+ * the scroll position, so it is recorded from an effect on the sections the Charts tab's
+ * scroll-spy reports in view: the one under the offset line (the first while the line is
+ * above it, none while it is in a gap between charts), and, at the bottom of the page or on
+ * a page that cannot scroll, every one whose top is in view. Once per chart per visit.
  *
- * - `perf_chart_viewed` follows the scroll position, so it is recorded from an effect on
- *   the sections the Charts tab's scroll-spy reports in view: the one under the offset line
- *   (the first while the line is above it, none while it is in a gap between charts), and,
- *   at the bottom of the page or on a page that cannot scroll, every one whose top is in
- *   view. Once per chart per visit.
- * - `drilldown_opened` with `buffer_details` is recorded wherever a buffer is focused,
- *   which includes the navigation a "Buffer details" link starts, so a reload that
- *   restores that navigation records it again.
- *
- * Follow one of those only for an event that is likewise about what is shown, and say so
- * in its docs section and in the docs' "Per-surface events" intro, which lists every
- * exception too. None may run per frame, per render or per row.
+ * Follow it only for an event that is likewise about what is shown, and say so in its docs
+ * section and in the docs' "Per-surface events" intro, which lists every exception too.
+ * None may run per frame, per render or per row.
  */
 
 // Exhaustive, so a new chart fails type-checking until it is given an exported label.
@@ -99,6 +95,70 @@ export function getComparisonReportCountBucket(comparisonReportCount: number): C
     }
 
     return ComparisonReportCountBucket.THREE_OR_MORE;
+}
+
+type ConnectionFailureReason = Exclude<RemoteConnectionFailureReason, RemoteConnectionFailureReason.REPORT_PATH_FAILED>;
+
+// The reasons that are about the connection rather than one path, so they decide the
+// result from any line. `REPORT_PATH_FAILED` is the path's own and is read below. Keyed by
+// every other reason, so a new one fails type-checking until it is given a result here.
+const REMOTE_CONNECTION_TEST_RESULT_BY_CONNECTION_REASON: Readonly<
+    Record<ConnectionFailureReason, RemoteConnectionTestResult>
+> = Object.freeze({
+    [RemoteConnectionFailureReason.AUTH_FAILED]: RemoteConnectionTestResult.AUTH_FAILED,
+    [RemoteConnectionFailureReason.HOST_KEY_REJECTED]: RemoteConnectionTestResult.HOST_KEY_REJECTED,
+    [RemoteConnectionFailureReason.UNREACHABLE]: RemoteConnectionTestResult.UNREACHABLE,
+});
+
+// An own-property check, so a reason such as "constructor" never resolves through the prototype.
+const isConnectionFailureReason = (reason: string): reason is ConnectionFailureReason =>
+    Object.hasOwn(REMOTE_CONNECTION_TEST_RESULT_BY_CONNECTION_REASON, reason);
+
+const getConnectionReasonResult = (line: ConnectionStatus): RemoteConnectionTestResult | undefined =>
+    line.reason && isConnectionFailureReason(line.reason)
+        ? REMOTE_CONNECTION_TEST_RESULT_BY_CONNECTION_REASON[line.reason]
+        : undefined;
+
+/**
+ * The outcome of a remote connection test, from its status lines alone — never their
+ * messages, which name the host. The first line is the SSH connection; each later one is a
+ * configured report path.
+ *
+ * In order: a connection failure classified by its line's reason, on any line; SSH up and
+ * a path the server marked as the problem; any other failed path, which nobody classified,
+ * is `OTHER`; a path with no reports (the only line the server marks `WARNING`); everything
+ * OK. Anything else is `OTHER`, so a failure the server does not classify can never be
+ * counted as a misconfigured path. A test always sends at least one path, so a lone OK line
+ * is not a success.
+ */
+export function getRemoteConnectionTestResult(statuses: readonly ConnectionStatus[]): RemoteConnectionTestResult {
+    const connectionResult = statuses.map(getConnectionReasonResult).find(Boolean);
+
+    if (connectionResult) {
+        return connectionResult;
+    }
+
+    const [connectionLine, ...pathLines] = statuses;
+
+    if (connectionLine?.status === ConnectionTestStates.OK && pathLines.length > 0) {
+        if (pathLines.some((line) => line.reason === RemoteConnectionFailureReason.REPORT_PATH_FAILED)) {
+            return RemoteConnectionTestResult.REPORT_PATH_FAILED;
+        }
+
+        if (pathLines.some((line) => line.status === ConnectionTestStates.FAILED)) {
+            return RemoteConnectionTestResult.OTHER;
+        }
+
+        if (pathLines.some((line) => line.status === ConnectionTestStates.WARNING)) {
+            return RemoteConnectionTestResult.NO_REPORTS_FOUND;
+        }
+
+        if (pathLines.every((line) => line.status === ConnectionTestStates.OK)) {
+            return RemoteConnectionTestResult.SUCCESS;
+        }
+    }
+
+    return RemoteConnectionTestResult.OTHER;
 }
 
 export function recordPerfChartViewed(chart: PerfChartLabel): void {

@@ -137,7 +137,7 @@ Recorded by `ttnn-visualizer-mcp` when a registered tool reaches its handler, no
 
 `refused` is a tool declining a well-formed call it cannot answer (unknown handle, argument out of range). `error` is an unexpected failure the server did not anticipate.
 
-**Per-surface events.** The events below record what is used inside the Performance and NPE views, and across them. Each section names the #1819 question it answers. Most fire once per deliberate action, from the control itself: restoring persisted state, a reset by the application, a re-click on the option already selected, and anything continuous such as dragging or scrubbing record nothing. Two are tied to what is shown rather than to a control, and say so in their sections: `perf_chart_viewed` follows the scroll position, and `drilldown_opened` with `buffer_details` is recorded again when a reload restores the navigation that opened it. Read every count against the matching `report_loaded` count: a view nobody opens because nobody loaded that kind of report is not evidence that the feature is unwanted.
+**Per-surface events.** The events below record what is used inside the Performance and NPE views, and across them. Each section names the #1819 question it answers. Most fire once per deliberate action, from the control itself: restoring persisted state, a reset by the application, a re-click on the option already selected, and anything continuous such as dragging or scrubbing record nothing. One is tied to what is shown rather than to a control, and says so in its section: `perf_chart_viewed` follows the scroll position. Read every count against the matching `report_loaded` count: a view nobody opens because nobody loaded that kind of report is not evidence that the feature is unwanted.
 
 ### `perf_chart_viewed`
 
@@ -182,9 +182,9 @@ Recorded when a detail surface is opened. It answers how deep use goes (Q4).
 - `drilldown_target`: `tensor_details`, `buffer_details`, `stack_trace`, `source_file`.
 
   - `tensor_details`: the tensor details drawer in the performance table, or a tensor's per-core allocation view.
-  - `buffer_details`: a buffer or tensor focused in a memory view, including through a "Buffer details" link. Reloading a page reached through that link records it again.
-  - `stack_trace`: a stack trace expanded, or an operation's error details opened.
-  - `source_file`: a source file opened from a stack trace.
+  - `buffer_details`: a buffer or tensor focused by a click in a memory view, or a "Buffer details" link clicked. A click on the buffer already focused records nothing, and neither does the focus that link's navigation applies, so a reload does not count it again.
+  - `stack_trace`: a stack trace expanded. Opening an operation's error records nothing until its trace is expanded, and expanding the error message never records. In the error overlay a trace opened after the message was expanded is shown expanded, so switching to it records, once, and only if the trace is long enough to expand. On the operation page, a trace that opens expanded because the previous operation's trace was left expanded records nothing: moving between operations carries the state over, and the expansion that set it was already counted.
+  - `source_file`: a source file opened, from a stack trace, an operation-list row, the Performance tensor drawer or the operation graph's info panel.
 
 Operation details are not a target: `view_opened` already counts them with `view` set to `operation_details`.
 
@@ -202,7 +202,7 @@ Recorded when a remote connection test in the connection dialog finishes. It ans
 
 - `connection_test_result`: `success`, `auth_failed`, `host_key_rejected`, `unreachable`, `no_reports_found`, `report_path_failed`, `other`.
 
-`report_path_failed` means SSH connected but a configured report path is missing, not a directory, or unreadable. `no_reports_found` means the paths exist but hold no reports.
+`unreachable` includes a host that did not answer before the test timed out, and a connection lost during the SSH test itself or while a path was being searched. `report_path_failed` means SSH connected and the server marked a configured report path as missing, not a directory, or unreadable. `no_reports_found` means the paths exist but hold no reports. `other` is a failure the server does not classify, a search that ended before settling whether its path exists, a form value the server refuses that the dialog's own check does not catch, or a request that failed before the server answered; a path failure is never assumed. Trusting a host key from the dialog re-runs the test, so that flow records `host_key_rejected` and then the result of the second test.
 
 ## Information that is not recorded
 

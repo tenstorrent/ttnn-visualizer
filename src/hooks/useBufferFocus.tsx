@@ -10,6 +10,8 @@ import { getBufferColor, getTensorColor } from '../functions/colorGenerator';
 import isValidNumber from '../functions/isValidNumber';
 import ToastTensorMessage, { ToastDeselectButton } from '../components/operation-details/ToastTensorMessage';
 import { activeToastAtom, selectedAddressAtom, selectedBufferColourAtom, selectedTensorIdAtom } from '../store/app';
+import { recordDrilldownOpened } from '../functions/surfaceEvents';
+import { DrilldownTarget } from '../definitions/EventLogEvent';
 
 /** Clears the buffer focus and its toast, through setters alone, so a caller needn't subscribe to it. */
 export const useResetBufferFocus = () => {
@@ -44,8 +46,19 @@ const useBufferFocus = () => {
     const [selectedBufferColour, setSelectedBufferColour] = useAtom(selectedBufferColourAtom);
     const resetBufferFocus = useResetBufferFocus();
 
+    /**
+     * Focuses a buffer. A click that focuses one passes `recordDrilldown`, which records a
+     * `buffer_details` drill-down unless that buffer is already the one focused. Off by
+     * default, so a focus set by code, such as one that follows navigation, records nothing.
+     */
     const updateBufferFocus = useCallback(
-        (address?: number, tensorId?: number, colorVariance?: number): void => {
+        (
+            address?: number,
+            tensorId?: number,
+            colorVariance?: number,
+            { recordDrilldown = false }: { recordDrilldown?: boolean } = {},
+        ): void => {
+            const isAlreadyFocused = (address ?? null) === selectedAddress && (tensorId ?? null) === selectedTensorId;
             const previousToast = activeToast;
             let colour = getTensorColor(tensorId);
 
@@ -79,10 +92,15 @@ const useBufferFocus = () => {
             setActiveToast(toastInstance);
             setSelectedAddress(address ?? null);
             setSelectedTensorId(tensorId ?? null);
+            if (recordDrilldown && !isAlreadyFocused) {
+                recordDrilldownOpened(DrilldownTarget.BUFFER_DETAILS);
+            }
         },
         [
             activeToast,
             resetBufferFocus,
+            selectedAddress,
+            selectedTensorId,
             setActiveToast,
             setSelectedAddress,
             setSelectedBufferColour,

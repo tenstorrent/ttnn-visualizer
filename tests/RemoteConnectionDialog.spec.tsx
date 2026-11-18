@@ -4,6 +4,7 @@
 
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { HttpStatusCode } from 'axios';
 import { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RemoteConnectionDialog from '../src/components/report-selection/RemoteConnectionDialog';
@@ -15,7 +16,12 @@ import {
     getNameRequiredMessage,
     getNameTakenMessage,
 } from '../src/definitions/ConnectionDialog';
-import { ConnectionStatus, ConnectionTestStates } from '../src/definitions/ConnectionStatus';
+import {
+    ConnectionStatus,
+    ConnectionTestStates,
+    RemoteConnectionFailureReason,
+} from '../src/definitions/ConnectionStatus';
+import { EventLogEvent, RemoteConnectionTestResult } from '../src/definitions/EventLogEvent';
 import { REMOTE_MEMORY_PATH_LABEL, REMOTE_PERFORMANCE_PATH_LABEL } from '../src/definitions/RemoteConnection';
 import { RemoteConnection } from '../src/model/RemoteConnection';
 import { HostKeyIssue } from '../src/definitions/HostKey';
@@ -30,6 +36,7 @@ import {
 } from '../src/definitions/SshConnectionFields';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import getButtonWithText from './helpers/getButtonWithText';
+import { FAILED_NO_CONNECTION } from '../src/functions/getConnectionTestPrecheckFailure';
 import { QueryProvider } from './helpers/queryClientProvider';
 import { MULTIHOST_CHECKBOX_NAME } from './helpers/multihostCheckbox';
 import { SshConfigHostsQueryResult, noSshConfigResult, sshConfigHostsResult } from './helpers/sshConfigFixtures';
@@ -51,6 +58,10 @@ const { getServerConfigMock, SERVER_CONFIG } = vi.hoisted(() => {
 const useSshConfigHostsMock = vi.hoisted(() => vi.fn<(enabled?: boolean) => SshConfigHostsQueryResult>());
 
 const testConnectionMock = vi.hoisted(() => vi.fn<() => Promise<ConnectionStatus[]>>());
+
+const { recordEvent } = vi.hoisted(() => ({ recordEvent: vi.fn() }));
+
+vi.mock('../src/functions/recordEvent', () => ({ default: recordEvent }));
 
 const { fetchHostKeyOfferMock, trustHostKeyMock } = vi.hoisted(() => ({
     fetchHostKeyOfferMock: vi.fn(),
@@ -89,6 +100,7 @@ beforeEach(() => {
     useSshConfigHostsMock.mockReturnValue(noSshConfigResult());
     testConnectionMock.mockClear();
     testConnectionMock.mockResolvedValue([]);
+    recordEvent.mockClear();
     fetchHostKeyOfferMock.mockClear();
     trustHostKeyMock.mockClear();
 });
@@ -1071,5 +1083,91 @@ describe('RemoteConnectionDialog multihost performance flag', () => {
 
         expect(getServerTestResults()).toHaveClass(STALE_CONNECTION_TESTS_CLASS);
         expect(getButtonWithText('Add connection')).toBeDisabled();
+    });
+});
+
+describe('RemoteConnectionDialog usage event', () => {
+    const EXISTING: ExistingTarget = { name: 'Work box', host: 'work-box', username: 'bob' };
+    const testResult = (result: RemoteConnectionTestResult) => ({
+        event: EventLogEvent.REMOTE_CONNECTION_TEST,
+        details: { connection_test_result: result },
+    });
+
+    it('records the classified result of a test the server ran', async () => {
+        testConnectionMock.mockResolvedValue([
+            {
+                status: ConnectionTestStates.FAILED,
+                message: 'Unable to establish SSH connection to work-box.',
+                reason: RemoteConnectionFailureReason.UNREACHABLE,
+            },
+        ]);
+        renderRemoteConnectionDialog({ existing: EXISTING });
+
+        fireEvent.click(getButtonWithText('Run tests'));
+
+        await waitFor(() => expect(recordEvent).toHaveBeenCalled());
+        expect(recordEvent).toHaveBeenCalledExactlyOnceWith(testResult(RemoteConnectionTestResult.UNREACHABLE));
+        expect(JSON.stringify(recordEvent.mock.calls)).not.toContain('work-box');
+    });
+
+    it('records a 422 verdict from the response body', async () => {
+        testConnectionMock.mockRejectedValue(
+            Object.assign(new Error('Unprocessable'), {
+                isAxiosError: true,
+                response: {
+                    status: HttpStatusCode.UnprocessableEntity,
+                    data: [
+                        {
+                            status: ConnectionTestStates.FAILED,
+                            message: 'SSH authentication failed.',
+                            reason: RemoteConnectionFailureReason.AUTH_FAILED,
+                        },
+                    ],
+                },
+            }),
+        );
+        renderRemoteConnectionDialog({ existing: EXISTING });
+
+        fireEvent.click(getButtonWithText('Run tests'));
+
+        await waitFor(() => expect(recordEvent).toHaveBeenCalled());
+        expect(recordEvent).toHaveBeenCalledExactlyOnceWith(testResult(RemoteConnectionTestResult.AUTH_FAILED));
+    });
+
+    it('records a request that failed without a status list as other', async () => {
+        testConnectionMock.mockRejectedValue(new Error('Network Error'));
+        renderRemoteConnectionDialog({ existing: EXISTING });
+
+        fireEvent.click(getButtonWithText('Run tests'));
+
+        await waitFor(() => expect(recordEvent).toHaveBeenCalled());
+        expect(recordEvent).toHaveBeenCalledExactlyOnceWith(testResult(RemoteConnectionTestResult.OTHER));
+    });
+
+    it('records nothing for a form error caught before the request is sent', async () => {
+        testConnectionMock.mockResolvedValue([FAILED_NO_CONNECTION]);
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        fillName();
+        fireEvent.click(getButtonWithText('Run tests'));
+
+        await waitFor(() => expect(screen.getByText(FAILED_NO_CONNECTION.message)).toBeInTheDocument());
+        expect(recordEvent).not.toHaveBeenCalled();
+    });
+
+    it('records a server line that shares a form error message, since the server ran it', async () => {
+        testConnectionMock.mockResolvedValue([{ ...FAILED_NO_CONNECTION }]);
+        renderRemoteConnectionDialog({ existing: EXISTING });
+
+        fireEvent.click(getButtonWithText('Run tests'));
+
+        await waitFor(() => expect(recordEvent).toHaveBeenCalled());
+        expect(recordEvent).toHaveBeenCalledExactlyOnceWith(testResult(RemoteConnectionTestResult.OTHER));
     });
 });

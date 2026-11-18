@@ -38,6 +38,9 @@ import ListItem from './ListItem';
 import LoadingSpinner from './LoadingSpinner';
 import MultiSelectField from './MultiSelectField';
 import SearchField from './SearchField';
+import useRecordFilterUsed from '../hooks/useRecordFilterUsed';
+import { DrilldownTarget, FilterSurface } from '../definitions/EventLogEvent';
+import { recordDrilldownOpened } from '../functions/surfaceEvents';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 39; // Estimated size of each element in px
@@ -56,6 +59,7 @@ const TensorList = () => {
     const [shouldSortBySize, setShouldSortBySize] = useAtom(shouldSortBySizeAtom);
     const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
     const [filterQuery, setFilterQuery] = useAtom(tensorListFilterAtom);
+    const recordListFilterUsed = useRecordFilterUsed(FilterSurface.TENSORS);
     const [expandedItems, setExpandedItems] = useState<number[]>([]);
 
     const location = useLocation();
@@ -284,7 +288,10 @@ const TensorList = () => {
                 <SearchField
                     placeholder='Filter tensors'
                     searchQuery={filterQuery}
-                    onQueryChanged={(value) => setFilterQuery(value)}
+                    onQueryChanged={(value) => {
+                        setFilterQuery(value);
+                        recordListFilterUsed(value !== '');
+                    }}
                 />
 
                 <MultiSelectField<Tensor, 'buffer_type'>
@@ -499,15 +506,16 @@ const TensorList = () => {
                                                 tensor.buffer_type === BufferType.L1 ? (
                                                     <Button
                                                         className='buffer-view'
-                                                        onClick={() =>
-                                                            navigate(`${ROUTES.BUFFERS}`, {
+                                                        onClick={() => {
+                                                            recordDrilldownOpened(DrilldownTarget.BUFFER_DETAILS);
+                                                            void navigate(`${ROUTES.BUFFERS}`, {
                                                                 state: {
                                                                     tensorId: tensor.id,
                                                                     tensorAddress: tensor.address,
                                                                     bufferType: tensor.buffer_type,
                                                                 },
-                                                            })
-                                                        }
+                                                            });
+                                                        }}
                                                         text='Buffer details'
                                                         intent={Intent.PRIMARY}
                                                         icon={

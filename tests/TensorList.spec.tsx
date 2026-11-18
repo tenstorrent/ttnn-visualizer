@@ -10,14 +10,19 @@
  * any buffer type.
  */
 
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import TensorList from '../src/components/TensorList';
+import { DrilldownTarget, EventLogEvent, FilterSurface } from '../src/definitions/EventLogEvent';
 import { Tensor } from '../src/model/APIData';
 import { BufferType } from '../src/model/BufferType';
-import { tensorBufferTypeFiltersAtom } from '../src/store/app';
+import { tensorBufferTypeFiltersAtom, tensorListFilterAtom } from '../src/store/app';
 import { useGetTensorDeallocationReportByOperation, useOperationsList, useTensors } from '../src/hooks/useAPI';
 import { TestProviders } from './helpers/TestProviders';
+
+const { recordEvent } = vi.hoisted(() => ({ recordEvent: vi.fn() }));
+
+vi.mock('../src/functions/recordEvent', () => ({ default: recordEvent }));
 
 vi.mock('../src/hooks/useAPI', () => ({
     useOperationsList: vi.fn(),
@@ -73,9 +78,14 @@ const DRAM_TENSOR = tensor(1, 'Shape([1, 111])', BufferType.DRAM, 100);
 const UNADDRESSED_L1_TENSOR = tensor(2, 'Shape([1, 222])', BufferType.L1, null);
 const HOST_TENSOR = tensor(3, 'Shape([1, 333])', null, null);
 
-const renderList = (bufferTypeFilters: (BufferType | null)[] = []) =>
+const renderList = (bufferTypeFilters: (BufferType | null)[] = [], restoredQuery = '') =>
     render(
-        <TestProviders initialAtomValues={[[tensorBufferTypeFiltersAtom, bufferTypeFilters]]}>
+        <TestProviders
+            initialAtomValues={[
+                [tensorBufferTypeFiltersAtom, bufferTypeFilters],
+                [tensorListFilterAtom, restoredQuery],
+            ]}
+        >
             <TensorList />
         </TestProviders>,
     );
@@ -88,6 +98,7 @@ const rowFor = (container: HTMLElement, shapeText: string) =>
 const memoryTagIn = (row: HTMLElement | undefined) => row?.querySelector('.memory-tag')?.textContent ?? null;
 
 beforeEach(() => {
+    recordEvent.mockClear();
     vi.mocked(useOperationsList).mockReturnValue({ data: [], isLoading: false } as unknown as ReturnType<
         typeof useOperationsList
     >);
@@ -153,5 +164,47 @@ describe('TensorList', () => {
         expect(rowFor(container, '111')).toBeUndefined();
         expect(rowFor(container, '222')).toBeDefined();
         expect(rowFor(container, '333')).toBeUndefined();
+    });
+});
+
+describe('TensorList filter event', () => {
+    const filterUsed = {
+        event: EventLogEvent.FILTER_USED,
+        details: { filter_surface: FilterSurface.TENSORS },
+    };
+
+    it('records the first query typed into the filter, once per mount', () => {
+        renderList();
+        const filter = screen.getByPlaceholderText('Filter tensors');
+
+        fireEvent.change(filter, { target: { value: 'a' } });
+        fireEvent.change(filter, { target: { value: 'ab' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Clear search query' }));
+        fireEvent.change(filter, { target: { value: 'c' } });
+
+        expect(recordEvent.mock.calls).toEqual([[filterUsed]]);
+    });
+
+    it('records nothing for clearing a query restored on return, which leaves no filter', () => {
+        renderList([], 'add');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Clear search query' }));
+
+        expect(screen.getByPlaceholderText<HTMLInputElement>('Filter tensors').value).toBe('');
+        expect(recordEvent).not.toHaveBeenCalled();
+    });
+});
+
+describe('TensorList buffer details event', () => {
+    it('records one drill-down for the "Buffer details" click itself', () => {
+        const { container } = renderList();
+        const row = rowFor(container, '111');
+
+        fireEvent.click(within(row!).getByRole('button', { name: /Buffer details/ }));
+
+        expect(recordEvent).toHaveBeenCalledExactlyOnceWith({
+            event: EventLogEvent.DRILLDOWN_OPENED,
+            details: { drilldown_target: DrilldownTarget.BUFFER_DETAILS },
+        });
     });
 });

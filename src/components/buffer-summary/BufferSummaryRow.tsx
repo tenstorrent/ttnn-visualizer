@@ -127,7 +127,7 @@ const BufferSummaryRow = ({
             return;
         }
 
-        updateBufferFocus(tensor?.address ?? buffer.address, tensor?.id);
+        updateBufferFocus(tensor?.address ?? buffer.address, tensor?.id, undefined, { recordDrilldown: true });
     };
 
     const handleMouseMove = (event: React.MouseEvent<HTMLCanvasElement>) => {

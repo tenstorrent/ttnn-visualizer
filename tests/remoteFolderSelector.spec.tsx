@@ -127,6 +127,15 @@ vi.mock('../src/libs/axiosInstance', () => ({
     },
 }));
 
+// The connection dialog records `remote_connection_test` for real. Left unmocked, the buffered
+// event is flushed two seconds later through the bare `post` mock above, which returns no
+// promise, and the throw lands as an unhandled error in whichever test is then running.
+// Delivery is covered by recordEvent.spec.ts; nothing here asserts on it.
+vi.mock('../src/functions/recordEvent', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../src/functions/recordEvent')>()),
+    default: vi.fn(),
+}));
+
 vi.mock('../src/functions/reportLoadEvents', async (importOriginal) => {
     const { reportLoadEventsSpiesMock } = await import('./helpers/mockReportLoadEvents');
 

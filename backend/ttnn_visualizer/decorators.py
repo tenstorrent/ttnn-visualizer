@@ -12,12 +12,14 @@ from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import (
     AuthenticationException,
     AuthenticationFailedException,
+    ConnectionDroppedError,
     HostKeyVerificationException,
     HostKeyVerificationFailedException,
     NoValidConnectionsError,
     RemoteConnectionException,
     RemoteFileReadException,
     SSHException,
+    UnreachableHostException,
     response_forbidden,
 )
 from ttnn_visualizer.instances import get_or_create_instance
@@ -101,22 +103,21 @@ def remote_exception_handler(func):
                 status=ConnectionTestStates.FAILED,
                 message=f"Unable to open path: {str(err)}",
             )
+        except ConnectionDroppedError as err:
+            # Ahead of its parent below: the host answered and then went away, so the
+            # refused-every-attempt advice would send the user to check the hostname.
+            current_app.logger.warning(
+                f"SSH connection lost for {connection.username}@{connection.host}: {str(err)}"
+            )
+            raise UnreachableHostException.for_dropped_connection(
+                connection.host, detail=str(err)
+            )
         except NoValidConnectionsError as err:
             current_app.logger.warning(
                 f"SSH connection failed for {connection.username}@{connection.host}: {str(err)}"
             )
 
-            # Provide user-friendly message for connection issues
-            user_message = (
-                f"Unable to establish SSH connection to {connection.host}. "
-                "Please check the hostname, port, and network connectivity. "
-                "Ensure SSH key-based authentication is properly configured."
-            )
-
-            raise RemoteConnectionException(
-                status=ConnectionTestStates.FAILED,
-                message=user_message,
-            )
+            raise UnreachableHostException.for_host(connection.host)
 
         except IOError as err:
             message = f"Error opening remote folder: {str(err)}"

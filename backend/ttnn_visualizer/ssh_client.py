@@ -13,12 +13,14 @@ from ttnn_visualizer.enums import ConnectionTestStates, HostKeyIssue
 from ttnn_visualizer.exceptions import (
     AuthenticationException,
     AuthenticationFailedException,
+    ConnectionDroppedError,
     HostKeyVerificationException,
     HostKeyVerificationFailedException,
     NoValidConnectionsError,
     RemoteConnectionException,
     RemoteFileReadException,
     SSHException,
+    UnreachableHostException,
 )
 from ttnn_visualizer.known_hosts import host_key_status
 from ttnn_visualizer.models import HostKeyStatus, HostKeyTarget, RemoteConnection
@@ -45,6 +47,7 @@ _SSH_AUTH_ERROR_FRAGMENTS = (
     "authentication failed",
     "publickey",
     "password",
+    "too many authentication failures",
 )
 _SSH_CONNECTION_ERROR_FRAGMENTS = (
     "connection refused",
@@ -55,6 +58,14 @@ _SSH_CONNECTION_ERROR_FRAGMENTS = (
     "connection timed out",
     "nodename nor servname provided",
 )
+# stderr fragments (lowercase) for a connection that was up and then lost: the host
+# went away mid-command, which says nothing about the command or the path it read.
+_SSH_DROPPED_CONNECTION_FRAGMENTS = (
+    "connection reset",
+    "broken pipe",
+)
+# OpenSSH's prefix for a failure before the key exchange finished.
+_SSH_HANDSHAKE_FRAGMENT = "kex_exchange_identification"
 
 
 # stderr fragments (lowercase) that mean the key we already trust no longer matches.
@@ -153,6 +164,12 @@ def raise_for_ssh_subprocess_error(
         raise AuthenticationException(SSH_AUTH_FAILURE_MESSAGE)
     if any(conn_err in stderr for conn_err in _SSH_CONNECTION_ERROR_FRAGMENTS):
         raise NoValidConnectionsError(f"SSH connection failed: {e.stderr}")
+    if any(dropped in stderr for dropped in _SSH_DROPPED_CONNECTION_FRAGMENTS):
+        # A reset during the key exchange is a connection that never came up, so it keeps
+        # the refused-every-attempt advice: the hostname or port is the usual cause.
+        if _SSH_HANDSHAKE_FRAGMENT in stderr:
+            raise NoValidConnectionsError(f"SSH connection failed: {e.stderr}")
+        raise ConnectionDroppedError(f"SSH connection lost: {e.stderr}")
     if "ssh:" in stderr or "protocol" in stderr:
         raise SSHException(f"SSH protocol error: {e.stderr}")
     raise SSHException(f"SSH command failed: {e.stderr}")
@@ -303,18 +320,16 @@ class SSHClient:
             raise AuthenticationFailedException(
                 message=SSH_AUTH_FAILURE_MESSAGE, detail=raw_error
             )
-        except NoValidConnectionsError as ssh_err:
-            user_message = (
-                f"Unable to establish SSH connection to {self.connection.host}. "
-                "Please check the hostname, port, and network connectivity. "
-                "Ensure SSH key-based authentication is properly configured."
+        except ConnectionDroppedError:
+            # Ahead of its parent below: the host answered and then went away, so the
+            # refused-every-attempt advice would send the user to check the hostname.
+            raise UnreachableHostException.for_dropped_connection(
+                self.connection.host, detail=getattr(self, "_last_raw_error", None)
             )
+        except NoValidConnectionsError as ssh_err:
             # Get the raw error details from the last SSH operation
-            raw_error = getattr(self, "_last_raw_error", None)
-            raise RemoteConnectionException(
-                message=user_message,
-                status=ConnectionTestStates.FAILED,
-                detail=raw_error,
+            raise UnreachableHostException.for_host(
+                self.connection.host, detail=getattr(self, "_last_raw_error", None)
             )
         except SSHException as ssh_err:
             # Add debug logging to understand what we're getting
@@ -329,11 +344,7 @@ class SSHClient:
                 )
                 # Store timeout as raw error
                 raw_error = str(ssh_err)
-                raise RemoteConnectionException(
-                    message=timeout_message,
-                    status=ConnectionTestStates.FAILED,
-                    detail=raw_error,
-                )
+                raise UnreachableHostException(timeout_message, detail=raw_error)
             else:
                 # This should match the original SSHException handling:
                 # "SSH connection error to {host}: {str(ssh_err)}. Ensure SSH key-based authentication is properly configured."

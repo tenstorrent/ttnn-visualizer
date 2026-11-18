@@ -10,7 +10,10 @@ import 'styles/components/StackTrace.scss';
 import { StackTraceLanguage } from '../../definitions/StackTrace';
 import hljs from '../../functions/highlightSource';
 import { getStackTraceFilePath, getStackTraceLineNumber } from '../../functions/stackTraceSource';
+import canStackTraceExpand, { STACK_TRACE_PREVIEW_LINES } from '../../functions/canStackTraceExpand';
 import SourceFileButton from './SourceFileButton';
+import { recordDrilldownOpened } from '../../functions/surfaceEvents';
+import { DrilldownTarget } from '../../definitions/EventLogEvent';
 
 interface StackTraceProps {
     title?: string;
@@ -24,6 +27,9 @@ interface StackTraceProps {
     onExpandChange?: (isVisible: boolean) => void;
     className?: string;
     intent?: Intent;
+    // Set where the text is a stack trace, so expanding it records a drill-down. Off by
+    // default because the component also shows error messages, which are not traces.
+    recordsExpansion?: boolean;
 }
 
 function StackTrace({
@@ -37,6 +43,7 @@ function StackTrace({
     onExpandChange,
     className,
     intent = Intent.NONE,
+    recordsExpansion = false,
 }: StackTraceProps) {
     const [isExpanded, setIsExpanded] = useState(isInitiallyExpanded || false);
     const filePath = useMemo(() => getStackTraceFilePath(stackTrace), [stackTrace]);
@@ -61,10 +68,16 @@ function StackTrace({
 
     const stackTracePreview = useMemo(() => getStackTracePreview(stackTraceWithHighlights), [stackTraceWithHighlights]);
     // A trace that fits in the preview has nothing more to show
-    const canExpand = stackTracePreview !== stackTraceWithHighlights;
+    const canExpand = useMemo(() => canStackTraceExpand(stackTrace), [stackTrace]);
 
     const handleToggleStackTrace = () => {
         setIsExpanded(!isExpanded);
+
+        // Expanding only: collapsing a trace is not a drill-down, and one shown expanded
+        // from the start was never opened.
+        if (recordsExpansion && !isExpanded) {
+            recordDrilldownOpened(DrilldownTarget.STACK_TRACE);
+        }
 
         if (isExpanded && scrollElementRef?.current && !isTopOfElementInViewport(scrollElementRef.current)) {
             scrollElementRef?.current?.scrollIntoView();
@@ -126,7 +139,10 @@ function StackTrace({
 }
 
 function getStackTracePreview(stackTrace: string) {
-    const splitTrace: Array<string> = stackTrace.split('<span class="line-number">').splice(0, 3);
+    // The first element is what precedes the first line, so one more than the lines shown.
+    const splitTrace: Array<string> = stackTrace
+        .split('<span class="line-number">')
+        .splice(0, STACK_TRACE_PREVIEW_LINES + 1);
 
     return splitTrace.join('<span class="line-number">');
 }

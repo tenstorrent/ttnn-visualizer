@@ -3,19 +3,29 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import StackTrace from '../src/components/operation-details/StackTrace';
 import { StackTraceLanguage } from '../src/definitions/StackTrace';
+import { DrilldownTarget, EventLogEvent } from '../src/definitions/EventLogEvent';
 
-const renderStackTrace = (stackTrace: string) =>
+const { recordEvent } = vi.hoisted(() => ({ recordEvent: vi.fn() }));
+
+vi.mock('../src/functions/recordEvent', () => ({ default: recordEvent }));
+
+const renderStackTrace = (stackTrace: string, recordsExpansion = true) =>
     render(
         <StackTrace
             stackTrace={stackTrace}
             language={StackTraceLanguage.CPP}
             hideSourceButton
+            recordsExpansion={recordsExpansion}
         />,
     );
+
+beforeEach(() => {
+    recordEvent.mockClear();
+});
 
 afterEach(cleanup);
 
@@ -30,5 +40,60 @@ describe('StackTrace expand toggle', () => {
         renderStackTrace('line 1\nline 2\nline 3');
 
         expect(screen.getByRole('button', { name: /expand/i })).toBeInTheDocument();
+    });
+});
+
+describe('StackTrace drill-down event', () => {
+    const stackTraceOpened = {
+        event: EventLogEvent.DRILLDOWN_OPENED,
+        details: { drilldown_target: DrilldownTarget.STACK_TRACE },
+    };
+
+    // Collapsing scrolls the trace back into view, which jsdom does not implement, so the
+    // stub is defined for these tests and the original (absent in jsdom) put back after.
+    const originalScrollIntoView = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollIntoView');
+
+    beforeEach(() => {
+        Element.prototype.scrollIntoView = vi.fn();
+    });
+
+    afterEach(() => {
+        if (originalScrollIntoView) {
+            Object.defineProperty(Element.prototype, 'scrollIntoView', originalScrollIntoView);
+        } else {
+            delete (Element.prototype as Partial<Element>).scrollIntoView;
+        }
+    });
+
+    it('records each expansion and never a collapse', () => {
+        renderStackTrace('line 1\nline 2\nline 3');
+
+        fireEvent.click(screen.getByRole('button', { name: /expand/i }));
+        fireEvent.click(screen.getByRole('button', { name: /collapse/i }));
+        fireEvent.click(screen.getByRole('button', { name: /expand/i }));
+
+        expect(recordEvent.mock.calls).toEqual([[stackTraceOpened], [stackTraceOpened]]);
+    });
+
+    it('records nothing for text that is not a trace, such as an error message', () => {
+        renderStackTrace('line 1\nline 2\nline 3', false);
+
+        fireEvent.click(screen.getByRole('button', { name: /expand/i }));
+
+        expect(recordEvent).not.toHaveBeenCalled();
+    });
+
+    it('records nothing for a trace shown expanded from the start', () => {
+        render(
+            <StackTrace
+                stackTrace={'line 1\nline 2\nline 3'}
+                language={StackTraceLanguage.CPP}
+                isInitiallyExpanded
+                hideSourceButton
+                recordsExpansion
+            />,
+        );
+
+        expect(recordEvent).not.toHaveBeenCalled();
     });
 });

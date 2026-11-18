@@ -55,4 +55,13 @@ describe('useRecordFilterUsed', () => {
 
         expect(recordFilterUsed).toHaveBeenCalledTimes(2);
     });
+
+    it('keeps one callback across renders, so handlers built on it stay stable', () => {
+        const { result, rerender } = renderHook(() => useRecordFilterUsed(FilterSurface.PERF_OP_CODE));
+        const first = result.current;
+
+        rerender();
+
+        expect(result.current).toBe(first);
+    });
 });

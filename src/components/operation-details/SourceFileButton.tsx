@@ -9,6 +9,8 @@ import { SourceFileStatus, StackTraceLanguage } from '../../definitions/StackTra
 import getServerConfig from '../../functions/getServerConfig';
 import { useSourceFile } from '../../hooks/useSourceFile';
 import SourceFileOverlay from './SourceFileOverlay';
+import { recordDrilldownOpened } from '../../functions/surfaceEvents';
+import { DrilldownTarget } from '../../definitions/EventLogEvent';
 
 interface SourceFileButtonProps {
     filePath: string;
@@ -78,6 +80,7 @@ function SourceFileButton({
         await readSource();
         setHasOpenedOverlay(true);
         setIsViewingSourceFile(true);
+        recordDrilldownOpened(DrilldownTarget.SOURCE_FILE);
     };
 
     return (

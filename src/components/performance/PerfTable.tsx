@@ -38,6 +38,8 @@ import PerfTableFrame from './PerfTableFrame';
 import PerfTableSkeleton from './PerfTableSkeleton';
 import PerfTensorDrawer from './PerfTensorDrawer';
 import PerfTableToolbar from './PerfTableToolbar';
+import { recordDrilldownOpened } from '../../functions/surfaceEvents';
+import { DrilldownTarget } from '../../definitions/EventLogEvent';
 
 interface PerformanceTableProps {
     data: TypedPerfTableRow[];
@@ -218,7 +220,14 @@ const PerformanceTable = ({
                         size={Size.SMALL}
                         aria-label={`View tensor details for ${row.raw_op_code}`}
                         data-testid={TEST_IDS.PERF_TENSOR_DRAWER_OPEN_BUTTON}
-                        onClick={() => setSelectedPerfRowId(row.id)}
+                        onClick={() => {
+                            // The selected row's drawer is already open, so a re-click opens nothing.
+                            if (row.id !== selectedPerfRowId) {
+                                recordDrilldownOpened(DrilldownTarget.TENSOR_DETAILS);
+                            }
+
+                            setSelectedPerfRowId(row.id);
+                        }}
                     />
                 </span>
             </Tooltip>
