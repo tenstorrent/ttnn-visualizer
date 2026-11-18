@@ -30,6 +30,7 @@ from ttnn_visualizer.csv_queries import (
 )
 from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.tests.smoke_capture import (
+    load_before_csv,
     signposted_rows,
     smoke_rows,
     write_ops_perf,
@@ -885,34 +886,26 @@ class TestRepeats:
                 _registry(tmp_path), "report-1", "report-2", repeats_a=repeats
             )
 
+    @pytest.mark.parametrize(
+        "miss",
+        [
+            lambda registry, early, other: tools.top_ops(registry, early),
+            tools.diff_reports,
+        ],
+        ids=["top_ops", "diff_reports"],
+    )
     def test_a_handle_loaded_before_its_csv_is_the_capture_it_then_reads(
-        self, tmp_path
+        self, tmp_path, miss
     ):
-        """Pinned to no capture, it would diff against its own capture as no change.
-        #2227"""
-        registry = ReportRegistry()
-        (tmp_path / "a").mkdir()
-        early = load_report(registry, performance_path=str(tmp_path / "a"))["handle"]
-        with pytest.raises(FileNotFoundError):
-            tools.top_ops(registry, early)
-        write_ops_perf(tmp_path / "a", smoke_rows())
-        later = load_report(registry, performance_path=str(tmp_path / "a"))["handle"]
-
-        with pytest.raises(
-            ValueError, match=f"{early!r} and {later!r} are the same capture"
-        ):
-            tools.diff_reports(registry, early, later)
-
-    def test_a_handle_whose_diff_missed_its_csv_is_then_that_capture(self, tmp_path):
-        """The check that refuses one capture twice reads the pin, so its miss must keep
-        none either. #2227"""
+        """Pinned to no capture, it would diff against its own capture as no change. A
+        miss in `diff_reports` reads the pin in the check that refuses one capture
+        twice, so it must keep none either. #2227"""
         registry = ReportRegistry()
         write_ops_perf(tmp_path / "b", smoke_rows())
         other = load_report(registry, performance_path=str(tmp_path / "b"))["handle"]
-        (tmp_path / "a").mkdir()
-        early = load_report(registry, performance_path=str(tmp_path / "a"))["handle"]
+        early = load_before_csv(registry, tmp_path / "a")
         with pytest.raises(FileNotFoundError):
-            tools.diff_reports(registry, early, other)
+            miss(registry, early, other)
         write_ops_perf(tmp_path / "a", smoke_rows())
         later = load_report(registry, performance_path=str(tmp_path / "a"))["handle"]
 
@@ -930,8 +923,7 @@ class TestRepeats:
         before = _transpose_reshaped(smoke_rows())
         write_ops_perf(tmp_path / "b", _transpose_reshaped(before, duration_ns=37_000))
         other = load_report(registry, performance_path=str(tmp_path / "b"))["handle"]
-        (tmp_path / "a").mkdir()
-        early = load_report(registry, performance_path=str(tmp_path / "a"))["handle"]
+        early = load_before_csv(registry, tmp_path / "a")
         with pytest.raises(FileNotFoundError):
             tools.diff_reports(registry, early, other)
         write_ops_perf(tmp_path / "a", before)

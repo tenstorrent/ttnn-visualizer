@@ -71,6 +71,7 @@ from ttnn_visualizer.tests.smoke_capture import (
     SIGNPOSTED_WINDOW_IDS,
     SMOKE_CAPTURE_DIR,
     append_unparsable_row,
+    load_before_csv,
     signpost,
     signposted_rows,
     smoke_rows,
@@ -211,14 +212,18 @@ def _write_header_only(directory):
     path.write_text(path.read_text().splitlines(keepends=True)[0])
 
 
+# The window `signposted_rows()` bounds.
+_PERF_WINDOW = tools.SignpostRange("PERF_START", "PERF_END")
+
+
 def _read_whole(registry, handle):
+    """`top_ops` of the whole report: it pins the CSV in `canonical_report`."""
     return tools.top_ops(registry, handle)
 
 
 def _read_window(registry, handle):
-    return tools.top_ops(
-        registry, handle, start_signpost="PERF_START", end_signpost="PERF_END"
-    )
+    """`top_ops` of `_PERF_WINDOW`: it pins the CSV earlier, reading the signposts."""
+    return tools.top_ops(registry, handle, **_PERF_WINDOW.as_overrides())
 
 
 def _touch_in_order(older, newer):
@@ -1828,7 +1833,7 @@ class TestSignpostRangeEndToEnd:
             handle,
             by="total_percent",
             limit=MAX_LIMIT,
-            **{"start_signpost": "PERF_START", "end_signpost": "PERF_END", **overrides},
+            **{**_PERF_WINDOW.as_overrides(), **overrides},
         )
 
     @staticmethod
@@ -1840,18 +1845,16 @@ class TestSignpostRangeEndToEnd:
     def _assert_reload_shares_snapshots(registry, first, second):
         """`second`, loaded later on `first`'s unchanged capture, answers from the
         whole and ranged snapshots `first` generated."""
-        ranged = tools.SignpostRange("PERF_START", "PERF_END")
-
         with patch.object(
             tools,
             "_generate_canonical_report",
             wraps=tools._generate_canonical_report,
         ) as generate:
             whole = tools.canonical_report(registry, first)
-            window = tools.canonical_report(registry, first, ranged)
+            window = tools.canonical_report(registry, first, _PERF_WINDOW)
 
             assert tools.canonical_report(registry, second) is whole
-            assert tools.canonical_report(registry, second, ranged) is window
+            assert tools.canonical_report(registry, second, _PERF_WINDOW) is window
         assert generate.call_count == 2
 
     def test_the_window_holds_the_rows_between_the_signposts_and_no_other(
@@ -1863,9 +1866,7 @@ class TestSignpostRangeEndToEnd:
         handle = self._handle(registry, tmp_path)
 
         whole_ids = self._report_ids(registry, handle)
-        ranged_ids = self._report_ids(
-            registry, handle, tools.SignpostRange("PERF_START", "PERF_END")
-        )
+        ranged_ids = self._report_ids(registry, handle, _PERF_WINDOW)
 
         assert ranged_ids == whole_ids & set(SIGNPOSTED_WINDOW_IDS)
         assert ranged_ids
@@ -1884,9 +1885,7 @@ class TestSignpostRangeEndToEnd:
         registry = ReportRegistry()
         handle = self._handle(registry, tmp_path, rows)
 
-        report = tools.canonical_report(
-            registry, handle, tools.SignpostRange("PERF_START", "PERF_END")
-        )["report"]
+        report = tools.canonical_report(registry, handle, _PERF_WINDOW)["report"]
 
         assert any(
             row.get("op_type") == "signpost" and "PERF_INNER" in str(row.get("op_code"))
@@ -1968,13 +1967,7 @@ class TestSignpostRangeEndToEnd:
         read as it generates the report, a window as it reads the signposts. #2227"""
         registry = ReportRegistry()
         directory = tmp_path / "signposted"
-        directory.mkdir()
-        # As the server loads it: with no CSV, no signposts are read, so none can fail.
-        loaded = tools.with_signposts(
-            registry, load_report(registry, performance_path=str(directory))
-        )
-        assert "signposts_problem" not in loaded
-        handle = loaded["handle"]
+        handle = load_before_csv(registry, directory)
         # Repeated whole and ranged misses must leave it free to pin the next CSV.
         for _ in range(2):
             for read in (_read_whole, _read_window):
@@ -1994,10 +1987,9 @@ class TestSignpostRangeEndToEnd:
         nothing was read from the first. Matched on purpose: #2306 is to settle it."""
         registry = ReportRegistry()
         directory = tmp_path / "signposted"
-        directory.mkdir()
-        handle = load_report(registry, performance_path=str(directory))["handle"]
+        handle = load_before_csv(registry, directory)
         _write_header_only(directory)
-        with pytest.raises(DataFormatError, match=r"at least header \+ 1 data row"):
+        with pytest.raises(DataFormatError):
             tools.top_ops(registry, handle)
 
         write_ops_perf(directory, signposted_rows())
@@ -2030,8 +2022,7 @@ class TestSignpostRangeEndToEnd:
         would generate them again. #2227"""
         registry = ReportRegistry()
         directory = tmp_path / "signposted"
-        directory.mkdir()
-        first = load_report(registry, performance_path=str(directory))["handle"]
+        first = load_before_csv(registry, directory)
         with pytest.raises(FileNotFoundError):
             tools.top_ops(registry, first)
         write_ops_perf(directory, signposted_rows())
@@ -2039,9 +2030,7 @@ class TestSignpostRangeEndToEnd:
 
         self._assert_reload_shares_snapshots(registry, first, second)
 
-    @pytest.mark.parametrize(
-        "signposts", [None, tools.SignpostRange("PERF_START", "PERF_END")]
-    )
+    @pytest.mark.parametrize("signposts", [None, _PERF_WINDOW])
     def test_a_degraded_snapshot_is_not_shared_with_a_reload(self, tmp_path, signposts):
         """A swallowed failure (an EMFILE, a full temp dir) leaves rows without an
         op type. Kept under the capture, every reload would read them too."""

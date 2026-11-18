@@ -15,6 +15,8 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 import pytest
+from ttnn_visualizer.agent import tools
+from ttnn_visualizer.agent.handles import ReportRegistry, load_report
 
 SMOKE_CAPTURE_DIR = (
     Path(__file__).resolve().parents[3]
@@ -71,6 +73,17 @@ def write_ops_perf(directory: Path, rows: List[Dict[str, str]]) -> Path:
         writer.writeheader()
         writer.writerows(rows)
     return destination
+
+
+def load_before_csv(registry: ReportRegistry, directory: Path) -> str:
+    """A handle on `directory`, loaded as the server loads one before the run has
+    written its ops_perf CSV: with no CSV, no signposts are read, so none can fail."""
+    directory.mkdir()
+    loaded = tools.with_signposts(
+        registry, load_report(registry, performance_path=str(directory))
+    )
+    assert "signposts_problem" not in loaded
+    return str(loaded["handle"])
 
 
 def append_unparsable_row(directory: Path) -> None:
