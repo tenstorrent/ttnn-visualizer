@@ -47,6 +47,7 @@ export const TEST_IDS = Object.freeze({
     NO_CONNECTION: 'no-connection',
     FETCH_REMOTE_FOLDERS: 'fetch-remote-folders-list',
     SHOW_OPERATION_SOURCE_BUTTON: 'show-operation-source-button',
+    STACK_TRACE_FRAME_LINK: 'stack-trace-frame-link',
 
     // Performance components
     PERFORMANCE_CHART: 'performance-chart',

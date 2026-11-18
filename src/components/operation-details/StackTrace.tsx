@@ -5,13 +5,20 @@
 import { Button, ButtonVariant, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import 'styles/components/StackTrace.scss';
 import { StackTraceLanguage } from '../../definitions/StackTrace';
+import { TEST_IDS } from '../../definitions/TestIds';
 import hljs from '../../functions/highlightSource';
-import { getStackTraceFilePath, getStackTraceLineNumber } from '../../functions/stackTraceSource';
+import {
+    StackTraceFrame,
+    getFrameSourceFileId,
+    parseStackTraceFrames,
+    splitStackTraceLines,
+} from '../../functions/stackTraceSource';
 import canStackTraceExpand, { STACK_TRACE_PREVIEW_LINES } from '../../functions/canStackTraceExpand';
 import SourceFileButton from './SourceFileButton';
+import StackTraceFrameSource from './StackTraceFrameSource';
 import { recordDrilldownOpened } from '../../functions/surfaceEvents';
 import { DrilldownTarget } from '../../definitions/EventLogEvent';
 
@@ -46,29 +53,40 @@ function StackTrace({
     recordsExpansion = false,
 }: StackTraceProps) {
     const [isExpanded, setIsExpanded] = useState(isInitiallyExpanded || false);
-    const filePath = useMemo(() => getStackTraceFilePath(stackTrace), [stackTrace]);
-    const lineNumber = useMemo(() => getStackTraceLineNumber(stackTrace), [stackTrace]);
+    const [activeFrame, setActiveFrame] = useState<StackTraceFrame | null>(null);
+    const [isFrameSourceOpen, setIsFrameSourceOpen] = useState(false);
     const scrollElementRef = useRef<null | HTMLPreElement>(null);
 
-    const stackTraceWithHighlights = useMemo(() => {
-        let highlightedFileContents = hljs.highlight(stackTrace, { language }).value;
+    const frames = useMemo(() => parseStackTraceFrames(stackTrace), [stackTrace]);
+    // The Source button opens frame 0, the call site, through the same parse as its link.
+    const callSite = frames[0] ?? null;
 
-        let line = 1;
-        highlightedFileContents = highlightedFileContents.replace(
-            /^/gm,
-            () => `<div class="ttnn-line"><span class="line-number">${line++}</span>`,
-        );
-        highlightedFileContents = highlightedFileContents.replace(
-            /<div class="ttnn-line">/gm,
-            (match) => `</div>${match}`,
-        );
+    const highlightedLines = useMemo(() => {
+        const framesByLine = new Map<number, StackTraceFrame>(frames.map((frame) => [frame.lineIndex, frame]));
+        const highlight = (text: string) => hljs.highlight(text, { language }).value;
 
-        return highlightedFileContents;
-    }, [stackTrace, language]);
+        return splitStackTraceLines(stackTrace).map((text, lineIndex): HighlightedLine => {
+            const frame = framesByLine.get(lineIndex) ?? null;
 
-    const stackTracePreview = useMemo(() => getStackTracePreview(stackTraceWithHighlights), [stackTraceWithHighlights]);
+            return frame
+                ? { frame, text: highlight(text), prefix: highlight(frame.prefix), suffix: highlight(frame.suffix) }
+                : { frame, text: highlight(text), prefix: '', suffix: '' };
+        });
+    }, [stackTrace, frames, language]);
+
+    const visibleLines = isExpanded ? highlightedLines : highlightedLines.slice(0, STACK_TRACE_PREVIEW_LINES);
     // A trace that fits in the preview has nothing more to show
     const canExpand = useMemo(() => canStackTraceExpand(stackTrace), [stackTrace]);
+    // Frame links share the Source button's gate: panes that hide it show error text, not
+    // a traceback whose files the report can open.
+    const showsFrameLinks = !hideSourceButton;
+
+    const handleOpenFrame = useCallback((frame: StackTraceFrame) => {
+        setActiveFrame(frame);
+        setIsFrameSourceOpen(true);
+    }, []);
+
+    const handleCloseFrameSource = useCallback(() => setIsFrameSourceOpen(false), []);
 
     const handleToggleStackTrace = () => {
         setIsExpanded(!isExpanded);
@@ -99,14 +117,34 @@ function StackTrace({
                 ref={scrollElementRef}
             >
                 <div className='code-wrapper'>
-                    <code
-                        className={`language-${language} code-output`}
-                        // HTML tags are escaped by hljs
-                        // eslint-disable-next-line react/no-danger
-                        dangerouslySetInnerHTML={{
-                            __html: isExpanded ? stackTraceWithHighlights : stackTracePreview,
-                        }}
-                    />
+                    <code className={`language-${language} code-output`}>
+                        {visibleLines.map(({ frame, text, prefix, suffix }, lineIndex) => (
+                            <div
+                                // Lines are positional: the trace is read once and never reordered.
+                                key={lineIndex}
+                                className='ttnn-line'
+                            >
+                                <span className='line-number'>{lineIndex + 1}</span>
+                                {frame && showsFrameLinks ? (
+                                    <>
+                                        <HighlightedText html={prefix} />
+                                        <button
+                                            type='button'
+                                            className='stack-trace-frame-link'
+                                            data-testid={TEST_IDS.STACK_TRACE_FRAME_LINK}
+                                            aria-label={`View source for ${frame.file} at line ${frame.line}`}
+                                            onClick={() => handleOpenFrame(frame)}
+                                        >
+                                            &quot;{frame.file}&quot;, line {frame.line}
+                                        </button>
+                                        <HighlightedText html={suffix} />
+                                    </>
+                                ) : (
+                                    <HighlightedText html={text} />
+                                )}
+                            </div>
+                        ))}
+                    </code>
                 </div>
 
                 <div className={classNames('stack-trace-buttons is-sticky')}>
@@ -122,9 +160,9 @@ function StackTrace({
 
                     {!hideSourceButton && (
                         <SourceFileButton
-                            filePath={filePath}
+                            filePath={callSite?.file ?? ''}
                             sourceFileId={stackTraceSourceFileId}
-                            lineNumber={lineNumber}
+                            lineNumber={callSite?.line ?? null}
                             language={language}
                             variant={ButtonVariant.MINIMAL}
                             intent={Intent.SUCCESS}
@@ -134,17 +172,39 @@ function StackTrace({
                     )}
                 </div>
             </pre>
+
+            {activeFrame && showsFrameLinks ? (
+                <StackTraceFrameSource
+                    // A new frame, or the same position in another trace, reads its own file.
+                    key={`${activeFrame.index}:${activeFrame.file}:${activeFrame.line}:${stackTraceSourceFileId}`}
+                    filePath={activeFrame.file}
+                    sourceFileId={getFrameSourceFileId(activeFrame, stackTraceSourceFileId)}
+                    lineNumber={activeFrame.line}
+                    language={language}
+                    isOpen={isFrameSourceOpen}
+                    onClose={handleCloseFrameSource}
+                />
+            ) : null}
         </div>
     );
 }
 
-function getStackTracePreview(stackTrace: string) {
-    // The first element is what precedes the first line, so one more than the lines shown.
-    const splitTrace: Array<string> = stackTrace
-        .split('<span class="line-number">')
-        .splice(0, STACK_TRACE_PREVIEW_LINES + 1);
+interface HighlightedLine {
+    frame: StackTraceFrame | null;
+    // hljs output for the whole line, and for the text either side of a frame's link.
+    text: string;
+    prefix: string;
+    suffix: string;
+}
 
-    return splitTrace.join('<span class="line-number">');
+interface HighlightedTextProps {
+    html: string;
+}
+
+function HighlightedText({ html }: HighlightedTextProps) {
+    // HTML tags are escaped by hljs
+    // eslint-disable-next-line react/no-danger
+    return <span dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
 function isTopOfElementInViewport(element: HTMLElement, scrollContainer?: React.RefObject<HTMLDivElement>): boolean {

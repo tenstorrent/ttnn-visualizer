@@ -77,6 +77,33 @@ $container-border-width: 1px;
         text-wrap: balance;
     }
 
+    // A frame's `"<file>", line <n>`, a button so it is reachable with Tab and opens with
+    // Enter, drawn as a link inside the trace's monospace text.
+    .stack-trace-frame-link {
+        padding: 0;
+        border: 0;
+        background: none;
+        font: inherit;
+
+        // A button is an inline block, so a path too long for the rest of the line
+        // wraps inside it, and it centres that text unless told otherwise.
+        text-align: start;
+        overflow-wrap: anywhere;
+        color: $tt-blue-tint-1;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+        cursor: pointer;
+
+        &:hover {
+            color: $tt-blue-tint-2;
+        }
+
+        &:focus-visible {
+            outline: 1px solid $tt-blue-tint-2;
+            outline-offset: 1px;
+        }
+    }
+
     .stack-trace-buttons {
         display: flex;
         flex-direction: column;
