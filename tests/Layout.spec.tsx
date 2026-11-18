@@ -8,7 +8,7 @@ import { StrictMode, act } from 'react';
 import type { ComponentType } from 'react';
 import { HelmetProvider } from 'react-helmet-async';
 import { type InitialEntry, MemoryRouter } from 'react-router';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import ROUTES from '../src/definitions/Routes';
 import { EventLogEvent, EventLogView } from '../src/definitions/EventLogEvent';
 import { VIEW_ENGAGEMENT_THRESHOLD_MS } from '../src/definitions/ViewEngagement';
@@ -77,6 +77,11 @@ function renderLayout(Layout: ComponentType, initialEntries: InitialEntry[] = ['
         </StrictMode>,
     );
 }
+
+// The first import loads the whole app shell, which can outlast a test's 5 s in a full run.
+beforeAll(async () => {
+    await import('../src/components/Layout');
+}, 30_000);
 
 describe('Layout event logging wiring', () => {
     beforeEach(async () => {

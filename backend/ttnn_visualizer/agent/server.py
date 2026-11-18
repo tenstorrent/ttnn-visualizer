@@ -10,13 +10,17 @@ licence scan on a spike. Swapping this file for the SDK is contained -- nothing
 above it imports anything from here. #1995
 
 Every byte on stdout is protocol. Logs go to stderr, and `tools` captures
-tt-perf-report's own printing for the same reason.
+tt-perf-report's own printing for the same reason, as the usage exporter captures
+curl's.
 """
 
 import json
 import logging
 import math
+import os
+import signal
 import sys
+from types import FrameType
 from typing import Callable, Dict, List, Optional, TextIO
 
 from ttnn_visualizer.agent import (
@@ -49,6 +53,12 @@ from ttnn_visualizer.event_logging import (
     record_event,
     start_run,
 )
+from ttnn_visualizer.usage_collection import (
+    describe_usage_collection,
+    prepare_usage_collection_config,
+)
+from ttnn_visualizer.usage_metrics import UsageMetricsExporter, start_usage_exporter
+from ttnn_visualizer.utils import parse_bool
 
 logger = logging.getLogger(__name__)
 
@@ -89,8 +99,8 @@ INSTRUCTIONS = (
     "(signpost_range_ignored).\n"
     "- On a multi-host report the database tools read rank 0 unless given rank.\n"
     "- The first call that generates or links the performance report can take "
-    "seconds on a large capture; later calls reuse it. A CSV rewritten or superseded "
-    "after load_report is refused: load it again.\n"
+    "seconds on a large capture; later calls reuse it. A handle refuses a CSV "
+    "rewritten or superseded after its first read of it: load it again.\n"
     "- Give the reader any app_link, or an app_link_template filled with an "
     "operation_id: it opens the same thing in the visualizer."
 )
@@ -430,7 +440,10 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "never pooled across devices. Takes one perf_id, or ranks the "
                 f"costliest ops by device time, capped at {MAX_DETAILED_LIMIT}. The "
                 "first call on a handle reads the whole device log; later calls "
-                "answer from that read."
+                "answer from that read. by_risc lists the first "
+                f"{tools.MAX_LISTED_RISCS} RISCs by name, counting the rest in "
+                "by_risc_unlisted_past_cap and those whose names are too long to show "
+                "in by_risc_unlisted_too_long."
             ),
             "schema": {
                 "type": "object",
@@ -467,8 +480,11 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "These are tt-npe's simulation, in device cycles, not a measurement. "
                 "The first call reads the whole trace, which takes seconds on a large "
                 "one and refuses one past "
-                f"{noc_congestion.MAX_TRACE_JSON_BYTES:,} bytes of JSON; later calls "
-                "answer from that read, with a caveat if the trace has changed since."
+                f"{noc_congestion.MAX_TRACE_JSON_BYTES:,} bytes of JSON; one past "
+                f"{noc_congestion.MAX_INLINE_TRACE_JSON_BYTES:,} is read in a process of "
+                "its own, which adds about half a second and holds about twice the JSON "
+                "while it reads. Later calls answer from that read, with a caveat if the "
+                "trace has changed since."
             ),
             "schema": {
                 "type": "object",
@@ -611,17 +627,14 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
             "title": "Operation detail",
             "description": (
                 "One operation: its input and output tensors with shape, dtype and "
-                "layout, what it had allocated, and its per-device l1_pressure in "
-                "bytes per bank "
-                "(fullness_pct, free_segments, largest_free_block and "
-                "largest_free_pct on the most constrained device, the one with "
-                "the smallest largest_free_block; free-space "
-                "figures are an upper bound because buffers excludes circular "
-                "buffers and intra-op tensors). l1_pressure is null, with a caveat, "
-                "when the devices rows cannot be attributed to the rank. Read "
-                "tensor_size_unit: a "
-                "tensor size is whole-tensor bytes only where the report carries "
-                "that column, and per bank otherwise. When the handle also holds a "
+                "layout, what it had allocated, and l1_pressure: its fullness and "
+                "free space in bytes per bank on its most constrained device, whose "
+                "note says which figures are bounds. l1_pressure is null, with a "
+                "caveat, when the operation has no buffers rows, no device records "
+                "L1 geometry, or the devices rows cannot be attributed to the rank. "
+                "Read tensor_size_unit: a tensor size is whole-tensor bytes only "
+                "where the report carries that column, and per bank otherwise. "
+                "When the handle also holds a "
                 "linked performance report, perf_rows lists the device operations "
                 "it launched with their device time and the same bound, "
                 "bound_analysis and op_category fields as top_ops. Each row's "
@@ -668,7 +681,8 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "within each type, with that type's largest footprint, the "
                 "device's L1 geometry, and l1_pressure (operations ranked by "
                 "smallest largest_free_block on each operation's most constrained "
-                "device). A floor, not the peak: the buffers table "
+                "device, with operations_at_top counting those that share the first "
+                "row's largest_free_block). A floor, not the peak: the buffers table "
                 "records tensor allocations only, so circular buffers and tensors "
                 "allocated and freed inside one operation are absent -- for an "
                 "out-of-memory question read errors and l1_peak instead, and "
@@ -678,7 +692,9 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "l1_bank_size; a device-wide total cannot be derived from the "
                 "response, and the report carries no DRAM capacity. device and "
                 "l1_pressure are null, with a caveat, when the devices rows cannot be "
-                "attributed to the rank."
+                "attributed to the rank, and l1_pressure also when no device records "
+                "L1 geometry, and with no caveat under any buffer_type but L1 or for "
+                "a report holding no L1 buffers."
             ),
             "schema": {
                 "type": "object",
@@ -1132,12 +1148,48 @@ def serve(
             stdout.flush()
 
 
+def _start_usage_export() -> Optional[UsageMetricsExporter]:
+    """Prepare the opt-in identity and push, as the app launcher does for a local launch.
+
+    The server is an entry point of its own, so an agent-only user is exported without
+    ever launching the app. #2282
+    """
+    # Anything but a readable false counts as hosted, failing closed: aggregate
+    # collection is local-only, and the app refuses to start on an unreadable value.
+    # Only an unset variable defaults to local; an empty one is unreadable, as it is
+    # to the app.
+    if parse_bool(os.environ.get("SERVER_MODE", "false")) is not False:
+        logger.info("Aggregate usage collection is unavailable under SERVER_MODE.")
+        return None
+    collection_config = prepare_usage_collection_config()
+    logger.info(describe_usage_collection(collection_config, recording_disabled=False))
+    return start_usage_exporter(collection_config)
+
+
+class _Terminated(SystemExit):
+    """Raised by the SIGTERM handler, so ``main()`` can tell a termination apart."""
+
+
+def _exit_on_sigterm(signum: int, frame: Optional[FrameType]) -> None:
+    # Raised in the main thread, so ``main()``'s ``finally`` still makes the final push
+    # when a host terminates the server rather than closing its stdin.
+    raise _Terminated(0)
+
+
+def _defer_sigterm(signum: int, frame: Optional[FrameType]) -> None:
+    # A handler rather than ``SIG_IGN``: a caught signal is reset to the default in an
+    # exec'd child, so the final push's curl still dies with a process-group SIGTERM.
+    pass
+
+
 def main() -> None:
     logging.basicConfig(stream=sys.stderr, level=logging.INFO)
     start_run()
+    exporter: Optional[UsageMetricsExporter] = None
     # Path.home() raises RuntimeError when HOME is unset and the uid is absent from
-    # passwd. Compaction and the disclosure banner both resolve that path, and must
-    # not keep serve() from starting — including when the operator already opted out.
+    # passwd. Compaction, the disclosure banner and the collection config all resolve
+    # that path, and must not keep serve() from starting — including when the operator
+    # already opted out.
     try:
         if is_recording_enabled():
             compact_if_needed()
@@ -1146,6 +1198,7 @@ def main() -> None:
                 get_event_log_path(),
                 describe_opt_out(),
             )
+            exporter = _start_usage_export()
         else:
             logger.info(
                 "Event logging is DISABLED: %s.",
@@ -1153,7 +1206,34 @@ def main() -> None:
             )
     except Exception:
         logger.exception("Event-log startup failed; serving without recording")
-    serve(sys.stdin, sys.stdout)
+
+    if exporter is None:
+        serve(sys.stdin, sys.stdout)
+        return
+
+    previous_handler = signal.getsignal(signal.SIGTERM)
+    terminated = False
+    try:
+        # Inside the ``try``, so a SIGTERM that lands as soon as the handler is in
+        # place still reaches ``stop()`` below.
+        signal.signal(signal.SIGTERM, _exit_on_sigterm)
+        serve(sys.stdin, sys.stdout)
+    except _Terminated:
+        terminated = True
+    finally:
+        # A repeated SIGTERM would otherwise raise inside ``stop()`` and drop the
+        # final push the first one started. The push is bounded, and a host that
+        # will not wait can still SIGKILL.
+        signal.signal(signal.SIGTERM, _defer_sigterm)
+        try:
+            exporter.stop()
+        finally:
+            signal.signal(signal.SIGTERM, previous_handler)
+    if terminated:
+        # Skip interpreter shutdown: it flushes what is left in stdout's buffer, which
+        # blocks for good while a client that is not reading has the pipe full. Those
+        # bytes are a partial frame for a client that is leaving anyway.
+        os._exit(0)
 
 
 if __name__ == "__main__":

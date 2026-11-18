@@ -6,35 +6,92 @@
 @use '../definitions/variables' as variables;
 
 /* stylelint-disable selector-class-pattern */
-.react-flow {
-    --xy-edge-label-color: #{$tt-grey-7};
-    --xy-edge-label-background-color: transparent;
-    --xy-controls-button-background-color-hover-props: #{$tt-grey-6};
-    --xy-controls-button-color: #{$tt-grey-2};
-    --xy-controls-button-color-hover: #{$tt-grey-2};
-    --xy-minimap-node-stroke-color: #{$tt-grey-2};
-    --xy-minimap-node-background-color: #{$tt-grey-2};
-    --xy-minimap-node-stroke-width: 1px;
 
-    .react-flow__minimap {
-        background: $tt-grey-2;
+/* React Flow puts these classes on every flow in the app, so each rule that
+ * opens with one sits in this block, under this component's own
+ * `.mlir-view-pane`, which wraps the flow in both single and split view.
+ * `:where()` adds no specificity, so each still ranks against React Flow's own
+ * rules exactly as an unscoped rule would. Controls colours are shared:
+ * `_reactFlow.scss`. #1899 */
+:where(.mlir-view-pane) {
+    .react-flow {
+        --xy-edge-label-color: #{$tt-grey-7};
+        --xy-edge-label-background-color: transparent;
+        --xy-minimap-node-stroke-color: #{$tt-grey-2};
+        --xy-minimap-node-background-color: #{$tt-grey-2};
+        --xy-minimap-node-stroke-width: 1px;
+
+        .react-flow__minimap {
+            background: $tt-grey-2;
+        }
+
+        /* Nudge only the bottom-right panel (minimap / attribution). The previous
+         * selector targeted every `.bottom` panel — including `.bottom.left`
+         * (the Controls panel) — and combined with React Flow's `left: 0` it
+         * stretched the controls bounding box across the entire bottom of the
+         * graph, intercepting pan/click events on everything underneath. */
+        .react-flow__panel.bottom.right {
+            bottom: 0;
+            right: -15px;
+        }
+
+        /* Keep the zoom Controls near the bottom edge, with the colour legend
+         * sitting beside them (see MlirNodeColorLegend.scss). */
+        .react-flow__panel.bottom.left {
+            bottom: 16px;
+            left: variables.$reactflow-panel-origin-left;
+        }
     }
 
-    /* Nudge only the bottom-right panel (minimap / attribution). The previous
-     * selector targeted every `.bottom` panel — including `.bottom.left`
-     * (the Controls panel) — and combined with React Flow's `left: 0` it
-     * stretched the controls bounding box across the entire bottom of the
-     * graph, intercepting pan/click events on everything underneath. */
-    .react-flow__panel.bottom.right {
-        bottom: 0;
-        right: -15px;
+    .react-flow__edge-text {
+        font-size: 10px;
+        font-family: monospace;
     }
 
-    /* Keep the zoom Controls near the bottom edge, with the colour legend
-     * sitting beside them (see MlirNodeColorLegend.scss). */
-    .react-flow__panel.bottom.left {
-        bottom: 16px;
-        left: variables.$reactflow-panel-origin-left;
+    .react-flow__node-mlirOp {
+        /* Visual chrome formerly inline-set by `makeOpNode` in mlirGraphBuilder.ts. */
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        background: var(--graph-op-node);
+        color: #222;
+        border: 1px solid #999;
+        border-radius: 6px;
+        font-size: 12px;
+
+        &.selected {
+            box-shadow: 0 0 0 3px var(--graph-selected);
+            outline: none;
+        }
+    }
+
+    .react-flow__node-mlirGroup.selected {
+        box-shadow: 0 0 0 3px var(--graph-selected);
+        outline: none;
+    }
+
+    // Custom group node: transparent wrapper, visible dashed body, sticky header
+    // bar that handles collapse.
+    //
+    // The group is intentionally non-draggable (see worker), so React Flow does
+    // NOT add the `nopan` class to the wrapper. That means RF's pan filter
+    // (`event.target.closest('.nopan')`) returns null for mousedowns on the
+    // group's body, and the gesture is handled by RF's pane just like a drag in
+    // empty canvas space. The body therefore advertises `cursor: grab` to
+    // telegraph the pan affordance, matching what the user sees outside any
+    // group.
+    //
+    // The header bar opts back into `nopan` (added inline on the element) so its
+    // own clicks/drags never trigger a stray canvas pan; that combined with
+    // `onMouseDown stopPropagation()` in the React component keeps the collapse
+    // click clean.
+    .react-flow__node.react-flow__node-mlirGroup {
+        background: transparent;
+        padding: 0;
+        border: none;
     }
 }
 
@@ -61,66 +118,6 @@
     border: 1px solid $tt-grey-3;
     border-radius: 4px;
     box-shadow: 0 1px 4px rgb(0 0 0 / 30%);
-}
-
-.react-flow__edge-text {
-    font-size: 10px;
-    font-family: monospace;
-}
-
-.react-flow__node-default {
-    color: #222;
-
-    /* DefaultNode renders label as a raw text node; clip when width is capped by layout. */
-    overflow: hidden;
-    white-space: nowrap;
-}
-
-.react-flow__node-mlirOp {
-    /* Visual chrome formerly inline-set by `makeOpNode` in mlirGraphBuilder.ts. */
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-    background: var(--graph-op-node);
-    color: #222;
-    border: 1px solid #999;
-    border-radius: 6px;
-    font-size: 12px;
-
-    &.selected {
-        box-shadow: 0 0 0 3px var(--graph-selected);
-        outline: none;
-    }
-}
-
-.react-flow__node-group.selected,
-.react-flow__node-mlirGroup.selected {
-    box-shadow: 0 0 0 3px var(--graph-selected);
-    outline: none;
-}
-
-/* Custom group node: transparent wrapper, visible dashed body, sticky header
- * bar that handles collapse.
- *
- * The group is intentionally non-draggable (see worker), so React Flow does
- * NOT add the `nopan` class to the wrapper. That means RF's pan filter
- * (`event.target.closest('.nopan')`) returns null for mousedowns on the
- * group's body, and the gesture is handled by RF's pane just like a drag in
- * empty canvas space. The body therefore advertises `cursor: grab` to
- * telegraph the pan affordance, matching what the user sees outside any
- * group.
- *
- * The header bar opts back into `nopan` (added inline on the element) so its
- * own clicks/drags never trigger a stray canvas pan; that combined with
- * `onMouseDown stopPropagation()` in the React component keeps the collapse
- * click clean. */
-.react-flow__node.react-flow__node-mlirGroup {
-    background: transparent;
-    padding: 0;
-    border: none;
 }
 
 /* Group ports are functional only — they exist so React Flow has anchor

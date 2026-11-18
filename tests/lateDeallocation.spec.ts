@@ -22,7 +22,7 @@ import {
     selectLateDeallocationRunStarts,
 } from '../src/functions/lateDeallocation';
 import { LATE_DEALLOC_OPPORTUNITY_TEXT, LateDeallocationAvailability } from '../src/definitions/LateDeallocation';
-import { Buffer, Tensor } from '../src/model/APIData';
+import { Buffer, Operation, Tensor } from '../src/model/APIData';
 import { BufferType } from '../src/model/BufferType';
 import { buildTensorDeallocationReport as buildReport } from './helpers/lateDeallocationFixtures';
 import { buildTensor as buildFullTensor } from './helpers/operationDetailsFixtures';
@@ -150,7 +150,7 @@ describe('buildTensorsByOperationByAddress', () => {
         const tensor = buildFullTensor({ id: 10, address: 100, buffer_type: BufferType.DRAM });
 
         const tensorsByOperation = buildTensorsByOperationByAddress(
-            [{ id: 1, inputs: [], outputs: [tensor] }],
+            [{ id: 1, name: 'ttnn.add', inputs: [], outputs: [tensor] }],
             [{ id: 1, name: 'ttnn.add', buffers: [buildBuffer(100, 10, BufferType.L1)] }],
         );
 
@@ -162,8 +162,8 @@ describe('buildTensorsByOperationByAddress', () => {
 
         const tensorsByOperation = buildTensorsByOperationByAddress(
             [
-                { id: 1, inputs: [tensor], outputs: [] },
-                { id: 2, inputs: [tensor], outputs: [] },
+                { id: 1, name: 'ttnn.add', inputs: [tensor], outputs: [] },
+                { id: 2, name: 'ttnn.add', inputs: [tensor], outputs: [] },
             ],
             [{ id: 1, name: 'ttnn.add', buffers: [buildBuffer(100, 10)] }],
         );
@@ -177,6 +177,7 @@ describe('buildTensorsByOperationByAddress', () => {
             [
                 {
                     id: 1,
+                    name: 'ttnn.add',
                     inputs: [buildFullTensor({ id: 10, address: 100 })],
                     outputs: [buildFullTensor({ id: 11, address: 100 })],
                 },
@@ -185,6 +186,134 @@ describe('buildTensorsByOperationByAddress', () => {
         );
 
         expect(tensorsByOperation.get(1)?.get(100)?.id).toBe(11);
+    });
+
+    // Only the fields the address map reads; `name` matters only for a deallocate call.
+    const op = (id: number, overrides: Partial<Pick<Operation, 'name' | 'inputs' | 'outputs'>> = {}) => ({
+        id,
+        name: 'ttnn.add',
+        inputs: [],
+        outputs: [],
+        ...overrides,
+    });
+    const snapshot = (id: number, addresses: number[]) => ({
+        id,
+        name: 'ttnn.add',
+        buffers: addresses.map((address) => buildBuffer(address, 10)),
+    });
+
+    it("stops crediting an address once its tensor's buffer leaves a snapshot", () => {
+        const tensor = buildFullTensor({ id: 10, address: 100 });
+
+        const tensorsByOperation = buildTensorsByOperationByAddress(
+            [op(1, { outputs: [tensor] }), op(2), op(3)],
+            [snapshot(1, [100]), snapshot(2, [200]), snapshot(3, [100])],
+        );
+
+        expect(tensorsByOperation.get(1)?.get(100)?.id).toBe(10);
+        expect(tensorsByOperation.get(3)).toEqual(new Map());
+    });
+
+    it('credits a forgotten address again once a later operation names its tensor there', () => {
+        const tensor = buildFullTensor({ id: 10, address: 100 });
+
+        const tensorsByOperation = buildTensorsByOperationByAddress(
+            [op(1, { outputs: [tensor] }), op(2), op(3), op(4, { inputs: [tensor] })],
+            [snapshot(1, [100]), snapshot(2, [200]), snapshot(3, [100]), snapshot(4, [100])],
+        );
+
+        expect(tensorsByOperation.get(3)).toEqual(new Map());
+        expect(tensorsByOperation.get(4)?.get(100)?.id).toBe(10);
+    });
+
+    it('keeps crediting an address across an operation that recorded no buffers', () => {
+        const tensor = buildFullTensor({ id: 10, address: 100 });
+
+        const tensorsByOperation = buildTensorsByOperationByAddress(
+            [op(1, { outputs: [tensor] }), op(2), op(3)],
+            [snapshot(1, [100]), snapshot(2, []), snapshot(3, [100])],
+        );
+
+        expect(tensorsByOperation.get(3)?.get(100)?.id).toBe(10);
+    });
+
+    it('keeps crediting an address across an operation missing from the buffers', () => {
+        const tensor = buildFullTensor({ id: 10, address: 100 });
+
+        const tensorsByOperation = buildTensorsByOperationByAddress(
+            [op(1, { outputs: [tensor] }), op(2), op(3)],
+            [snapshot(1, [100]), snapshot(3, [100])],
+        );
+
+        expect(tensorsByOperation.get(2)).toEqual(new Map());
+        expect(tensorsByOperation.get(3)?.get(100)?.id).toBe(10);
+    });
+
+    it('stops crediting an address after a deallocate call frees its tensor', () => {
+        const tensor = buildFullTensor({ id: 10, address: 100 });
+
+        const tensorsByOperation = buildTensorsByOperationByAddress(
+            [op(1, { outputs: [tensor] }), op(2, { name: 'ttnn.deallocate', inputs: [tensor] }), op(3)],
+            [1, 2, 3].map((id) => snapshot(id, [100])),
+        );
+
+        expect(tensorsByOperation.get(2)?.get(100)?.id).toBe(10);
+        expect(tensorsByOperation.get(3)).toEqual(new Map());
+    });
+
+    it('frees a tensor a deallocate call names by id, not by the same object', () => {
+        const tensor = buildFullTensor({ id: 10, address: 100 });
+
+        const tensorsByOperation = buildTensorsByOperationByAddress(
+            [op(1, { outputs: [tensor] }), op(2, { name: 'TTNN::Deallocate', inputs: [{ ...tensor }] }), op(3)],
+            [1, 2, 3].map((id) => snapshot(id, [100])),
+        );
+
+        expect(tensorsByOperation.get(3)).toEqual(new Map());
+    });
+
+    it('leaves an address with its tensor when a deallocate call names an earlier one', () => {
+        const earlier = buildFullTensor({ id: 10, address: 100 });
+        const later = buildFullTensor({ id: 11, address: 100 });
+
+        const tensorsByOperation = buildTensorsByOperationByAddress(
+            [
+                op(1, { outputs: [earlier] }),
+                op(2, { outputs: [later] }),
+                op(3, { name: 'ttnn.deallocate', inputs: [earlier] }),
+                op(4),
+            ],
+            [1, 2, 3, 4].map((id) => snapshot(id, [100])),
+        );
+
+        expect(tensorsByOperation.get(3)?.get(100)?.id).toBe(11);
+        expect(tensorsByOperation.get(4)?.get(100)?.id).toBe(11);
+    });
+
+    it('leaves an address with its tensor when a deallocate call names it with no address', () => {
+        const tensor = buildFullTensor({ id: 10, address: 100 });
+
+        const tensorsByOperation = buildTensorsByOperationByAddress(
+            [
+                op(1, { outputs: [tensor] }),
+                op(2, { name: 'ttnn.deallocate', inputs: [{ ...tensor, address: null }] }),
+                op(3),
+            ],
+            [1, 2, 3].map((id) => snapshot(id, [100])),
+        );
+
+        expect(tensorsByOperation.get(3)?.get(100)?.id).toBe(10);
+    });
+
+    it('never credits a tensor first named at the deallocate call that frees it', () => {
+        const tensor = buildFullTensor({ id: 10, address: 100 });
+
+        const tensorsByOperation = buildTensorsByOperationByAddress(
+            [op(1), op(2, { name: 'ttnn.deallocate', inputs: [tensor] }), op(3)],
+            [1, 2, 3].map((id) => snapshot(id, [100])),
+        );
+
+        expect([1, 2, 3].map((id) => tensorsByOperation.get(id))).toEqual([new Map(), new Map(), new Map()]);
     });
 });
 

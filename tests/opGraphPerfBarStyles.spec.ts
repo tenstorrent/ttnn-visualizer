@@ -2,25 +2,17 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { getRuleBody, getStylesheet } from './helpers/stylesheets';
 
 import { PERF_BAR_COLOR_VAR, PERF_BAR_SCALE_VAR } from '../src/components/operation-graph/opGraphPerfOverlay';
 import { NODE_ZOOM_VAR } from '../src/components/operation-graph/opGraphNodeZoom';
 
 // jsdom doesn't compile SCSS, so a rendered node carries the class but none of
 // its declarations. Same approach as `opGraphNodeStyles.spec.ts`.
-const STYLESHEET = readFileSync(resolve(process.cwd(), 'src/scss/components/OperationGraphReactFlow.scss'), {
-    encoding: 'utf8',
-});
+const STYLESHEET = getStylesheet('src/scss/components/OperationGraphReactFlow.scss');
 
-const ruleBody = (selector: string): string => {
-    const start = STYLESHEET.indexOf(selector);
-    expect(start, `${selector} not found`).toBeGreaterThan(-1);
-    const open = STYLESHEET.indexOf('{', start);
-    return STYLESHEET.slice(open + 1, STYLESHEET.indexOf('}', open));
-};
+const ruleBody = (selector: string): string => getRuleBody(STYLESHEET, selector);
 
 const PERF_BAR = '&::after';
 

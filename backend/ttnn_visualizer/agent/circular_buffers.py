@@ -29,7 +29,7 @@ from typing import (
     TypeVar,
 )
 
-from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_LIMIT
+from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_LIMIT, cut_text
 from ttnn_visualizer.agent.js_values import (
     MISSING,
     Missing,
@@ -577,15 +577,6 @@ def _unrecorded_by_name(
     ]
 
 
-def _core_range_set(value: object) -> Dict[str, object]:
-    if not isinstance(value, str) or len(value) <= MAX_CORE_RANGE_SET_CHARS:
-        return {"core_range_set": value}
-    return {
-        "core_range_set": value[:MAX_CORE_RANGE_SET_CHARS],
-        "core_range_set_full_length": len(value),
-    }
-
-
 def _figure(value: NumberValue) -> Optional[NumberValue]:
     # JSON holds no NaN; a size no capture writes reads as unknown.
     return value if math.isfinite(value) else None
@@ -616,7 +607,11 @@ def response(
                     {
                         "address": _figure(row.address),
                         "size_per_core": _figure(row.size),
-                        **_core_range_set(row.core_range_set),
+                        **cut_text(
+                            "core_range_set",
+                            row.core_range_set,
+                            MAX_CORE_RANGE_SET_CHARS,
+                        ),
                         "core_count": row.core_count,
                         "device_count": row.device_count,
                         "globally_allocated": row.globally_allocated,

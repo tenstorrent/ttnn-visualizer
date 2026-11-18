@@ -18,12 +18,18 @@ from typing import Dict, Set
 
 import pytest
 from ttnn_visualizer.agent import report_diff, server, tools
-from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_LIMIT
+from ttnn_visualizer.agent.bounds import (
+    MAX_DETAILED_LIMIT,
+    MAX_LIMIT,
+    MAX_OP_CODE_CHARS,
+)
 from ttnn_visualizer.agent.handles import MAX_SCOPED_DIFF_TOTALS, ReportRegistry
 from ttnn_visualizer.agent.perf_detail import DetailGroup
 from ttnn_visualizer.csv_queries import (
     ACCUMULATE_FLUSH_ZONES,
     L1_ZONE_MARKER_CAPACITY,
+    MAX_CAPTURE_FIELD_CHARS,
+    MAX_CAPTURE_FIELDS,
     MAX_LISTED_SIGNPOSTS,
     MAX_ZONE_TIMELINES,
     PROFILER_ZONE_PREFIX,
@@ -218,13 +224,28 @@ def test_the_signpost_name_limit_the_page_states_is_the_enforced_one():
     assert f"or a {stated} writes it" in page
 
 
-def test_the_zone_tools_name_bounds_the_page_states_are_the_enforced_ones():
-    """The page states both bounds as numbers, so nothing else ties them to the code."""
+def test_the_capture_field_bounds_the_page_states_are_the_enforced_ones():
+    page = " ".join(_read(_AGENT_DOCS).split())
+
+    assert f"value runs past {MAX_CAPTURE_FIELD_CHARS} characters" in page
+    assert f"after the first {MAX_CAPTURE_FIELDS} it keeps" in page
+    assert (
+        f"name longer than {MAX_CAPTURE_FIELD_CHARS} characters reads as none" in page
+    )
+
+
+def test_the_zone_tools_name_bounds_and_risc_cap_the_page_states_are_enforced():
+    """The page states the bounds and the cap as numbers, so nothing else ties them to
+    the code."""
     page = " ".join(_read(_AGENT_DOCS).split())
 
     assert (
         f"a zone name longer than {tools.MAX_ZONE_NAME_LENGTH} bytes or a RISC "
         f"name longer than {tools.MAX_RISC_NAME_LENGTH} bytes"
+    ) in page
+    assert (
+        f"lists at most {tools.MAX_LISTED_RISCS} RISCs an operation in `by_risc`, the "
+        "first by name, counting the rest in `by_risc_unlisted_past_cap`"
     ) in page
 
 
@@ -263,6 +284,8 @@ def test_the_diff_figures_the_page_states_are_the_enforced_ones():
     assert f"up to {report_diff.MAX_CAPTURES_PER_SIDE} captures a side" in page
     assert f"for up to {MAX_SCOPED_DIFF_TOTALS} captures and ranges" in page
     assert f"past {report_diff.MAX_SIGNATURE_CHARS} characters is cut" in page
+    assert f"An op code past {MAX_OP_CODE_CHARS} characters is cut" in page
+    assert f"An op code longer than {MAX_OP_CODE_CHARS} characters" in page
     assert f"{report_diff.DEFAULT_MIN_PERCENT:g}% unless asked" in page
     assert (
         f"{min_deltas['device_time']} µs for device time and op-to-op gap, "
@@ -327,6 +350,23 @@ def test_the_page_explains_each_diff_caveat(caveat, page_phrase):
     """Each caveat the answer can carry is one the page explains."""
     assert caveat
     assert page_phrase in " ".join(_read(_AGENT_DOCS).split())
+
+
+def test_the_page_names_every_tool_a_csv_that_cannot_be_read_costs():
+    """`without_performance_csv` moves exactly these, so the page names them as one set."""
+    from ttnn_visualizer.agent.handles import PERF_CSV_TOOLS
+
+    page = " ".join(_read(_AGENT_DOCS).split())
+    sentence = re.search(
+        r"The (\w+) tools that read the performance CSV's rows, (.+?), are listed only",
+        page,
+    )
+
+    assert sentence is not None
+    named = re.findall(r"`([a-z_]+)`", sentence.group(2))
+    assert set(named) == PERF_CSV_TOOLS
+    assert len(named) == len(PERF_CSV_TOOLS)
+    assert sentence.group(1) == "five"
 
 
 def test_the_signpost_listing_cap_the_page_states_is_the_enforced_one():

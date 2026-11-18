@@ -5,20 +5,25 @@
 """How congested a tt-npe trace's NoC links were: the trace's own run summary, the
 worst link and when, bursts of congestion, and the busiest links. #2156
 
-Read through the app's index when it is built and current, else from the trace itself,
-never by building an index: the tools write nothing beside a report.
+Read through the app's index when it is built and current, else from the trace itself a
+timestep at a time, never by building an index: the tools write nothing beside a report.
 """
 
 import io
+import json
 import logging
+import multiprocessing
+import multiprocessing.connection
 import os
 import stat
 import sys
+import threading
+from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
-import orjson
 import zstd
 from ttnn_visualizer import npe_index
 from ttnn_visualizer.agent.bounds import MAX_LIMIT, bounded, name_fits
@@ -36,8 +41,12 @@ MAX_LINK_NAME_LENGTH = 32
 MAX_LABEL_LENGTH = 64
 # tt-npe models two NoCs; more in a trace's run summary are its text, not a NoC.
 MAX_NOCS = 4
-# Past every local trace (904 MB of JSON); parsing one costs about ten times its size.
+# Past every local trace (904 MB of JSON); reading one costs about twice its size when
+# its bulk is spread over its timesteps (#2320).
 MAX_TRACE_JSON_BYTES = 1 << 30
+# A trace whose JSON is past this is read in a process of its own, whose memory goes back
+# to the system when it ends; the server's own allocator would keep much of it. #2275
+MAX_INLINE_TRACE_JSON_BYTES = 64 << 20
 # Distinct links summed; the most in a local trace is 4,653.
 MAX_LINKS = 1 << 16
 # Past this `truncate` overflows; no link is asked for 10^305 percent of itself.
@@ -169,7 +178,9 @@ def _cycle(cell: object) -> Optional[int]:
 
 
 # One function, rows inlined: a large trace holds 17 million of them.
-def _summed(rows: npe_index.LinkDemand) -> _NocRead:  # noqa: C901
+def _summed(  # noqa: C901
+    rows: Union[npe_index.LinkDemand, npe_index.StreamedLinkDemand],
+) -> _NocRead:
     """Sum each link's demand and follow bursts over the timesteps, in order, in one
     pass. Rows are read as the index stores them, so both sources answer alike."""
     links: Dict[Link, _LinkTotals] = {}
@@ -278,13 +289,22 @@ def _summed(rows: npe_index.LinkDemand) -> _NocRead:  # noqa: C901
 def _past_limit(npe_path: Path, size: str) -> ValueError:
     return ValueError(
         f"{npe_path.name} holds {size} bytes of JSON, past the "
-        f"{MAX_TRACE_JSON_BYTES:,} this tool parses, about ten times that in memory; "
-        "open it in the app, whose index this tool then reads"
+        f"{MAX_TRACE_JSON_BYTES:,} this tool reads, about twice that in memory if "
+        "its bulk is spread over its timesteps; open it in the app, whose index this "
+        "tool then reads"
     )
 
 
-def _trace_bytes(npe_path: Path, compressed: bool) -> bytes:
-    """The trace's bytes through one descriptor, so the bytes bounded are those parsed."""
+def _unreadable(npe_path: Path, reason: object) -> ValueError:
+    return ValueError(f"{npe_path.name} is not a readable tt-npe trace: {reason}")
+
+
+def _too_deep(npe_path: Path) -> ValueError:
+    return _unreadable(npe_path, "it nests too deep")
+
+
+def _trace_json(npe_path: Path, compressed: bool) -> bytes:
+    """The trace's JSON, read through one descriptor so the bytes bounded are those read."""
     with npe_path.open("rb") as source:
         if not npe_index.starts_as_trace(
             source.read(npe_index.TRACE_HEAD_BYTES), compressed
@@ -315,33 +335,90 @@ def _trace_bytes(npe_path: Path, compressed: bool) -> bytes:
         if size is None:
             raise ValueError(
                 f"{npe_path.name} is not zstd frames that each declare their size, so "
-                "what parsing it costs cannot be bounded before reading it"
+                "the memory its read takes cannot be bounded beforehand"
             )
         if size > MAX_TRACE_JSON_BYTES:
             raise _past_limit(npe_path, f"{size:,}")
+        # Rebound, so the compressed bytes are gone before the text is made.
+        data = zstd.uncompress(data)
     return data
 
 
-def _parsed_trace(npe_path: Path) -> object:
+def _from_trace(npe_path: Path) -> _NocRead:
+    """The trace's summed link demand, read from the trace a timestep at a time."""
     # Every refusal `from None`: its message carries the cause, and no frame of the read.
     compressed = npe_path.suffix == ".zst"
     try:
-        return npe_index.parse_trace(_trace_bytes(npe_path, compressed), compressed)
+        text = npe_index.trace_text(_trace_json(npe_path, compressed))
     except OSError as error:
         raise ValueError(f"{npe_path.name} cannot be read: {error.strerror}") from None
-    except (orjson.JSONDecodeError, zstd.Error) as error:
-        raise ValueError(
-            f"{npe_path.name} is not a readable tt-npe trace: {error}"
-        ) from None
-
-
-def _from_trace(npe_path: Path) -> _NocRead:
-    trace = _parsed_trace(npe_path)
+    except zstd.Error as error:
+        raise _unreadable(npe_path, error) from None
     try:
-        rows = npe_index.trace_link_demand(trace)
+        return _summed(npe_index.streamed_link_demand(text))
+    except json.JSONDecodeError as error:
+        raise _unreadable(npe_path, error) from None
+    except npe_index.NestsTooDeep:
+        raise _too_deep(npe_path) from None
     except ValueError as error:
         raise ValueError(f"{npe_path.name}: {error}") from None
-    return _summed(rows)
+
+
+def _reader_setup() -> None:
+    """Keep a reading process off stdout, which carries the server's messages, and end
+    it with the server: a pool's worker outlives a killed parent, holding the read."""
+    # Spawn imports `__main__` and this module before this runs, on the server's
+    # stdout, so neither may print at import.
+    try:
+        quiet = sys.stderr.fileno()
+    except (AttributeError, OSError, ValueError):
+        quiet = os.open(os.devnull, os.O_WRONLY)
+    os.dup2(quiet, 1)
+    # Room to send back a read whose `common_info` nests as deep as orjson reads.
+    sys.setrecursionlimit(sys.getrecursionlimit() + npe_index.RECURSION_HEADROOM)
+    parent = multiprocessing.parent_process()
+    if parent is not None:
+        threading.Thread(
+            target=_exit_with, args=(parent.sentinel,), daemon=True
+        ).start()
+
+
+def _exit_with(sentinel: int) -> None:
+    multiprocessing.connection.wait([sentinel])
+    os._exit(1)
+
+
+def _reader_pool(
+    initializer: Callable[[], None] = _reader_setup,
+) -> ProcessPoolExecutor:
+    """The process a large trace is read in: spawned, since a fork copies the server."""
+    return ProcessPoolExecutor(
+        1, mp_context=multiprocessing.get_context("spawn"), initializer=initializer
+    )
+
+
+def _read_trace(npe_path: Path) -> _NocRead:
+    """`_from_trace`, in a process of its own for a trace past
+    `MAX_INLINE_TRACE_JSON_BYTES`."""
+    try:
+        size = npe_index.trace_size(npe_path)
+    except OSError:
+        size = None
+    # Past the cap the read refuses it at once, so no process is started for it.
+    # Sized before it is read: one that grows meanwhile is read here, still capped.
+    if size is None or not MAX_INLINE_TRACE_JSON_BYTES < size <= MAX_TRACE_JSON_BYTES:
+        return _from_trace(npe_path)
+    with _reader_pool() as reader:
+        try:
+            return reader.submit(_from_trace, npe_path).result()
+        except RecursionError:
+            # Sending the read back nests as deep as its `common_info` does.
+            raise _too_deep(npe_path) from None
+        except BrokenProcessPool:
+            # Not a refusal, which would be kept: what ended the process may pass.
+            raise RuntimeError(
+                f"{npe_path.name}: the process reading it ended before it answered"
+            ) from None
 
 
 def _read(npe_path: Path) -> _NocRead:
@@ -357,7 +434,7 @@ def _read(npe_path: Path) -> _NocRead:
             npe_path.name,
             error,
         )
-    return _from_trace(npe_path)
+    return _read_trace(npe_path)
 
 
 def _trace_source(path: Path) -> Optional[FileSource]:

@@ -65,13 +65,15 @@ def usage_collection_config_path(tmp_path, monkeypatch):
     return path
 
 
-@pytest.fixture
-def event_log_directory(tmp_path, monkeypatch):
-    """Redirect the event log into a temporary directory and reset per-process state.
+@pytest.fixture(autouse=True)
+def isolated_event_log_directory(tmp_path, monkeypatch):
+    """Keep every test's event log inside ``tmp_path`` and reset per-process state.
 
-    Shared rather than module-local because both the writer's own tests and the ingest
-    endpoint's need it, and the consequence of a test forgetting it is not a failure but
-    an append to the developer's real ``~/.ttnn-visualizer/usage``.
+    Autouse because a test that forgot to opt in did not fail: it appended to the
+    developer's real ``~/.ttnn-visualizer/usage`` (#2278, #2279, #2288). The override
+    replaces both posture roots, so ``/data/usage`` is out of reach too. Recording
+    itself is left as the environment sets it; ask for :func:`event_log_directory` to
+    turn it on and read what a test wrote.
     """
     directory = tmp_path / "event-log"
     monkeypatch.setattr(event_logging, "EVENT_LOG_DIRECTORY", directory)
@@ -81,10 +83,18 @@ def event_log_directory(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(event_logging, "_hosted_log_state_by_path", OrderedDict())
     monkeypatch.setattr(event_logging, "_hosted_quota_warning_logged", False)
+    return directory
+
+
+@pytest.fixture
+def event_log_directory(isolated_event_log_directory, monkeypatch):
+    """The isolated event log, with recording on whatever the environment says.
+
+    For tests that assert on what was written, or on a recorder that is turned off.
+    """
     monkeypatch.delenv(RUN_ID_ENV_VAR, raising=False)
     monkeypatch.delenv(RECORDING_DISABLED_ENV_VAR, raising=False)
-
-    return directory
+    return isolated_event_log_directory
 
 
 @pytest.fixture
