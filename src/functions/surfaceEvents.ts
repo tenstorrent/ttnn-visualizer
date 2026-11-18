@@ -24,8 +24,9 @@ import recordEvent from './recordEvent';
  * code, and an effect would count a load or a reset as use. One event is tied to what is
  * shown rather than to a control, and is the only exception: `perf_chart_viewed` follows
  * the scroll position, so it is recorded from an effect on the sections the Charts tab's
- * scroll-spy reports in view: the active one, and at the bottom of the page every one whose
- * top is in view. Once per chart per visit.
+ * scroll-spy reports in view: the one under the offset line (the first while the line is
+ * above it, none while it is in a gap between charts), and, at the bottom of the page or on
+ * a page that cannot scroll, every one whose top is in view. Once per chart per visit.
  *
  * Follow it only for an event that is likewise about what is shown, and say so in its docs
  * section and in the docs' "Per-surface events" intro, which lists every exception too.

@@ -241,7 +241,8 @@ describe('useScrollSpy', () => {
         expect(result.current).toBe('second');
     });
 
-    describe('at the bottom of the page', () => {
+    // Short sections at the end of the page, the layout where the bottom-of-page rules apply.
+    describe('with short sections at the end of the page', () => {
         const VIEWPORT_HEIGHT_PX = 800;
         const PAGE_HEIGHT_PX = 2000;
         const BOTTOM_SCROLL_Y = PAGE_HEIGHT_PX - VIEWPORT_HEIGHT_PX;
@@ -260,29 +261,24 @@ describe('useScrollSpy', () => {
             });
         });
 
-        it('makes the last section active, though it never reaches the offset line', () => {
-            vi.spyOn(document.documentElement, 'scrollHeight', 'get').mockReturnValue(PAGE_HEIGHT_PX);
-            const { result } = renderHook(() => useActiveSection(['first', 'second', 'third']));
+        describe('on a page that cannot scroll', () => {
+            beforeEach(() => {
+                vi.spyOn(document.documentElement, 'scrollHeight', 'get').mockReturnValue(VIEWPORT_HEIGHT_PX);
+            });
 
-            scrollTo(BOTTOM_SCROLL_Y);
+            it('stays on its first section', () => {
+                const { result } = renderHook(() => useActiveSection(['first', 'second', 'third']));
 
-            expect(result.current).toBe('third');
-        });
+                scrollTo(0);
 
-        it('leaves a page that cannot scroll on its first section', () => {
-            vi.spyOn(document.documentElement, 'scrollHeight', 'get').mockReturnValue(VIEWPORT_HEIGHT_PX);
-            const { result } = renderHook(() => useActiveSection(['first', 'second', 'third']));
+                expect(result.current).toBe('first');
+            });
 
-            scrollTo(0);
+            it('lists every section, which is all in view', () => {
+                const { result } = renderHook(() => useScrollSpy(['first', 'second', 'third']));
 
-            expect(result.current).toBe('first');
-        });
-
-        it('lists every section of a page that cannot scroll, which is all in view', () => {
-            vi.spyOn(document.documentElement, 'scrollHeight', 'get').mockReturnValue(VIEWPORT_HEIGHT_PX);
-            const { result } = renderHook(() => useScrollSpy(['first', 'second', 'third']));
-
-            expect(result.current).toEqual({ activeId: 'first', sectionsInView: ['first', 'second', 'third'] });
+                expect(result.current).toEqual({ activeId: 'first', sectionsInView: ['first', 'second', 'third'] });
+            });
         });
 
         describe('on a page that scrolls', () => {
@@ -290,7 +286,15 @@ describe('useScrollSpy', () => {
                 vi.spyOn(document.documentElement, 'scrollHeight', 'get').mockReturnValue(PAGE_HEIGHT_PX);
             });
 
-            it('lists every section whose top is in view, though only the last becomes active', () => {
+            it('makes the last section active at the bottom, though it never reaches the offset line', () => {
+                const { result } = renderHook(() => useActiveSection(['first', 'second', 'third']));
+
+                scrollTo(BOTTOM_SCROLL_Y);
+
+                expect(result.current).toBe('third');
+            });
+
+            it('lists every section whose top is in view at the bottom, though only the last becomes active', () => {
                 const { result } = renderHook(() => useScrollSpy(['first', 'second', 'third']));
 
                 scrollTo(BOTTOM_SCROLL_Y);
@@ -308,7 +312,7 @@ describe('useScrollSpy', () => {
                 expect(result.current.sectionsInView).toEqual(['first']);
             });
 
-            it('lists nothing before its first measurement', () => {
+            it('lists nothing on arrival before its first measurement', () => {
                 const listed: string[][] = [];
 
                 renderHook(() => {
@@ -356,6 +360,77 @@ describe('useScrollSpy', () => {
 
                 expect(result.current.sectionsInView).toBe(listed);
             });
+        });
+    });
+
+    describe('listing what the measurement found', () => {
+        // Charts 500px tall with 60px margins between them, below 1440px of page header.
+        beforeEach(() => {
+            vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(800);
+            vi.spyOn(document.documentElement, 'scrollHeight', 'get').mockReturnValue(5000);
+            vi.spyOn(document, 'getElementById').mockImplementation((id) => {
+                const element = {
+                    a: mockElement(1440, 500),
+                    b: mockElement(2000, 500),
+                    c: mockElement(2560, 500),
+                }[id];
+
+                return element ?? null;
+            });
+        });
+
+        it('lists the first section while the offset line is above it', () => {
+            const { result } = renderHook(() => useScrollSpy(['a', 'b', 'c'], 60));
+
+            expect(result.current).toEqual({ activeId: 'a', sectionsInView: ['a'] });
+        });
+
+        it('lists nothing on arrival with the offset line in a margin', () => {
+            // The line is at 2540, between 'b' (ends 2500) and 'c' (starts 2560); 'a' is far above.
+            window.scrollY = 2480;
+            const { result } = renderHook(() => useScrollSpy(['a', 'b', 'c'], 60));
+
+            expect(result.current.sectionsInView).toEqual([]);
+        });
+
+        it('keeps the highlight but lists nothing once the line scrolls into a margin', () => {
+            const { result } = renderHook(() => useScrollSpy(['a', 'b', 'c'], 60));
+
+            scrollTo(1960);
+            scrollTo(2480);
+
+            expect(result.current).toEqual({ activeId: 'b', sectionsInView: [] });
+        });
+
+        it('does not list the fallback section when the active one leaves the id set', () => {
+            const { result, rerender } = renderHook(({ ids }) => useScrollSpy(ids, 60), {
+                initialProps: { ids: ['a', 'b', 'c'] },
+            });
+
+            scrollTo(1960);
+            expect(result.current.sectionsInView).toEqual(['b']);
+
+            // The line is still inside 'b', which has gone, so nothing is being read.
+            rerender({ ids: ['a', 'c'] });
+
+            expect(result.current).toEqual({ activeId: 'a', sectionsInView: [] });
+        });
+
+        it('activates a section jumped to whose fractional top stops just below the offset line', () => {
+            vi.spyOn(document, 'getElementById').mockImplementation((id) => {
+                const element = {
+                    a: mockElement(400, 200),
+                    // 60px below the first, at a fractional top a jump cannot land on exactly.
+                    b: mockElement(660.3, 200),
+                }[id];
+
+                return element ?? null;
+            });
+            const { result } = renderHook(() => useScrollSpy(['a', 'b'], 60));
+
+            scrollTo(600);
+
+            expect(result.current).toEqual({ activeId: 'b', sectionsInView: ['b'] });
         });
     });
 

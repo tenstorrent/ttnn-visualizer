@@ -16,7 +16,7 @@ import { TestProviders } from './helpers/TestProviders';
 
 const { recordEvent, activeSection } = vi.hoisted(() => ({
     recordEvent: vi.fn(),
-    activeSection: { id: null as string | null, inViewAtBottom: [] as string[] },
+    activeSection: { id: null as string | null, sectionsInView: [] as string[] },
 }));
 
 vi.mock('../src/functions/recordEvent', () => ({ default: recordEvent }));
@@ -27,7 +27,7 @@ vi.mock('../src/hooks/useScrollSpy', () => ({
         activeId: activeSection.id,
         // The hook lists the active section among those in view, after any it finds at the bottom.
         sectionsInView: [
-            ...new Set([...activeSection.inViewAtBottom, ...(activeSection.id ? [activeSection.id] : [])]),
+            ...new Set([...activeSection.sectionsInView, ...(activeSection.id ? [activeSection.id] : [])]),
         ],
     }),
 }));
@@ -80,9 +80,9 @@ function renderChartsTab() {
     );
     const view = render(tree());
 
-    const showSection = (id: string, inViewAtBottom: string[] = []) => {
+    const showSection = (id: string, sectionsInView: string[] = []) => {
         activeSection.id = id;
-        activeSection.inViewAtBottom = inViewAtBottom;
+        activeSection.sectionsInView = sectionsInView;
         view.rerender(tree());
     };
 
@@ -92,7 +92,7 @@ function renderChartsTab() {
 beforeEach(() => {
     recordEvent.mockClear();
     activeSection.id = null;
-    activeSection.inViewAtBottom = [];
+    activeSection.sectionsInView = [];
 });
 
 afterEach(cleanup);

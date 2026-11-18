@@ -51,6 +51,31 @@ afterEach(() => {
 });
 
 describe('PerformanceChartsTab on arrival', () => {
+    // Every chart laid out 400px apart from 300px down a page that scrolls, so at the top the
+    // offset line is above the first of them.
+    beforeEach(() => {
+        let nextTop = 300;
+        const tops = new Map<string, number>();
+
+        vi.spyOn(document, 'getElementById').mockImplementation((id) => {
+            if (!tops.has(id)) {
+                tops.set(id, nextTop);
+                nextTop += 400;
+            }
+
+            const element = document.createElement('div');
+
+            Object.defineProperty(element, 'offsetHeight', { configurable: true, value: 340 });
+            vi.spyOn(element, 'getBoundingClientRect').mockImplementation(
+                () => ({ top: (tops.get(id) ?? 0) - window.scrollY, height: 340 }) as DOMRect,
+            );
+
+            return element;
+        });
+        vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(800);
+        vi.spyOn(document.documentElement, 'scrollHeight', 'get').mockReturnValue(10000);
+    });
+
     it('records the chart the tab opens on, once, without scrolling', () => {
         const { rerender } = render(<TestProviders>{tab()}</TestProviders>);
 
@@ -141,8 +166,12 @@ describe('PerformanceChartsTab at the bottom of the page', () => {
             });
         });
 
-        // The scrolls changed what is in view, which only the index and the recording follow.
-        expect(recordEvent).toHaveBeenCalled();
+        // The scrolls changed what is in view, which only the index and the recording follow: the
+        // last chart is recorded only once the page reaches its bottom.
+        expect(recordEvent).toHaveBeenCalledWith({
+            event: EventLogEvent.PERF_CHART_VIEWED,
+            details: { perf_chart: PerfChartLabel.KERNEL_DURATION_VS_CORE_COUNT },
+        });
         expect(renderCharts).toHaveBeenCalledTimes(chartRendersOnArrival);
     });
 });
@@ -151,10 +180,11 @@ describe('PerformanceChartsTab on arrival partway down the page', () => {
     it('records the chart under the offset line, not the first chart', () => {
         const SCROLL_Y_PX = 2000;
 
-        // The first chart is scrolled out of view above; the second sits on the offset line.
+        // The first chart is scrolled out of view above; the second has scrolled past the offset
+        // line, clear of the bound a jump lands on.
         const rects: Record<string, number> = {
             [PerfChartId.OpDurationHistogram]: -1000,
-            [PerfChartId.OpCountVsRuntime]: PERF_CHARTS_NAV_OFFSET_PX,
+            [PerfChartId.OpCountVsRuntime]: PERF_CHARTS_NAV_OFFSET_PX - 20,
         };
 
         vi.spyOn(document, 'getElementById').mockImplementation((id) => {
