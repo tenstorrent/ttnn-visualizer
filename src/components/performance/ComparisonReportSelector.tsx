@@ -52,11 +52,17 @@ const ComparisonReportSelector = ({
                     value={selectedReportName}
                     valueLabel={selectedReportName ? formatSyncedReportName(selectedReportName) : null}
                     handleSelect={(folder: ReportFolder) => {
+                        const isSameReport = comparisonReportList?.[reportIndex] === folder.reportName;
                         const updatedReports = [...(comparisonReportList || [])];
                         updatedReports[reportIndex] = folder.reportName;
 
                         setComparisonReportList(updatedReports);
-                        recordPerfComparisonUsed(updatedReports.length);
+
+                        // Re-picking the report already in this slot changes nothing. Count the
+                        // filled slots, not the length, which a gap before this one would pad.
+                        if (!isSameReport) {
+                            recordPerfComparisonUsed(updatedReports.filter(Boolean).length);
+                        }
                     }}
                 />
 

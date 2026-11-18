@@ -178,6 +178,44 @@ describe('useActiveSection', () => {
         expect(result.current).toBe('second');
     });
 
+    describe('at the bottom of the page', () => {
+        const VIEWPORT_HEIGHT_PX = 800;
+        const PAGE_HEIGHT_PX = 2000;
+        const BOTTOM_SCROLL_Y = PAGE_HEIGHT_PX - VIEWPORT_HEIGHT_PX;
+
+        beforeEach(() => {
+            vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(VIEWPORT_HEIGHT_PX);
+            vi.spyOn(document, 'getElementById').mockImplementation((id) => {
+                // Two short sections at the end that can never reach the offset line.
+                const element = {
+                    first: mockElement(0, 1500),
+                    second: mockElement(1600, 200),
+                    third: mockElement(1800, 200),
+                }[id];
+
+                return element ?? null;
+            });
+        });
+
+        it('makes the last section active, though it never reaches the offset line', () => {
+            vi.spyOn(document.documentElement, 'scrollHeight', 'get').mockReturnValue(PAGE_HEIGHT_PX);
+            const { result } = renderHook(() => useActiveSection(['first', 'second', 'third']));
+
+            scrollTo(BOTTOM_SCROLL_Y);
+
+            expect(result.current).toBe('third');
+        });
+
+        it('leaves a page that cannot scroll on its first section', () => {
+            vi.spyOn(document.documentElement, 'scrollHeight', 'get').mockReturnValue(VIEWPORT_HEIGHT_PX);
+            const { result } = renderHook(() => useActiveSection(['first', 'second', 'third']));
+
+            scrollTo(0);
+
+            expect(result.current).toBe('first');
+        });
+    });
+
     it('uses the provided scroll offset when determining the active section', () => {
         vi.spyOn(document, 'getElementById').mockImplementation((id) => {
             if (id === 'section') {

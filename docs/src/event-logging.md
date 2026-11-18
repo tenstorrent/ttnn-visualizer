@@ -145,7 +145,7 @@ Recorded the first time each performance chart becomes the chart in view, per vi
 
 - `perf_chart`: `op_duration_histogram`, `op_count_vs_runtime`, `core_count_kernel_runtime`, `kernel_duration_vs_core_count`, `matmul_core_count_utilization`, `matmul_device_time`, `matmul_kernel_duration_utilization`, `matmul_utilization_vs_kernel_duration`, `conv_core_count_utilization`, `conv_device_time`, `conv_kernel_duration_utilization`, `conv_utilization_vs_kernel_duration`, `operation_types`.
 
-The matmul and conv charts show a placeholder when the report has no such operations, and still count when scrolled to.
+The matmul and conv charts show a placeholder when the report has no such operations, and record nothing while they do: a placeholder is not a chart. Reaching the bottom of the page counts the last chart, which may be too short to scroll to the top. A chart passed over by a jump to a later one is not counted.
 
 ### `perf_table_option_toggled`
 

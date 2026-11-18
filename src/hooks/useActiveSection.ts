@@ -5,6 +5,15 @@
 import { useEffect, useState } from 'react';
 
 const ID_SEPARATOR = '|';
+// Sub-pixel scroll positions can stop just short of the true bottom.
+const PAGE_BOTTOM_TOLERANCE_PX = 1;
+
+function isScrolledToBottom(scrollY: number): boolean {
+    const { scrollHeight } = document.documentElement;
+
+    // A page that cannot scroll has no bottom to reach, and every section is already in view.
+    return scrollHeight > window.innerHeight && scrollY + window.innerHeight >= scrollHeight - PAGE_BOTTOM_TOLERANCE_PX;
+}
 
 export function useActiveSection<TId extends string>(ids: TId[], offsetPx = 250): TId | null {
     const [trackedId, setTrackedId] = useState<TId | null>(ids[0] ?? null);
@@ -24,12 +33,20 @@ export function useActiveSection<TId extends string>(ids: TId[], offsetPx = 250)
 
         function navHighlighter() {
             const { scrollY } = window;
+            const isAtBottom = isScrolledToBottom(scrollY);
             let current: TId | null = null;
 
             sectionIds.forEach((id) => {
                 const element = document.getElementById(id);
 
                 if (element && element.offsetHeight > 0) {
+                    // The last sections may be too short to scroll up to the offset line, so at
+                    // the bottom of the page the last one rendered is the one being read.
+                    if (isAtBottom) {
+                        current = id;
+                        return;
+                    }
+
                     const sectionHeight = element.offsetHeight;
                     const sectionTop = element.offsetTop - offsetPx;
 

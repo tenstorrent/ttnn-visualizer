@@ -859,7 +859,7 @@ describe('PerformanceReport usage events', () => {
         expect(recordEvent).not.toHaveBeenCalled();
     });
 
-    it('records raw op codes picked from the list once per visit', async () => {
+    it('records raw op codes picked from the list once per mount', async () => {
         renderReport({ data: [row('Matmul', 1), row('Conv2d', 2)] });
 
         await openMultiSelect('Select Op Codes...');
@@ -873,5 +873,36 @@ describe('PerformanceReport usage events', () => {
         renderReport({ data: [row('Matmul', 1), row('Conv2d', 2)], rawOpCodeFilterList: ['Matmul'] });
 
         expect(recordEvent).not.toHaveBeenCalled();
+    });
+
+    it('does not record removing the last restored raw op code, which leaves no filter', () => {
+        renderReport({ data: [row('Matmul', 1), row('Conv2d', 2)], rawOpCodeFilterList: ['Matmul'] });
+
+        // The restored code is the field's only tag, so its remove button is the one to press.
+        fireEvent.click(screen.getByRole('button', { name: 'Remove tag' }));
+
+        expect(screen.getByPlaceholderText('Select Op Codes...')).toBeInTheDocument();
+        expect(recordEvent).not.toHaveBeenCalled();
+    });
+
+    it('counts the search and the raw op-code list as one filter', async () => {
+        renderReport({ data: [row('Matmul', 1), row('Conv2d', 2)] });
+
+        fireEvent.change(screen.getByPlaceholderText('Filter by operation name'), { target: { value: 'Mat' } });
+        await openMultiSelect('Select Op Codes...');
+        fireEvent.click(await screen.findByRole('checkbox', { name: 'Matmul' }, WAIT_FOR_OPTIONS));
+
+        expect(recordEvent).toHaveBeenCalledExactlyOnceWith(opCodeFilterEvent);
+    });
+
+    it('records the op-code filter again on a later visit', () => {
+        const first = renderReport();
+        fireEvent.change(screen.getByPlaceholderText('Filter by operation name'), { target: { value: 'Mat' } });
+        first.unmount();
+
+        renderReport();
+        fireEvent.change(screen.getByPlaceholderText('Filter by operation name'), { target: { value: 'Conv' } });
+
+        expect(recordEvent).toHaveBeenCalledTimes(2);
     });
 });

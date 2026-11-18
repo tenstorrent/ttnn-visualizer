@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PerformanceChartsTab from '../src/components/performance/PerformanceChartsTab';
 import ComparisonReportSelector from '../src/components/performance/ComparisonReportSelector';
@@ -64,19 +64,17 @@ function ChartsTab() {
 }
 
 function renderChartsTab() {
-    const view = render(
+    // A fresh element each time: React skips a rerender handed the very same element.
+    const tree = () => (
         <TestProviders>
             <ChartsTab />
-        </TestProviders>,
+        </TestProviders>
     );
+    const view = render(tree());
 
     const showSection = (id: string) => {
         activeSection.id = id;
-        view.rerender(
-            <TestProviders>
-                <ChartsTab />
-            </TestProviders>,
-        );
+        view.rerender(tree());
     };
 
     return { ...view, showSection };
@@ -163,7 +161,11 @@ describe('ComparisonReportSelector usage events', () => {
         [null, 0, ComparisonReportCountBucket.ONE],
         [['report-c'], 1, ComparisonReportCountBucket.TWO],
         [['report-c', 'report-d'], 2, ComparisonReportCountBucket.THREE_OR_MORE],
-    ])('buckets an add to %j by the resulting count', (comparisonReports, reportIndex, bucket) => {
+        // Replacing the report in a slot is a use too, and leaves the count as it was.
+        [['report-c'], 0, ComparisonReportCountBucket.ONE],
+        // Filling a slot past an empty one counts the reports, not the slots.
+        [['report-c'], 3, ComparisonReportCountBucket.TWO],
+    ])('buckets a pick into %j at %i by the resulting count', (comparisonReports, reportIndex, bucket) => {
         renderSelector(comparisonReports, reportIndex);
 
         fireEvent.click(screen.getByRole('button', { name: 'Pick report' }));
@@ -177,9 +179,15 @@ describe('ComparisonReportSelector usage events', () => {
     it('records nothing when a comparison report is removed', () => {
         renderSelector(['report-c'], 0);
 
-        act(() => {
-            fireEvent.click(screen.getByRole('button', { name: 'Remove report' }));
-        });
+        fireEvent.click(screen.getByRole('button', { name: 'Remove report' }));
+
+        expect(recordEvent).not.toHaveBeenCalled();
+    });
+
+    it('records nothing when the report already in the slot is picked again', () => {
+        renderSelector([PICKED_FOLDER.reportName], 0);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Pick report' }));
 
         expect(recordEvent).not.toHaveBeenCalled();
     });
