@@ -966,8 +966,9 @@ class TestServer:
 
         def listed(name: str) -> bool:
             path = str(tmp_path / name / "profiler")
-            loaded = load_report(ReportRegistry(), profiler_path=path)
-            return "op_configurations" in loaded["answerable"]
+            answerable = load_report(ReportRegistry(), profiler_path=path)["answerable"]
+            assert isinstance(answerable, list)
+            return "op_configurations" in answerable
 
         assert listed("with")
         assert not listed("without")
