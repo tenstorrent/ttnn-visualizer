@@ -22,8 +22,14 @@ const { recordEvent, activeSection } = vi.hoisted(() => ({
 vi.mock('../src/functions/recordEvent', () => ({ default: recordEvent }));
 
 // The scroll-spy is covered by its own spec; here it is the input the tab reacts to.
-vi.mock('../src/hooks/useActiveSection', () => ({
-    useScrollSpy: () => ({ activeId: activeSection.id, sectionsInViewAtBottom: activeSection.inViewAtBottom }),
+vi.mock('../src/hooks/useScrollSpy', () => ({
+    useScrollSpy: () => ({
+        activeId: activeSection.id,
+        // The hook lists the active section among those in view, after any it finds at the bottom.
+        sectionsInView: [
+            ...new Set([...activeSection.inViewAtBottom, ...(activeSection.id ? [activeSection.id] : [])]),
+        ],
+    }),
 }));
 
 vi.mock('../src/hooks/usePrefilterPerfTableByOpCode', () => ({ usePrefilterPerfTableByOpCode: () => vi.fn() }));

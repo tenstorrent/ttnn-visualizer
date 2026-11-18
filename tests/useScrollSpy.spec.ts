@@ -4,7 +4,10 @@
 
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useActiveSection, useScrollSpy } from '../src/hooks/useActiveSection';
+import { useScrollSpy } from '../src/hooks/useScrollSpy';
+
+// Most cases are about the section being read alone.
+const useActiveSection = (ids: string[], offsetPx?: number) => useScrollSpy(ids, offsetPx).activeId;
 
 const SCROLL_OFFSET_PX = 250;
 
@@ -42,7 +45,7 @@ function scrollTo(scrollY: number): void {
     });
 }
 
-describe('useActiveSection', () => {
+describe('useScrollSpy', () => {
     beforeEach(() => {
         Object.defineProperty(window, 'scrollY', {
             configurable: true,
@@ -88,11 +91,11 @@ describe('useActiveSection', () => {
 
         const { result } = renderHook(() => useActiveSection(['first', 'second']));
 
-        // 'first' spans (150, 350] once the 250px offset is applied.
+        // 'first' spans [150, 350] once the 250px offset is applied.
         scrollTo(200);
         expect(result.current).toBe('first');
 
-        // 'second' spans (450, 650].
+        // 'second' spans [450, 650].
         scrollTo(500);
         expect(result.current).toBe('second');
     });
@@ -139,7 +142,7 @@ describe('useActiveSection', () => {
 
         const { result } = renderHook(() => useActiveSection(['first', 'second'], 60));
 
-        // 'second' spans (1140, 1540] in the document; offsetTop alone would put it at (340, 740].
+        // 'second' spans [1140, 1540] in the document; offsetTop alone would put it at [340, 740].
         scrollTo(600);
         expect(result.current).toBe('first');
 
@@ -147,6 +150,30 @@ describe('useActiveSection', () => {
         expect(result.current).toBe('first');
 
         scrollTo(1200);
+        expect(result.current).toBe('second');
+    });
+
+    it('activates a section jumped to, whose top lands exactly on the offset line', () => {
+        vi.spyOn(document, 'getElementById').mockImplementation((id) => {
+            if (id === 'first') {
+                return mockElement(400, 200);
+            }
+
+            // 60px below the first, as the charts' margin leaves them.
+            if (id === 'second') {
+                return mockElement(660, 200);
+            }
+
+            return null;
+        });
+
+        const { result } = renderHook(() => useActiveSection(['first', 'second'], 60));
+
+        scrollTo(400);
+        expect(result.current).toBe('first');
+
+        // A jump scrolls the target's top to the offset line: 660 - 60. The first ended at 600 - 60.
+        scrollTo(600);
         expect(result.current).toBe('second');
     });
 
@@ -165,11 +192,11 @@ describe('useActiveSection', () => {
 
         const { result } = renderHook(() => useActiveSection(['first', 'second'], 60));
 
-        // 'second' spans (640, 1040] once the 60px offset is applied.
+        // 'second' spans [640, 1040] once the 60px offset is applied.
         scrollTo(800);
         expect(result.current).toBe('second');
 
-        // Back to the top: 'first' spans (-60, 340] and must still be reachable from the very top.
+        // Back to the top: 'first' spans [-60, 340] and must still be reachable from the very top.
         scrollTo(0);
         expect(result.current).toBe('first');
     });
@@ -205,7 +232,7 @@ describe('useActiveSection', () => {
             initialProps: { ids: ['first', 'second'] },
         });
 
-        // 'second' spans (450, 650]; make it the active section before the id set grows.
+        // 'second' spans [450, 650]; make it the active section before the id set grows.
         scrollTo(500);
         expect(result.current).toBe('second');
 
@@ -251,7 +278,14 @@ describe('useActiveSection', () => {
             expect(result.current).toBe('first');
         });
 
-        describe('useScrollSpy', () => {
+        it('lists every section of a page that cannot scroll, which is all in view', () => {
+            vi.spyOn(document.documentElement, 'scrollHeight', 'get').mockReturnValue(VIEWPORT_HEIGHT_PX);
+            const { result } = renderHook(() => useScrollSpy(['first', 'second', 'third']));
+
+            expect(result.current).toEqual({ activeId: 'first', sectionsInView: ['first', 'second', 'third'] });
+        });
+
+        describe('on a page that scrolls', () => {
             beforeEach(() => {
                 vi.spyOn(document.documentElement, 'scrollHeight', 'get').mockReturnValue(PAGE_HEIGHT_PX);
             });
@@ -262,37 +296,65 @@ describe('useActiveSection', () => {
                 scrollTo(BOTTOM_SCROLL_Y);
 
                 // 'second' never reaches the offset line, so this list is its only way to count.
-                expect(result.current).toEqual({ activeId: 'third', sectionsInViewAtBottom: ['second', 'third'] });
+                expect(result.current).toEqual({ activeId: 'third', sectionsInView: ['second', 'third'] });
             });
 
-            it('lists nothing away from the bottom', () => {
+            it('lists only the active section away from the bottom', () => {
                 const { result } = renderHook(() => useScrollSpy(['first', 'second', 'third']));
 
                 scrollTo(BOTTOM_SCROLL_Y);
                 scrollTo(100);
 
-                expect(result.current.sectionsInViewAtBottom).toEqual([]);
+                expect(result.current.sectionsInView).toEqual(['first']);
             });
 
-            it('drops a listed section that leaves the id set', () => {
-                const { result, rerender } = renderHook(({ ids }) => useScrollSpy(ids), {
-                    initialProps: { ids: ['first', 'second', 'third'] },
+            it('lists nothing before its first measurement', () => {
+                const listed: string[][] = [];
+
+                renderHook(() => {
+                    const spy = useScrollSpy(['first', 'second', 'third']);
+
+                    listed.push(spy.sectionsInView);
+
+                    return spy;
                 });
 
-                scrollTo(BOTTOM_SCROLL_Y);
-                rerender({ ids: ['first', 'third'] });
-
-                expect(result.current.sectionsInViewAtBottom).toEqual(['third']);
+                // A page opened partway down must not report its first section before it is measured.
+                expect(listed[0]).toEqual([]);
+                expect(listed.at(-1)).toEqual(['first']);
             });
 
-            it('keeps the same list between scrolls that leave the same sections in view', () => {
-                const { result } = renderHook(() => useScrollSpy(['first', 'second', 'third']));
+            it('never lists a section once it has left the id set', () => {
+                const listed: string[][] = [];
+                const { rerender } = renderHook(
+                    ({ ids }) => {
+                        const spy = useScrollSpy(ids);
+
+                        listed.push(spy.sectionsInView);
+
+                        return spy;
+                    },
+                    { initialProps: { ids: ['first', 'second', 'third'] } },
+                );
 
                 scrollTo(BOTTOM_SCROLL_Y);
-                const listed = result.current.sectionsInViewAtBottom;
-                scrollTo(BOTTOM_SCROLL_Y);
+                listed.length = 0;
+                rerender({ ids: ['first', 'third'] });
 
-                expect(result.current.sectionsInViewAtBottom).toBe(listed);
+                // Every render, including the one before the effect re-measures, leaves it out.
+                expect(listed.length).toBeGreaterThan(0);
+                listed.forEach((sections) => expect(sections).not.toContain('second'));
+            });
+
+            it('keeps the same list across renders that leave the same sections in view', () => {
+                // A fresh array literal on each render, as callers commonly pass.
+                const { result, rerender } = renderHook(() => useScrollSpy(['first', 'second', 'third']));
+
+                scrollTo(BOTTOM_SCROLL_Y);
+                const listed = result.current.sectionsInView;
+                rerender();
+
+                expect(result.current.sectionsInView).toBe(listed);
             });
         });
     });
@@ -308,7 +370,7 @@ describe('useActiveSection', () => {
 
         const { result } = renderHook(() => useActiveSection(['section'], SCROLL_OFFSET_PX));
 
-        // With a 250px offset the section spans (150, 350]; 350 is the inclusive upper bound.
+        // With a 250px offset the section spans [150, 350]; 350 is the inclusive upper bound.
         scrollTo(SCROLL_OFFSET_PX + 100);
         expect(result.current).toBe('section');
     });

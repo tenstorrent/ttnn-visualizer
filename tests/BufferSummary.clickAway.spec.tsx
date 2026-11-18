@@ -16,7 +16,7 @@ import { getBufferFocusProbe, pressAndRelease } from './helpers/bufferFocus';
 
 vi.mock('../src/components/buffer-summary/BufferSummaryTab', () => ({ default: () => null }));
 vi.mock('../src/components/buffer-summary/L1PeakComposition', () => ({ default: () => null }));
-vi.mock('../src/hooks/useActiveSection', () => ({ useActiveSection: () => null }));
+vi.mock('../src/hooks/useScrollSpy', () => ({ useScrollSpy: () => ({ activeId: null, sectionsInView: [] }) }));
 vi.mock('../src/hooks/useAPI', () => ({ useGetClusterDescription: () => ({ data: undefined }) }));
 vi.mock('../src/functions/createToastNotification', async () => {
     const { toastNotificationModuleMock } = await import('./helpers/mockToastNotification');

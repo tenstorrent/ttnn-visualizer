@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useCallback, useState } from 'react';
+import isScrolledToBottom from '../functions/isScrolledToBottom';
 
 interface UseScrollShade {
     hasScrolledFromTop: boolean;
@@ -25,10 +26,9 @@ const useScrollShade = (): UseScrollShade => {
 
     const updateScrollShade = useCallback((scrollElement: HTMLElement) => {
         const { scrollTop, offsetHeight, scrollHeight } = scrollElement;
-        const scrollBottom = scrollTop + offsetHeight;
 
         setHasScrolledFromTop(scrollTop > SCROLL_TOLERANCE_PX);
-        setHasScrolledToBottom(scrollBottom >= scrollHeight - SCROLL_TOLERANCE_PX);
+        setHasScrolledToBottom(isScrolledToBottom(scrollTop, offsetHeight, scrollHeight));
     }, []);
 
     const resetScrollShade = useCallback(() => {

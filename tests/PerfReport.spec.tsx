@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
+import { Classes } from '@blueprintjs/core';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PerformanceReport from '../src/components/performance/PerfReport';
@@ -28,6 +29,7 @@ import { formatDurationBucketRange } from '../src/functions/formatDurationBucket
 import { AtomProviderInitialValues } from './helpers/atomProvider';
 import { TestProviders } from './helpers/TestProviders';
 import openMultiSelect from './helpers/openMultiSelect';
+import { openPopover } from './helpers/testForPortal';
 import { DEFAULT_MAX_CORES } from '../src/functions/getCoreCount';
 import { EventLogEvent, FilterSurface, PerfTableOption } from '../src/definitions/EventLogEvent';
 
@@ -875,6 +877,28 @@ describe('PerformanceReport usage events', () => {
 
         expect(screen.getByPlaceholderText('Select Op Codes...')).toBeInTheDocument();
         expect(recordEvent).not.toHaveBeenCalled();
+    });
+
+    it('records removing one of several restored raw op codes, an edit that leaves a filter', () => {
+        renderReport({ data: [row('Matmul', 1), row('Conv2d', 2)], rawOpCodeFilterList: ['Matmul', 'Conv2d'] });
+
+        fireEvent.click(screen.getAllByRole('button', { name: 'Remove tag' })[0]);
+
+        expect(recordEvent).toHaveBeenCalledExactlyOnceWith(opCodeFilterEvent);
+    });
+
+    it('records adding a raw op code to a restored list, an edit that leaves a filter', async () => {
+        renderReport({
+            data: [row('Matmul', 1), row('Conv2d', 2), row('Softmax', 3)],
+            rawOpCodeFilterList: ['Matmul', 'Conv2d'],
+        });
+
+        // With tags in place the field shows no placeholder, so open it through the tags' own input.
+        const tagInput = screen.getAllByRole('button', { name: 'Remove tag' })[0].closest(`.${Classes.TAG_INPUT}`);
+        await openPopover(tagInput!.querySelector('input')!, WAIT_FOR_OPTIONS);
+        fireEvent.click(await screen.findByRole('checkbox', { name: 'Softmax' }, WAIT_FOR_OPTIONS));
+
+        expect(recordEvent).toHaveBeenCalledExactlyOnceWith(opCodeFilterEvent);
     });
 
     it('counts the search and the raw op-code list as one filter', async () => {
