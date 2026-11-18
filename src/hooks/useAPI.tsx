@@ -49,7 +49,7 @@ import { StackedPerfRow } from '../definitions/StackedPerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
 import { getLinkableDeviceOperations } from '../functions/linkableDeviceOperations';
 import { normalizeBufferPagesResponse } from '../functions/normalizeBufferPagesResponse';
-import { filterByOperationRange } from '../functions/filterByOperationRange';
+import { filterByOperationRange, isInOperationRange } from '../functions/filterByOperationRange';
 import {
     activeMlirJsonAtom,
     activeNpeOpTraceAtom,
@@ -111,6 +111,7 @@ import { throwNpeClientAxiosError } from '../functions/throwNpeClientAxiosError'
 import validateNpeSummary from '../functions/validateNpeSummary';
 import validateNpeWindow from '../functions/validateNpeWindow';
 import { comparisonReportAxiosError } from '../functions/comparisonReportAxiosError';
+import { getPerformanceIdRange } from '../functions/numericExtent';
 
 const EMPTY_PERF_RETURN = { report: [], stacked_report: [], signposts: [] };
 
@@ -984,16 +985,7 @@ export const usePerformanceRange = (): NumberRange | null => {
     const activeReportFolderName = useAtomValue(activePerformanceReportFolderNameAtom);
     const { data: perfData } = usePerformanceReport(activeReportFolderName);
 
-    return useMemo(
-        () =>
-            perfData?.report?.length
-                ? [
-                      Math.min(...perfData.report.map((data) => parseInt(data.id, 10))),
-                      Math.max(...perfData.report.map((data) => parseInt(data.id, 10))),
-                  ]
-                : null,
-        [perfData],
-    );
+    return useMemo(() => getPerformanceIdRange(perfData?.report), [perfData]);
 };
 
 interface ReportMetadata {
@@ -1632,23 +1624,48 @@ export const usePerfFolderList = () => {
     });
 };
 
+// Shared by every operation outside the selected range; callers only read it.
+const NO_TENSORS_BY_ADDRESS: Map<number, Tensor> = new Map<number, Tensor>();
+
 export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = BufferType.L1) => {
-    const { data: buffersByOperation, status: buffersStatus } = useBuffers(bufferType, true);
+    // Every operation's buffers, so a buffer that left before the range still clears its address.
+    const { data: buffersByOperation, status: buffersStatus } = useBuffers(bufferType, false);
     const { data: operations, status: operationsStatus } = useOperationsList();
     const operationRange = useAtomValue(selectedOperationRangeAtom);
 
-    const uniqueBuffersByOperationList = useMemo(
+    const allUniqueBuffersByOperation = useMemo(
         () => (buffersByOperation ? getUniqueBuffersByOperation(buffersByOperation) : undefined),
         [buffersByOperation],
     );
 
-    const tensorsByOperationByAddress = useMemo(
+    const allTensorsByOperationByAddress = useMemo(
         (): TensorsByOperationByAddress =>
-            operations && uniqueBuffersByOperationList
-                ? buildTensorsByOperationByAddress(operations, uniqueBuffersByOperationList)
+            operations && allUniqueBuffersByOperation
+                ? buildTensorsByOperationByAddress(operations, allUniqueBuffersByOperation)
                 : new Map(),
-        [operations, uniqueBuffersByOperationList],
+        [operations, allUniqueBuffersByOperation],
     );
+
+    const uniqueBuffersByOperationList = useMemo(
+        () =>
+            allUniqueBuffersByOperation && operationRange
+                ? filterByOperationRange(allUniqueBuffersByOperation, operationRange)
+                : allUniqueBuffersByOperation,
+        [allUniqueBuffersByOperation, operationRange],
+    );
+
+    const tensorsByOperationByAddress = useMemo((): TensorsByOperationByAddress => {
+        if (!operationRange) {
+            return allTensorsByOperationByAddress;
+        }
+
+        return new Map(
+            Array.from(allTensorsByOperationByAddress, ([operationId, tensorsByAddress]) => [
+                operationId,
+                isInOperationRange(operationId, operationRange) ? tensorsByAddress : NO_TENSORS_BY_ADDRESS,
+            ]),
+        );
+    }, [allTensorsByOperationByAddress, operationRange]);
 
     // The map is empty until both queries settle, so callers need this to tell
     // "nothing here" from "not known yet".
@@ -1663,8 +1680,8 @@ export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = Buf
         tensorListByOperation: tensorsByOperationByAddress,
         uniqueBuffersByOperationList,
         status,
-        // `useBuffers(…, true)` drops operations outside this range, which then
-        // read as empty rather than as unchecked.
+        // Operations outside this range map to an empty `Map`, which reads as empty
+        // rather than as unchecked.
         operationRange,
     };
 };

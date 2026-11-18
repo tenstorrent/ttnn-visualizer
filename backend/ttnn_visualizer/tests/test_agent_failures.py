@@ -365,6 +365,20 @@ class TestErrors:
         assert len(error["error_message"]) == failures.MAX_ERROR_TEXT_CHARS
         assert error["error_message_full_length"] == len(message)
 
+    def test_a_blob_where_text_belongs_is_cut_as_text_is(self, tmp_path):
+        """A crafted database can keep bytes in a text column; they are cut too."""
+        blob = b"x" * (failures.MAX_ERROR_TEXT_CHARS + 5)
+        registry, handle = _report(
+            tmp_path,
+            operations=[(1, "ttnn.add")],
+            errors=[(1, "ttnn.add", "TT_THROW", blob)],
+        )
+
+        error = failures.errors(registry, handle)["errors"][0]
+
+        assert len(error["error_message"]) == failures.MAX_ERROR_TEXT_CHARS
+        assert error["error_message_full_length"] == len(blob)
+
     def test_a_message_is_read_for_a_failure_only_up_to_the_bound(self, tmp_path):
         """The patterns cost the square of a crafted message's length. The port reads
         the whole message, as the app does; the tool reads a prefix."""
@@ -1528,7 +1542,7 @@ class TestInventoryAndTransport:
         [("errors", {}), ("dram_fallbacks", {"limit": 5}), ("l1_peak", {"limit": 5})],
     )
     def test_each_answers_over_the_server_in_valid_json(
-        self, tmp_path, event_log_directory, tool, arguments
+        self, tmp_path, tool, arguments
     ):
         registry, handle = _report(
             tmp_path,
