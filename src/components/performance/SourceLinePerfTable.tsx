@@ -110,6 +110,9 @@ const SourceLinePerfTable = ({
     );
     const footerTotals = useMemo(
         () => ({
+            // Each line's percentage is a share of the whole range, so under a filter the visible
+            // lines sum to less than 100; summing them keeps the footer about the rows it sits under.
+            percent: groups.reduce((total, group) => total + group.percent, 0),
             deviceTimeUs: groups.reduce((total, group) => total + group.deviceTimeUs, 0),
             rowCount: groups.reduce((total, group) => total + group.rowCount, 0),
         }),
@@ -182,7 +185,8 @@ const SourceLinePerfTable = ({
 
         return (
             <PerfTableFrame
-                scrollResetKey={groups}
+                // The sorted list, so a header click scrolls back to the top as filtering does.
+                scrollResetKey={sortedGroups}
                 data-testid={TEST_IDS.PERF_SOURCE_LINE_TABLE}
             >
                 <thead className='table-header'>
@@ -264,11 +268,11 @@ const SourceLinePerfTable = ({
 const getFooterCell = (
     key: SourceLineColumnKey,
     groups: SourceLineGroup[],
-    totals: { deviceTimeUs: number; rowCount: number },
+    totals: { percent: number; deviceTimeUs: number; rowCount: number },
 ): string => {
     switch (key) {
         case SourceLineColumnKey.PERCENT:
-            return '100%';
+            return formatPercentage(totals.percent, PERCENT_DECIMALS);
         case SourceLineColumnKey.LOCATION:
             return `${groups.length} source lines`;
         case SourceLineColumnKey.DEVICE_TIME:

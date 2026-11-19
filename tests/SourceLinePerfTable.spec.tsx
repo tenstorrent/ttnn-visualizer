@@ -134,6 +134,27 @@ describe('SourceLinePerfTable', () => {
         expect(getLabels()).toEqual(['big.py:42', 'small.py:42']);
     });
 
+    it('scrolls back to the top when a header re-sorts the lines', () => {
+        renderTable();
+        const scrollRegion = screen.getByRole('region', { name: 'Performance table' });
+        scrollRegion.scrollTop = 200;
+
+        fireEvent.click(screen.getByRole('button', { name: 'Source line' }));
+
+        expect(scrollRegion.scrollTop).toBe(0);
+    });
+
+    it.each([
+        ['every line', GROUPS, '100%'],
+        ['only the lines a filter leaves', [GROUPS[0]], '20%'],
+        ['lines with no countable time', [group({ percent: 0, deviceTimeUs: 0 })], '0%'],
+    ])('totals Total %% over %s', (_, groups, expected) => {
+        renderTable({ groups });
+
+        const footerCells = document.querySelectorAll('tfoot td');
+        expect(footerCells[0]).toHaveTextContent(expected);
+    });
+
     it('opens and closes a line, saying which it will do', () => {
         renderTable();
 
