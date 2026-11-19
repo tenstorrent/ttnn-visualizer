@@ -50,6 +50,11 @@ function SourceFileOverlay({
     const [scrollContainerEl, setScrollContainerEl] = useState<Element | null>(null);
     const [overlayTopOffset, setOverlayTopOffset] = useState<number>(0);
     const sourceControlsRef = useRef<null | HTMLDivElement>(null);
+    // State rather than a ref so the auto-scroll effect reruns once the file is in the document.
+    // Blueprint's Portal renders its children only after its own effect has created the
+    // container, so on a first open, when the overlay mounts already open, the lines arrive a
+    // render after this component's effects have run.
+    const [codeEl, setCodeEl] = useState<HTMLElement | null>(null);
     const didAutoScrollRef = useRef(false);
 
     const fileWithHighlights = useMemo(() => {
@@ -137,25 +142,28 @@ function SourceFileOverlay({
     useEffect(() => {
         if (!isOpen) {
             didAutoScrollRef.current = false;
-            return;
+            return undefined;
         }
 
         if (
             !scrollToLineNumber ||
             didAutoScrollRef.current ||
+            !codeEl ||
             !fileWithHighlights ||
             errorDetails ||
             lineNumber == null
         ) {
-            return;
+            return undefined;
         }
 
-        // Wait until highlighted HTML is painted before trying to scroll.
-        requestAnimationFrame(() => {
-            scrollToLineNumberInFile();
-            didAutoScrollRef.current = true;
+        // Wait until highlighted HTML is painted before trying to scroll. Only a scroll that found
+        // its line counts, so a frame that fires too early leaves the next render to try again.
+        const frame = requestAnimationFrame(() => {
+            didAutoScrollRef.current = scrollToHighlightedLine(codeEl);
         });
-    }, [isOpen, scrollToLineNumber, fileWithHighlights, errorDetails, lineNumber]);
+
+        return () => cancelAnimationFrame(frame);
+    }, [isOpen, scrollToLineNumber, codeEl, fileWithHighlights, errorDetails, lineNumber]);
 
     return (
         <Overlay
@@ -180,7 +188,7 @@ function SourceFileOverlay({
                             <Tooltip content='Scroll to highlighted line'>
                                 <Button
                                     icon={IconNames.LOCATE}
-                                    onClick={scrollToLineNumberInFile}
+                                    onClick={() => scrollToHighlightedLine(codeEl)}
                                 />
                             </Tooltip>
 
@@ -217,6 +225,7 @@ function SourceFileOverlay({
                             </Callout>
                         ) : null}
                         <code
+                            ref={setCodeEl}
                             className={`language-${language} code-output`}
                             // HTML tags are escaped by hljs
                             // eslint-disable-next-line react/no-danger
@@ -231,12 +240,20 @@ function SourceFileOverlay({
     );
 }
 
-const scrollToLineNumberInFile = () => {
-    const lineElement = document.querySelector(`.highlighted-line .line-number`);
+/**
+ * Scroll this overlay's highlighted line into view, returning whether it was found. Looked up
+ * within the overlay's own code, not the whole document, so another source overlay's line can
+ * never be the one scrolled to.
+ */
+const scrollToHighlightedLine = (codeEl: HTMLElement | null): boolean => {
+    const lineElement = codeEl?.querySelector('.highlighted-line .line-number');
 
-    if (lineElement && typeof lineElement.scrollIntoView === 'function') {
-        lineElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (!lineElement || typeof lineElement.scrollIntoView !== 'function') {
+        return false;
     }
+
+    lineElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return true;
 };
 
 export default SourceFileOverlay;
