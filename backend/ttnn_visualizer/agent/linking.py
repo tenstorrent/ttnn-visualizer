@@ -40,9 +40,11 @@ from ttnn_visualizer.agent import (
     operations,
     perf_detail,
     perf_flags,
+    source_lines,
     tools,
 )
 from ttnn_visualizer.agent.bounds import (
+    MAX_DETAILED_LIMIT,
     MAX_LIMIT,
     GraphTooLargeError,
     bounded,
@@ -918,6 +920,120 @@ def op_configurations(
     )
 
 
+def source_lines_by_call_site(
+    registry: ReportRegistry,
+    handle: str,
+    limit: Optional[int] = None,
+    start_signpost: Optional[str] = None,
+    end_signpost: Optional[str] = None,
+    rank: Optional[int] = None,
+) -> Dict[str, object]:
+    """The performance rows rolled up by the call site of their linked operation, as
+    the stacked table's Source line grouping rolls them up. #2359"""
+    count = bounded(limit, MAX_DETAILED_LIMIT)
+    signposts = tools.SignpostRange.of(start_signpost, end_signpost)
+    # First, so a range the report lacks is refused before any trace is read.
+    report = tools.canonical_report(registry, handle, signposts)
+    link = operation_link(registry, handle)
+    if link.status is not LinkStatus.LINKED:
+        raise ValueError(
+            "grouping by source line needs each performance row's memory report "
+            "operation, which needs the performance report linked to the memory "
+            f"report: {link.reason or link.status.value}"
+        )
+    instance = registry.get(handle)
+    with operations.profiler_db(instance) as queries:
+        scope = operations.rank_scope(queries, rank)
+        if scope.rank != link.rank:
+            raise ValueError(
+                _rank_mismatch_reason(link.rank, scope.rank, "the grouping")
+            )
+        operations.refuse_unattributable(queries, scope, "stack_traces")
+        if not queries.report_records_stack_traces():
+            raise ValueError(
+                "this capture records no stack traces, so no performance row has a "
+                "source line to be grouped by: every linked row would read no_trace. "
+                "op_breakdown groups the same rows by op or op_category instead."
+            )
+        call_site_by_operation = operations.cached_per_rank(
+            registry,
+            handle,
+            CacheVariant.CALL_SITES,
+            queries,
+            scope,
+            # Every linked operation's, so a range asked later reads no trace again.
+            lambda queries, scope: failures.read_call_sites(
+                queries, scope, link.perf_rows_by_operation
+            ),
+        )
+
+    rows = [row for row in report.get("report", []) if not tools.is_signpost_row(row)]
+    groups = source_lines.source_line_groups(
+        rows,
+        link.operation_by_perf_id,
+        call_site_by_operation,
+        tools.countable_device_time,
+        lambda row: _unlinked_reason(row).value,
+    )
+    device_time_total = sum(group.device_time for group in groups)
+
+    def share(device_time: float) -> Optional[float]:
+        return tools.share_percent(device_time, device_time_total)
+
+    shown, rest = groups[:count], groups[count:]
+    result: Dict[str, object] = {
+        "handle": handle,
+        "row_count": len(rows),
+        "group_count": len(groups),
+        "returned": len(shown),
+        "device_time_unit": tools.DEVICE_TIME_UNIT,
+        "device_time_total": round(device_time_total, 3),
+        "groups": [
+            source_lines.group_entry(group, failures.call_site_entry, share)
+            for group in shown
+        ],
+        "projection": tools.projection(
+            signposts, bool(report.get("signpost_range_ignored"))
+        ),
+        "note": source_lines.SOURCE_LINES_NOTE,
+        **scope.as_response(),
+    }
+    if rest:
+        rest_time = sum(group.device_time for group in rest)
+        result["rest"] = {
+            "group_count": len(rest),
+            "device_time": round(rest_time, 3),
+            "device_time_share_percent": share(rest_time),
+            "row_count": sum(group.row_count for group in rest),
+        }
+    caveats: List[str] = []
+    untraced = next(
+        (
+            group
+            for group in groups
+            if group.kind is source_lines.SourceLineKind.NO_TRACE
+        ),
+        None,
+    )
+    if untraced is not None:
+        caveats.append(
+            f"{len(untraced.operation_ids)} linked operations, launching "
+            f"{untraced.row_count} rows, have no source line: they recorded no stack "
+            "trace, or none naming a frame this tool can read."
+        )
+    partitioned = tools.partitioned_caveat(rows)
+    if partitioned:
+        caveats.append(partitioned)
+    result.update(operations.caveat_field(scope, *caveats))
+    link_response = link.as_response()
+    # As `top_ops`: the link is matched against the whole report, whatever the range.
+    if tools.is_ranged(result["projection"]):
+        link_response["scope"] = WHOLE_REPORT_SCOPE
+        link_response["note"] = RANGED_LINK_NOTE
+    result["operation_link"] = link_response
+    return result
+
+
 PROGRAM_CACHE_LINK_NOTE = (
     "first_repeat_miss_operation_id is the memory report database id of the operation that "
     "launched the op code's first repeat miss, to pass to operation_provenance for its "
@@ -966,6 +1082,7 @@ __all__ = [
     "operation_device_time",
     "operation_link",
     "program_cache",
+    "source_lines_by_call_site",
     "top_ops",
     "unlinked_rows",
 ]

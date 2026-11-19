@@ -61,7 +61,8 @@ Answers link to the same thing in the web application, for the reader to open:
 - `operation_detail` and `operation_provenance` return an `app_link` to the operation.
 - `find_operations`, `top_ops`, `program_cache`, `memory_profile`, `tensor_flow`,
   `errors`, `dram_fallbacks`, `l1_peak`, `late_deallocations`, `critical_path`,
-  `subgraph_between` and `op_configurations` return one `app_link_template`, in which
+  `source_lines`, `subgraph_between` and `op_configurations` return one
+  `app_link_template`, in which
   `{operation_id}` takes any operation id the answer lists.
 
 A link names the report by its directories, and the visualizer opens them when the link is
@@ -113,15 +114,17 @@ another rank's operation under the same id.
 | `late_deallocations` | Tensors still allocated after their last use, by Buffer Summary's late-deallocation rule (L1, as the app shows it, or DRAM), grouped by the call site of that use: how many holds each has, how they ended, and the bytes per bank they held over the operations held. |
 | `noc_congestion` | How congested the NoC links were in a tt-npe trace: the trace's own run summary, the highest demand any single link reached and when, bursts of congested timesteps ranked by peak, and the links with the highest mean demand. |
 | `critical_path` | The longest chain of cumulative device time through the operation graph, source to sink, with each operation's device time, the chain's total and share of the report's, and how many of its operations have no device time. Needs a linked performance report. |
+| `source_lines` | Where in the model code the device time went: performance rows rolled up by the call site of their linked memory report operation, as the performance view's stacked table groups by Source line — each line's file, function, summed device time and share, row count, top op codes and operation ids, over the whole report or a signpost range. Needs a linked performance report and a capture that records stack traces. |
 | `subgraph_between` | The operations, tensor edges and tensors on every path from one operation to another, each tensor once with its shape, dtype, layout, buffer type and memory layout, so a block can be read without walking it one tensor at a time. |
 
 `top_ops`, `op_breakdown`, `program_cache`, `zone_timings`, `zone_intervals`, `core_spread`
 and `diff_reports` read the performance CSVs; the operation tools — `find_operations`,
 `operation_detail`, `memory_profile`, `tensor_flow`, `operation_provenance`,
 `op_configurations`, `errors`, `dram_fallbacks`, `l1_peak`, `late_deallocations` and
-`subgraph_between` — read the memory report's SQLite database; `critical_path` reads both,
-and is listed only when the performance CSV can be reported on and the database holds the
-graph's tables and its captured graphs; `noc_congestion` reads a tt-npe trace.
+`subgraph_between` — read the memory report's SQLite database; `critical_path` and
+`source_lines` read both, and are listed only when the performance CSV can be reported on
+and the database holds the captured graphs, with the graph's tables for `critical_path` and
+the stack traces for `source_lines`; `noc_congestion` reads a tt-npe trace.
 `load_report` takes any of the three, since its whole job is saying which of the others
 apply. A capture can carry any of them, or — as far as these tools are concerned — none,
 which is what makes `load_report`'s answer worth reading first.
@@ -141,9 +144,9 @@ loaded without a `performance_path` is refused and says so. `zone_timings` is li
 `zone name`, `run host ID`, `PCIe slot`, `RISC processor type`, `core_x`, `core_y` and
 `time[cycles since reset]`), and has at least one data row. `zone_intervals` is listed only
 when `zone_timings` is, the device log marks zone starts and ends in a `type` or
-`zone phase` column, and its first line names a positive `CHIP_FREQ[MHz]`. The five tools
+`zone phase` column, and its first line names a positive `CHIP_FREQ[MHz]`. The six tools
 that read the performance CSV's rows, `top_ops`, `op_breakdown`, `program_cache`,
-`core_spread` and `critical_path`, are listed only when it can be reported on, and when it
+`core_spread`, `critical_path` and `source_lines`, are listed only when it can be reported on, and when it
 cannot, `performance_csv_problem` says why (`empty`, `no data rows`, `missing columns: …`,
 that it cannot be read or decoded, or the parse error reading its signposts gave).
 `program_cache` also needs the `PROGRAM HASH` and `PROGRAM CACHE HIT` columns,
@@ -533,6 +536,28 @@ op-to-op gap. On every local performance capture, the groups, their counts, thei
 time and their shares match the stacked report tt-perf-report generates from the same CSV.
 That report itself is not generated: the answer is computed from the rows, which also gives
 it the op-to-op gap the stacked report leaves out.
+
+**`source_lines` groups the same rows by the model-code line that launched them**, as the
+performance view's stacked table does under Source line. Each row is filed under frame 0 of
+its linked memory report operation's stack trace — the `ttnn.<op>` call in the model code,
+which `operation_provenance` gives as the call site — keyed by full path and line, so two
+files that share a name stay apart. Device time is summed per line, as tt-perf-report's
+`Device_Time_Sum_us` sums it, so each group's `device_time_share_percent` is of
+`device_time_total`, the rows read, and the shares add up to 100; the graph view weighs an
+operation by its slowest row instead, so its numbers can differ. Every row but a signpost
+adds to `row_count`, and only a positive device time adds to `device_time`. Each group
+names its `top_op_codes`, the 3 raw op codes with the most device time, and the first 20
+of its `operation_ids`, with `operation_count` for all of them. Rows with no linked
+operation form one `unlinked` group, counted by why in `unlinked_by_reason`: host ops,
+which the application's stacked table hides by default, and rows past the end of the
+memory report capture. Rows whose operation recorded no stack trace, or none naming a
+frame, form one `no_trace` group, and its count is in the caveat. `limit` caps the groups
+at 25, ranked by device time, and those past it are summed into `rest`. Over a range, the
+rows and shares are the window's, while `operation_link` carries `scope: whole_report`, as
+`top_ops`'s does. The tool refuses a handle whose two reports did not link, and a capture
+that records no stack traces, where every row would read `no_trace`; it reads the linked
+rank only. The first call reads every linked operation's stack trace, 500 at a time, and
+keeps only each one's call site; later calls, over any range, reuse them.
 
 **`diff_reports` calls a move a change only when it is bigger than run-to-run noise.** Two
 captures of the same code never time an operation identically, so a diff that ranks every
@@ -985,7 +1010,7 @@ its CSV position in either read, so its `operation_id` is the one it has unrange
 `top_ops`'s own `op_count` and totals describe the window.
 
 The link is resolved once per handle, on the first `top_ops`, `program_cache`,
-`operation_detail` or `critical_path` that needs it, and reads every captured graph at the linked rank. On a handle with both reports,
+`operation_detail`, `critical_path` or `source_lines` that needs it, and reads every captured graph at the linked rank. On a handle with both reports,
 the first `operation_detail` therefore also generates the performance report, which can
 take seconds on a large capture; every later call reuses both. A link that failed on a read
 that might pass next time — a locked database, a temp-file error in tt-perf-report — is not

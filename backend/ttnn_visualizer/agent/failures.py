@@ -792,7 +792,7 @@ def report_late_deallocations(
         run_start_count=late.run_start_count(operation_ids, held.held_by_operation),
         holds=holds,
         names=names,
-        call_sites=_call_sites(
+        call_sites=read_call_sites(
             queries,
             scope,
             {hold.last_use_operation_id for hold in holds},
@@ -818,7 +818,7 @@ def _call_site(trace: Optional[str]) -> Optional[Dict[str, object]]:
     return frames[0]
 
 
-def _call_sites(
+def read_call_sites(
     queries: DatabaseQueries, scope: RankScope, operation_ids: Iterable[int]
 ) -> Dict[int, Optional[Dict[str, object]]]:
     """Frame 0 of each operation's first stack trace, as `operation_provenance` reads it."""
@@ -854,7 +854,7 @@ def _hold_totals(holds: Sequence[late.Hold]) -> _HoldTotals:
     }
 
 
-def _call_site_entry(site: Optional[Dict[str, object]]) -> Optional[Dict[str, object]]:
+def call_site_entry(site: Optional[Dict[str, object]]) -> Optional[Dict[str, object]]:
     if site is None:
         return None
     entry: Dict[str, object] = {}
@@ -902,7 +902,7 @@ def _call_site_groups(
         )
         entries.append(
             {
-                "call_site": _call_site_entry(
+                "call_site": call_site_entry(
                     report.call_sites.get(members[0].last_use_operation_id)
                 ),
                 **totals[key],
@@ -1184,11 +1184,13 @@ __all__ = [
     "DramFallbackReport",
     "L1PeakReport",
     "LateDeallocationReport",
+    "call_site_entry",
     "dram_fallbacks",
     "errors",
     "l1_peak",
     "late_deallocations",
     "operation_failure_fields",
+    "read_call_sites",
     "report_dram_fallbacks",
     "report_l1_peak",
     "report_late_deallocations",
