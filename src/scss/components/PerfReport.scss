@@ -159,7 +159,7 @@ $perf-table-max-height: calc(
     .cell-header {
         text-align: left;
         vertical-align: initial;
-        padding: 3px;
+        padding: 5px 1px;
 
         .header-label {
             font-weight: 400;
@@ -327,6 +327,7 @@ $perf-table-max-height: calc(
 
         td {
             line-height: 1;
+            padding-top: 10px;
 
             &.pre-wrap {
                 white-space: pre-wrap;
