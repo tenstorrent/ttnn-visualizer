@@ -77,6 +77,8 @@ import indexFirstById from '../../functions/indexFirstById';
 import { SourceLineGroup, getSourceLineGroups, isSourceLineGroupMatch } from '../../functions/perfSourceLines';
 import { TEST_IDS } from '../../definitions/TestIds';
 import SourceLinePerfTable from './SourceLinePerfTable';
+import { getCallSiteFrame } from '../../functions/stackTraceSource';
+import { sumStackedDeviceTime } from '../../functions/stackedPerfFunctions';
 
 interface PerformanceReportProps {
     data?: TypedPerfTableRow[];
@@ -90,6 +92,11 @@ interface PerformanceReportProps {
     maxCores: number;
     comparisonMaxCores?: number[];
     allocationFailureListings?: AllocationFailureListing[];
+    /**
+     * Whether any row of the whole report links to a memory-report operation. `data` holds only
+     * the range slider's rows, which can all be unlinked while the report is linked.
+     */
+    hasLinkedOperations?: boolean;
 }
 
 const EMPTY_ALLOCATION_FAILURE_LISTINGS: AllocationFailureListing[] = [];
@@ -101,9 +108,9 @@ const STACKED_GROUP_BY = [
     StackedGroupBy.SOURCE_LINE,
 ];
 const EMPTY_SOURCE_LINE_GROUPS: SourceLineGroup[] = [];
-const SOURCE_LINE_UNAVAILABLE = 'Needs a memory report linked to this performance report';
-const SOURCE_LINE_RANGE_NOTE =
-    'Source line follows the selected operation range; other groupings cover the whole report';
+const SOURCE_LINE_UNLINKED = 'Needs a memory report linked to this performance report';
+const SOURCE_LINE_NO_TRACES = 'The linked memory report recorded no stack traces';
+const SOURCE_LINE_RANGE_NOTE = 'Source line also follows the range slider, which the other groupings ignore';
 const SOURCE_LINE_COMPARISON_NOTE =
     "Source lines come from the active memory report's stack traces, so they are shown for the active performance report only.";
 const OP_CODE_FILTER_PLACEHOLDER = 'Filter by operation name';
@@ -149,6 +156,7 @@ const PerformanceReport = ({
     maxCores,
     comparisonMaxCores = [],
     allocationFailureListings = EMPTY_ALLOCATION_FAILURE_LISTINGS,
+    hasLinkedOperations = false,
 }: PerformanceReportProps) => {
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const activeReportFolderName = useAtomValue(activePerformanceReportFolderNameAtom);
@@ -306,20 +314,42 @@ const PerformanceReport = ({
         [filteredComparisonStackedRowsList, comparisonIndex],
     );
 
+    // Footer shares are of the unfiltered rows' device time.
+    const stackedTotalDeviceTimeUs = useMemo(() => sumStackedDeviceTime(stackedData), [stackedData]);
+    const comparisonStackedTotalDeviceTimeUs = useMemo(
+        () => sumStackedDeviceTime(comparisonStackedData[comparisonIndex]),
+        [comparisonStackedData, comparisonIndex],
+    );
+
     const { data: operations, isLoading: isLoadingOperations } = useOperationsList();
-    const isSourceLineAvailable = useMemo(() => !!data?.some((row) => row.op !== undefined), [data]);
+    // Judged on the whole report rather than the range: `some` stops at the first call site, so
+    // only a report with no traces parses every operation.
+    const sourceLineUnavailableReason = useMemo(() => {
+        if (!hasLinkedOperations) {
+            return SOURCE_LINE_UNLINKED;
+        }
+
+        return operations?.some((operation) => getCallSiteFrame(operation.stack_trace) !== null)
+            ? null
+            : SOURCE_LINE_NO_TRACES;
+    }, [hasLinkedOperations, operations]);
+    const isSourceLineAvailable = sourceLineUnavailableReason === null;
     const operationById = useMemo(() => indexFirstById(operations, (operation) => operation.id), [operations]);
     // Rolled up from `data`, never `filteredRows`: the Standard view's buffer type, layout, math
     // fidelity and duration filters stay set while Stacked hides them, and the raw op code list
     // cannot apply to a line that mixes op codes.
     const sourceLineGroups = useMemo(
         () =>
-            // With no row linked, every row would sit in the one unlinked group, which says less
-            // than the table's explanation of why there are no lines.
+            // Unlinked or traceless, every row would sit in one group without a line, which says
+            // less than the table's explanation of why there are no lines.
             isSourceLineShown && isSourceLineAvailable
                 ? getSourceLineGroups(data ?? [], operationById, { mergeDevices })
                 : EMPTY_SOURCE_LINE_GROUPS,
         [isSourceLineShown, isSourceLineAvailable, data, operationById, mergeDevices],
+    );
+    const sourceLineTotalDeviceTimeUs = useMemo(
+        () => sourceLineGroups.reduce((total, group) => total + group.deviceTimeUs, 0),
+        [sourceLineGroups],
     );
     const sourceLineFilterQuery = stackedFilters?.[StackedColumnKeys.OpCode] ?? '';
     // Filtered after grouping, so each line's percentage stays a share of the whole range.
@@ -457,7 +487,8 @@ const PerformanceReport = ({
                     reportFolderName={activeReportFolderName}
                     maxCores={maxCores}
                     isLoading={isTableLoading || isLoadingOperations}
-                    emptyReason={isSourceLineAvailable ? null : SOURCE_LINE_UNAVAILABLE}
+                    emptyReason={sourceLineUnavailableReason}
+                    totalDeviceTimeUs={sourceLineTotalDeviceTimeUs}
                 />
             );
         }
@@ -466,6 +497,7 @@ const PerformanceReport = ({
             return (
                 <StackedPerformanceTable
                     stackedData={filteredStackedRows}
+                    totalDeviceTimeUs={stackedTotalDeviceTimeUs}
                     filters={filters}
                     stackedComparisonData={filteredComparisonStackedRowsList}
                     reportFolderName={activeReportFolderName}
@@ -508,6 +540,9 @@ const PerformanceReport = ({
             return (
                 <StackedPerformanceTable
                     stackedData={comparisonIndex > -1 ? filteredComparisonStackedRows : filteredStackedRows}
+                    totalDeviceTimeUs={
+                        comparisonIndex > -1 ? comparisonStackedTotalDeviceTimeUs : stackedTotalDeviceTimeUs
+                    }
                     stackedComparisonData={[
                         filteredStackedRows,
                         ...filteredComparisonStackedRowsList.filter((_, i) => i !== comparisonIndex),
@@ -708,7 +743,9 @@ const PerformanceReport = ({
                                     itemDisabled={(item) =>
                                         item === StackedGroupBy.SOURCE_LINE && !isSourceLineAvailable
                                     }
-                                    itemRenderer={(item, itemProps) => renderStackedGroupBy(item, itemProps)}
+                                    itemRenderer={(item, itemProps) =>
+                                        renderStackedGroupBy(item, itemProps, sourceLineUnavailableReason)
+                                    }
                                     onItemSelect={(value) => setStackedGroupBy(value)}
                                 >
                                     <Button
@@ -941,12 +978,13 @@ const filterSignpost: ItemPredicate<Signpost> = (query, signpost) => {
 };
 
 interface RenderStackedGroupByProps<T> {
-    (item: T, itemProps: ItemRendererProps): JSX.Element | null;
+    (item: T, itemProps: ItemRendererProps, sourceLineUnavailableReason: string | null): JSX.Element | null;
 }
 
 const renderStackedGroupBy: RenderStackedGroupByProps<StackedGroupBy> = (
     value,
     { handleClick, handleFocus, modifiers, query, id },
+    sourceLineUnavailableReason,
 ) => {
     if (!modifiers.matchesPredicate) {
         return null;
@@ -970,7 +1008,7 @@ const renderStackedGroupBy: RenderStackedGroupByProps<StackedGroupBy> = (
             text={
                 modifiers.disabled && value === StackedGroupBy.SOURCE_LINE ? (
                     <Tooltip
-                        content={SOURCE_LINE_UNAVAILABLE}
+                        content={sourceLineUnavailableReason ?? undefined}
                         position={PopoverPosition.RIGHT}
                     >
                         {text}

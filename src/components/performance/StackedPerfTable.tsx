@@ -16,7 +16,7 @@ import {
 import 'styles/components/PerfReport.scss';
 import useSortTable from '../../hooks/useSortTable';
 import { useGetNPEManifest } from '../../hooks/useAPI';
-import { formatStackedCell } from '../../functions/stackedPerfFunctions';
+import { formatStackedCell, sumStackedDeviceTime } from '../../functions/stackedPerfFunctions';
 import { formatPercentage, formatSize } from '../../functions/math';
 import PerfDeviceArchitecture from './PerfDeviceArchitecture';
 import PerfTableFrame from './PerfTableFrame';
@@ -37,6 +37,8 @@ interface StackedPerformanceTableProps {
     reportFolderName: string | null;
     maxCores: number;
     isLoading?: boolean;
+    /** Device time of every row before filtering; the footer's Total % is the visible rows' share of it. */
+    totalDeviceTimeUs: number;
 }
 
 const StackedPerformanceTable = ({
@@ -46,6 +48,7 @@ const StackedPerformanceTable = ({
     reportFolderName,
     maxCores,
     isLoading = false,
+    totalDeviceTimeUs,
 }: StackedPerformanceTableProps) => {
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
     const { error: npeManifestError } = useGetNPEManifest();
@@ -63,7 +66,10 @@ const StackedPerformanceTable = ({
         [mergeDevices],
     );
 
-    const footerTotals = useMemo(() => computeFooterTotals(stackedData), [stackedData]);
+    const footerTotals = useMemo(
+        () => computeFooterTotals(stackedData, totalDeviceTimeUs),
+        [stackedData, totalDeviceTimeUs],
+    );
 
     const renderTable = () => {
         if (isLoading) {
@@ -190,22 +196,21 @@ const StackedPerformanceTable = ({
     );
 };
 
-const computeFooterTotals = (data: TypedStackedPerfRow[]): Partial<Record<StackedColumnKeys, string>> => {
+const computeFooterTotals = (
+    data: TypedStackedPerfRow[],
+    totalDeviceTimeUs: number,
+): Partial<Record<StackedColumnKeys, string>> => {
     const rows = data ?? [];
-    let percentSum = 0;
-    let deviceTimeSum = 0;
-    let opsCountSum = 0;
-
-    for (const row of rows) {
-        percentSum += row[StackedColumnKeys.Percent] || 0;
-        deviceTimeSum += row[StackedColumnKeys.DeviceTimeSumUs] || 0;
-        opsCountSum += row[StackedColumnKeys.OpsCount] || 0;
-    }
+    const deviceTimeSum = sumStackedDeviceTime(rows);
+    const opsCountSum = rows.reduce((total, row) => total + (row[StackedColumnKeys.OpsCount] || 0), 0);
 
     return {
-        // Each row's percentage is a share of the whole report, so under a filter the visible rows
-        // sum to less than 100; summing them keeps the footer about the rows it sits under.
-        [StackedColumnKeys.Percent]: formatPercentage(percentSum, PERCENT_DECIMALS),
+        // The visible rows' share of all device time (see `sumStackedDeviceTime`): 100% unfiltered,
+        // less under a filter, whether or not devices are merged.
+        [StackedColumnKeys.Percent]: formatPercentage(
+            totalDeviceTimeUs > 0 ? (deviceTimeSum / totalDeviceTimeUs) * 100 : 0,
+            PERCENT_DECIMALS,
+        ),
         [StackedColumnKeys.DeviceTimeSumUs]: `${formatSize(deviceTimeSum, 2)} µs`,
         [StackedColumnKeys.OpCode]: `${rows.length} op types`,
         [StackedColumnKeys.OpsCount]: `${opsCountSum}`,

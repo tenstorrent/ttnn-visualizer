@@ -47,14 +47,22 @@ function SourceFileOverlay({
     const isRemote = useAtomValue(profilerReportLocationAtom) === ReportLocation.REMOTE;
     const { persistentState } = useRemoteConnection();
 
-    const [scrollContainerEl, setScrollContainerEl] = useState<Element | null>(null);
-    const [overlayTopOffset, setOverlayTopOffset] = useState<number>(0);
-    const sourceControlsRef = useRef<null | HTMLDivElement>(null);
-    // State rather than a ref so the auto-scroll effect reruns once the file is in the document.
-    // Blueprint's Portal renders its children only after its own effect has created the
-    // container, so on a first open, when the overlay mounts already open, the lines arrive a
-    // render after this component's effects have run.
+    // The controls and the code are held in state rather than refs so what depends on them reruns
+    // once they are in the document. Blueprint's Portal renders its children only after its own
+    // effect has created the container, so on a first open, when the overlay mounts already open,
+    // they arrive a render after this component's effects have run.
+    const [controlsEl, setControlsEl] = useState<HTMLDivElement | null>(null);
     const [codeEl, setCodeEl] = useState<HTMLElement | null>(null);
+    // Read from the committed controls element, so a reopen finds its new scroll container.
+    const scrollContainerEl = useMemo(
+        () => controlsEl?.closest(`.${Classes.OVERLAY_SCROLL_CONTAINER}`) ?? null,
+        [controlsEl],
+    );
+    const overlayTopOffset = useMemo(() => {
+        const overlayEl = scrollContainerEl?.querySelector(`.${Classes.OVERLAY_CONTENT}`);
+
+        return overlayEl ? parseInt(window.getComputedStyle(overlayEl).marginTop, 10) || 0 : 0;
+    }, [scrollContainerEl]);
     const didAutoScrollRef = useRef(false);
 
     const fileWithHighlights = useMemo(() => {
@@ -104,27 +112,11 @@ function SourceFileOverlay({
         scrollContainerEl?.scrollTo({ top: scrollContainerEl.scrollHeight, behavior: 'smooth' });
 
     useEffect(() => {
-        if (!scrollContainerEl) {
-            if (sourceControlsRef?.current) {
-                const scrollEl = sourceControlsRef.current.closest(`.${Classes.OVERLAY_SCROLL_CONTAINER}`);
-                const overlayEl = scrollEl?.querySelector(`.${Classes.OVERLAY_CONTENT}`);
-
-                setScrollContainerEl(scrollEl || null);
-
-                if (overlayEl) {
-                    const overlayStyles = window.getComputedStyle(overlayEl);
-                    setOverlayTopOffset(parseInt(overlayStyles.marginTop, 10) || 0);
-                }
-            }
+        if (!controlsEl || !scrollContainerEl) {
+            return undefined;
         }
 
         const handleScroll = () => {
-            const controlsEl = sourceControlsRef.current;
-
-            if (!controlsEl || !scrollContainerEl || Number.isNaN(overlayTopOffset)) {
-                return;
-            }
-
             const { scrollTop } = scrollContainerEl;
 
             if (scrollTop > overlayTopOffset) {
@@ -134,10 +126,10 @@ function SourceFileOverlay({
             }
         };
 
-        scrollContainerEl?.addEventListener('scroll', handleScroll);
+        scrollContainerEl.addEventListener('scroll', handleScroll);
 
-        return () => scrollContainerEl?.removeEventListener('scroll', handleScroll);
-    }, [scrollContainerEl, overlayTopOffset, isOpen]);
+        return () => scrollContainerEl.removeEventListener('scroll', handleScroll);
+    }, [controlsEl, scrollContainerEl, overlayTopOffset]);
 
     useEffect(() => {
         if (!isOpen) {
@@ -176,7 +168,7 @@ function SourceFileOverlay({
                 {!errorDetails ? (
                     <div
                         className='source-file-controls'
-                        ref={sourceControlsRef}
+                        ref={setControlsEl}
                     >
                         <div className='buttons'>
                             <Tooltip content='Scroll to top'>

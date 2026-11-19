@@ -60,12 +60,27 @@ export const MAX_LISTED_OPERATIONS = 100;
 const EMPTY_MESSAGE = 'No data to display';
 
 // `sortTableFields` takes flat records, so groups are sorted through this projection.
+// Sorted by basename, then line number, then full path. `sortTableFields` compares strings by
+// code unit, so the NUL separator sorts a shorter basename first and the zero-padded line
+// number sorts `:9` before `:10`, which comparing the `basename:line` label would not.
+const LOCATION_SORT_SEPARATOR = '\u0000';
+const LINE_NUMBER_SORT_WIDTH = 10;
+
+const getLocationSortValue = (group: SourceLineGroup): string =>
+    group.basename === null
+        ? getSourceLineGroupLabel(group)
+        : [
+              group.basename,
+              String(group.lineNumber ?? 0).padStart(LINE_NUMBER_SORT_WIDTH, '0'),
+              group.filePath ?? '',
+          ].join(LOCATION_SORT_SEPARATOR);
+
 type SourceLineSortRow = Record<SourceLineColumnKey, string | number | null> & { key: string };
 
 const toSortRow = (group: SourceLineGroup): SourceLineSortRow => ({
     key: group.key,
     [SourceLineColumnKey.PERCENT]: group.percent,
-    [SourceLineColumnKey.LOCATION]: getSourceLineGroupLabel(group),
+    [SourceLineColumnKey.LOCATION]: getLocationSortValue(group),
     [SourceLineColumnKey.DEVICE]: group.device,
     [SourceLineColumnKey.DEVICE_TIME]: group.deviceTimeUs,
     [SourceLineColumnKey.ROW_COUNT]: group.rowCount,
@@ -83,6 +98,8 @@ interface SourceLinePerfTableProps {
     isLoading?: boolean;
     /** Shown in place of the generic empty message when there is a reason the table is empty. */
     emptyReason?: string | null;
+    /** Device time of every line before filtering; the footer's Total % is the visible lines' share of it. */
+    totalDeviceTimeUs: number;
 }
 
 const SourceLinePerfTable = ({
@@ -93,6 +110,7 @@ const SourceLinePerfTable = ({
     maxCores,
     isLoading = false,
     emptyReason = null,
+    totalDeviceTimeUs,
 }: SourceLinePerfTableProps) => {
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
     const mergeDevices = useAtomValue(mergeDevicesAtom);
@@ -108,16 +126,18 @@ const SourceLinePerfTable = ({
             }),
         [groups, groupByKey, sortTableFields],
     );
-    const footerTotals = useMemo(
-        () => ({
-            // Each line's percentage is a share of the whole range, so under a filter the visible
-            // lines sum to less than 100; summing them keeps the footer about the rows it sits under.
-            percent: groups.reduce((total, group) => total + group.percent, 0),
-            deviceTimeUs: groups.reduce((total, group) => total + group.deviceTimeUs, 0),
+    const footerTotals = useMemo(() => {
+        const deviceTimeUs = groups.reduce((total, group) => total + group.deviceTimeUs, 0);
+
+        return {
+            // The visible lines' share of all the range's device time: 100% unfiltered, less under a
+            // filter. Not a sum of the lines' own percentages, which are per device while devices
+            // are unmerged and would sum to 100 per device.
+            percent: totalDeviceTimeUs > 0 ? (deviceTimeUs / totalDeviceTimeUs) * 100 : 0,
+            deviceTimeUs,
             rowCount: groups.reduce((total, group) => total + group.rowCount, 0),
-        }),
-        [groups],
-    );
+        };
+    }, [groups, totalDeviceTimeUs]);
 
     const toggleExpanded = useCallback((key: string) => {
         setExpandedKeys((current) => {

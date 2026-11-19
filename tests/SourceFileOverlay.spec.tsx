@@ -119,6 +119,29 @@ describe('SourceFileOverlay', () => {
         expect(getScrolledLineNumbers()).toEqual([`${LINE_NUMBER}`, `${LINE_NUMBER}`]);
     });
 
+    it('scrolls its container to the top and bottom when it first opens', () => {
+        const scrollTo = vi.fn();
+        const originalScrollTo = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTo');
+        Element.prototype.scrollTo = scrollTo;
+
+        try {
+            renderOverlay();
+
+            fireEvent.click(document.querySelector('[data-icon="double-chevron-up"]')!.closest('button')!);
+            fireEvent.click(document.querySelector('[data-icon="double-chevron-down"]')!.closest('button')!);
+
+            expect(scrollTo).toHaveBeenCalledTimes(2);
+            expect(scrollTo.mock.contexts[0]).toHaveClass('bp6-overlay-scroll-container');
+            expect(scrollTo.mock.calls[0][0]).toMatchObject({ top: 0 });
+        } finally {
+            if (originalScrollTo) {
+                Object.defineProperty(Element.prototype, 'scrollTo', originalScrollTo);
+            } else {
+                delete (Element.prototype as Partial<Element>).scrollTo;
+            }
+        }
+    });
+
     it('does not scroll on open when not asked to, but its locate button does', () => {
         renderOverlay({ scrollToLineNumber: false });
 

@@ -17,21 +17,29 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
     usePerfMeta: vi.fn(),
 }));
 
-const stackedRow = (opCode: string, percent: number | null = 100): TypedStackedPerfRow =>
+const stackedRow = (
+    opCode: string,
+    {
+        percent = 100,
+        deviceTimeUs = 1,
+        device = 0,
+    }: { percent?: number | null; deviceTimeUs?: number; device?: number } = {},
+): TypedStackedPerfRow =>
     ({
         [StackedColumnKeys.Percent]: percent,
         [StackedColumnKeys.OpCode]: opCode,
-        [StackedColumnKeys.Device]: 0,
-        [StackedColumnKeys.DeviceTimeSumUs]: 1,
+        [StackedColumnKeys.Device]: device,
+        [StackedColumnKeys.DeviceTimeSumUs]: deviceTimeUs,
         [StackedColumnKeys.OpsCount]: 1,
     }) as unknown as TypedStackedPerfRow;
 
 interface RenderOptions {
     stackedData?: TypedStackedPerfRow[];
     isLoading?: boolean;
+    totalDeviceTimeUs?: number;
 }
 
-function renderStacked({ stackedData = [], isLoading = false }: RenderOptions = {}) {
+function renderStacked({ stackedData = [], isLoading = false, totalDeviceTimeUs = 0 }: RenderOptions = {}) {
     return render(
         <TestProviders>
             <StackedPerformanceTable
@@ -41,6 +49,7 @@ function renderStacked({ stackedData = [], isLoading = false }: RenderOptions = 
                 reportFolderName='unit-test'
                 maxCores={DEFAULT_MAX_CORES}
                 isLoading={isLoading}
+                totalDeviceTimeUs={totalDeviceTimeUs}
             />
         </TestProviders>,
     );
@@ -92,11 +101,33 @@ describe('StackedPerformanceTable footer', () => {
     const getTotalPercent = () => document.querySelector('tfoot td')?.textContent;
 
     it.each([
-        ['every row', [stackedRow('Matmul', 75), stackedRow('Conv2d', 25)], '100%'],
-        ['only the rows a filter leaves', [stackedRow('Conv2d', 25)], '25%'],
-        ['rows with no percentage', [stackedRow('Matmul', null)], '0%'],
-    ])('totals Total %% over %s', (_, stackedData, expected) => {
-        renderStacked({ stackedData });
+        [
+            'every row',
+            [
+                stackedRow('Matmul', { percent: 75, deviceTimeUs: 75 }),
+                stackedRow('Conv2d', { percent: 25, deviceTimeUs: 25 }),
+            ],
+            100,
+            '100%',
+        ],
+        ['only the rows a filter leaves', [stackedRow('Conv2d', { percent: 25, deviceTimeUs: 25 })], 100, '25%'],
+        ['rows with no device time', [stackedRow('Matmul', { percent: null, deviceTimeUs: 0 })], 0, '0%'],
+        [
+            // The CSV rounds each `%`; device time does not drift, where these would sum to 99.99%.
+            'rows whose rounded percentages fall short of 100',
+            [1, 1, 1].map((_, index) => stackedRow(`Op${index}`, { percent: 33.33, deviceTimeUs: 1 })),
+            3,
+            '100%',
+        ],
+        [
+            // tt-perf-report gives each unmerged row its share of its own device: these sum to 200.
+            'rows of two unmerged devices',
+            [stackedRow('Matmul', { device: 0 }), stackedRow('Matmul', { device: 1 })],
+            2,
+            '100%',
+        ],
+    ])('totals Total %% over %s', (_, stackedData, totalDeviceTimeUs, expected) => {
+        renderStacked({ stackedData, totalDeviceTimeUs });
 
         expect(getTotalPercent()).toBe(expected);
     });

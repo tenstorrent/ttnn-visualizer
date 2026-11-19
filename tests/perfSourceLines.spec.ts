@@ -175,6 +175,30 @@ describe('getSourceLineGroups', () => {
         expect(merged[0].device).toBeNull();
     });
 
+    it("gives each unmerged line its share of its own device's time, as tt-perf-report does", () => {
+        // Device 0 spends 30 µs, device 1 spends 10 µs; a.py takes 10 µs of each.
+        const rows = [
+            perfRow({ op: 1, device: 0, deviceTime: 10 }),
+            perfRow({ op: 2, device: 0, deviceTime: 20 }),
+            perfRow({ op: 1, device: 1, deviceTime: 10 }),
+        ];
+        const operationById = operations([
+            [1, trace('/m/a.py', 1)],
+            [2, trace('/m/b.py', 2)],
+        ]);
+
+        const percentByLine = Object.fromEntries(
+            getSourceLineGroups(rows, operationById, { mergeDevices: false }).map((group) => [
+                `${group.basename}@${group.device}`,
+                group.percent,
+            ]),
+        );
+
+        expect(percentByLine['a.py@0']).toBeCloseTo(100 / 3);
+        expect(percentByLine['b.py@0']).toBeCloseTo(200 / 3);
+        expect(percentByLine['a.py@1']).toBe(100);
+    });
+
     it('keeps two files that share a basename apart', () => {
         const groups = getSourceLineGroups(
             [perfRow({ op: 1 }), perfRow({ op: 2 })],

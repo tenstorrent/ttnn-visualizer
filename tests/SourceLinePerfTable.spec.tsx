@@ -80,6 +80,7 @@ const renderTable = (
                 filterQuery=''
                 reportFolderName={null}
                 maxCores={64}
+                totalDeviceTimeUs={10}
                 {...props}
             />
         </TestProviders>,
@@ -134,6 +135,19 @@ describe('SourceLinePerfTable', () => {
         expect(getLabels()).toEqual(['big.py:42', 'small.py:42']);
     });
 
+    it('sorts line numbers as numbers, not as text', () => {
+        const atLine = (lineNumber: number) =>
+            group({ key: `line-${lineNumber}`, lineNumber, filePath: '/m/model.py', basename: 'model.py' });
+        renderTable({ groups: [atLine(10), atLine(9), atLine(100)] });
+        const getLabels = () => getRows().map((row) => row.textContent?.match(/\w+\.py:\d+/)?.[0]);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Source line' }));
+        expect(getLabels()).toEqual(['model.py:9', 'model.py:10', 'model.py:100']);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Source line' }));
+        expect(getLabels()).toEqual(['model.py:100', 'model.py:10', 'model.py:9']);
+    });
+
     it('scrolls back to the top when a header re-sorts the lines', () => {
         renderTable();
         const scrollRegion = screen.getByRole('region', { name: 'Performance table' });
@@ -145,14 +159,23 @@ describe('SourceLinePerfTable', () => {
     });
 
     it.each([
-        ['every line', GROUPS, '100%'],
-        ['only the lines a filter leaves', [GROUPS[0]], '20%'],
-        ['lines with no countable time', [group({ percent: 0, deviceTimeUs: 0 })], '0%'],
-    ])('totals Total %% over %s', (_, groups, expected) => {
-        renderTable({ groups });
+        ['every line', GROUPS, 10, '100%'],
+        ['only the lines a filter leaves', [GROUPS[0]], 10, '20%'],
+        ['lines with no countable time', [group({ percent: 0, deviceTimeUs: 0 })], 0, '0%'],
+        [
+            // Each line is all of its own device's time, so summing the rows' shares would say 200%.
+            'one line on each of two unmerged devices',
+            [
+                group({ key: 'device-0', device: 0, deviceTimeUs: 5, percent: 100 }),
+                group({ key: 'device-1', device: 1, deviceTimeUs: 5, percent: 100 }),
+            ],
+            10,
+            '100%',
+        ],
+    ])('totals Total %% over %s', (_, groups, totalDeviceTimeUs, expected) => {
+        renderTable({ groups, totalDeviceTimeUs });
 
-        const footerCells = document.querySelectorAll('tfoot td');
-        expect(footerCells[0]).toHaveTextContent(expected);
+        expect(document.querySelector('tfoot td')?.textContent).toBe(expected);
     });
 
     it('opens and closes a line, saying which it will do', () => {

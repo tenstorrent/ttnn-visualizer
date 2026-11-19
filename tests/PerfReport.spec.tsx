@@ -83,6 +83,7 @@ interface RenderOptions {
     bufferTypeFilterList?: BufferType[];
     layoutFilterList?: DeviceOperationLayoutTypes[];
     stackedGroupBy?: StackedGroupBy | null;
+    hasLinkedOperations?: boolean;
 }
 
 function renderReport({
@@ -98,6 +99,8 @@ function renderReport({
     bufferTypeFilterList = [],
     layoutFilterList = [],
     stackedGroupBy = null,
+    // The route derives this from the whole report's links; the rows passed stand in for it.
+    hasLinkedOperations = data.some((dataRow) => dataRow.op !== undefined),
 }: RenderOptions = {}) {
     const initialAtomValues: AtomProviderInitialValues = [];
 
@@ -143,6 +146,7 @@ function renderReport({
                 isLoading={isLoading}
                 isComparisonLoading={isComparisonLoading}
                 maxCores={DEFAULT_MAX_CORES}
+                hasLinkedOperations={hasLinkedOperations}
             />
         </TestProviders>,
     );
@@ -968,6 +972,29 @@ describe('PerformanceReport stacked view grouped by source line', () => {
         ).toBeInTheDocument();
     });
 
+    it('disables the option, with its reason, when the linked memory report has no stack traces', async () => {
+        (useOperationsList as Mock).mockReturnValue({
+            data: [{ id: 7, name: 'ttnn.matmul', stack_trace: null, stack_trace_source_file_id: null }],
+            isLoading: false,
+        });
+        renderReport({ data: LINKED_ROWS, stackedGroupBy: StackedGroupBy.OP });
+
+        const item = await findGroupByItem('Source line');
+        expect(item).toHaveAttribute('aria-disabled', 'true');
+
+        fireEvent.mouseEnter(within(item).getByText('Source line'));
+
+        expect(
+            await screen.findByText('The linked memory report recorded no stack traces', {}, WAIT_FOR_OPTIONS),
+        ).toBeInTheDocument();
+    });
+
+    it('offers the option when the range holds only unlinked rows of a linked report', async () => {
+        renderReport({ data: [row('Matmul')], stackedGroupBy: StackedGroupBy.OP, hasLinkedOperations: true });
+
+        expect(await findGroupByItem('Source line')).not.toHaveAttribute('aria-disabled', 'true');
+    });
+
     it('swaps in the source-line table when the option is chosen', async () => {
         renderReport({ data: LINKED_ROWS, stackedGroupBy: StackedGroupBy.OP });
 
@@ -1015,6 +1042,32 @@ describe('PerformanceReport stacked view grouped by source line', () => {
 
         fireEvent.change(screen.getByPlaceholderText('Filter by file or function'), { target: { value: 'nothing' } });
         expect(getSourceLineRows()).toHaveLength(0);
+    });
+
+    it("keeps a filtered line's share of the whole range", () => {
+        (useOperationsList as Mock).mockReturnValue({
+            data: [
+                { id: 7, name: 'ttnn.matmul', stack_trace: MODEL_TRACE, stack_trace_source_file_id: null },
+                {
+                    id: 8,
+                    name: 'ttnn.softmax',
+                    stack_trace: '  File "/m/models/head.py", line 7, in head\n    y = ttnn.softmax(a)',
+                    stack_trace_source_file_id: null,
+                },
+            ],
+            isLoading: false,
+        });
+        renderReport({
+            data: [linkedRow('Matmul', 1, 7), linkedRow('Softmax', 2, 8)],
+            stackedGroupBy: StackedGroupBy.SOURCE_LINE,
+        });
+
+        fireEvent.change(screen.getByPlaceholderText('Filter by file or function'), { target: { value: 'head' } });
+
+        expect(getSourceLineRows()).toHaveLength(1);
+        // Re-scaling the filtered lines would read 100% in both.
+        expect(getSourceLineRows()[0].querySelector('td')?.textContent).toBe('50%');
+        expect(document.querySelector('tfoot td')?.textContent).toBe('50%');
     });
 
     it('shows a notice instead of a table on a comparison tab', () => {

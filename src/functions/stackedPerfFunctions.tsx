@@ -23,6 +23,15 @@ const OPERATION_COLOURS: { [key: string]: CellColour } = {
     Conv2d: CellColour.Orange,
 };
 
+/**
+ * Total device time across stacked rows. The footer's Total % is the visible rows' share of
+ * this total over the unfiltered rows, rather than a sum of the rows' own `%`: with devices
+ * unmerged tt-perf-report gives each row its share of its own device, so those sum to 100 per
+ * device, and the CSV rounds each to two decimals.
+ */
+export const sumStackedDeviceTime = (rows: TypedStackedPerfRow[] | undefined): number =>
+    (rows ?? []).reduce((total, row) => total + (row[StackedColumnKeys.DeviceTimeSumUs] || 0), 0);
+
 export const formatStackedCell = (
     row: TypedStackedPerfRow,
     column: StackedTableColumn,

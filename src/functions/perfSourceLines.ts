@@ -81,11 +81,21 @@ const getTopOpCodes = (deviceTimeByOpCode: Map<string, number>): string[] =>
  * that share a basename stay apart.
  *
  * Device time is summed per line, as tt-perf-report's `Device_Time_Sum_us` sums it, so the
- * percentages add up to 100. `aggregatePerfByOp` takes the max per operation instead, so the
- * graph view's numbers can differ. Every non-signpost row adds to its group's row count; only
- * countable device time (`isCountableDeviceTime`) adds to its time.
+ * percentages add up to 100 (per device, while devices are unmerged, as tt-perf-report's own
+ * `%` does). `aggregatePerfByOp` takes the max per operation instead, so the graph view's
+ * numbers can differ. Every non-signpost row adds to its group's row count; only countable
+ * device time (`isCountableDeviceTime`) adds to its time.
  *
  * Sorted by device time, largest first.
+ *
+ * The `source_lines` MCP tool (#2364) answers the same question, but differs from this view:
+ * - Range: this covers the rows it is given, which `PerfReport` takes from the range slider;
+ *   the tool reads the whole report or a signpost range.
+ * - No traces: `PerfReport` disables the grouping when no linked operation has a call site;
+ *   the tool refuses.
+ * - Unmerged devices: this keeps a group per line per device, each a share of its device.
+ * - Trace: this reads the call site from the operation list's `stack_trace`, which may come
+ *   from a different `stack_traces` row than the one the tool picks on a multi-rank report.
  */
 export const getSourceLineGroups = (
     rows: TypedPerfTableRow[],
@@ -157,14 +167,27 @@ export const getSourceLineGroups = (
     }
 
     const accumulators = [...accumulatorByKey.values()];
-    const totalDeviceTimeUs = accumulators.reduce((total, accumulator) => total + accumulator.deviceTimeUs, 0);
+    // Keyed by device, which is null throughout while devices are merged. Unmerged, each line's
+    // share is of its own device's time, as tt-perf-report computes the other groupings' `%`.
+    const totalDeviceTimeByDevice = new Map<number | null, number>();
+
+    for (const accumulator of accumulators) {
+        totalDeviceTimeByDevice.set(
+            accumulator.device,
+            (totalDeviceTimeByDevice.get(accumulator.device) ?? 0) + accumulator.deviceTimeUs,
+        );
+    }
 
     return accumulators
-        .map(({ deviceTimeByOpCode, operationIdSet: _operationIdSet, ...group }) => ({
-            ...group,
-            percent: totalDeviceTimeUs > 0 ? (group.deviceTimeUs / totalDeviceTimeUs) * 100 : 0,
-            topOpCodes: getTopOpCodes(deviceTimeByOpCode),
-        }))
+        .map(({ deviceTimeByOpCode, operationIdSet: _operationIdSet, ...group }) => {
+            const deviceTotalUs = totalDeviceTimeByDevice.get(group.device) ?? 0;
+
+            return {
+                ...group,
+                percent: deviceTotalUs > 0 ? (group.deviceTimeUs / deviceTotalUs) * 100 : 0,
+                topOpCodes: getTopOpCodes(deviceTimeByOpCode),
+            };
+        })
         .sort((a, b) => b.deviceTimeUs - a.deviceTimeUs || a.key.localeCompare(b.key));
 };
 
