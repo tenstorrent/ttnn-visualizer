@@ -10,7 +10,7 @@ import PerformanceReport from '../src/components/performance/PerfReport';
 import { TypedPerfTableRow } from '../src/model/PerfTable';
 import { PERF_DURATION_BUCKET_FILTER_PLACEHOLDER } from '../src/definitions/PerfDurationHistogram';
 import { OpType } from '../src/definitions/Performance';
-import { OperationCategories } from '../src/definitions/StackedPerfTable';
+import { OperationCategories, StackedGroupBy } from '../src/definitions/StackedPerfTable';
 import { MathFidelity } from '../src/definitions/MathFidelity';
 import { DeviceOperationLayoutTypes } from '../src/model/APIData';
 import { BufferType } from '../src/model/BufferType';
@@ -20,10 +20,12 @@ import {
     bufferTypeFilterListAtom,
     comparisonPerformanceReportListAtom,
     durationBucketFilterListAtom,
+    isStackedViewAtom,
     layoutFilterListAtom,
     mathFilterListAtom,
     opCategoryFilterListAtom,
     rawOpCodeFilterListAtom,
+    stackedGroupByAtom,
 } from '../src/store/app';
 import { formatDurationBucketRange } from '../src/functions/formatDurationBucketRange';
 import { AtomProviderInitialValues } from './helpers/atomProvider';
@@ -80,6 +82,7 @@ interface RenderOptions {
     mathFilterList?: string[];
     bufferTypeFilterList?: BufferType[];
     layoutFilterList?: DeviceOperationLayoutTypes[];
+    stackedGroupBy?: StackedGroupBy | null;
 }
 
 function renderReport({
@@ -94,8 +97,13 @@ function renderReport({
     mathFilterList = [],
     bufferTypeFilterList = [],
     layoutFilterList = [],
+    stackedGroupBy = null,
 }: RenderOptions = {}) {
     const initialAtomValues: AtomProviderInitialValues = [];
+
+    if (stackedGroupBy) {
+        initialAtomValues.push([isStackedViewAtom, true], [stackedGroupByAtom, stackedGroupBy]);
+    }
 
     if (comparisonReports) {
         initialAtomValues.push([comparisonPerformanceReportListAtom, comparisonReports]);
@@ -920,5 +928,98 @@ describe('PerformanceReport usage events', () => {
         fireEvent.change(screen.getByPlaceholderText('Filter by operation name'), { target: { value: 'Conv' } });
 
         expect(recordEvent).toHaveBeenCalledTimes(2);
+    });
+});
+
+describe('PerformanceReport stacked view grouped by source line', () => {
+    const MODEL_TRACE = '  File "/m/models/model.py", line 42, in forward\n    y = ttnn.matmul(a, b)';
+    const linkedRow = (opCode: string, id: number, op: number) => ({ ...row(opCode, id, 10), op }) as TypedPerfTableRow;
+    const LINKED_ROWS = [linkedRow('Matmul', 1, 7), linkedRow('Softmax', 2, 7)];
+
+    beforeEach(() => {
+        (useOperationsList as Mock).mockReturnValue({
+            data: [{ id: 7, name: 'ttnn.matmul', stack_trace: MODEL_TRACE, stack_trace_source_file_id: null }],
+            isLoading: false,
+        });
+    });
+
+    const getSourceLineRows = () => screen.queryAllByTestId(TEST_IDS.PERF_SOURCE_LINE_ROW);
+    // Merged devices: Total %, Source line, Device Time, Ops Count.
+    const getOpsCountCell = (tableRow: HTMLElement) => tableRow.querySelectorAll('td')[3];
+
+    // A list option's `li` carries the role; its anchor takes the click and the disabled state.
+    const findGroupByItem = async (name: string) => {
+        await openPopover(screen.getByRole('button', { name: 'Operation' }), WAIT_FOR_OPTIONS);
+        const option = await screen.findByRole('option', { name }, WAIT_FOR_OPTIONS);
+
+        return option.querySelector('a')!;
+    };
+
+    it('disables the option, with its reason, when no row is linked to an operation', async () => {
+        renderReport({ stackedGroupBy: StackedGroupBy.OP });
+
+        expect(await findGroupByItem('Source line')).toHaveAttribute('aria-disabled', 'true');
+    });
+
+    it('swaps in the source-line table when the option is chosen', async () => {
+        renderReport({ data: LINKED_ROWS, stackedGroupBy: StackedGroupBy.OP });
+
+        fireEvent.click(await findGroupByItem('Source line'));
+
+        expect(await screen.findByTestId(TEST_IDS.PERF_SOURCE_LINE_TABLE)).toBeInTheDocument();
+        expect(getSourceLineRows()).toHaveLength(1);
+        expect(getSourceLineRows()[0]).toHaveTextContent('model.py:42');
+    });
+
+    it('explains an empty table when Source line stays selected without a link', () => {
+        renderReport({ stackedGroupBy: StackedGroupBy.SOURCE_LINE });
+
+        expect(screen.getByText('Needs a memory report linked to this performance report')).toBeInTheDocument();
+    });
+
+    it("ignores the Standard view's hidden filters", () => {
+        renderReport({
+            data: LINKED_ROWS,
+            stackedGroupBy: StackedGroupBy.SOURCE_LINE,
+            bufferTypeFilterList: [BufferType.L1],
+        });
+
+        expect(getSourceLineRows()).toHaveLength(1);
+        expect(getOpsCountCell(getSourceLineRows()[0])).toHaveTextContent(/^2$/);
+    });
+
+    it('ignores a raw op-code selection and disables its control', () => {
+        renderReport({
+            data: LINKED_ROWS,
+            stackedGroupBy: StackedGroupBy.SOURCE_LINE,
+            rawOpCodeFilterList: ['Softmax'],
+        });
+
+        expect(getSourceLineRows()).toHaveLength(1);
+        expect(getOpsCountCell(getSourceLineRows()[0])).toHaveTextContent(/^2$/);
+        expect(document.querySelector(`.${Classes.TAG_INPUT}.${Classes.DISABLED}`)).toHaveTextContent('Softmax');
+    });
+
+    it('filters lines by file or function after grouping', () => {
+        renderReport({ data: LINKED_ROWS, stackedGroupBy: StackedGroupBy.SOURCE_LINE });
+
+        fireEvent.change(screen.getByPlaceholderText('Filter by file or function'), { target: { value: 'forw' } });
+        expect(getSourceLineRows()).toHaveLength(1);
+
+        fireEvent.change(screen.getByPlaceholderText('Filter by file or function'), { target: { value: 'nothing' } });
+        expect(getSourceLineRows()).toHaveLength(0);
+    });
+
+    it('shows a notice instead of a table on a comparison tab', () => {
+        renderReport({
+            data: LINKED_ROWS,
+            stackedGroupBy: StackedGroupBy.SOURCE_LINE,
+            comparisonData: [[row('Matmul')]],
+            comparisonReports: [COMPARISON_REPORT],
+        });
+
+        fireEvent.click(screen.getByRole('tab', { name: COMPARISON_REPORT }));
+
+        expect(screen.getByTestId(TEST_IDS.PERF_SOURCE_LINE_COMPARISON_NOTICE)).toBeInTheDocument();
     });
 });

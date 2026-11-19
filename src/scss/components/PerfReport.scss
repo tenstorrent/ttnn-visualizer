@@ -349,3 +349,22 @@ $perf-table-max-height: calc(
 
     @include perf.perf-report-colours;
 }
+
+.source-line-location {
+    align-items: center;
+    display: inline-flex;
+    gap: 4px;
+}
+
+.source-line-function {
+    margin-left: 4px;
+}
+
+.source-line-operation-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    list-style: none;
+    margin: 0;
+    padding: 0 0 0 28px;
+}

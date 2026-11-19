@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     extractOperationSourceData,
+    getCallSiteFrame,
     getFrameSourceFileId,
     getStackTraceFilePath,
     getStackTraceLineNumber,
@@ -34,6 +35,7 @@ describe('parseStackTraceFrames', () => {
                 line: 135,
                 prefix: '  File ',
                 suffix: ', in run_downsample_if_req',
+                function: 'run_downsample_if_req',
             },
             {
                 index: 1,
@@ -42,6 +44,7 @@ describe('parseStackTraceFrames', () => {
                 line: 317,
                 prefix: '  File ',
                 suffix: ', in run',
+                function: 'run',
             },
         ]);
     });
@@ -93,6 +96,41 @@ describe('parseStackTraceFrames', () => {
 
         expect(parseStackTraceFrames(untraced)).toEqual([]);
         expect(extractOperationSourceData({ stack_trace: untraced, stack_trace_source_file_id: null })).toBeNull();
+    });
+});
+
+describe('getCallSiteFrame', () => {
+    it("returns frame 0's file, line and function from a multi-frame trace", () => {
+        expect(getCallSiteFrame(MULTI_FRAME_TRACE)).toMatchObject({
+            index: 0,
+            file: '/m/models/resnet.py',
+            line: 135,
+            function: 'run_downsample_if_req',
+        });
+    });
+
+    it('trims whitespace around the function name, as the backend strips it', () => {
+        expect(getCallSiteFrame('  File "/m/a.py", line 3, in forward  \n    x()')?.function).toBe('forward');
+    });
+
+    it('returns null when the trace has no frame', () => {
+        expect(getCallSiteFrame('#0 0x7f in ttnn::run()')).toBeNull();
+        expect(getCallSiteFrame('')).toBeNull();
+        expect(getCallSiteFrame('  File "/m/we"ird.py", line 20, in f\n    x()')).toBeNull();
+        expect(getCallSiteFrame(null as unknown as string)).toBeNull();
+    });
+
+    it.each([
+        ['a multi-frame trace', MULTI_FRAME_TRACE],
+        ['a CRLF trace', MULTI_FRAME_TRACE.replace(/\n/g, '\r\n')],
+        ['a CR-only trace', MULTI_FRAME_TRACE.replace(/\n/g, '\r')],
+        ['a frame after a partial File line', '  File "/m/partial.py"\n  File "/m/real.py", line 7, in fn\n    x()'],
+        ['a frame after leading blank lines', '\n\r\n  File "/m/late.py", line 9, in late'],
+        ['a trace ending in a line break', '  File "/m/end.py", line 4, in end\n'],
+        ['a one-line trace', PYTHON_TRACE],
+        ['a trace with no frame', 'no frame here'],
+    ])('agrees with the first frame parseStackTraceFrames reads, on %s', (_, trace) => {
+        expect(getCallSiteFrame(trace)).toEqual(parseStackTraceFrames(trace)[0] ?? null);
     });
 });
 

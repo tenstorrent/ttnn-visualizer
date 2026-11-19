@@ -8,6 +8,7 @@ import {
     Button,
     ButtonGroup,
     ButtonVariant,
+    Callout,
     FormGroup,
     Intent,
     MenuItem,
@@ -52,6 +53,7 @@ import {
 import 'styles/components/PerfReport.scss';
 import StackedPerformanceTable from './StackedPerfTable';
 import {
+    STACKED_GROUP_BY_LABELS,
     StackedColumnKeys,
     StackedGroupBy,
     StackedTableFilter,
@@ -63,7 +65,6 @@ import HighlightedText from '../HighlightedText';
 import PerfReportRowCount from './PerfReportRowCount';
 import MultiSelectField from '../MultiSelectField';
 import { BufferType, BufferTypeLabel } from '../../model/BufferType';
-import { capitalizeString } from '../../functions/formatting';
 import { formatSyncedReportName } from '../../functions/reportRank';
 import { DeviceOperationLayoutTypes } from '../../model/APIData';
 import usePerfReportFiltering from './usePerfReportFiltering';
@@ -71,6 +72,11 @@ import AllocationFailureSummary from './AllocationFailureSummary';
 import isSignpostOutsideRange from '../../functions/isSignpostOutsideRange';
 import { SignpostSelectType } from '../../definitions/Performance';
 import { AllocationFailureListing } from '../../model/AllocationFailure';
+import { useOperationsList } from '../../hooks/useAPI';
+import indexFirstById from '../../functions/indexFirstById';
+import { SourceLineGroup, getSourceLineGroups, isSourceLineGroupMatch } from '../../functions/perfSourceLines';
+import { TEST_IDS } from '../../definitions/TestIds';
+import SourceLinePerfTable from './SourceLinePerfTable';
 
 interface PerformanceReportProps {
     data?: TypedPerfTableRow[];
@@ -88,7 +94,20 @@ interface PerformanceReportProps {
 
 const EMPTY_ALLOCATION_FAILURE_LISTINGS: AllocationFailureListing[] = [];
 const INITIAL_TAB_ID = 'perf-table-0'; // `perf-table-${index}`
-const STACKED_GROUP_BY = [StackedGroupBy.CATEGORY, StackedGroupBy.MEMORY, StackedGroupBy.OP];
+const STACKED_GROUP_BY = [
+    StackedGroupBy.CATEGORY,
+    StackedGroupBy.MEMORY,
+    StackedGroupBy.OP,
+    StackedGroupBy.SOURCE_LINE,
+];
+const EMPTY_SOURCE_LINE_GROUPS: SourceLineGroup[] = [];
+const SOURCE_LINE_UNAVAILABLE = 'Needs a memory report linked to this performance report';
+const SOURCE_LINE_RANGE_NOTE =
+    'Source line follows the selected operation range; other groupings cover the whole report';
+const SOURCE_LINE_COMPARISON_NOTE =
+    "Source lines come from the active memory report's stack traces, so they are shown for the active performance report only.";
+const OP_CODE_FILTER_PLACEHOLDER = 'Filter by operation name';
+const SOURCE_LINE_FILTER_PLACEHOLDER = 'Filter by file or function';
 
 /**
  * Drops selections the current data can no longer offer, preserving the array identity when
@@ -191,6 +210,7 @@ const PerformanceReport = ({
     const isTableLoading = isLoading || isComparisonLoading;
     const comparisonIndex = (activeComparisonReportList ?? []).findIndex((value) => value === selectedTabId);
     const isGroupedByMemory = stackedGroupBy === StackedGroupBy.MEMORY;
+    const isSourceLineShown = isStackedView && stackedGroupBy === StackedGroupBy.SOURCE_LINE;
     const filterScopeHelperText =
         activeComparisonReportList?.length &&
         'Comparison rows are filtered together with the active report to maintain row data alignment';
@@ -286,6 +306,28 @@ const PerformanceReport = ({
         [filteredComparisonStackedRowsList, comparisonIndex],
     );
 
+    const { data: operations, isLoading: isLoadingOperations } = useOperationsList();
+    const isSourceLineAvailable = useMemo(() => !!data?.some((row) => row.op !== undefined), [data]);
+    const operationById = useMemo(() => indexFirstById(operations, (operation) => operation.id), [operations]);
+    // Rolled up from `data`, never `filteredRows`: the Standard view's buffer type, layout, math
+    // fidelity and duration filters stay set while Stacked hides them, and the raw op code list
+    // cannot apply to a line that mixes op codes.
+    const sourceLineGroups = useMemo(
+        () =>
+            // With no row linked, every row would sit in the one unlinked group, which says less
+            // than the table's explanation of why there are no lines.
+            isSourceLineShown && isSourceLineAvailable
+                ? getSourceLineGroups(data ?? [], operationById, { mergeDevices })
+                : EMPTY_SOURCE_LINE_GROUPS,
+        [isSourceLineShown, isSourceLineAvailable, data, operationById, mergeDevices],
+    );
+    const sourceLineFilterQuery = stackedFilters?.[StackedColumnKeys.OpCode] ?? '';
+    // Filtered after grouping, so each line's percentage stays a share of the whole range.
+    const filteredSourceLineGroups = useMemo(
+        () => sourceLineGroups.filter((group) => isSourceLineGroupMatch(group, sourceLineFilterQuery)),
+        [sourceLineGroups, sourceLineFilterQuery],
+    );
+
     const updateColumnFilter = (_key: ColumnKeys.OpCode | StackedColumnKeys.OpCode, value: string) => {
         // Only OpCode filter is shared between standard and stacked views
         setFilters((prevFilters) => ({
@@ -336,6 +378,9 @@ const PerformanceReport = ({
             processedData = isStackedView
                 ? comparisonStackedData[comparisonIndex]
                 : processedComparisonRows[comparisonIndex];
+        } else if (isSourceLineShown) {
+            filteredData = filteredSourceLineGroups;
+            processedData = sourceLineGroups;
         } else {
             filteredData = isStackedView ? filteredStackedRows : filteredRows;
             processedData = isStackedView ? stackedData : processedRows;
@@ -350,9 +395,12 @@ const PerformanceReport = ({
         isInitialTab,
         comparisonIndex,
         isStackedView,
+        isSourceLineShown,
         filteredRows,
         processedRows,
         filteredStackedRows,
+        filteredSourceLineGroups,
+        sourceLineGroups,
         comparisonData,
         stackedData,
         comparisonStackedData,
@@ -562,16 +610,20 @@ const PerformanceReport = ({
                         <FormGroup
                             subLabel='Stacked data grouping'
                             className='form-group'
+                            helperText={isSourceLineShown ? SOURCE_LINE_RANGE_NOTE : undefined}
                         >
                             <ButtonGroup className='select-group'>
                                 <Select<StackedGroupBy>
                                     activeItem={stackedGroupBy}
                                     items={STACKED_GROUP_BY}
+                                    itemDisabled={(item) =>
+                                        item === StackedGroupBy.SOURCE_LINE && !isSourceLineAvailable
+                                    }
                                     itemRenderer={(item, itemProps) => renderStackedGroupBy(item, itemProps)}
                                     onItemSelect={(value) => setStackedGroupBy(value)}
                                 >
                                     <Button
-                                        text={capitalizeString(stackedGroupBy)}
+                                        text={STACKED_GROUP_BY_LABELS[stackedGroupBy]}
                                         endIcon={IconNames.CARET_DOWN}
                                     />
                                 </Select>
@@ -591,7 +643,9 @@ const PerformanceReport = ({
                                     updateColumnFilter(ColumnKeys.OpCode, value);
                                     recordOpCodeFilterUsed(value !== '');
                                 }}
-                                placeholder='Filter by operation name'
+                                placeholder={
+                                    isSourceLineShown ? SOURCE_LINE_FILTER_PLACEHOLDER : OP_CODE_FILTER_PLACEHOLDER
+                                }
                                 searchQuery={filters?.op_code || ''}
                             />
 
@@ -601,6 +655,7 @@ const PerformanceReport = ({
                                 placeholder='Select Op Codes...'
                                 values={activeRawOpCodeFilterList}
                                 updateHandler={handleRawOpCodeFilterChange}
+                                disabled={isSourceLineShown}
                             />
                         </ButtonGroup>
                     </FormGroup>
@@ -722,7 +777,18 @@ const PerformanceReport = ({
                         }
                         icon={IconNames.TH_LIST}
                         panel={
-                            isStackedView ? (
+                            // eslint-disable-next-line no-nested-ternary -- three panels share one tab
+                            isSourceLineShown ? (
+                                <SourceLinePerfTable
+                                    groups={filteredSourceLineGroups}
+                                    operationById={operationById}
+                                    filterQuery={sourceLineFilterQuery}
+                                    reportFolderName={activeReportFolderName}
+                                    maxCores={maxCores}
+                                    isLoading={isTableLoading || isLoadingOperations}
+                                    emptyReason={isSourceLineAvailable ? null : SOURCE_LINE_UNAVAILABLE}
+                                />
+                            ) : isStackedView ? (
                                 <StackedPerformanceTable
                                     stackedData={filteredStackedRows}
                                     filters={filters}
@@ -766,7 +832,17 @@ const PerformanceReport = ({
                                 )
                             }
                             panel={
-                                isStackedView ? (
+                                // eslint-disable-next-line no-nested-ternary -- three panels share one tab
+                                isSourceLineShown ? (
+                                    <Callout
+                                        intent={Intent.PRIMARY}
+                                        icon={IconNames.INFO_SIGN}
+                                        data-testid={TEST_IDS.PERF_SOURCE_LINE_COMPARISON_NOTICE}
+                                        compact
+                                    >
+                                        {SOURCE_LINE_COMPARISON_NOTE}
+                                    </Callout>
+                                ) : isStackedView ? (
                                     <StackedPerformanceTable
                                         stackedData={
                                             comparisonIndex > -1 ? filteredComparisonStackedRows : filteredStackedRows
@@ -862,6 +938,13 @@ const renderStackedGroupBy: RenderStackedGroupByProps<StackedGroupBy> = (
         return null;
     }
 
+    const text = (
+        <HighlightedText
+            text={STACKED_GROUP_BY_LABELS[value]}
+            filter={query}
+        />
+    );
+
     return (
         <MenuItem
             active={modifiers.active}
@@ -871,10 +954,16 @@ const renderStackedGroupBy: RenderStackedGroupByProps<StackedGroupBy> = (
             onFocus={handleFocus}
             roleStructure='listoption'
             text={
-                <HighlightedText
-                    text={capitalizeString(value)}
-                    filter={query}
-                />
+                modifiers.disabled && value === StackedGroupBy.SOURCE_LINE ? (
+                    <Tooltip
+                        content={SOURCE_LINE_UNAVAILABLE}
+                        position={PopoverPosition.RIGHT}
+                    >
+                        {text}
+                    </Tooltip>
+                ) : (
+                    text
+                )
             }
         />
     );

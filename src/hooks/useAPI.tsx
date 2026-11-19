@@ -44,6 +44,7 @@ import {
     getLinkedPerformanceReportParams,
     getPerformanceComparisonReportQueryKey,
     getPerformanceReportQueryKey,
+    toBackendStackedGroupBy,
 } from '../functions/performanceReportQueryKey';
 import { L1PressureResult } from '../model/L1Pressure';
 import { buildL1PressureResult } from '../functions/l1Pressure';
@@ -1325,7 +1326,7 @@ const useViewPerformanceReportParams = (): PerformanceReportParams => {
             hideHostOps,
             mergeDevices,
             tracingMode,
-            groupBy,
+            groupBy: toBackendStackedGroupBy(groupBy),
         }),
         [startSignpost, endSignpost, hideHostOps, mergeDevices, tracingMode, groupBy],
     );
