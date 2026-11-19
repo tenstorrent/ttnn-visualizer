@@ -13,12 +13,14 @@ import hljs from '../../functions/highlightSource';
 import {
     StackTraceFrame,
     getFrameSourceFileId,
+    isFrameSourceInReport,
     parseStackTraceFrames,
     splitStackTraceLines,
 } from '../../functions/stackTraceSource';
 import canStackTraceExpand, { STACK_TRACE_PREVIEW_LINES } from '../../functions/canStackTraceExpand';
 import SourceFileButton from './SourceFileButton';
 import StackTraceFrameSource from './StackTraceFrameSource';
+import { useReportSourceFiles } from '../../hooks/useAPI';
 import { recordDrilldownOpened } from '../../functions/surfaceEvents';
 import { DrilldownTarget } from '../../definitions/EventLogEvent';
 
@@ -78,7 +80,8 @@ function StackTrace({
     // A trace that fits in the preview has nothing more to show
     const canExpand = useMemo(() => canStackTraceExpand(stackTrace), [stackTrace]);
     // Frame links share the Source button's gate: panes that hide it show error text, not
-    // a traceback whose files the report can open.
+    // a traceback whose files the report can open. Within it, only frames whose file the
+    // report holds are linked; see `StackTraceFrameLine`.
     const showsFrameLinks = !hideSourceButton;
 
     const handleOpenFrame = useCallback((frame: StackTraceFrame) => {
@@ -126,19 +129,14 @@ function StackTrace({
                             >
                                 <span className='line-number'>{lineIndex + 1}</span>
                                 {frame && showsFrameLinks ? (
-                                    <>
-                                        <HighlightedText html={prefix} />
-                                        <button
-                                            type='button'
-                                            className='stack-trace-frame-link'
-                                            data-testid={TEST_IDS.STACK_TRACE_FRAME_LINK}
-                                            aria-label={`View source for ${frame.file} at line ${frame.line}`}
-                                            onClick={() => handleOpenFrame(frame)}
-                                        >
-                                            &quot;{frame.file}&quot;, line {frame.line}
-                                        </button>
-                                        <HighlightedText html={suffix} />
-                                    </>
+                                    <StackTraceFrameLine
+                                        frame={frame}
+                                        sourceFileId={stackTraceSourceFileId}
+                                        text={text}
+                                        prefix={prefix}
+                                        suffix={suffix}
+                                        onOpen={handleOpenFrame}
+                                    />
                                 ) : (
                                     <HighlightedText html={text} />
                                 )}
@@ -186,6 +184,44 @@ function StackTrace({
                 />
             ) : null}
         </div>
+    );
+}
+
+interface StackTraceFrameLineProps {
+    frame: StackTraceFrame;
+    sourceFileId: number | null;
+    text: string;
+    prefix: string;
+    suffix: string;
+    onOpen: (frame: StackTraceFrame) => void;
+}
+
+/**
+ * A frame's line, with its `"<file>", line <n>` linked when the report holds that file.
+ * The report's `source_files` are the only source the viewer can show, so a frame whose
+ * file is not among them stays plain text, as it does until the list has loaded.
+ */
+function StackTraceFrameLine({ frame, sourceFileId, text, prefix, suffix, onOpen }: StackTraceFrameLineProps) {
+    const { data: sourceFiles } = useReportSourceFiles();
+
+    if (!sourceFiles || !isFrameSourceInReport(frame, sourceFileId, sourceFiles)) {
+        return <HighlightedText html={text} />;
+    }
+
+    return (
+        <>
+            <HighlightedText html={prefix} />
+            <button
+                type='button'
+                className='stack-trace-frame-link'
+                data-testid={TEST_IDS.STACK_TRACE_FRAME_LINK}
+                aria-label={`View source for ${frame.file} at line ${frame.line}`}
+                onClick={() => onOpen(frame)}
+            >
+                &quot;{frame.file}&quot;, line {frame.line}
+            </button>
+            <HighlightedText html={suffix} />
+        </>
     );
 }
 

@@ -72,6 +72,20 @@ export const parseStackTraceFrames = (stackTrace: string): StackTraceFrame[] => 
 export const getFrameSourceFileId = (frame: StackTraceFrame, sourceFileId: number | null): number | null =>
     frame.index === 0 ? sourceFileId : null;
 
+/**
+ * Whether the report holds a frame's source file, by path or, for frame 0 only, by the
+ * trace's source file id. A file the report does not hold cannot be viewed.
+ */
+export const isFrameSourceInReport = (
+    frame: StackTraceFrame,
+    sourceFileId: number | null,
+    sourceFiles: { ids: ReadonlySet<number>; paths: ReadonlySet<string> },
+): boolean => {
+    const frameSourceFileId = getFrameSourceFileId(frame, sourceFileId);
+
+    return sourceFiles.paths.has(frame.file) || (frameSourceFileId != null && sourceFiles.ids.has(frameSourceFileId));
+};
+
 export const getStackTraceFilePath = (stackTrace: string): string => parseStackTraceFrames(stackTrace)[0]?.file ?? '';
 
 export const getStackTraceLineNumber = (stackTrace: string): number | null =>

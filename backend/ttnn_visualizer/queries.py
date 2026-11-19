@@ -662,6 +662,21 @@ class DatabaseQueries:
                 return rows[0][0]
         return None
 
+    def query_source_file_index(self) -> List[Tuple[int, str]]:
+        """``(id, path)`` of every ``source_files`` row a read can return.
+
+        The same rows ``get_source_file_path_if_present`` approves: a path and
+        non-empty contents, asked for without loading the contents.
+        """
+        if not self._check_table_exists("source_files"):
+            return []
+        rows = self.query_runner.execute_query(
+            "SELECT id, path FROM source_files "
+            "WHERE path IS NOT NULL AND contents IS NOT NULL AND length(contents) > 0 "
+            "ORDER BY id"
+        )
+        return [(row[0], row[1]) for row in rows]
+
     def query_error_records(
         self, filters: Optional[Dict[str, Any]] = None
     ) -> Generator[ErrorRecord, None, None]:

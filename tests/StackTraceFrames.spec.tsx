@@ -18,6 +18,7 @@ vi.mock('../src/functions/recordEvent', () => ({ default: recordEvent }));
 
 const isSourceFileAvailable = vi.fn();
 const readRemoteFile = vi.fn();
+const mockUseReportSourceFiles = vi.fn();
 
 vi.mock('../src/hooks/useRemote', () => ({
     default: () => ({
@@ -32,6 +33,7 @@ vi.mock('../src/hooks/useAPI.tsx', async (importOriginal) => {
     return {
         ...actual,
         useReportMetadata: () => ({ data: undefined }),
+        useReportSourceFiles: () => mockUseReportSourceFiles(),
     };
 });
 
@@ -47,6 +49,22 @@ const TRACE = [
     `  File "${CALLER}", line 5, in run`,
     '    self.output = self.model(',
 ].join('\n');
+
+const LIBRARY = '/venv/lib/python3.10/site-packages/_pytest/python.py';
+
+// Innermost first, as the capture writes it, so frame 1 is past the collapsed preview.
+// Frame 2 is a library file the report does not hold.
+const TRACE_WITH_LIBRARY_FRAME = [
+    TRACE,
+    `  File "${LIBRARY}", line 195, in pytest_pyfunc_call`,
+    '    result = f()',
+].join('\n');
+
+// The report holds the call site only by the trace's source file id, and its caller by
+// path, so both routes to a link are exercised.
+const reportSourceFiles = (ids: number[], paths: string[]) => ({
+    data: { ids: new Set<number>(ids), paths: new Set<string>(paths) },
+});
 
 const FILE_CONTENTS = ['line 1', 'line 2', 'line 3', 'line 4', 'line 5', 'line 6'].join('\n');
 
@@ -70,6 +88,7 @@ const highlightedLineNumber = () => document.querySelector('.highlighted-line .l
 
 beforeEach(() => {
     vi.clearAllMocks();
+    mockUseReportSourceFiles.mockReturnValue(reportSourceFiles([SOURCE_FILE_ID], [CALLER]));
     isSourceFileAvailable.mockResolvedValue({ available: true, source: StackSourceOrigin.Path });
     readRemoteFile.mockImplementation((filePath: string) =>
         Promise.resolve({ data: FILE_CONTENTS, error: null, resolvedPath: filePath }),
@@ -131,7 +150,7 @@ describe('StackTrace frame links', () => {
         await waitFor(() => expect(highlightedLineNumber()).toBe('5'));
     });
 
-    it('opens the viewer on the read error when the file is unavailable', async () => {
+    it('opens the viewer on the read error when a listed file cannot be read', async () => {
         isSourceFileAvailable.mockResolvedValue({ available: false, source: null });
         readRemoteFile.mockResolvedValue({ data: null, error: 'Source file not found', resolvedPath: null });
         renderStackTrace({ isInitiallyExpanded: true });
@@ -153,6 +172,28 @@ describe('StackTrace frame links', () => {
                 details: { drilldown_target: DrilldownTarget.SOURCE_FILE },
             }),
         );
+    });
+
+    it('links only frames whose file the report holds', () => {
+        renderStackTrace({ stackTrace: TRACE_WITH_LIBRARY_FRAME, isInitiallyExpanded: true });
+
+        expect(frameLinks().map((link) => link.textContent)).toEqual([`"${CALL_SITE}", line 3`, `"${CALLER}", line 5`]);
+        expect(screen.getByText(new RegExp(LIBRARY))).toBeInTheDocument();
+    });
+
+    it("links frame 0 by the report's source file id, but no other frame", () => {
+        mockUseReportSourceFiles.mockReturnValue(reportSourceFiles([SOURCE_FILE_ID], []));
+        renderStackTrace({ isInitiallyExpanded: true });
+
+        expect(frameLinks().map((link) => link.textContent)).toEqual([`"${CALL_SITE}", line 3`]);
+    });
+
+    it('links no frame until the report says which files it holds', () => {
+        mockUseReportSourceFiles.mockReturnValue({ data: undefined });
+        renderStackTrace({ isInitiallyExpanded: true });
+
+        expect(frameLinks()).toHaveLength(0);
+        expect(screen.getByText(new RegExp(CALLER))).toBeInTheDocument();
     });
 
     it('renders each link as a button, so Tab reaches it and Enter opens it', () => {

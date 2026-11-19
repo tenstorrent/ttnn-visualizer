@@ -8,6 +8,7 @@ import {
     getFrameSourceFileId,
     getStackTraceFilePath,
     getStackTraceLineNumber,
+    isFrameSourceInReport,
     parseStackTraceFrames,
 } from '../src/functions/stackTraceSource';
 
@@ -98,6 +99,24 @@ describe('getFrameSourceFileId', () => {
         expect(getFrameSourceFileId(callSite, 7)).toBe(7);
         expect(getFrameSourceFileId(caller, 7)).toBeNull();
         expect(getFrameSourceFileId(callSite, null)).toBeNull();
+    });
+});
+
+describe('isFrameSourceInReport', () => {
+    const [callSite, caller] = parseStackTraceFrames(MULTI_FRAME_TRACE);
+    const holding = (ids: number[], paths: string[]) => ({ ids: new Set(ids), paths: new Set(paths) });
+
+    it('holds a frame whose path the report lists', () => {
+        expect(isFrameSourceInReport(caller, null, holding([], ['/m/tests/infra.py']))).toBe(true);
+    });
+
+    it("holds frame 0 by the trace's source file id, and no other frame by it", () => {
+        expect(isFrameSourceInReport(callSite, 7, holding([7], []))).toBe(true);
+        expect(isFrameSourceInReport(caller, 7, holding([7], []))).toBe(false);
+    });
+
+    it('does not hold a frame by an id the report does not list', () => {
+        expect(isFrameSourceInReport(callSite, 7, holding([8], []))).toBe(false);
     });
 });
 

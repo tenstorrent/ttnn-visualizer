@@ -1030,6 +1030,41 @@ export const useReportMetadata = () => {
     });
 };
 
+interface SourceFileResponse {
+    id: number;
+    path: string;
+}
+
+export interface ReportSourceFiles {
+    ids: Set<number>;
+    paths: Set<string>;
+}
+
+export const fetchReportSourceFiles = async (): Promise<ReportSourceFiles> => {
+    const { data } = await axiosInstance.get<SourceFileResponse[]>(Endpoints.SOURCE_FILES);
+
+    return {
+        ids: new Set<number>(data.map(({ id }) => id)),
+        paths: new Set<string>(data.map(({ path }) => path)),
+    };
+};
+
+/**
+ * The source files the memory report holds. A stack trace frame's source can be viewed
+ * only when its file is one of them, so frames link only to these.
+ */
+export const useReportSourceFiles = () => {
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+
+    return useQuery<ReportSourceFiles, AxiosError>({
+        queryKey: ['get-report-source-files', activeProfilerReport?.path],
+        queryFn: fetchReportSourceFiles,
+        enabled: activeProfilerReport !== null,
+        retry: false,
+        staleTime: Infinity,
+    });
+};
+
 const REPORT_FINGERPRINTS_QUERY_KEY = 'fetch-report-fingerprints';
 
 /**
