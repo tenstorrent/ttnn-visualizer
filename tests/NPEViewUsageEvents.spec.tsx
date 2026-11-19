@@ -316,6 +316,18 @@ describe('NPEView usage events', () => {
         expect(recordEvent).toHaveBeenCalledExactlyOnceWith(modeChanged(NpeMode.LOCAL_EVENTS));
     });
 
+    it('enables the event filter for a windowed trace with fabric events when the first window has none', () => {
+        renderView([], true);
+
+        expect(screen.getByLabelText('Fabric events')).toBeEnabled();
+        expect(screen.getByLabelText('Local events')).toBeEnabled();
+
+        fireEvent.click(screen.getByLabelText('Fabric events'));
+
+        expect(screen.getByLabelText('Local events')).toBeChecked();
+        expect(recordEvent).toHaveBeenCalledExactlyOnceWith(modeChanged(NpeMode.LOCAL_EVENTS));
+    });
+
     it('disables the event filter for a windowed trace without fabric events even when a window has one', () => {
         renderView([FABRIC_TRANSFER], false);
 

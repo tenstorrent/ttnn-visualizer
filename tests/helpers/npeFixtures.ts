@@ -16,6 +16,7 @@ export const summary: NpeSummary = {
     common_info: { version: '1.0.0' } as CommonInfo,
     chips: {},
     zones: [],
+    has_fabric_events: false,
     n_timesteps: 3,
     timesteps: {
         start_cycle: [0, 10, 20],

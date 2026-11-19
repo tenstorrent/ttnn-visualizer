@@ -194,6 +194,19 @@ def test_summary_reports_fabric_events_when_any_transfer_is_fabric(tmp_path):
     assert summary["has_fabric_events"] is True
 
 
+def test_summary_reports_fabric_events_from_a_transfer_with_no_id(tmp_path):
+    # The build skips a transfer with no id, but the whole-file path still sees
+    # it, so the flag must be decided before that skip.
+    obj = _make_npe_object(n_transfers=3)
+    obj["noc_transfers"][-1]["fabric_event_type"] = True
+    del obj["noc_transfers"][-1]["id"]
+    npe_path = _write_npe(tmp_path, obj)
+
+    summary = read_summary(ensure_index(npe_path))
+
+    assert summary["has_fabric_events"] is True
+
+
 def test_summary_reports_no_fabric_events_when_none_are_fabric(tmp_path):
     obj = _make_npe_object(n_transfers=3)
     obj["noc_transfers"][0]["fabric_event_type"] = False

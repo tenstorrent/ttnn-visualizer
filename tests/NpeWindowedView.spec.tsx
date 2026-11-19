@@ -110,20 +110,25 @@ describe('NpeWindowedView', () => {
 
     // #2356: the window holds no fabric transfers, but the whole trace does, so the
     // view must be told so rather than decide from the window.
-    it("passes the whole trace's fabric-event flag to the view, not the window's", () => {
-        mockedSummary.mockReturnValue({
-            data: { ...summary, has_fabric_events: true },
-            isLoading: false,
-            isError: false,
-            error: null,
-        } as SummaryHook);
-        mockedWindow.mockReturnValue({ data: npeWindow, isError: false, error: null } as WindowHook);
+    it.each([true, false])(
+        "passes the whole trace's fabric-event flag (%s) to the view, not the window's",
+        (hasFabricEvents) => {
+            mockedSummary.mockReturnValue({
+                data: { ...summary, has_fabric_events: hasFabricEvents },
+                isLoading: false,
+                isError: false,
+                error: null,
+            } as SummaryHook);
+            mockedWindow.mockReturnValue({ data: npeWindow, isError: false, error: null } as WindowHook);
 
-        render(windowedView());
+            render(windowedView());
 
-        expect(npeWindow.transfers).toEqual([]);
-        expect(screen.getByTestId(TEST_IDS.NPE_VIEW).getAttribute('data-has-fabric-events')).toBe('true');
-    });
+            expect(npeWindow.transfers).toEqual([]);
+            expect(screen.getByTestId(TEST_IDS.NPE_VIEW).getAttribute('data-has-fabric-events')).toBe(
+                String(hasFabricEvents),
+            );
+        },
+    );
 
     it('reports one successful initial load for the active attempt', async () => {
         mockedSummary.mockReturnValue({

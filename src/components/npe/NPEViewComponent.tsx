@@ -200,6 +200,8 @@ const NPEView = ({
         return npeData.zones || NO_ZONES;
     }, [npeData]);
 
+    // Truthy `fabric_event_type`, the same rule npe_index._write_index applies when
+    // it records has_fabric_events for the windowed path.
     const isFabricTransfersFilteringEnabled = useMemo(
         () => hasFabricEvents ?? npeData.noc_transfers.some((tr) => tr.fabric_event_type),
         [hasFabricEvents, npeData],
