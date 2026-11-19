@@ -79,17 +79,16 @@ so everything numeric goes through `cells.finite_number` rather than being compa
 directly; it also drops a NaN or an infinity, which would reach the client as invalid JSON.
 
 **The call-site parse has a second implementation.** `parse_frames` must agree with
-`src/functions/stackTraceSource.ts`, which takes the first `File "..."` and the first
-`line N` for the operation details panel — two answers to "where is this op from" that
-disagreed would be worse than one. `TestFrameParity` pins where they agree and, for the
-inputs where the frontend's looser regexes answer differently, which answer this side
-gives. They diverge only on a quote inside the path or the function name, which
-CPython does not write for ordinary code; on 15,374 real traces there is no difference.
+`parseStackTraceFrames` in `src/functions/stackTraceSource.ts`, which links each frame on
+the operation details panel and opens frame 0, the call site, from its Source button —
+two answers to "where is this op from" that disagreed would be worse than one. Both match
+one anchored pattern per line, so a frame's file and line always come from the same line,
+and a path with a quote in it is no frame on either side. The frontend splits lines on
+CRLF, CR and LF, where `splitlines()` also splits on a few rarer separators.
+`TestFrameParity` transcribes the frontend pattern and pins that both read the same frames.
 
-The frontend takes its file and its line number from two *separate* regexes over the
-whole trace, so they need not come from the same frame, and it has a second input
-(`stack_trace_source_file_id`) that has no equivalent here. Backend-owned parsing,
-exposed to the frontend so those regexes can go, is the real fix — see #2013.
+The frontend has a second input, `stack_trace_source_file_id`, with no equivalent here.
+It is one id per trace and is taken to be frame 0's, so only frame 0 sends it.
 
 **Two size units share one response.** `buffers.max_size_per_bank` is per bank and
 `tensors.size` is a whole-tensor byte count, so `operations.py` labels both rather than

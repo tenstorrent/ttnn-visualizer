@@ -10,6 +10,7 @@ import StackTrace from '../src/components/operation-details/StackTrace';
 import { DrilldownTarget, EventLogEvent } from '../src/definitions/EventLogEvent';
 import { StackSourceOrigin, StackTraceLanguage } from '../src/definitions/StackTrace';
 import { TEST_IDS } from '../src/definitions/TestIds';
+import { ReportSourceFiles } from '../src/model/APIData';
 import { TestProviders } from './helpers/TestProviders';
 
 const { recordEvent } = vi.hoisted(() => ({ recordEvent: vi.fn() }));
@@ -60,9 +61,7 @@ const TRACE_WITH_LIBRARY_FRAME = [
     '    result = f()',
 ].join('\n');
 
-// The report holds the call site only by the trace's source file id, and its caller by
-// path, so both routes to a link are exercised.
-const reportSourceFiles = (ids: number[], paths: string[]) => ({
+const reportSourceFiles = (ids: number[], paths: string[]): { data: ReportSourceFiles } => ({
     data: { ids: new Set<number>(ids), paths: new Set<string>(paths) },
 });
 
@@ -82,12 +81,16 @@ const renderStackTrace = (props: Partial<ComponentProps<typeof StackTrace>> = {}
 const frameLinks = () => screen.queryAllByTestId(TEST_IDS.STACK_TRACE_FRAME_LINK);
 
 const openFrame = (file: string, line: number) =>
-    fireEvent.click(screen.getByRole('button', { name: `View source for ${file} at line ${line}` }));
+    fireEvent.click(screen.getByRole('button', { name: `"${file}", line ${line}: view source` }));
+
+const closeViewer = () => fireEvent.click(screen.getByRole('button', { name: 'Close' }));
 
 const highlightedLineNumber = () => document.querySelector('.highlighted-line .line-number')?.textContent;
 
 beforeEach(() => {
     vi.clearAllMocks();
+    // The report holds the call site only by the trace's source file id, and its caller by
+    // path, so both routes to a link are exercised.
     mockUseReportSourceFiles.mockReturnValue(reportSourceFiles([SOURCE_FILE_ID], [CALLER]));
     isSourceFileAvailable.mockResolvedValue({ available: true, source: StackSourceOrigin.Path });
     readRemoteFile.mockImplementation((filePath: string) =>
@@ -123,8 +126,9 @@ describe('StackTrace frame links', () => {
         openFrame(CALLER, 5);
 
         expect(await screen.findByText(CALLER)).toBeInTheDocument();
-        expect(isSourceFileAvailable).toHaveBeenCalledWith(CALLER, expect.any(AbortSignal), null);
         expect(readRemoteFile).toHaveBeenCalledWith(CALLER, null);
+        // Linked only because the report lists it, so it is read without an availability probe.
+        expect(isSourceFileAvailable).not.toHaveBeenCalledWith(CALLER, expect.anything(), expect.anything());
     });
 
     it("opens frame 0 with the report's source file id, the location the Source button opens", async () => {
@@ -137,9 +141,8 @@ describe('StackTrace frame links', () => {
         openFrame(CALL_SITE, 3);
 
         expect(await screen.findByText(CALL_SITE)).toBeInTheDocument();
-        expect(isSourceFileAvailable).toHaveBeenCalledWith(sourceButtonPath, expect.any(AbortSignal), sourceButtonId);
         expect([sourceButtonPath, sourceButtonId]).toEqual([CALL_SITE, SOURCE_FILE_ID]);
-        expect(readRemoteFile).toHaveBeenCalledWith(CALL_SITE, SOURCE_FILE_ID);
+        expect(readRemoteFile).toHaveBeenCalledWith(sourceButtonPath, sourceButtonId);
     });
 
     it("highlights the clicked frame's line in the source viewer", async () => {
@@ -151,7 +154,6 @@ describe('StackTrace frame links', () => {
     });
 
     it('opens the viewer on the read error when a listed file cannot be read', async () => {
-        isSourceFileAvailable.mockResolvedValue({ available: false, source: null });
         readRemoteFile.mockResolvedValue({ data: null, error: 'Source file not found', resolvedPath: null });
         renderStackTrace({ isInitiallyExpanded: true });
 
@@ -178,7 +180,7 @@ describe('StackTrace frame links', () => {
         renderStackTrace({ stackTrace: TRACE_WITH_LIBRARY_FRAME, isInitiallyExpanded: true });
 
         expect(frameLinks().map((link) => link.textContent)).toEqual([`"${CALL_SITE}", line 3`, `"${CALLER}", line 5`]);
-        expect(screen.getByText(new RegExp(LIBRARY))).toBeInTheDocument();
+        expect(screen.getByText(LIBRARY, { exact: false })).toBeInTheDocument();
     });
 
     it("links frame 0 by the report's source file id, but no other frame", () => {
@@ -193,21 +195,89 @@ describe('StackTrace frame links', () => {
         renderStackTrace({ isInitiallyExpanded: true });
 
         expect(frameLinks()).toHaveLength(0);
-        expect(screen.getByText(new RegExp(CALLER))).toBeInTheDocument();
+        expect(screen.getByText(CALLER, { exact: false })).toBeInTheDocument();
     });
 
-    it('renders each link as a button, so Tab reaches it and Enter opens it', () => {
+    it('renders each link as a focusable button named by the text it shows', () => {
         renderStackTrace();
+        const link = screen.getByRole('button', { name: `"${CALL_SITE}", line 3: view source` });
 
-        expect(frameLinks()[0].tagName).toBe('BUTTON');
-        expect(frameLinks()[0]).toHaveAttribute('type', 'button');
+        link.focus();
+
+        expect(link).toHaveFocus();
+        expect(link).toHaveAttribute('type', 'button');
+        expect(link.textContent).toBe(`"${CALL_SITE}", line 3`);
+    });
+
+    it('reopens a frame from its first read', async () => {
+        renderStackTrace({ isInitiallyExpanded: true });
+
+        openFrame(CALLER, 5);
+        expect(await screen.findByText(CALLER)).toBeInTheDocument();
+        closeViewer();
+        openFrame(CALLER, 5);
+
+        await waitFor(() => expect(highlightedLineNumber()).toBe('5'));
+        expect(readRemoteFile).toHaveBeenCalledTimes(1);
+    });
+
+    it('reads the newly clicked frame after another was opened', async () => {
+        renderStackTrace({ isInitiallyExpanded: true });
+
+        openFrame(CALLER, 5);
+        expect(await screen.findByText(CALLER)).toBeInTheDocument();
+        closeViewer();
+        openFrame(CALL_SITE, 3);
+
+        await waitFor(() => expect(readRemoteFile).toHaveBeenLastCalledWith(CALL_SITE, SOURCE_FILE_ID));
+        await waitFor(() => expect(highlightedLineNumber()).toBe('3'));
+    });
+
+    it('forgets an opened frame when the trace it was opened in is replaced', async () => {
+        const nextSourceFileId = SOURCE_FILE_ID + 1;
+        mockUseReportSourceFiles.mockReturnValue(reportSourceFiles([SOURCE_FILE_ID, nextSourceFileId], [CALLER]));
+        const { rerender } = renderStackTrace();
+
+        openFrame(CALL_SITE, 3);
+        expect(await screen.findByText(CALL_SITE)).toBeInTheDocument();
+        closeViewer();
+        readRemoteFile.mockClear();
+
+        // Another operation called from the same line, as the details page swaps it in
+        // without remounting: same frame, another source file id.
+        rerender(
+            <StackTrace
+                stackTrace={TRACE}
+                stackTraceSourceFileId={nextSourceFileId}
+                language={StackTraceLanguage.PYTHON}
+            />,
+        );
+
+        expect(readRemoteFile).not.toHaveBeenCalled();
+
+        openFrame(CALL_SITE, 3);
+
+        await waitFor(() => expect(readRemoteFile).toHaveBeenCalledWith(CALL_SITE, nextSourceFileId));
+        await waitFor(() => expect(highlightedLineNumber()).toBe('3'));
+    });
+
+    it('escapes markup in the trace, on plain lines and either side of a link', () => {
+        renderStackTrace({
+            stackTrace: `  File "${CALLER}", line 5, in <img src=x>\n<b>boom</b>`,
+            isInitiallyExpanded: true,
+        });
+
+        expect(frameLinks()).toHaveLength(1);
+        expect(document.querySelector('code img')).toBeNull();
+        expect(document.querySelector('code b')).toBeNull();
+        expect(screen.getByText('<b>boom</b>', { exact: false })).toBeInTheDocument();
     });
 
     it('links nothing where the Source button is hidden', () => {
         renderStackTrace({ hideSourceButton: true, isInitiallyExpanded: true });
 
         expect(frameLinks()).toHaveLength(0);
-        expect(screen.getByText(new RegExp(CALLER))).toBeInTheDocument();
+        expect(screen.getByText(CALLER, { exact: false })).toBeInTheDocument();
     });
 
     it('links nothing in a trace with no frames', () => {

@@ -55,28 +55,21 @@ function StackTrace({
     recordsExpansion = false,
 }: StackTraceProps) {
     const [isExpanded, setIsExpanded] = useState(isInitiallyExpanded || false);
-    const [activeFrame, setActiveFrame] = useState<StackTraceFrame | null>(null);
-    const [isFrameSourceOpen, setIsFrameSourceOpen] = useState(false);
+    const [openedFrame, setOpenedFrame] = useState<OpenedFrame | null>(null);
     const scrollElementRef = useRef<null | HTMLPreElement>(null);
+
+    // The component outlives its trace: the operation details page swaps in another
+    // operation's trace without remounting it. A frame opened in the old trace is forgotten
+    // then, or its source would be read again for a trace nobody clicked in, and frame 0's
+    // old path sent with the new trace's source file id.
+    if (openedFrame && (openedFrame.stackTrace !== stackTrace || openedFrame.sourceFileId !== stackTraceSourceFileId)) {
+        setOpenedFrame(null);
+    }
 
     const frames = useMemo(() => parseStackTraceFrames(stackTrace), [stackTrace]);
     // The Source button opens frame 0, the call site, through the same parse as its link.
     const callSite = frames[0] ?? null;
-
-    const highlightedLines = useMemo(() => {
-        const framesByLine = new Map<number, StackTraceFrame>(frames.map((frame) => [frame.lineIndex, frame]));
-        const highlight = (text: string) => hljs.highlight(text, { language }).value;
-
-        return splitStackTraceLines(stackTrace).map((text, lineIndex): HighlightedLine => {
-            const frame = framesByLine.get(lineIndex) ?? null;
-
-            return frame
-                ? { frame, text: highlight(text), prefix: highlight(frame.prefix), suffix: highlight(frame.suffix) }
-                : { frame, text: highlight(text), prefix: '', suffix: '' };
-        });
-    }, [stackTrace, frames, language]);
-
-    const visibleLines = isExpanded ? highlightedLines : highlightedLines.slice(0, STACK_TRACE_PREVIEW_LINES);
+    const lines = useMemo(() => splitStackTraceLines(stackTrace), [stackTrace]);
     // A trace that fits in the preview has nothing more to show
     const canExpand = useMemo(() => canStackTraceExpand(stackTrace), [stackTrace]);
     // Frame links share the Source button's gate: panes that hide it show error text, not
@@ -84,12 +77,35 @@ function StackTrace({
     // report holds are linked; see `StackTraceFrameLine`.
     const showsFrameLinks = !hideSourceButton;
 
-    const handleOpenFrame = useCallback((frame: StackTraceFrame) => {
-        setActiveFrame(frame);
-        setIsFrameSourceOpen(true);
-    }, []);
+    // Only the lines on screen are highlighted, one hljs call each, so a long collapsed
+    // trace costs its preview. The text either side of a frame's link is highlighted only
+    // where links can show.
+    const visibleLines = useMemo(() => {
+        const framesByLine = new Map<number, StackTraceFrame>(frames.map((frame) => [frame.lineIndex, frame]));
+        const highlight = (text: string) => hljs.highlight(text, { language }).value;
+        const shownLines = isExpanded ? lines : lines.slice(0, STACK_TRACE_PREVIEW_LINES);
 
-    const handleCloseFrameSource = useCallback(() => setIsFrameSourceOpen(false), []);
+        return shownLines.map((text, lineIndex): HighlightedLine => {
+            const frame = framesByLine.get(lineIndex) ?? null;
+
+            return frame && showsFrameLinks
+                ? { frame, text: highlight(text), prefix: highlight(frame.prefix), suffix: highlight(frame.suffix) }
+                : { frame: null, text: highlight(text), prefix: '', suffix: '' };
+        });
+    }, [lines, frames, language, isExpanded, showsFrameLinks]);
+
+    const activeFrame = openedFrame?.frame ?? null;
+
+    const handleOpenFrame = useCallback(
+        (frame: StackTraceFrame) =>
+            setOpenedFrame({ frame, stackTrace, sourceFileId: stackTraceSourceFileId, isOpen: true }),
+        [stackTrace, stackTraceSourceFileId],
+    );
+
+    const handleCloseFrameSource = useCallback(
+        () => setOpenedFrame((opened) => (opened ? { ...opened, isOpen: false } : null)),
+        [],
+    );
 
     const handleToggleStackTrace = () => {
         setIsExpanded(!isExpanded);
@@ -128,7 +144,7 @@ function StackTrace({
                                 className='ttnn-line'
                             >
                                 <span className='line-number'>{lineIndex + 1}</span>
-                                {frame && showsFrameLinks ? (
+                                {frame ? (
                                     <StackTraceFrameLine
                                         frame={frame}
                                         sourceFileId={stackTraceSourceFileId}
@@ -173,13 +189,13 @@ function StackTrace({
 
             {activeFrame && showsFrameLinks ? (
                 <StackTraceFrameSource
-                    // A new frame, or the same position in another trace, reads its own file.
-                    key={`${activeFrame.index}:${activeFrame.file}:${activeFrame.line}:${stackTraceSourceFileId}`}
+                    // Another frame reads its own file; reopening this one reuses its read.
+                    key={`${activeFrame.index}:${activeFrame.file}:${activeFrame.line}`}
                     filePath={activeFrame.file}
                     sourceFileId={getFrameSourceFileId(activeFrame, stackTraceSourceFileId)}
                     lineNumber={activeFrame.line}
                     language={language}
-                    isOpen={isFrameSourceOpen}
+                    isOpen={openedFrame?.isOpen ?? false}
                     onClose={handleCloseFrameSource}
                 />
             ) : null}
@@ -215,7 +231,8 @@ function StackTraceFrameLine({ frame, sourceFileId, text, prefix, suffix, onOpen
                 type='button'
                 className='stack-trace-frame-link'
                 data-testid={TEST_IDS.STACK_TRACE_FRAME_LINK}
-                aria-label={`View source for ${frame.file} at line ${frame.line}`}
+                // Starts with the visible text, so voice control can name it by what it shows.
+                aria-label={`"${frame.file}", line ${frame.line}: view source`}
                 onClick={() => onOpen(frame)}
             >
                 &quot;{frame.file}&quot;, line {frame.line}
@@ -223,6 +240,14 @@ function StackTraceFrameLine({ frame, sourceFileId, text, prefix, suffix, onOpen
             <HighlightedText html={suffix} />
         </>
     );
+}
+
+interface OpenedFrame {
+    frame: StackTraceFrame;
+    // The trace and source file id it was opened in, to forget it when either changes.
+    stackTrace: string;
+    sourceFileId: number | null;
+    isOpen: boolean;
 }
 
 interface HighlightedLine {

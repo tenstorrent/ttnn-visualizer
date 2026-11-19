@@ -20,8 +20,8 @@ interface StackTraceFrameSourceProps {
 
 /**
  * The source viewer for one stack trace frame. Mounted on the frame's first click, keyed by
- * frame, so a trace never probes a frame nobody opened: on a remote report every probe is an
- * SSH round trip.
+ * frame, so a trace never reads a frame nobody opened, and reopening the same frame reuses
+ * its read.
  */
 function StackTraceFrameSource({
     filePath,
@@ -32,7 +32,7 @@ function StackTraceFrameSource({
     onClose,
 }: StackTraceFrameSourceProps) {
     const [hasRead, setHasRead] = useState(false);
-    const { matchedViaRemap, fileContents, errorDetails, resolvedPath, probe, readSource } = useSourceFile(
+    const { matchedViaRemap, fileContents, errorDetails, resolvedPath, readSource } = useSourceFile(
         filePath,
         sourceFileId,
     );
@@ -41,9 +41,9 @@ function StackTraceFrameSource({
         let isCurrent = true;
 
         (async () => {
-            await probe();
-            // Read even when the probe says the file is unavailable: the read's error says
-            // why, where skipping it would leave the click doing nothing.
+            // No availability probe first: a frame is linked only when the report lists its
+            // file, so a probe could only agree. A read that still fails opens the viewer on
+            // its error, where skipping it would leave the click doing nothing.
             await readSource();
 
             if (isCurrent) {

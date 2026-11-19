@@ -23,6 +23,8 @@ import {
     OperationDetailsData,
     ReportError,
     ReportMetadataResponse,
+    ReportSourceFiles,
+    SourceFileResponse,
     Tensor,
     defaultBuffer,
     defaultOperation,
@@ -1029,16 +1031,6 @@ export const useReportMetadata = () => {
         staleTime: Infinity,
     });
 };
-
-interface SourceFileResponse {
-    id: number;
-    path: string;
-}
-
-export interface ReportSourceFiles {
-    ids: Set<number>;
-    paths: Set<string>;
-}
 
 export const fetchReportSourceFiles = async (): Promise<ReportSourceFiles> => {
     const { data } = await axiosInstance.get<SourceFileResponse[]>(Endpoints.SOURCE_FILES);

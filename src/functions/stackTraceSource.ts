@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { Operation } from '../model/APIData';
+import { Operation, ReportSourceFiles } from '../model/APIData';
 
 // One frame of a Python traceback, the same shape as `_TRACE_FRAME` in
 // `backend/ttnn_visualizer/agent/operations.py` so the operation details panel and the MCP
@@ -79,7 +79,7 @@ export const getFrameSourceFileId = (frame: StackTraceFrame, sourceFileId: numbe
 export const isFrameSourceInReport = (
     frame: StackTraceFrame,
     sourceFileId: number | null,
-    sourceFiles: { ids: ReadonlySet<number>; paths: ReadonlySet<string> },
+    sourceFiles: ReportSourceFiles,
 ): boolean => {
     const frameSourceFileId = getFrameSourceFileId(frame, sourceFileId);
 

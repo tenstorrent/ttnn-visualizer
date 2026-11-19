@@ -37,3 +37,15 @@ def test_a_report_without_the_table_has_no_source_files(client, make_report):
     instance_id = make_report(schema_sql=SCHEMA_V2, inserts_sql="")
 
     assert _source_files(client, instance_id) == []
+
+
+def test_it_is_served_in_server_mode(app, client, make_report):
+    """Hosted users open source the same way, through the report's own files. Gating
+    this route `@local_only` would silently drop every stack trace frame link there."""
+    app.config["SERVER_MODE"] = True
+    instance_id = make_report(
+        schema_sql=SCHEMA_V2_1,
+        inserts_sql="INSERT INTO source_files VALUES (1, '/proj/model.py', 'x = 1');",
+    )
+
+    assert _source_files(client, instance_id) == [{"id": 1, "path": "/proj/model.py"}]
