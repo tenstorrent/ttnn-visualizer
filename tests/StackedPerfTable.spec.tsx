@@ -17,9 +17,9 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
     usePerfMeta: vi.fn(),
 }));
 
-const stackedRow = (opCode: string): TypedStackedPerfRow =>
+const stackedRow = (opCode: string, percent: number | null = 100): TypedStackedPerfRow =>
     ({
-        [StackedColumnKeys.Percent]: 100,
+        [StackedColumnKeys.Percent]: percent,
         [StackedColumnKeys.OpCode]: opCode,
         [StackedColumnKeys.Device]: 0,
         [StackedColumnKeys.DeviceTimeSumUs]: 1,
@@ -85,5 +85,19 @@ describe('StackedPerformanceTable layout', () => {
         const region = screen.getByRole('region', { name: 'Performance table' });
         expect(region).toHaveClass('perf-table-scroll');
         expect(within(region).getByRole('table').querySelector('thead')).toHaveClass('table-header');
+    });
+});
+
+describe('StackedPerformanceTable footer', () => {
+    const getTotalPercent = () => document.querySelector('tfoot td')?.textContent;
+
+    it.each([
+        ['every row', [stackedRow('Matmul', 75), stackedRow('Conv2d', 25)], '100%'],
+        ['only the rows a filter leaves', [stackedRow('Conv2d', 25)], '25%'],
+        ['rows with no percentage', [stackedRow('Matmul', null)], '0%'],
+    ])('totals Total %% over %s', (_, stackedData, expected) => {
+        renderStacked({ stackedData });
+
+        expect(getTotalPercent()).toBe(expected);
     });
 });

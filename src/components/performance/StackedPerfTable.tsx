@@ -17,7 +17,7 @@ import 'styles/components/PerfReport.scss';
 import useSortTable from '../../hooks/useSortTable';
 import { useGetNPEManifest } from '../../hooks/useAPI';
 import { formatStackedCell } from '../../functions/stackedPerfFunctions';
-import { formatSize } from '../../functions/math';
+import { formatPercentage, formatSize } from '../../functions/math';
 import PerfDeviceArchitecture from './PerfDeviceArchitecture';
 import PerfTableFrame from './PerfTableFrame';
 import PerfTableSkeleton from './PerfTableSkeleton';
@@ -25,6 +25,9 @@ import SortableHeaderLabel from './SortableHeaderLabel';
 import { PATTERN_COUNT } from '../../definitions/Performance';
 import { mergeDevicesAtom } from '../../store/app';
 import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
+
+// The footer's total is formatted as the Total % cells above it are.
+const PERCENT_DECIMALS = stackedTableColumns.find((column) => column.key === StackedColumnKeys.Percent)?.decimals;
 
 interface StackedPerformanceTableProps {
     stackedData: TypedStackedPerfRow[];
@@ -189,16 +192,20 @@ const StackedPerformanceTable = ({
 
 const computeFooterTotals = (data: TypedStackedPerfRow[]): Partial<Record<StackedColumnKeys, string>> => {
     const rows = data ?? [];
+    let percentSum = 0;
     let deviceTimeSum = 0;
     let opsCountSum = 0;
 
     for (const row of rows) {
+        percentSum += row[StackedColumnKeys.Percent] || 0;
         deviceTimeSum += row[StackedColumnKeys.DeviceTimeSumUs] || 0;
         opsCountSum += row[StackedColumnKeys.OpsCount] || 0;
     }
 
     return {
-        [StackedColumnKeys.Percent]: '100%',
+        // Each row's percentage is a share of the whole report, so under a filter the visible rows
+        // sum to less than 100; summing them keeps the footer about the rows it sits under.
+        [StackedColumnKeys.Percent]: formatPercentage(percentSum, PERCENT_DECIMALS),
         [StackedColumnKeys.DeviceTimeSumUs]: `${formatSize(deviceTimeSum, 2)} µs`,
         [StackedColumnKeys.OpCode]: `${rows.length} op types`,
         [StackedColumnKeys.OpsCount]: `${opsCountSum}`,
