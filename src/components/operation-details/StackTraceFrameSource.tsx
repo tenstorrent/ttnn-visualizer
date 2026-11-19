@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { DrilldownTarget } from '../../definitions/EventLogEvent';
 import { StackTraceLanguage } from '../../definitions/StackTrace';
 import { recordDrilldownOpened } from '../../functions/surfaceEvents';
@@ -15,13 +15,15 @@ interface StackTraceFrameSourceProps {
     lineNumber: number;
     language: StackTraceLanguage;
     isOpen: boolean;
-    onClose: () => void;
+    // Says whether the read failed, so the parent can drop this viewer and read afresh on
+    // the next click rather than reopen on a stale error.
+    onClose: (readFailed: boolean) => void;
 }
 
 /**
  * The source viewer for one stack trace frame. Mounted on the frame's first click, keyed by
  * frame, so a trace never reads a frame nobody opened, and reopening the same frame reuses
- * its read.
+ * a successful read.
  */
 function StackTraceFrameSource({
     filePath,
@@ -60,6 +62,7 @@ function StackTraceFrameSource({
     }, []);
 
     const isVisible = isOpen && hasRead;
+    const handleClose = useCallback(() => onClose(!!errorDetails), [onClose, errorDetails]);
 
     useEffect(() => {
         if (isVisible) {
@@ -70,7 +73,7 @@ function StackTraceFrameSource({
     return hasRead ? (
         <SourceFileOverlay
             isOpen={isVisible}
-            onClose={onClose}
+            onClose={handleClose}
             language={language}
             lineNumber={lineNumber}
             fileContents={fileContents}

@@ -221,6 +221,20 @@ describe('StackTrace frame links', () => {
         expect(readRemoteFile).toHaveBeenCalledTimes(1);
     });
 
+    it('reads a frame again on reopening it after its read failed', async () => {
+        readRemoteFile.mockResolvedValueOnce({ data: null, error: 'Connection reset', resolvedPath: null });
+        renderStackTrace({ isInitiallyExpanded: true });
+
+        openFrame(CALLER, 5);
+        expect(await screen.findByText('Connection reset')).toBeInTheDocument();
+        closeViewer();
+        openFrame(CALLER, 5);
+
+        await waitFor(() => expect(highlightedLineNumber()).toBe('5'));
+        expect(readRemoteFile).toHaveBeenCalledTimes(2);
+        expect(screen.queryByText('Connection reset')).not.toBeInTheDocument();
+    });
+
     it('reads the newly clicked frame after another was opened', async () => {
         renderStackTrace({ isInitiallyExpanded: true });
 

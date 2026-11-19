@@ -102,8 +102,11 @@ function StackTrace({
         [stackTrace, stackTraceSourceFileId],
     );
 
+    // A successful read is kept for reopening the frame. A failed one is dropped, so the next
+    // click reads again: the failure may have been transient.
     const handleCloseFrameSource = useCallback(
-        () => setOpenedFrame((opened) => (opened ? { ...opened, isOpen: false } : null)),
+        (readFailed: boolean) =>
+            setOpenedFrame((opened) => (opened && !readFailed ? { ...opened, isOpen: false } : null)),
         [],
     );
 
