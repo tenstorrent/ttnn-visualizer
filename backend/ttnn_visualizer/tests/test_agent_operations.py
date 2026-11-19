@@ -1683,7 +1683,11 @@ class TestFrameParity:
 
     # `TRACE_FRAME_REGEX`, transcribed: JavaScript's `$` without the `m` flag is
     # Python's `\Z`, and the frontend splits lines on CRLF, CR and LF before matching.
-    _TS_FRAME = re.compile(r'^([ \t]*File )"([^"]*)", line (\d+)(, in .*)\Z')
+    # `re.ASCII` because JavaScript's `\d` matches only ASCII digits, and the class in
+    # place of `.` because JavaScript's `.` also stops at U+2028 and U+2029.
+    _TS_FRAME = re.compile(
+        r'^([ \t]*File )"([^"]*)", line (\d+)(, in [^\r\n\u2028\u2029]*)\Z', re.ASCII
+    )
     _TS_LINE_BREAK = re.compile(r"\r\n|\r|\n")
 
     def _frontend(self, trace: str):

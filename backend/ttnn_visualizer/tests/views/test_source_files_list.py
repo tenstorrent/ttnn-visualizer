@@ -39,10 +39,11 @@ def test_a_report_without_the_table_has_no_source_files(client, make_report):
     assert _source_files(client, instance_id) == []
 
 
-def test_it_is_served_in_server_mode(app, client, make_report):
-    """Hosted users open source the same way, through the report's own files. Gating
-    this route `@local_only` would silently drop every stack trace frame link there."""
-    app.config["SERVER_MODE"] = True
+def test_it_is_served_outside_server_mode_too(app, client, make_report):
+    """The shared test settings run hosted, so the tests above already pin that this
+    route answers under ``SERVER_MODE``; gating it ``@local_only`` would drop every
+    stack trace frame link there. Frames link the same way on a local install."""
+    app.config["SERVER_MODE"] = False
     instance_id = make_report(
         schema_sql=SCHEMA_V2_1,
         inserts_sql="INSERT INTO source_files VALUES (1, '/proj/model.py', 'x = 1');",

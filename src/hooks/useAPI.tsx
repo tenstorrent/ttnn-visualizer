@@ -1042,8 +1042,8 @@ export const fetchReportSourceFiles = async (): Promise<ReportSourceFiles> => {
 };
 
 /**
- * The source files the memory report holds. A stack trace frame's source can be viewed
- * only when its file is one of them, so frames link only to these.
+ * The source files the memory report holds. Stack trace frames link only to these, which
+ * the viewer can read in either mode without probing each frame.
  */
 export const useReportSourceFiles = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);

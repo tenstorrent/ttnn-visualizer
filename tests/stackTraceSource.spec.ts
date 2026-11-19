@@ -78,6 +78,10 @@ describe('parseStackTraceFrames', () => {
         ]);
     });
 
+    it('reads no frame from a line that only quotes one', () => {
+        expect(parseStackTraceFrames(`    raise ValueError('File "/a.py", line 3, in f')`)).toEqual([]);
+    });
+
     it('reads nothing from a trace that is not a Python traceback', () => {
         expect(parseStackTraceFrames('#0 0x7f in ttnn::run()')).toEqual([]);
         expect(parseStackTraceFrames('')).toEqual([]);

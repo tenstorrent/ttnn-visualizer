@@ -22,8 +22,9 @@ interface StackTraceFrameSourceProps {
 
 /**
  * The source viewer for one stack trace frame. Mounted on the frame's first click, keyed by
- * frame, so a trace never reads a frame nobody opened, and reopening the same frame reuses
- * a successful read.
+ * frame, so a trace never reads a frame nobody opened. Closing and reopening the same frame
+ * reuses a successful read; opening another frame in between replaces this viewer, so coming
+ * back reads the file again.
  */
 function StackTraceFrameSource({
     filePath,
@@ -45,7 +46,7 @@ function StackTraceFrameSource({
         (async () => {
             // No availability probe first: a frame is linked only when the report lists its
             // file, so a probe could only agree. A read that still fails opens the viewer on
-            // its error, where skipping it would leave the click doing nothing.
+            // its error.
             await readSource();
 
             if (isCurrent) {
@@ -56,8 +57,9 @@ function StackTraceFrameSource({
         return () => {
             isCurrent = false;
         };
-        // Once per mount: the parent remounts this per frame, and `readSource` changes
-        // identity when the contents arrive, which must not read the file again.
+        // Once per mount: the parent remounts this per frame. `readSource` changes identity on
+        // every render (`useRemote`'s `readRemoteFile` is not memoised), so depending on it
+        // would read the file again each time.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 

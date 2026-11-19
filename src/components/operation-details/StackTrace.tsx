@@ -102,8 +102,8 @@ function StackTrace({
         [stackTrace, stackTraceSourceFileId],
     );
 
-    // A successful read is kept for reopening the frame. A failed one is dropped, so the next
-    // click reads again: the failure may have been transient.
+    // A successful read is kept for reopening the frame, until another frame is opened. A failed
+    // one is dropped, so the next click reads again: the failure may have been transient.
     const handleCloseFrameSource = useCallback(
         (readFailed: boolean) =>
             setOpenedFrame((opened) => (opened && !readFailed ? { ...opened, isOpen: false } : null)),
@@ -192,7 +192,7 @@ function StackTrace({
 
             {activeFrame && showsFrameLinks ? (
                 <StackTraceFrameSource
-                    // Another frame reads its own file; reopening this one reuses its read.
+                    // Another frame mounts its own viewer and reads its own file.
                     key={`${activeFrame.index}:${activeFrame.file}:${activeFrame.line}`}
                     filePath={activeFrame.file}
                     sourceFileId={getFrameSourceFileId(activeFrame, stackTraceSourceFileId)}
@@ -216,9 +216,11 @@ interface StackTraceFrameLineProps {
 }
 
 /**
- * A frame's line, with its `"<file>", line <n>` linked when the report holds that file.
- * The report's `source_files` are the only source the viewer can show, so a frame whose
- * file is not among them stays plain text, as it does until the list has loaded.
+ * A frame's line, with its `"<file>", line <n>` linked when the report holds that file in
+ * its `source_files`, and plain text otherwise, as every frame is until that list loads.
+ * Outside server mode the read could also find a file in a tt-metal checkout or over SSH,
+ * but finding out means probing each frame (an SSH round trip on remote reports), so only
+ * the report's own files are linked, in both modes. The Source button still falls back.
  */
 function StackTraceFrameLine({ frame, sourceFileId, text, prefix, suffix, onOpen }: StackTraceFrameLineProps) {
     const { data: sourceFiles } = useReportSourceFiles();

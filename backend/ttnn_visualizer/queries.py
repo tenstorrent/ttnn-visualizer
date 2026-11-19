@@ -145,6 +145,13 @@ class LocalQueryRunner:
             self.connection.close()
 
 
+# A ``source_files`` row a read can return: one with contents. The probe, the read's
+# lookup and the frontend's list of linkable files must agree on it, or a frame links to
+# a file that will not open. ``!= ''`` rather than ``length(contents) > 0``, which makes
+# SQLite read every file's text to count its characters.
+_SERVABLE_SOURCE_FILE = "contents IS NOT NULL AND contents != ''"
+
+
 class DatabaseQueries:
 
     instance: Optional[Instance] = None
@@ -645,7 +652,7 @@ class DatabaseQueries:
         if source_file_id is not None:
             rows = self.query_runner.execute_query(
                 "SELECT path FROM source_files "
-                "WHERE id = ? AND contents IS NOT NULL AND length(contents) > 0 "
+                f"WHERE id = ? AND {_SERVABLE_SOURCE_FILE} "
                 "LIMIT 1",
                 [source_file_id],
             )
@@ -654,7 +661,7 @@ class DatabaseQueries:
         if file_path:
             rows = self.query_runner.execute_query(
                 "SELECT path FROM source_files "
-                "WHERE path = ? AND contents IS NOT NULL AND length(contents) > 0 "
+                f"WHERE path = ? AND {_SERVABLE_SOURCE_FILE} "
                 "LIMIT 1",
                 [file_path],
             )
@@ -672,7 +679,7 @@ class DatabaseQueries:
             return []
         rows = self.query_runner.execute_query(
             "SELECT id, path FROM source_files "
-            "WHERE path IS NOT NULL AND contents IS NOT NULL AND length(contents) > 0 "
+            f"WHERE path IS NOT NULL AND {_SERVABLE_SOURCE_FILE} "
             "ORDER BY id"
         )
         return [(row[0], row[1]) for row in rows]

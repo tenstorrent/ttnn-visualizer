@@ -53,8 +53,7 @@ const TRACE = [
 
 const LIBRARY = '/venv/lib/python3.10/site-packages/_pytest/python.py';
 
-// Innermost first, as the capture writes it, so frame 1 is past the collapsed preview.
-// Frame 2 is a library file the report does not hold.
+// `TRACE` plus frame 2, a library file the report does not hold.
 const TRACE_WITH_LIBRARY_FRAME = [
     TRACE,
     `  File "${LIBRARY}", line 195, in pytest_pyfunc_call`,
@@ -128,7 +127,8 @@ describe('StackTrace frame links', () => {
         expect(await screen.findByText(CALLER)).toBeInTheDocument();
         expect(readRemoteFile).toHaveBeenCalledWith(CALLER, null);
         // Linked only because the report lists it, so it is read without an availability probe.
-        expect(isSourceFileAvailable).not.toHaveBeenCalledWith(CALLER, expect.anything(), expect.anything());
+        // Checked by path: the Source button probes frame 0 on its own.
+        expect(isSourceFileAvailable.mock.calls.filter(([path]) => path === CALLER)).toEqual([]);
     });
 
     it("opens frame 0 with the report's source file id, the location the Source button opens", async () => {

@@ -64,17 +64,17 @@ export const parseStackTraceFrames = (stackTrace: string): StackTraceFrame[] => 
 };
 
 /**
- * The report's source file id for a frame. `stack_traces.source_file_id` is one id per trace
- * and nothing records which frame it belongs to; the only fixture ties it to the call site, so
- * it is assumed to be frame 0's. The backend tries the id before the path, so sending it with
- * any other frame's path would open frame 0's file instead.
+ * The report's source file id for a frame. `stack_traces.source_file_id` is one id per trace,
+ * for frame 0's file: tt-metal's writer stores the first file the trace names
+ * (`extract_stack_trace_file` in `ttnn/ttnn/stack_trace_source.py`). The backend tries the id
+ * before the path, so sending it with any other frame's path would open frame 0's file instead.
  */
 export const getFrameSourceFileId = (frame: StackTraceFrame, sourceFileId: number | null): number | null =>
     frame.index === 0 ? sourceFileId : null;
 
 /**
  * Whether the report holds a frame's source file, by path or, for frame 0 only, by the
- * trace's source file id. A file the report does not hold cannot be viewed.
+ * trace's source file id. Frame links are limited to these files; see `StackTraceFrameLine`.
  */
 export const isFrameSourceInReport = (
     frame: StackTraceFrame,

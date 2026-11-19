@@ -661,8 +661,8 @@ def _device_capacity(devices: Sequence[Device]) -> Dict[str, object]:
 MAX_ARGUMENT_VALUE_CHARS = 500
 
 # One frame of a Python traceback. Deliberately the same pattern as
-# `TRACE_FRAME_REGEX` in `src/functions/stackTraceSource.ts`, which links each frame
-# on the operation details panel and opens frame 0 from its Source button, so the
+# `TRACE_FRAME_REGEX` in `src/functions/stackTraceSource.ts`, which finds the frames
+# the operation details panel links and frame 0, which its Source button opens, so the
 # call site here is the frame the panel shows for the same operation. Two answers to
 # "where is this op from" that disagreed would be worse than one.
 _TRACE_FRAME = re.compile(
