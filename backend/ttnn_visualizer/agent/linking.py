@@ -27,11 +27,12 @@ import logging
 import re
 import sqlite3
 import tempfile
+import time
 from collections import Counter
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import partial
-from typing import Dict, List, NamedTuple, Optional, Sequence, Set, Tuple
+from typing import Dict, Iterable, List, NamedTuple, Optional, Sequence, Set, Tuple
 
 from tt_perf_report.perf_report import HOST_OP_MARKER
 from ttnn_visualizer.agent import (
@@ -40,6 +41,7 @@ from ttnn_visualizer.agent import (
     operations,
     perf_detail,
     perf_flags,
+    report_diff,
     source_lines,
     tools,
 )
@@ -59,6 +61,7 @@ from ttnn_visualizer.agent.op_configurations import (
 )
 from ttnn_visualizer.agent.scope_outcomes import is_device_operation, scope_pairing
 from ttnn_visualizer.models import Instance
+from ttnn_visualizer.queries import DatabaseQueries
 
 logger = logging.getLogger(__name__)
 
@@ -938,6 +941,22 @@ def op_configurations(
     )
 
 
+def _read_call_sites(
+    queries: DatabaseQueries, scope: operations.RankScope, operation_ids: Iterable[int]
+) -> Dict[int, Optional[source_lines.CallSite]]:
+    """`failures.read_call_sites`, logged: the first read on a large capture is the
+    slow part of `source_lines`, and the log says how slow and over how many."""
+    started = time.perf_counter()
+    sites = failures.read_call_sites(queries, scope, operation_ids)
+    logger.info(
+        "read the call sites of %d linked operations at rank %s in %.2f s",
+        len(sites),
+        scope.rank,
+        time.perf_counter() - started,
+    )
+    return sites
+
+
 def source_lines_by_call_site(
     registry: ReportRegistry,
     handle: str,
@@ -975,9 +994,7 @@ def source_lines_by_call_site(
             queries,
             scope,
             # Every linked operation's, so a range asked later reads no trace again.
-            lambda queries, scope: failures.read_call_sites(
-                queries, scope, link.perf_rows_by_operation
-            ),
+            partial(_read_call_sites, operation_ids=link.perf_rows_by_operation),
         )
 
     rows = [row for row in report.get("report", []) if not tools.is_signpost_row(row)]
@@ -1000,7 +1017,7 @@ def source_lines_by_call_site(
         "group_count": len(groups),
         "returned": len(shown),
         "device_time_unit": tools.DEVICE_TIME_UNIT,
-        "device_time_total": round(device_time_total, 3),
+        "device_time_total": report_diff.as_answered(device_time_total),
         "groups": [
             source_lines.group_entry(group, failures.call_site_entry, share)
             for group in shown
@@ -1015,7 +1032,7 @@ def source_lines_by_call_site(
         rest_time = sum(group.device_time for group in rest)
         result["rest"] = {
             "group_count": len(rest),
-            "device_time": round(rest_time, 3),
+            "device_time": report_diff.as_answered(rest_time),
             "device_time_share_percent": share(rest_time),
             "row_count": sum(group.row_count for group in rest),
         }

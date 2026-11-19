@@ -232,13 +232,19 @@ def _touch_in_order(older, newer):
     _touch_after(older, newer, (2000, 2000))
 
 
+# The tools in `PERF_CSV_TOOLS` that also read the memory report database, and the
+# tables they need beyond `TOOL_TABLES`'s. A new one goes in both.
+_DATABASE_PERF_TOOLS = frozenset({"critical_path", "source_lines"})
+_DATABASE_PERF_TOOL_TABLES = frozenset({"captured_graph", "stack_traces"})
+
+
 class TestPerfCsvTools:
     """The tools a CSV that does not parse leaves unanswerable. #2198"""
 
     def test_they_are_the_tools_the_inventory_lists_only_for_a_readable_csv(self):
         """With everything else present, a CSV problem flips exactly these."""
         everything = frozenset().union(
-            *handles.TOOL_TABLES.values(), {"captured_graph", "stack_traces"}
+            *handles.TOOL_TABLES.values(), _DATABASE_PERF_TOOL_TABLES
         )
         instance = Instance(
             instance_id="x", profiler_path="p", performance_path="q", npe_path=None
@@ -289,7 +295,7 @@ class TestPerfCsvTools:
 
     def test_a_csv_pandas_cannot_parse_moves_them_and_no_other(self, tmp_path):
         """`core_spread` and `program_cache` move with the rest, and the zone tools stay."""
-        moved = PERF_CSV_TOOLS - {"critical_path", "source_lines"}
+        moved = PERF_CSV_TOOLS - _DATABASE_PERF_TOOLS
         _, sound = self._capture(tmp_path / "sound", parses=True)
         _, loaded = self._capture(tmp_path / "unclosed", parses=False)
 

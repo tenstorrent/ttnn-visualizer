@@ -11,11 +11,15 @@ operation and each operation's call site come in from `linking`, which owns the 
 so this module reads neither report.
 """
 
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Callable, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Callable, DefaultDict, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from ttnn_visualizer.agent.bounds import cut_op_code
+from ttnn_visualizer.agent.report_diff import as_answered
+
+CallSite = Dict[str, object]
 
 # `TOP_OP_CODE_COUNT` in `perfSourceLines.ts`.
 TOP_OP_CODE_COUNT = 3
@@ -33,8 +37,11 @@ SOURCE_LINES_NOTE = (
     "kind unlinked holds the rows with no linked operation, counted by why in "
     "unlinked_by_reason: host ops, which the app's stacked table hides by default, and "
     "rows past the end of the memory report capture. kind no_trace holds rows whose "
-    "operation recorded no stack trace this tool can read. operation_ids are the "
-    "memory report database's, in the order the rows first name them."
+    "operation recorded no stack trace this tool can read, including a frame at line "
+    "0 or past 2**31, which the app groups as a line. operation_ids are the memory "
+    "report database's, in the order the rows first name them. Groups with equal "
+    "device time are ordered by kind, path and line as text, by code point, where the "
+    "app compares them by locale, so two paths differing only in case can swap."
 )
 
 
@@ -49,17 +56,22 @@ class SourceLineKind(str, Enum):
 @dataclass
 class SourceLineGroup:
     kind: SourceLineKind
-    call_site: Optional[Dict[str, object]]
+    call_site: Optional[CallSite]
     device_time: float = 0.0
     row_count: int = 0
-    device_time_by_op_code: Dict[str, float] = field(default_factory=dict)
+    device_time_by_op_code: DefaultDict[str, float] = field(
+        default_factory=lambda: defaultdict(float)
+    )
     # Insertion-ordered, so the ids keep the order the rows first name them.
     operation_ids: Dict[int, None] = field(default_factory=dict)
-    unlinked_by_reason: Dict[str, int] = field(default_factory=dict)
+    unlinked_by_reason: Counter = field(default_factory=Counter)
 
     @property
     def sort_key(self) -> Tuple[float, str, str, str]:
-        """`getSourceLineGroupKey`'s order behind the device time: kind, path, line."""
+        """`getSourceLineGroupKey`'s order behind the device time: kind, path, line,
+        each as text. Compared by code point, where the app's `localeCompare` is
+        locale-aware: the two agree on ASCII of one case, and can differ on case or
+        punctuation alone, which two real paths rarely do."""
         site = self.call_site or {}
         return (
             -self.device_time,
@@ -78,7 +90,7 @@ class SourceLineGroup:
 def source_line_groups(
     rows: Sequence[Dict],
     operation_by_perf_id: Mapping[str, int],
-    call_site_by_operation: Mapping[int, Optional[Dict[str, object]]],
+    call_site_by_operation: Mapping[int, Optional[CallSite]],
     device_time: Callable[[Dict], Optional[float]],
     unlinked_reason: Callable[[Dict], str],
 ) -> List[SourceLineGroup]:
@@ -93,17 +105,16 @@ def source_line_groups(
         site = (
             None if operation_id is None else call_site_by_operation.get(operation_id)
         )
-        if operation_id is None:
-            kind = SourceLineKind.UNLINKED
-        elif site is None:
-            kind = SourceLineKind.NO_TRACE
-        else:
+        if site is not None:
             kind = SourceLineKind.LINE
-        key = (
-            kind.value,
-            None if site is None else site["file"],
-            None if site is None else site["line"],
-        )
+            key: Tuple[str, object, object] = (kind.value, site["file"], site["line"])
+        else:
+            kind = (
+                SourceLineKind.UNLINKED
+                if operation_id is None
+                else SourceLineKind.NO_TRACE
+            )
+            key = (kind.value, None, None)
         group = group_by_key.get(key)
         if group is None:
             group = group_by_key[key] = SourceLineGroup(kind, site)
@@ -111,34 +122,29 @@ def source_line_groups(
         timed = device_time(row)
         if timed is not None:
             group.device_time += timed
-            op_code = str(row.get("raw_op_code") or "")
-            group.device_time_by_op_code[op_code] = (
-                group.device_time_by_op_code.get(op_code, 0.0) + timed
-            )
+            # The app keys by `raw_op_code` as is; a row without one is filed as "".
+            group.device_time_by_op_code[str(row.get("raw_op_code") or "")] += timed
         if operation_id is not None:
             group.operation_ids.setdefault(operation_id, None)
         else:
-            reason = unlinked_reason(row)
-            group.unlinked_by_reason[reason] = (
-                group.unlinked_by_reason.get(reason, 0) + 1
-            )
+            group.unlinked_by_reason[unlinked_reason(row)] += 1
     return sorted(group_by_key.values(), key=lambda group: group.sort_key)
 
 
 def group_entry(
     group: SourceLineGroup,
-    call_site_entry: Callable[[Optional[Dict[str, object]]], Optional[Dict]],
+    call_site_entry: Callable[[Optional[CallSite]], Optional[Dict[str, object]]],
     share: Callable[[float], Optional[float]],
 ) -> Dict[str, object]:
     operation_ids = list(group.operation_ids)
     entry: Dict[str, object] = {
         "kind": group.kind.value,
         "call_site": call_site_entry(group.call_site),
-        "device_time": round(group.device_time, 3),
+        "device_time": as_answered(group.device_time),
         "device_time_share_percent": share(group.device_time),
         "row_count": group.row_count,
         "top_op_codes": [
-            {**cut_op_code("op_code", op_code), "device_time": round(time, 3)}
+            {**cut_op_code("op_code", op_code), "device_time": as_answered(time)}
             for op_code, time in group.top_op_codes()
         ],
         "operation_ids": operation_ids[:MAX_LISTED_OPERATION_IDS],
@@ -150,6 +156,7 @@ def group_entry(
 
 
 __all__ = [
+    "CallSite",
     "MAX_LISTED_OPERATION_IDS",
     "SOURCE_LINES_NOTE",
     "TOP_OP_CODE_COUNT",

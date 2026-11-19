@@ -66,6 +66,7 @@ from ttnn_visualizer.models import (
     InputTensor,
     Operation,
     OutputTensor,
+    StackTrace,
     Tensor,
 )
 from ttnn_visualizer.queries import DatabaseQueries
@@ -828,22 +829,33 @@ def read_call_sites(
     """Frame 0 of each operation's first stack trace, as `operation_provenance` reads it.
 
     Only frame 0 outlives the read: each trace is dropped once its call site is parsed.
+    A trace a loop repeats is parsed once, and its operations share one site, which
+    every caller only reads.
     """
     ids = sorted(operation_ids)
     sites: Dict[int, Optional[Dict[str, object]]] = {}
+    site_by_trace: Dict[Optional[str], Optional[Dict[str, object]]] = {}
+
+    def keep(trace: StackTrace) -> None:
+        if trace.operation_id in sites:
+            return
+        text = trace.stack_trace
+        if text not in site_by_trace:
+            site_by_trace[text] = _call_site(text)
+        sites[trace.operation_id] = site_by_trace[text]
+
     if len(ids) > STACK_TRACE_SCAN_IDS:
         wanted = set(ids)
         for trace in queries.iter_stack_traces(scoped(queries, "stack_traces", scope)):
-            if trace.operation_id in wanted and trace.operation_id not in sites:
-                sites[trace.operation_id] = _call_site(trace.stack_trace)
+            if trace.operation_id in wanted:
+                keep(trace)
         return sites
     for start in range(0, len(ids), STACK_TRACE_IDS_PER_READ):
         batch = ids[start : start + STACK_TRACE_IDS_PER_READ]
         for trace in queries.query_stack_traces(
             scoped(queries, "stack_traces", scope, operation_id=batch)
         ):
-            if trace.operation_id not in sites:
-                sites[trace.operation_id] = _call_site(trace.stack_trace)
+            keep(trace)
     return sites
 
 

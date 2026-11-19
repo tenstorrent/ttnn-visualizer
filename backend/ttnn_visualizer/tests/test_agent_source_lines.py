@@ -202,6 +202,33 @@ class TestGrouping:
             (SourceLineKind.UNLINKED, None),
         ]
 
+    def test_paths_differing_only_in_case_order_by_code_point(self):
+        """Pinned because it differs from the app: `localeCompare` would put
+        `/model.py` first, and code point order puts `/Model.py` first."""
+        rows = [
+            {"id": str(index), "raw_op_code": "A", "device_time": "1.0"}
+            for index in range(2)
+        ]
+        sites = {
+            1: {"file": "/model.py", "line": 1, "function": "f", "code": None},
+            2: {"file": "/Model.py", "line": 1, "function": "f", "code": None},
+        }
+
+        groups = self._groups(rows, {"0": 1, "1": 2}, sites)
+
+        assert [(group.call_site or {}).get("file") for group in groups] == [
+            "/Model.py",
+            "/model.py",
+        ]
+
+    def test_a_timed_row_without_an_op_code_is_filed_under_an_empty_one(self):
+        site = {"file": "/m.py", "line": 1, "function": "f", "code": None}
+        rows = [{"id": "1", "raw_op_code": None, "device_time": "2.0"}]
+
+        [group] = self._groups(rows, {"1": 1}, {1: site})
+
+        assert group.top_op_codes() == [("", 2.0)]
+
     def test_operation_ids_keep_first_seen_order_and_list_a_bounded_prefix(self):
         site = {"file": "/m.py", "line": 1, "function": "f", "code": None}
         count = source_lines.MAX_LISTED_OPERATION_IDS + 5
@@ -275,7 +302,8 @@ class TestSourceLines:
     @pytest.mark.parametrize(
         "trace",
         [None, "no frame in this text", '  File "/m.py", line 0, in f\n'],
-        ids=["missing", "frameless", "line-zero"],
+        # Line 0 is the one case the app answers differently: it groups it as a line.
+        ids=["missing", "frameless", "line-zero-diverges-from-app"],
     )
     def test_an_operation_without_a_readable_trace_is_its_own_group(
         self, traced, trace
@@ -294,6 +322,75 @@ class TestSourceLines:
         assert "1 linked operations, launching 1 rows, have no source line" in (
             result["caveat"]
         )
+
+    def test_the_untraced_caveat_holds_when_the_limit_leaves_that_group_out(
+        self, traced
+    ):
+        traces = {key: value for key, value in _TRACES.items() if key != 3}
+        registry, handle = traced(traces=traces)
+
+        result = linking.source_lines_by_call_site(registry, handle, limit=1)
+
+        assert [group["kind"] for group in result["groups"]] == ["no_trace"]
+        assert result["rest"]["group_count"] == 2
+        assert "1 linked operations, launching 1 rows" in result["caveat"]
+
+    def test_a_partitioned_run_carries_its_caveat(self, traced):
+        registry, handle = traced()
+
+        with patch.object(
+            tools, "partitioned_caveat", return_value="Partitioned run caveat."
+        ):
+            result = linking.source_lines_by_call_site(registry, handle)
+
+        assert result["caveat"] == "Partitioned run caveat."
+
+    def test_with_no_countable_device_time_the_shares_are_null(self, traced):
+        """`share_percent` has no share of nothing, where the app shows 0%."""
+        rows = [
+            {**row, "device_time": ""} if row["op_type"] != "signpost" else row
+            for row in _ROWS
+        ]
+        registry, handle = traced(rows=rows)
+
+        result = linking.source_lines_by_call_site(registry, handle, limit=1)
+
+        assert result["device_time_total"] == 0
+        assert result["row_count"] == 5
+        assert all(
+            group["device_time_share_percent"] is None for group in result["groups"]
+        )
+        assert result["rest"]["device_time_share_percent"] is None
+        assert (
+            sum(group["row_count"] for group in result["groups"])
+            + result["rest"]["row_count"]
+            == 5
+        )
+
+    def test_a_repeated_trace_is_parsed_once(self, traced):
+        same = _trace("/model/a/block.py", 10)
+        registry, handle = traced(traces={2: same, 3: same, 4: same})
+
+        with patch.object(
+            failures, "_call_site", side_effect=failures._call_site
+        ) as parsed:
+            result = linking.source_lines_by_call_site(registry, handle)
+
+        assert parsed.call_count == 1
+        assert _by_location(result)[("/model/a/block.py", 10)]["operation_ids"] == [
+            2,
+            3,
+            4,
+        ]
+
+    def test_an_unknown_signpost_is_refused_before_the_link_is_asked(self, traced):
+        # Unlinked as well, so the order of the two refusals decides which is raised.
+        registry, handle = traced(rows=_ROWS[:4])
+
+        with pytest.raises(ValueError, match="no signpost named 'missing'"):
+            linking.source_lines_by_call_site(
+                registry, handle, start_signpost="missing"
+            )
 
     def test_a_fully_traced_report_carries_no_caveat(self, traced):
         registry, handle = traced()
@@ -314,6 +411,7 @@ class TestSourceLines:
         assert result["device_time_total"] == 14.5
         assert result["projection"]["start_signpost"] == "signpost-start"
         assert result["operation_link"]["scope"] == linking.WHOLE_REPORT_SCOPE
+        assert result["operation_link"]["note"] == linking.RANGED_LINK_NOTE
         assert result["operation_link"]["matched_rows"] == 3
 
     def test_the_limit_caps_the_groups_and_rest_sums_the_others(self, traced):
@@ -499,6 +597,13 @@ class TestSourceLines:
         assert "source_lines" in answerable(traced_path, str(performance))
         assert "source_lines" not in answerable(traced_path, None)
         assert "source_lines" not in answerable(untraced_path, str(performance))
+        # Listed by its tables alone: an empty table is answerable, and the call
+        # itself refuses it, saying the capture records no stack traces.
+        empty_path = _write_profiler(
+            tmp_path / "empty", _GRAPHS, operations=_OPERATIONS
+        )
+        _add_traces(empty_path, {})
+        assert "source_lines" in answerable(empty_path, str(performance))
 
     def test_the_server_routes_it_with_a_link_template(self, traced):
         registry, handle = traced()

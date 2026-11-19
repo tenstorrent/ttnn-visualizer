@@ -146,8 +146,8 @@ loaded without a `performance_path` is refused and says so. `zone_timings` is li
 when `zone_timings` is, the device log marks zone starts and ends in a `type` or
 `zone phase` column, and its first line names a positive `CHIP_FREQ[MHz]`. The six tools
 that read the performance CSV's rows, `top_ops`, `op_breakdown`, `program_cache`,
-`core_spread`, `critical_path` and `source_lines`, are listed only when it can be reported on, and when it
-cannot, `performance_csv_problem` says why (`empty`, `no data rows`, `missing columns: …`,
+`core_spread`, `critical_path` and `source_lines`, are listed only when it can be reported
+on, and when it cannot, `performance_csv_problem` says why (`empty`, `no data rows`, `missing columns: …`,
 that it cannot be read or decoded, or the parse error reading its signposts gave).
 `program_cache` also needs the `PROGRAM HASH` and `PROGRAM CACHE HIT` columns,
 `core_spread` needs `zone_intervals` as well, and `critical_path` the graph, as above.
@@ -551,7 +551,10 @@ of its `operation_ids`, with `operation_count` for all of them. Rows with no lin
 operation form one `unlinked` group, counted by why in `unlinked_by_reason`: host ops,
 which the application's stacked table hides by default, and rows past the end of the
 memory report capture. Rows whose operation recorded no stack trace, or none naming a
-frame, form one `no_trace` group, and its count is in the caveat. `limit` caps the groups
+frame, form one `no_trace` group, and its count is in the caveat; so does a frame at line 0
+or past 2³¹, which the application groups as a line of its own. Groups with equal device
+time are ordered by kind, path and line as text, by code point, where the application
+compares them by locale, so two paths that differ only in case can come out swapped. `limit` caps the groups
 at 25, ranked by device time, and those past it are summed into `rest`. Over a range, the
 rows and shares are the window's, while `operation_link` carries `scope: whole_report`, as
 `top_ops`'s does. The tool refuses a handle whose two reports did not link, and a capture
@@ -1011,8 +1014,8 @@ its CSV position in either read, so its `operation_id` is the one it has unrange
 `top_ops`'s own `op_count` and totals describe the window.
 
 The link is resolved once per handle, on the first `top_ops`, `program_cache`,
-`operation_detail`, `critical_path` or `source_lines` that needs it, and reads every captured graph at the linked rank. On a handle with both reports,
-the first `operation_detail` therefore also generates the performance report, which can
+`operation_detail`, `critical_path` or `source_lines` that needs it, and reads every
+captured graph at the linked rank. On a handle with both reports, the first `operation_detail` therefore also generates the performance report, which can
 take seconds on a large capture; every later call reuses both. A link that failed on a read
 that might pass next time — a locked database, a temp-file error in tt-perf-report — is not
 kept, so the next call tries again. A handle keeps answering from the capture it first
