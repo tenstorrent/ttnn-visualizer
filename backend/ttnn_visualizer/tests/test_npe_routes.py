@@ -107,6 +107,7 @@ def test_summary_happy_path(client, make_npe_instance):
     assert body["n_timesteps"] == 4
     assert isinstance(body["timesteps"], dict)
     assert len(body["timesteps"]["active_count"]) == 4
+    assert body["has_fabric_events"] is False
 
 
 def test_window_happy_path(client, make_npe_instance):

@@ -173,6 +173,7 @@ const NpeWindowedView = ({ fileName, loadAttempt }: NpeWindowedViewProps) => {
                 <NPEView
                     npeData={npeData}
                     timelineData={baseTimestepData ?? undefined}
+                    hasFabricEvents={summary?.has_fabric_events}
                     selectedTimestep={selectedTimestep}
                     onSelectedTimestepChange={setSelectedTimestep}
                     reportKey={fileName}

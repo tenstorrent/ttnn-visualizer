@@ -19,8 +19,13 @@ vi.mock('../src/hooks/useAPI', () => ({
 }));
 
 vi.mock('../src/components/npe/NPEViewComponent', () => ({
-    default: ({ selectedTimestep }: { selectedTimestep?: number }) => (
-        <div data-testid={TEST_IDS.NPE_VIEW}>step:{selectedTimestep}</div>
+    default: ({ selectedTimestep, hasFabricEvents }: { selectedTimestep?: number; hasFabricEvents?: boolean }) => (
+        <div
+            data-testid={TEST_IDS.NPE_VIEW}
+            data-has-fabric-events={String(hasFabricEvents)}
+        >
+            step:{selectedTimestep}
+        </div>
     ),
 }));
 
@@ -101,6 +106,23 @@ describe('NpeWindowedView', () => {
 
         // active_count = [0, 2, 0] → first active step is index 1.
         expect(screen.getByTestId(TEST_IDS.NPE_VIEW).textContent).toBe('step:1');
+    });
+
+    // #2356: the window holds no fabric transfers, but the whole trace does, so the
+    // view must be told so rather than decide from the window.
+    it("passes the whole trace's fabric-event flag to the view, not the window's", () => {
+        mockedSummary.mockReturnValue({
+            data: { ...summary, has_fabric_events: true },
+            isLoading: false,
+            isError: false,
+            error: null,
+        } as SummaryHook);
+        mockedWindow.mockReturnValue({ data: npeWindow, isError: false, error: null } as WindowHook);
+
+        render(windowedView());
+
+        expect(npeWindow.transfers).toEqual([]);
+        expect(screen.getByTestId(TEST_IDS.NPE_VIEW).getAttribute('data-has-fabric-events')).toBe('true');
     });
 
     it('reports one successful initial load for the active attempt', async () => {
