@@ -606,6 +606,19 @@ class DatabaseQueries:
         for row in rows:
             yield StackTrace(*row)
 
+    def iter_stack_traces(
+        self, filters: Optional[Dict[str, Any]] = None
+    ) -> Iterator[StackTrace]:
+        """`query_stack_traces`, streamed: the traces are the largest text in a
+        report, so a caller reading every one holds one row at a time."""
+        if not self._check_table_exists("stack_traces"):
+            return
+        select_clause = self._dataclass_select_clause("stack_traces", StackTrace)
+        for row in self.query_runner.iter_query(
+            *self._table_query("stack_traces", filters, select_clause=select_clause)
+        ):
+            yield StackTrace(*row)
+
     def query_source_files(
         self, filters: Optional[Dict[str, Any]] = None
     ) -> Generator[SourceFile, None, None]:

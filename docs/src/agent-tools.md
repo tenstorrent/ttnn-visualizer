@@ -556,8 +556,9 @@ at 25, ranked by device time, and those past it are summed into `rest`. Over a r
 rows and shares are the window's, while `operation_link` carries `scope: whole_report`, as
 `top_ops`'s does. The tool refuses a handle whose two reports did not link, and a capture
 that records no stack traces, where every row would read `no_trace`; it reads the linked
-rank only. The first call reads every linked operation's stack trace, 500 at a time, and
-keeps only each one's call site; later calls, over any range, reuse them.
+rank only. The first call reads every linked operation's stack trace, 500 at a time, or in
+one streamed pass past 2,000 operations, and keeps only each one's call site; later calls,
+over any range, reuse them.
 
 **`diff_reports` calls a move a change only when it is bigger than run-to-run noise.** Two
 captures of the same code never time an operation identically, so a diff that ranks every

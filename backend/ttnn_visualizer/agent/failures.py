@@ -102,7 +102,11 @@ MAX_LISTED_PRODUCERS = 5
 MAX_CALL_SITE_TEXT_CHARS = 300
 _MAX_SOURCE_LINE = 1 << 31
 # Ids per `stack_traces` read, inside SQLite's oldest bound of 999 parameters.
-_STACK_TRACE_IDS_PER_READ = 500
+STACK_TRACE_IDS_PER_READ = 500
+# Past this many ids, the traces are read in one streamed pass instead. Nothing
+# indexes `stack_traces.operation_id`, so each batch scans the whole table: past
+# four batches, one scan costs less than the batches would.
+STACK_TRACE_SCAN_IDS = 4 * STACK_TRACE_IDS_PER_READ
 # The tables behind each answer's figures, so its rank refusal covers every one.
 # `query_tensors` joins `device_tensors` by id alone where it has no `rank`.
 _FALLBACK_TABLES = (
@@ -821,11 +825,20 @@ def _call_site(trace: Optional[str]) -> Optional[Dict[str, object]]:
 def read_call_sites(
     queries: DatabaseQueries, scope: RankScope, operation_ids: Iterable[int]
 ) -> Dict[int, Optional[Dict[str, object]]]:
-    """Frame 0 of each operation's first stack trace, as `operation_provenance` reads it."""
+    """Frame 0 of each operation's first stack trace, as `operation_provenance` reads it.
+
+    Only frame 0 outlives the read: each trace is dropped once its call site is parsed.
+    """
     ids = sorted(operation_ids)
     sites: Dict[int, Optional[Dict[str, object]]] = {}
-    for start in range(0, len(ids), _STACK_TRACE_IDS_PER_READ):
-        batch = ids[start : start + _STACK_TRACE_IDS_PER_READ]
+    if len(ids) > STACK_TRACE_SCAN_IDS:
+        wanted = set(ids)
+        for trace in queries.iter_stack_traces(scoped(queries, "stack_traces", scope)):
+            if trace.operation_id in wanted and trace.operation_id not in sites:
+                sites[trace.operation_id] = _call_site(trace.stack_trace)
+        return sites
+    for start in range(0, len(ids), STACK_TRACE_IDS_PER_READ):
+        batch = ids[start : start + STACK_TRACE_IDS_PER_READ]
         for trace in queries.query_stack_traces(
             scoped(queries, "stack_traces", scope, operation_id=batch)
         ):
@@ -1181,6 +1194,8 @@ __all__ = [
     "MAX_PARSED_MESSAGE_CHARS",
     "MAX_PEAK_CONTRIBUTORS",
     "MAX_REPEAT_OPERATION_IDS",
+    "STACK_TRACE_IDS_PER_READ",
+    "STACK_TRACE_SCAN_IDS",
     "DramFallbackReport",
     "L1PeakReport",
     "LateDeallocationReport",

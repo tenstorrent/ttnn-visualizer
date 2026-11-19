@@ -268,7 +268,10 @@ def test_the_source_lines_caps_the_page_states_are_the_enforced_ones():
         in page
     )
     assert f"`limit` caps the groups at {MAX_DETAILED_LIMIT}" in page
-    assert f"{failures._STACK_TRACE_IDS_PER_READ} at a time" in page
+    assert (
+        f"{failures.STACK_TRACE_IDS_PER_READ} at a time, or in one streamed pass "
+        f"past {failures.STACK_TRACE_SCAN_IDS:,} operations"
+    ) in page
 
 
 def test_the_op_configurations_rules_the_page_names_are_the_restated_ones():

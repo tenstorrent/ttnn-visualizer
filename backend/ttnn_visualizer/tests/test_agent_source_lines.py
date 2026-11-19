@@ -15,7 +15,14 @@ from typing import Dict, Optional
 from unittest.mock import patch
 
 import pytest
-from ttnn_visualizer.agent import failures, linking, server, source_lines, tools
+from ttnn_visualizer.agent import (
+    failures,
+    linking,
+    operations,
+    server,
+    source_lines,
+    tools,
+)
 from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
 from ttnn_visualizer.agent.source_lines import SourceLineKind, source_line_groups
@@ -71,25 +78,39 @@ _TRACES = {
 }
 
 
-def _add_traces(profiler_path: str, traces: Dict[int, str], rank: Optional[int] = None):
+def _add_traces(profiler_path: str, traces: Dict[int, str]) -> None:
+    """A `stack_traces` table with no `rank` column, as a single-host capture writes."""
     connection = sqlite3.connect(Path(profiler_path, "db.sqlite"))
     try:
-        if rank is None:
-            connection.execute(
-                "CREATE TABLE stack_traces (operation_id int, stack_trace text)"
-            )
-            connection.executemany(
-                "INSERT INTO stack_traces VALUES (?, ?)", list(traces.items())
-            )
-        else:
-            connection.execute(
-                "CREATE TABLE stack_traces "
-                "(operation_id int, stack_trace text, rank int NOT NULL DEFAULT 0)"
-            )
-            connection.executemany(
-                "INSERT INTO stack_traces VALUES (?, ?, ?)",
-                [(key, trace, rank) for key, trace in traces.items()],
-            )
+        connection.execute(
+            "CREATE TABLE stack_traces (operation_id int, stack_trace text)"
+        )
+        connection.executemany(
+            "INSERT INTO stack_traces VALUES (?, ?)", list(traces.items())
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def _add_ranked_traces(
+    profiler_path: str, traces_by_rank: Dict[int, Dict[int, str]]
+) -> None:
+    """A `stack_traces` table carrying `rank`, as a multi-host capture writes."""
+    connection = sqlite3.connect(Path(profiler_path, "db.sqlite"))
+    try:
+        connection.execute(
+            "CREATE TABLE stack_traces "
+            "(operation_id int, stack_trace text, rank int NOT NULL DEFAULT 0)"
+        )
+        connection.executemany(
+            "INSERT INTO stack_traces VALUES (?, ?, ?)",
+            [
+                (operation_id, trace, rank)
+                for rank, traces in traces_by_rank.items()
+                for operation_id, trace in traces.items()
+            ],
+        )
         connection.commit()
     finally:
         connection.close()
@@ -341,7 +362,7 @@ class TestSourceLines:
         registry, handle = traced()
 
         with (
-            patch.object(failures, "_STACK_TRACE_IDS_PER_READ", 2),
+            patch.object(failures, "STACK_TRACE_IDS_PER_READ", 2),
             patch.object(
                 DatabaseQueries,
                 "query_stack_traces",
@@ -369,6 +390,77 @@ class TestSourceLines:
         with pytest.raises(ValueError, match="records no stack traces"):
             linking.source_lines_by_call_site(registry, handle)
 
+    def test_a_dense_read_streams_every_trace_once(self, linked, tmp_path):
+        """Past the scan threshold the traces are read in one pass, with the same
+        answer the batched read gives."""
+        path = _write_profiler(tmp_path / "dense", _GRAPHS, operations=_OPERATIONS)
+        _add_traces(path, _TRACES)
+        registry, handle, _ = linked(profiler_path=path, rows=_ROWS)
+        batched = linking.source_lines_by_call_site(registry, handle)
+        # A fresh registry, so its call sites are read again rather than reused. Not a
+        # second `linked` call: its patches would stop in the wrong order and leak.
+        registry = ReportRegistry()
+        handle = load_report(
+            registry, profiler_path=path, performance_path=str(tmp_path / "perf")
+        )["handle"]
+
+        with (
+            patch.object(failures, "STACK_TRACE_SCAN_IDS", 1),
+            patch.object(
+                DatabaseQueries,
+                "iter_stack_traces",
+                autospec=True,
+                side_effect=DatabaseQueries.iter_stack_traces,
+            ) as streamed,
+            patch.object(
+                DatabaseQueries, "query_stack_traces", autospec=True
+            ) as batches,
+        ):
+            result = linking.source_lines_by_call_site(registry, handle)
+
+        assert streamed.call_count == 1
+        assert batches.call_count == 0
+        assert result["groups"] == batched["groups"]
+
+    @pytest.mark.parametrize("rank", [None, 0])
+    def test_a_multi_host_report_files_rows_by_the_linked_ranks_traces(
+        self, linked, tmp_path, rank
+    ):
+        # Rank 1's operation 2 has a trace of its own; filed under rank 0's rows,
+        # it would name a path rank 0 never ran.
+        path = _write_ranked_profiler(tmp_path / "ranked", _LINKED_GRAPHS)
+        _add_ranked_traces(
+            path,
+            {
+                1: {2: _trace("/rank1/model.py", 7), 3: _trace("/rank1/model.py", 8)},
+                0: {2: _trace("/rank0/model.py", 1), 3: _trace("/rank0/model.py", 2)},
+            },
+        )
+        registry, handle, _ = linked(profiler_path=path)
+
+        result = linking.source_lines_by_call_site(registry, handle, rank=rank)
+
+        files = {
+            group["call_site"]["file"]
+            for group in result["groups"]
+            if group["call_site"] is not None
+        }
+        assert files == {"/rank0/model.py"}
+        assert result["rank"] == 0
+        assert "multi-host report read at rank 0" in result["caveat"]
+
+    def test_a_multi_host_report_with_rankless_traces_is_refused(
+        self, linked, tmp_path
+    ):
+        """Traces that cannot be told apart by rank would file one rank's call sites
+        under another's rows."""
+        path = _write_ranked_profiler(tmp_path / "ranked", _LINKED_GRAPHS)
+        _add_traces(path, {2: _trace("/m.py", 1)})
+        registry, handle, _ = linked(profiler_path=path)
+
+        with pytest.raises(operations.UnattributableRankError, match="stack_traces"):
+            linking.source_lines_by_call_site(registry, handle)
+
     def test_it_refuses_a_rank_a_single_host_report_lacks(self, traced):
         registry, handle = traced()
 
@@ -377,7 +469,7 @@ class TestSourceLines:
 
     def test_it_refuses_a_rank_other_than_the_linked_one(self, linked, tmp_path):
         path = _write_ranked_profiler(tmp_path / "ranked", _LINKED_GRAPHS)
-        _add_traces(path, {2: _trace("/m.py", 1)}, rank=0)
+        _add_ranked_traces(path, {0: {2: _trace("/m.py", 1)}})
         registry, handle, _ = linked(profiler_path=path)
 
         with pytest.raises(

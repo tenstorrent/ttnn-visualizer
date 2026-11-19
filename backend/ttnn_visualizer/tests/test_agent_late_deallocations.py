@@ -880,7 +880,7 @@ class TestCallSites:
         assert "1 of the 1 holds have no call site" in result["caveat"]
 
     def test_the_last_uses_past_one_read_of_traces_get_their_call_sites(self, tmp_path):
-        count = failures._STACK_TRACE_IDS_PER_READ + 1
+        count = failures.STACK_TRACE_IDS_PER_READ + 1
         uses = [
             (10, _trace("/m/model.py", index + 1), "ttnn.matmul")
             for index in range(count)

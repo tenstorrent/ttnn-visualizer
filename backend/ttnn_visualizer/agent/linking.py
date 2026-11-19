@@ -596,8 +596,8 @@ TOP_OPS_LINK_NOTE = (
     "first_past_profiler_capture_id names the first row past the memory report capture."
 )
 
-# `operation_link.scope` on a ranged `top_ops`: the link's counts are the whole
-# report's, not the window's.
+# `operation_link.scope` on a linked tool read over a signpost range: the link's
+# counts are the whole report's, not the window's.
 WHOLE_REPORT_SCOPE = "whole_report"
 
 # What a signpost range does not narrow. The link is matched against the whole
@@ -608,6 +608,20 @@ RANGED_LINK_NOTE = (
     "one it has unranged, and matched_rows and unlinked_by_reason count rows "
     "outside the window too."
 )
+
+
+def _scope_link_response(
+    response: Dict[str, object], projection: object, note: Optional[str] = None
+) -> None:
+    """`note` on a link response, and on a ranged read the whole-report scope and
+    the note saying so. Read from the projection, which already names any range it
+    read, so the note can never disagree with it."""
+    ranged = tools.is_ranged(projection)
+    if ranged:
+        response["scope"] = WHOLE_REPORT_SCOPE
+    notes = [text for text in (note, RANGED_LINK_NOTE if ranged else None) if text]
+    if notes:
+        response["note"] = " ".join(notes)
 
 
 def top_ops(
@@ -640,12 +654,7 @@ def top_ops(
     response = link.as_response()
     # Only a handle with a memory report has an operation_id worth explaining.
     if registry.get(handle).profiler_path:
-        response["note"] = TOP_OPS_LINK_NOTE
-        # Read from the projection, which already names any range it read, so
-        # the note can never disagree with it.
-        if tools.is_ranged(result.get("projection")):
-            response["scope"] = WHOLE_REPORT_SCOPE
-            response["note"] = f"{TOP_OPS_LINK_NOTE} {RANGED_LINK_NOTE}"
+        _scope_link_response(response, result.get("projection"), TOP_OPS_LINK_NOTE)
     if link.status is LinkStatus.LINKED and link.unlinked is not None:
         response["unlinked_row_count"] = link.unlinked.total
         response["unlinked_by_reason"] = link.unlinked.by_reason
@@ -774,6 +783,21 @@ def _rank_mismatch_reason(
     )
 
 
+def _require_link(link: OperationLink, purpose: str) -> None:
+    """Refuse a tool that cannot answer without the link, saying why it is missing."""
+    if link.status is not LinkStatus.LINKED:
+        raise ValueError(
+            f"{purpose}, which needs the performance report linked to the memory "
+            f"report: {link.reason or link.status.value}"
+        )
+
+
+def _require_link_rank(link: OperationLink, rank: object, subject: str) -> None:
+    """Refuse an answer read at a rank the linked rows do not belong to."""
+    if rank != link.rank:
+        raise ValueError(_rank_mismatch_reason(link.rank, rank, subject))
+
+
 def _link_at_rank(
     link: OperationLink, rank: object, subject: str = "this operation"
 ) -> OperationLink:
@@ -795,17 +819,11 @@ def critical_path(
 ) -> Dict[str, object]:
     """The longest chain of cumulative device time through the operation graph."""
     link = operation_link(registry, handle)
-    if link.status is not LinkStatus.LINKED:
-        raise ValueError(
-            "the critical path needs device time per operation, which needs the "
-            "performance report linked to the memory report: "
-            f"{link.reason or link.status.value}"
-        )
+    _require_link(link, "the critical path needs device time per operation")
     instance = registry.get(handle)
     with operations.profiler_db(instance) as queries:
         scope = operations.rank_scope(queries, rank)
-        if scope.rank != link.rank:
-            raise ValueError(_rank_mismatch_reason(link.rank, scope.rank, "the graph"))
+        _require_link_rank(link, scope.rank, "the graph")
         graph = operations.read_scoped_graph(registry, handle, queries, scope)
 
     kept = op_graph.kept_operation_ids(graph)
@@ -935,19 +953,14 @@ def source_lines_by_call_site(
     # First, so a range the report lacks is refused before any trace is read.
     report = tools.canonical_report(registry, handle, signposts)
     link = operation_link(registry, handle)
-    if link.status is not LinkStatus.LINKED:
-        raise ValueError(
-            "grouping by source line needs each performance row's memory report "
-            "operation, which needs the performance report linked to the memory "
-            f"report: {link.reason or link.status.value}"
-        )
+    _require_link(
+        link,
+        "grouping by source line needs each performance row's memory report operation",
+    )
     instance = registry.get(handle)
     with operations.profiler_db(instance) as queries:
         scope = operations.rank_scope(queries, rank)
-        if scope.rank != link.rank:
-            raise ValueError(
-                _rank_mismatch_reason(link.rank, scope.rank, "the grouping")
-            )
+        _require_link_rank(link, scope.rank, "the grouping")
         operations.refuse_unattributable(queries, scope, "stack_traces")
         if not queries.report_records_stack_traces():
             raise ValueError(
@@ -1026,10 +1039,7 @@ def source_lines_by_call_site(
         caveats.append(partitioned)
     result.update(operations.caveat_field(scope, *caveats))
     link_response = link.as_response()
-    # As `top_ops`: the link is matched against the whole report, whatever the range.
-    if tools.is_ranged(result["projection"]):
-        link_response["scope"] = WHOLE_REPORT_SCOPE
-        link_response["note"] = RANGED_LINK_NOTE
+    _scope_link_response(link_response, result["projection"])
     result["operation_link"] = link_response
     return result
 
