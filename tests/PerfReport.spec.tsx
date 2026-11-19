@@ -4,7 +4,7 @@
 
 import '@testing-library/jest-dom/vitest';
 import { Classes } from '@blueprintjs/core';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PerformanceReport from '../src/components/performance/PerfReport';
 import { TypedPerfTableRow } from '../src/model/PerfTable';
@@ -958,7 +958,14 @@ describe('PerformanceReport stacked view grouped by source line', () => {
     it('disables the option, with its reason, when no row is linked to an operation', async () => {
         renderReport({ stackedGroupBy: StackedGroupBy.OP });
 
-        expect(await findGroupByItem('Source line')).toHaveAttribute('aria-disabled', 'true');
+        const item = await findGroupByItem('Source line');
+        expect(item).toHaveAttribute('aria-disabled', 'true');
+
+        fireEvent.mouseEnter(within(item).getByText('Source line'));
+
+        expect(
+            await screen.findByText('Needs a memory report linked to this performance report', {}, WAIT_FOR_OPTIONS),
+        ).toBeInTheDocument();
     });
 
     it('swaps in the source-line table when the option is chosen', async () => {

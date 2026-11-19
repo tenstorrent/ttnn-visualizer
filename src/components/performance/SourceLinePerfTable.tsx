@@ -5,7 +5,7 @@
 import { Fragment, useCallback, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import classNames from 'classnames';
-import { Button, ButtonVariant, Classes, Icon, PopoverPosition, Size, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonVariant, Classes, PopoverPosition, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtomValue } from 'jotai';
 import ROUTES from '../../definitions/Routes';
@@ -13,7 +13,7 @@ import { StackTraceLanguage } from '../../definitions/StackTrace';
 import { TEST_IDS } from '../../definitions/TestIds';
 import { formatPercentage, formatSize } from '../../functions/math';
 import { SourceLineGroup, SourceLineGroupKind, getSourceLineGroupLabel } from '../../functions/perfSourceLines';
-import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
+import useSortTable from '../../hooks/useSortTable';
 import { Operation } from '../../model/APIData';
 import { mergeDevicesAtom } from '../../store/app';
 import HighlightedText from '../HighlightedText';
@@ -22,6 +22,7 @@ import PerfDeviceArchitecture from './PerfDeviceArchitecture';
 import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
 import PerfTableFrame from './PerfTableFrame';
 import PerfTableSkeleton from './PerfTableSkeleton';
+import SortableHeaderLabel from './SortableHeaderLabel';
 import 'styles/components/PerfReport.scss';
 
 enum SourceLineColumnKey {
@@ -55,7 +56,7 @@ const MERGED_COLUMNS = COLUMNS.filter((column) => column.key !== SourceLineColum
 const PERCENT_DECIMALS = 2;
 const DEVICE_TIME_DECIMALS = 2;
 // A line inside a loop can link thousands of operations; past this many, the rest are counted.
-const MAX_LISTED_OPERATIONS = 100;
+export const MAX_LISTED_OPERATIONS = 100;
 const EMPTY_MESSAGE = 'No data to display';
 
 // `sortTableFields` takes flat records, so groups are sorted through this projection.
@@ -186,38 +187,21 @@ const SourceLinePerfTable = ({
             >
                 <thead className='table-header'>
                     <tr>
-                        {columns.map((column) => {
-                            const isSorted = sortingColumn === column.key;
-                            const isAscending = sortDirection === SortingDirection.ASC;
-                            // A second click on the sorted column flips it; another column keeps the direction.
-                            const flippedDirection = isAscending ? SortingDirection.DESC : SortingDirection.ASC;
-                            const targetSortDirection = isSorted ? flippedDirection : sortDirection;
-
-                            return (
-                                <th
-                                    key={column.key}
-                                    className='cell-header'
-                                >
-                                    {column.sortable ? (
-                                        <Button
-                                            onClick={() => changeSorting(column.key)(targetSortDirection)}
-                                            variant={ButtonVariant.MINIMAL}
-                                            size={Size.SMALL}
-                                        >
-                                            <span className='header-label'>{column.label}</span>
-                                            <Icon
-                                                className={classNames('sort-icon', { 'is-active': isSorted })}
-                                                icon={
-                                                    isSorted && isAscending ? IconNames.CARET_UP : IconNames.CARET_DOWN
-                                                }
-                                            />
-                                        </Button>
-                                    ) : (
-                                        <span className='header-label no-button'>{column.label}</span>
-                                    )}
-                                </th>
-                            );
-                        })}
+                        {columns.map((column) => (
+                            <th
+                                key={column.key}
+                                className='cell-header'
+                            >
+                                <SortableHeaderLabel
+                                    columnKey={column.key}
+                                    label={column.label}
+                                    sortable={column.sortable}
+                                    sortingColumn={sortingColumn}
+                                    sortDirection={sortDirection}
+                                    onSort={changeSorting}
+                                />
+                            </th>
+                        ))}
                     </tr>
                 </thead>
 

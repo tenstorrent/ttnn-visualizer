@@ -447,6 +447,95 @@ const PerformanceReport = ({
         setActiveDurationBucketFilterList,
     ]);
 
+    const renderActivePanel = () => {
+        if (isSourceLineShown) {
+            return (
+                <SourceLinePerfTable
+                    groups={filteredSourceLineGroups}
+                    operationById={operationById}
+                    filterQuery={sourceLineFilterQuery}
+                    reportFolderName={activeReportFolderName}
+                    maxCores={maxCores}
+                    isLoading={isTableLoading || isLoadingOperations}
+                    emptyReason={isSourceLineAvailable ? null : SOURCE_LINE_UNAVAILABLE}
+                />
+            );
+        }
+
+        if (isStackedView) {
+            return (
+                <StackedPerformanceTable
+                    stackedData={filteredStackedRows}
+                    filters={filters}
+                    stackedComparisonData={filteredComparisonStackedRowsList}
+                    reportFolderName={activeReportFolderName}
+                    maxCores={maxCores}
+                    isLoading={isTableLoading}
+                />
+            );
+        }
+
+        return (
+            <PerfTable
+                data={filteredRows}
+                comparisonData={filteredComparisonRowsList}
+                filters={filters}
+                provideMatmulAdvice={provideMatmulAdvice}
+                hiliteHighDispatch={hiliteHighDispatch}
+                reportFolderName={activeReportFolderName}
+                hasL1PressureData={hasL1PressureData}
+                maxCores={maxCores}
+                isLoading={isTableLoading}
+            />
+        );
+    };
+
+    const renderComparisonPanel = (report: string, index: number) => {
+        if (isSourceLineShown) {
+            return (
+                <Callout
+                    intent={Intent.PRIMARY}
+                    icon={IconNames.INFO_SIGN}
+                    data-testid={TEST_IDS.PERF_SOURCE_LINE_COMPARISON_NOTICE}
+                    compact
+                >
+                    {SOURCE_LINE_COMPARISON_NOTE}
+                </Callout>
+            );
+        }
+
+        if (isStackedView) {
+            return (
+                <StackedPerformanceTable
+                    stackedData={comparisonIndex > -1 ? filteredComparisonStackedRows : filteredStackedRows}
+                    stackedComparisonData={[
+                        filteredStackedRows,
+                        ...filteredComparisonStackedRowsList.filter((_, i) => i !== comparisonIndex),
+                    ]}
+                    filters={filters}
+                    reportFolderName={report}
+                    maxCores={comparisonMaxCores[index] ?? maxCores}
+                    isLoading={isTableLoading}
+                />
+            );
+        }
+
+        return (
+            <PerfTable
+                data={filteredComparisonRows}
+                comparisonData={comparisonTabComparisonRows}
+                filters={filters}
+                provideMatmulAdvice={provideMatmulAdvice}
+                hiliteHighDispatch={hiliteHighDispatch}
+                reportFolderName={report}
+                hasL1PressureData={hasL1PressureData}
+                maxCores={comparisonMaxCores[index] ?? maxCores}
+                activeReportComparisonIndex={0}
+                isLoading={isTableLoading}
+            />
+        );
+    };
+
     return (
         <>
             {/* See note above by the useState declarations */}
@@ -776,41 +865,7 @@ const PerformanceReport = ({
                                 : 'Loading...'
                         }
                         icon={IconNames.TH_LIST}
-                        panel={
-                            // eslint-disable-next-line no-nested-ternary -- three panels share one tab
-                            isSourceLineShown ? (
-                                <SourceLinePerfTable
-                                    groups={filteredSourceLineGroups}
-                                    operationById={operationById}
-                                    filterQuery={sourceLineFilterQuery}
-                                    reportFolderName={activeReportFolderName}
-                                    maxCores={maxCores}
-                                    isLoading={isTableLoading || isLoadingOperations}
-                                    emptyReason={isSourceLineAvailable ? null : SOURCE_LINE_UNAVAILABLE}
-                                />
-                            ) : isStackedView ? (
-                                <StackedPerformanceTable
-                                    stackedData={filteredStackedRows}
-                                    filters={filters}
-                                    stackedComparisonData={filteredComparisonStackedRowsList}
-                                    reportFolderName={activeReportFolderName}
-                                    maxCores={maxCores}
-                                    isLoading={isTableLoading}
-                                />
-                            ) : (
-                                <PerfTable
-                                    data={filteredRows}
-                                    comparisonData={filteredComparisonRowsList}
-                                    filters={filters}
-                                    provideMatmulAdvice={provideMatmulAdvice}
-                                    hiliteHighDispatch={hiliteHighDispatch}
-                                    reportFolderName={activeReportFolderName}
-                                    hasL1PressureData={hasL1PressureData}
-                                    maxCores={maxCores}
-                                    isLoading={isTableLoading}
-                                />
-                            )
-                        }
+                        panel={renderActivePanel()}
                     />
 
                     {activeComparisonReportList?.map((report, index) => (
@@ -831,48 +886,7 @@ const PerformanceReport = ({
                                     report
                                 )
                             }
-                            panel={
-                                // eslint-disable-next-line no-nested-ternary -- three panels share one tab
-                                isSourceLineShown ? (
-                                    <Callout
-                                        intent={Intent.PRIMARY}
-                                        icon={IconNames.INFO_SIGN}
-                                        data-testid={TEST_IDS.PERF_SOURCE_LINE_COMPARISON_NOTICE}
-                                        compact
-                                    >
-                                        {SOURCE_LINE_COMPARISON_NOTE}
-                                    </Callout>
-                                ) : isStackedView ? (
-                                    <StackedPerformanceTable
-                                        stackedData={
-                                            comparisonIndex > -1 ? filteredComparisonStackedRows : filteredStackedRows
-                                        }
-                                        stackedComparisonData={[
-                                            filteredStackedRows,
-                                            ...filteredComparisonStackedRowsList.filter(
-                                                (_, i) => i !== comparisonIndex,
-                                            ),
-                                        ]}
-                                        filters={filters}
-                                        reportFolderName={report}
-                                        maxCores={comparisonMaxCores[index] ?? maxCores}
-                                        isLoading={isTableLoading}
-                                    />
-                                ) : (
-                                    <PerfTable
-                                        data={filteredComparisonRows}
-                                        comparisonData={comparisonTabComparisonRows}
-                                        filters={filters}
-                                        provideMatmulAdvice={provideMatmulAdvice}
-                                        hiliteHighDispatch={hiliteHighDispatch}
-                                        reportFolderName={report}
-                                        hasL1PressureData={hasL1PressureData}
-                                        maxCores={comparisonMaxCores[index] ?? maxCores}
-                                        activeReportComparisonIndex={0}
-                                        isLoading={isTableLoading}
-                                    />
-                                )
-                            }
+                            panel={renderComparisonPanel(report, index)}
                         />
                     ))}
                 </Tabs>

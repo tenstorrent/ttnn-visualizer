@@ -6,7 +6,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import SourceLinePerfTable from '../src/components/performance/SourceLinePerfTable';
+import SourceLinePerfTable, { MAX_LISTED_OPERATIONS } from '../src/components/performance/SourceLinePerfTable';
 import { StackSourceOrigin } from '../src/definitions/StackTrace';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { SourceLineGroup, SourceLineGroupKind } from '../src/functions/perfSourceLines';
@@ -118,6 +118,63 @@ describe('SourceLinePerfTable', () => {
             'href',
             '/operations/8',
         );
+    });
+
+    it('sorts by a header and reverses on a second click, keeping every line', () => {
+        renderTable({ groups: [GROUPS[0], GROUPS[1]] });
+        const getLabels = () => getRows().map((row) => row.textContent?.match(/\w+\.py:\d+/)?.[0]);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Source line' }));
+        expect(getLabels()).toEqual(['big.py:42', 'small.py:42']);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Source line' }));
+        expect(getLabels()).toEqual(['small.py:42', 'big.py:42']);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Total %' }));
+        expect(getLabels()).toEqual(['big.py:42', 'small.py:42']);
+    });
+
+    it('opens and closes a line, saying which it will do', () => {
+        renderTable();
+
+        const toggle = screen.getByRole('button', { name: 'Show operations for big.py:42' });
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+
+        fireEvent.click(toggle);
+        expect(screen.getByRole('button', { name: 'Hide operations for big.py:42' })).toHaveAttribute(
+            'aria-expanded',
+            'true',
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Hide operations for big.py:42' }));
+        expect(screen.queryByTestId(TEST_IDS.PERF_SOURCE_LINE_OPERATIONS)).toBeNull();
+    });
+
+    it('cannot expand a line with no operations', () => {
+        renderTable({
+            groups: [group({ key: 'unlinked', kind: SourceLineGroupKind.UNLINKED, filePath: null, operationIds: [] })],
+        });
+
+        expect(screen.getByRole('button', { name: 'Show operations for No linked operation' })).toBeDisabled();
+    });
+
+    it.each([
+        [MAX_LISTED_OPERATIONS, MAX_LISTED_OPERATIONS, null],
+        [MAX_LISTED_OPERATIONS + 1, MAX_LISTED_OPERATIONS, 'and 1 more'],
+    ])('lists %i operations as %i links, then counts the rest', (operationCount, linkCount, moreText) => {
+        const operationIds = Array.from({ length: operationCount }, (_, index) => index + 1);
+        renderTable({ groups: [group({ operationIds })] });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Show operations for model.py:42' }));
+
+        const operations = screen.getByTestId(TEST_IDS.PERF_SOURCE_LINE_OPERATIONS);
+        expect(within(operations).getAllByRole('link')).toHaveLength(linkCount);
+
+        if (moreText) {
+            expect(within(operations).getByText(moreText)).toBeInTheDocument();
+        } else {
+            expect(within(operations).queryByText(/more$/)).toBeNull();
+        }
     });
 
     it('probes no source file until a Source button is hovered', async () => {
