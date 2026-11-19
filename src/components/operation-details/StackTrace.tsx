@@ -262,12 +262,20 @@ interface HighlightedLine {
 }
 
 interface HighlightedTextProps {
+    // Only ever `hljs.highlight(...).value`; see `HighlightedText`.
     html: string;
 }
 
+/**
+ * Renders hljs output as HTML. That is safe only because `html` is hljs output, and nothing
+ * else may be passed here. hljs escapes `&`, `<`, `>`, `"` and `'` in every piece of text it
+ * adds, and the only markup it writes is `<span class="hljs-…">` with class names from the
+ * grammar, never from the input. Its error fallbacks escape the input the same way. A trace
+ * is report data, so a function name or error message can hold markup; the test "escapes
+ * markup in the trace" pins that it renders as text. SAST tools flag this line regardless.
+ */
 function HighlightedText({ html }: HighlightedTextProps) {
-    // HTML tags are escaped by hljs
-    // eslint-disable-next-line react/no-danger
+    // eslint-disable-next-line react/no-danger -- `html` is escaped hljs output, as above
     return <span dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
