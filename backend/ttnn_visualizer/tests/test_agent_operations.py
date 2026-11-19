@@ -1764,6 +1764,21 @@ class TestFrameParity:
         assert agent_operations.parse_frames("#0 0x7f in ttnn::run()") == []
         assert agent_operations.parse_frames("") == []
 
+    def test_the_transcription_reads_no_frame_where_javascript_reads_none(self):
+        """A plain Python copy of the pattern reads a frame from each of these lines,
+        where JavaScript reads none. This pins `_TS_FRAME` to JavaScript's reading.
+
+        `parse_frames` does read them, a known difference the agent README notes:
+        its `\\d` matches non-ASCII digits, and `splitlines()` ends a line at U+2028.
+        Neither occurs in a CPython traceback."""
+        arabic_indic_line = '  File "/m/a.py", line \u0663, in f\n'
+        line_separator = '  File "/m/a.py", line 3, in f\u2028x\n'
+
+        assert self._frontend(arabic_indic_line) == []
+        assert self._frontend(line_separator) == []
+        assert self._backend(arabic_indic_line) == [("/m/a.py", 3)]
+        assert self._backend(line_separator) == [("/m/a.py", 3)]
+
 
 class TestFindOperations:
     def test_it_matches_a_name_case_insensitively(self, loaded):

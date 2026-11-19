@@ -21,6 +21,7 @@ const isSourceFileAvailable = vi.fn();
 const readRemoteFile = vi.fn();
 const mockUseReportSourceFiles = vi.fn();
 
+// Stable functions, like the real hook's: `useRemote.spec.tsx` pins that they are memoised.
 vi.mock('../src/hooks/useRemote', () => ({
     default: () => ({
         readRemoteFile,
@@ -143,6 +144,8 @@ describe('StackTrace frame links', () => {
         expect(await screen.findByText(CALL_SITE)).toBeInTheDocument();
         expect([sourceButtonPath, sourceButtonId]).toEqual([CALL_SITE, SOURCE_FILE_ID]);
         expect(readRemoteFile).toHaveBeenCalledWith(sourceButtonPath, sourceButtonId);
+        // Read without a probe of its own, as every linked frame is.
+        expect(isSourceFileAvailable).not.toHaveBeenCalled();
     });
 
     it("highlights the clicked frame's line in the source viewer", async () => {

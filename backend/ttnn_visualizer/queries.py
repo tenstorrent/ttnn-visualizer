@@ -145,11 +145,13 @@ class LocalQueryRunner:
             self.connection.close()
 
 
-# A ``source_files`` row a read can return: one with contents. The probe, the read's
-# lookup and the frontend's list of linkable files must agree on it, or a frame links to
-# a file that will not open. ``!= ''`` rather than ``length(contents) > 0``, which makes
-# SQLite read every file's text to count its characters.
-_SERVABLE_SOURCE_FILE = "contents IS NOT NULL AND contents != ''"
+# A ``source_files`` row a read can return: one with contents. The probe, the frontend's
+# list of linkable files and the read, which checks ``bool(contents)`` in Python
+# (``_source_file_has_contents``), must agree on it, or a frame links to a file that will
+# not open. Hence an empty BLOB counts as empty too: SQLite never equates it with ``''``.
+# The comparison spares SQLite the character count ``length(contents) > 0`` makes, but
+# not the read: SQLite still loads every file's text to compare it.
+_SERVABLE_SOURCE_FILE = "contents IS NOT NULL AND contents NOT IN ('', x'')"
 
 
 class DatabaseQueries:
@@ -673,7 +675,8 @@ class DatabaseQueries:
         """``(id, path)`` of every ``source_files`` row a read can return.
 
         The same rows ``get_source_file_path_if_present`` approves: a path and
-        non-empty contents, asked for without loading the contents.
+        non-empty contents. The contents are not returned, but SQLite still reads
+        them to test them.
         """
         if not self._check_table_exists("source_files"):
             return []

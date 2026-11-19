@@ -85,8 +85,11 @@ site, that its Source button opens —
 two answers to "where is this op from" that disagreed would be worse than one. Both match
 one anchored pattern per line, so a frame's file and line always come from the same line,
 and a path with a quote in it is no frame on either side. The frontend splits lines on
-CRLF, CR and LF, where `splitlines()` also splits on a few rarer separators.
-`TestFrameParity` transcribes the frontend pattern and pins that both read the same frames.
+CRLF, CR and LF, where `splitlines()` also splits on a few rarer separators, and
+`parse_frames`' `\d` matches any Unicode digit, where JavaScript's matches only ASCII. So a
+frame line holding U+2028, or a line number in, say, Arabic-Indic digits, is a frame here
+and not in the app; CPython writes neither. `TestFrameParity` transcribes the frontend
+pattern, pins that both read the same frames, and pins those two differences.
 
 The frontend has a second input, `stack_trace_source_file_id`, with no equivalent here.
 It is one id per trace, for frame 0's file (tt-metal's writer stores the first file a trace

@@ -14,14 +14,16 @@ def _source_files(client, instance_id):
 
 
 def test_it_lists_the_files_a_read_can_return(client, make_report):
-    """Only rows a read would serve: the stack trace frames linked from these are
-    the frames whose source the viewer can open."""
+    """Only rows a read would serve. Stack trace frames are linked only to these
+    files, so a linked frame opens without an availability probe. The viewer behind
+    the Source button can still find other files outside server mode."""
     instance_id = make_report(
         schema_sql=SCHEMA_V2_1,
         inserts_sql="""
         INSERT INTO source_files VALUES (1, '/proj/model.py', 'def forward(): pass');
         INSERT INTO source_files VALUES (2, '/proj/empty.py', '');
         INSERT INTO source_files VALUES (3, '/proj/null.py', NULL);
+        INSERT INTO source_files VALUES (4, '/proj/blob.py', x'');
         INSERT INTO source_files VALUES (5, '/proj/../escape.py', 'x = 1');
         INSERT INTO source_files VALUES (6, '/proj/helpers.py', 'def helper(): pass');
         """,

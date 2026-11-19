@@ -57,11 +57,9 @@ function StackTraceFrameSource({
         return () => {
             isCurrent = false;
         };
-        // Once per mount: the parent remounts this per frame. `readSource` changes identity on
-        // every render (`useRemote`'s `readRemoteFile` is not memoised), so depending on it
-        // would read the file again each time.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+        // One read per mount: the parent remounts this per frame. `readSource` changes only
+        // when the read stores the file's contents, and it returns early once they are there.
+    }, [readSource]);
 
     const isVisible = isOpen && hasRead;
     const handleClose = useCallback(() => onClose(!!errorDetails), [onClose, errorDetails]);
