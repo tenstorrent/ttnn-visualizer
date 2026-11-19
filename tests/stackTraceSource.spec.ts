@@ -7,8 +7,6 @@ import {
     extractOperationSourceData,
     getCallSiteFrame,
     getFrameSourceFileId,
-    getStackTraceFilePath,
-    getStackTraceLineNumber,
     isFrameSourceInReport,
     parseStackTraceFrames,
 } from '../src/functions/stackTraceSource';
@@ -64,8 +62,7 @@ describe('parseStackTraceFrames', () => {
         expect(parseStackTraceFrames(trace).map(({ index, file, line }) => [index, file, line])).toEqual([
             [0, '/m/real.py', 7],
         ]);
-        expect(getStackTraceFilePath(trace)).toBe('/m/real.py');
-        expect(getStackTraceLineNumber(trace)).toBe(7);
+        expect(getCallSiteFrame(trace)).toMatchObject({ file: '/m/real.py', line: 7 });
     });
 
     it('reads a path with a quote in it as no frame', () => {
@@ -162,31 +159,18 @@ describe('isFrameSourceInReport', () => {
     });
 });
 
-describe('getStackTraceFilePath', () => {
-    it('extracts the file path from a trace', () => {
-        expect(getStackTraceFilePath(PYTHON_TRACE)).toBe('/models/resnet/ttnn_functional_resnet50.py');
+describe('getCallSiteFrame on a single frame or none', () => {
+    it("reads a single frame's file and line", () => {
+        expect(getCallSiteFrame(PYTHON_TRACE)).toMatchObject({
+            file: '/models/resnet/ttnn_functional_resnet50.py',
+            line: 641,
+        });
     });
 
-    it('returns an empty string when no file path is present', () => {
-        expect(getStackTraceFilePath('no file here')).toBe('');
-        expect(getStackTraceFilePath('File "/x.py" with no line')).toBe('');
-        expect(getStackTraceFilePath('')).toBe('');
-    });
-});
-
-describe('getStackTraceLineNumber', () => {
-    it("is frame 0's line, matching frame 0's file", () => {
-        expect(getStackTraceFilePath(MULTI_FRAME_TRACE)).toBe('/m/models/resnet.py');
-        expect(getStackTraceLineNumber(MULTI_FRAME_TRACE)).toBe(135);
-    });
-
-    it('extracts the line number from a trace', () => {
-        expect(getStackTraceLineNumber(PYTHON_TRACE)).toBe(641);
-    });
-
-    it('returns null when no line number is present', () => {
-        expect(getStackTraceLineNumber('File "/x.py" with no line')).toBeNull();
-        expect(getStackTraceLineNumber('')).toBeNull();
+    it('is null when no line is a whole frame', () => {
+        expect(getCallSiteFrame('no file here')).toBeNull();
+        expect(getCallSiteFrame('File "/x.py" with no line')).toBeNull();
+        expect(getCallSiteFrame('')).toBeNull();
     });
 });
 

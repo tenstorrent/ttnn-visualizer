@@ -126,11 +126,6 @@ export const isFrameSourceInReport = (
     return sourceFiles.paths.has(frame.file) || (frameSourceFileId != null && sourceFiles.ids.has(frameSourceFileId));
 };
 
-export const getStackTraceFilePath = (stackTrace: string): string => getCallSiteFrame(stackTrace)?.file ?? '';
-
-export const getStackTraceLineNumber = (stackTrace: string): number | null =>
-    getCallSiteFrame(stackTrace)?.line ?? null;
-
 export const extractOperationSourceData = (operation: OperationStackTraceFields): OperationSourceData | null => {
     const callSite = getCallSiteFrame(operation.stack_trace);
     const filePath = callSite?.file ?? '';
