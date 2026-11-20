@@ -1794,8 +1794,8 @@ class TestFrameParity:
 
         assert self._frontend(arabic_indic_line) == []
         assert self._frontend(line_separator) == []
-        assert self._backend(arabic_indic_line) == [("/m/a.py", 3)]
-        assert self._backend(line_separator) == [("/m/a.py", 3)]
+        assert self._backend(arabic_indic_line) == [("/m/a.py", 3, "f")]
+        assert self._backend(line_separator) == [("/m/a.py", 3, "f")]
 
     def test_a_separator_inside_the_path_is_a_frame_only_in_the_app(self):
         """The other direction: JavaScript's `[^"]*` takes U+2028, while
