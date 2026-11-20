@@ -19,6 +19,7 @@ import FooterFallback from './FooterFallback';
 import { activePerformanceReportAtom, activeProfilerReportAtom } from '../store/app';
 import { getFolderReportId } from '../functions/reportLinks';
 import ReportLinkRecorder from './ReportLinkRecorder';
+import ReportLoadRecorder from './ReportLoadRecorder';
 import ClusterRenderer from './cluster/ClusterRenderer';
 import { ModalAwareOutlet } from '../libs/ModalAwareOutlet';
 import FeedbackButton from './FeedbackButton';
@@ -104,6 +105,8 @@ function Layout() {
             <BoundedFooterInfobar />
 
             <ReportLinkRecorder />
+
+            <ReportLoadRecorder />
 
             <FeedbackButton />
 

@@ -11,6 +11,7 @@ import { ListStates } from '../definitions/VirtualLists';
 import { Signpost } from '../model/Signpost';
 import { PerfTabIds } from '../definitions/Performance';
 import { ReportFolder, ReportLocation } from '../definitions/Reports';
+import { ReportKind, ReportSource } from '../definitions/EventLogEvent';
 import { ReportScope } from '../definitions/ReportScope';
 import { REPORT_LINKS_STORAGE_KEY } from '../definitions/ReportLinks';
 import { getFolderReportId } from '../functions/reportLinks';
@@ -93,6 +94,19 @@ export const activePerformanceReportAtom = atom<ReportFolder | null>(null);
 export const activePerformanceReportFolderNameAtom = atom((get) => {
     return getFolderReportId(get(activePerformanceReportAtom));
 });
+/** The report kinds whose `report_loaded` waits for their data to load (#2343). */
+export type SettledReportKind = ReportKind.PROFILER | ReportKind.PERFORMANCE;
+export interface PendingReportLoad {
+    /** The `path` of the report folder that was chosen, so a settle for another report is ignored. */
+    path: string;
+    source: ReportSource;
+}
+/**
+ * A report chosen inside the visualizer whose load event is not recorded yet. Choosing a
+ * report only sets this; `useReportLoadSettlement` records the event once the report's
+ * data settles. A restored report never gets one, so it records nothing.
+ */
+export const pendingReportLoadsAtom = atom<Partial<Record<SettledReportKind, PendingReportLoad>>>({});
 /** True while a report select/mount is awaiting confirmation of the active report. */
 export const isActivatingReportAtom = atom(false);
 // Persisted memory↔performance report pairs (linked and unlinked). Many-to-many
