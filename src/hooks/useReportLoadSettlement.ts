@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { AxiosError, HttpStatusCode } from 'axios';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useCallback, useEffect } from 'react';
 import { ReportKind, ReportLoadFailureReason, ReportSource } from '../definitions/EventLogEvent';
@@ -18,16 +19,30 @@ import {
     filterBySignpostAtom,
     pendingReportLoadsAtom,
 } from '../store/app';
-import { usePerformanceReport, useReportMetadata } from './useAPI';
+import { resetMemoryReportReads, useOperationsList, usePerformanceReport, useReportMetadata } from './useAPI';
 
-/** Marks a chosen report as pending, so its load event is recorded once its data settles. */
+/**
+ * Marks a chosen report as pending, so its load event is recorded once its data settles.
+ *
+ * A memory report's cached reads are reset first, so the outcome comes from this choice's own
+ * request. Call it once the server has the report active, so that request is answered for it.
+ * The performance report needs no reset: its query is keyed by location too, and the footer
+ * unloads one that fails, so choosing it again changes the key and refetches.
+ */
 export const useMarkReportLoadPending = () => {
+    const queryClient = useQueryClient();
     const setPendingReportLoads = useSetAtom(pendingReportLoadsAtom);
 
     return useCallback(
-        (kind: SettledReportKind, path: string, source: ReportSource) =>
-            setPendingReportLoads((pending) => ({ ...pending, [kind]: { path, source } })),
-        [setPendingReportLoads],
+        (kind: SettledReportKind, path: string, source: ReportSource) => {
+            if (kind === ReportKind.PROFILER) {
+                // Not awaited: the reset is synchronous, and the refetch it starts settles the marker
+                void resetMemoryReportReads(queryClient, path);
+            }
+
+            setPendingReportLoads((pending) => ({ ...pending, [kind]: { path, source } }));
+        },
+        [queryClient, setPendingReportLoads],
     );
 };
 
@@ -35,7 +50,8 @@ const getErrorStatus = (error: AxiosError) => error.status ?? error.response?.st
 
 /**
  * Records `report_loaded` or `report_load_failed` for a report chosen inside the visualizer
- * once its data settles: the memory report's metadata, or the performance report's rows.
+ * once its data settles: the memory report's operations and metadata, or the performance
+ * report's rows.
  *
  * Only a report with a pending marker for its own path is recorded, so a restored report,
  * or a choice replaced before its data arrived, records nothing. Every decision reads the
@@ -50,6 +66,7 @@ const useReportLoadSettlement = () => {
     const activePerformanceFolderName = useAtomValue(activePerformanceReportFolderNameAtom);
     const hasSignpostRange = useAtomValue(filterBySignpostAtom).some((signpost) => signpost !== null);
     const { data: reportMetadata, error: reportMetadataError } = useReportMetadata();
+    const { data: operations, error: operationsError } = useOperationsList();
     const { data: performanceReport, error: performanceReportError } =
         usePerformanceReport(activePerformanceFolderName);
 
@@ -84,26 +101,36 @@ const useReportLoadSettlement = () => {
             return;
         }
 
-        if (reportMetadataError) {
-            // Legacy reports lack the metadata table and still open
-            if (getErrorStatus(reportMetadataError) === HttpStatusCode.UnprocessableEntity) {
-                recordReportLoaded(ReportKind.PROFILER, pendingProfiler.source);
-            } else {
-                recordReportLoadFailure(ReportKind.PROFILER, reportMetadataError);
-            }
-        } else if (reportMetadata) {
-            if (evaluateDbVersion(reportMetadata.version).statusCode === DBVersionValidation.OK) {
-                recordReportLoaded(ReportKind.PROFILER, pendingProfiler.source);
-            } else {
-                // The report still opens, with a warning, but cannot be read reliably
-                recordReportLoadFailed(ReportKind.PROFILER, ReportLoadFailureReason.UNSUPPORTED_VERSION);
-            }
+        // Legacy reports lack the metadata table, and still open
+        const isLegacyMetadata =
+            reportMetadataError !== null && getErrorStatus(reportMetadataError) === HttpStatusCode.UnprocessableEntity;
+        const isSupportedVersion =
+            reportMetadata !== undefined &&
+            evaluateDbVersion(reportMetadata.version).statusCode === DBVersionValidation.OK;
+
+        if (reportMetadata && !isSupportedVersion) {
+            // The report still opens, with a warning, but cannot be read reliably
+            recordReportLoadFailed(ReportKind.PROFILER, ReportLoadFailureReason.UNSUPPORTED_VERSION);
+        } else if (operationsError) {
+            recordReportLoadFailure(ReportKind.PROFILER, operationsError);
+        } else if (reportMetadataError && !isLegacyMetadata) {
+            recordReportLoadFailure(ReportKind.PROFILER, reportMetadataError);
+        } else if (operations && (isSupportedVersion || isLegacyMetadata)) {
+            recordReportLoaded(ReportKind.PROFILER, pendingProfiler.source);
         } else {
             return;
         }
 
         clearPending(ReportKind.PROFILER, pendingProfiler);
-    }, [pendingProfiler, activeProfilerPath, reportMetadata, reportMetadataError, clearPending]);
+    }, [
+        pendingProfiler,
+        activeProfilerPath,
+        reportMetadata,
+        reportMetadataError,
+        operations,
+        operationsError,
+        clearPending,
+    ]);
 
     useEffect(() => {
         if (!pendingPerformance) {

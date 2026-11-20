@@ -92,7 +92,7 @@ Recorded by the server once during a successful local launch.
 
 ### `report_loaded`
 
-Recorded once a report chosen inside the visualizer has had its data read: for a memory report, its metadata at a supported version; for a performance report, its rows. Choosing a report records nothing on its own, so a choice abandoned or replaced before its data arrives records no event. Restoring the active report when the page is reloaded records no `report_loaded`. Neither does opening a report by path: the first page load after launching with `--memory-report-path` or `--performance-path`, or following a link from the agent tools. So counts are reports chosen inside the visualizer, not report sessions.
+Recorded once a report chosen inside the visualizer has had its data read: for a memory report, its operations, and its metadata at a supported version; for a performance report, its rows. Choosing a report records nothing on its own, so a choice abandoned or replaced before its data arrives records no event. Restoring the active report when the page is reloaded records no `report_loaded`. Neither does opening a report by path: the first page load after launching with `--memory-report-path` or `--performance-path`, or following a link from the agent tools. So counts are reports chosen inside the visualizer, not report sessions.
 
 - `kind`: `profiler` (the memory report), `performance`, `npe`, `mlir`, `cluster_descriptor`.
 - `source`: `upload`, `remote_sync`, `local_tt_metal`, `demo`.

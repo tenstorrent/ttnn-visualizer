@@ -651,11 +651,13 @@ export const useGetClusterTopology = () => {
     });
 };
 
+export const OPERATIONS_QUERY_KEY = 'get-operations';
+
 export const useOperationsList = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
     return useQuery<OperationDescription[], AxiosError>({
         queryFn: () => (activeProfilerReport !== null ? fetchOperations() : Promise.resolve([])),
-        queryKey: ['get-operations', activeProfilerReport?.path],
+        queryKey: [OPERATIONS_QUERY_KEY, activeProfilerReport?.path],
         retry: false,
         staleTime: Infinity,
     });
@@ -944,6 +946,19 @@ export const clearReportCaches = (queryClient: QueryClient) => {
     getDeviceOperationListPerfByOpId.reset();
 };
 
+/**
+ * Forgets what is cached of one memory report's operations and metadata, so the next read of
+ * either asks the server again. Both are keyed by folder path alone and never go stale, so a
+ * report chosen again would otherwise be answered from an earlier attempt: an error the server
+ * has since recovered from, or another location's report with the same folder name.
+ */
+export const resetMemoryReportReads = (queryClient: QueryClient, path: string) =>
+    Promise.all(
+        [OPERATIONS_QUERY_KEY, REPORT_METADATA_QUERY_KEY].map((key) =>
+            queryClient.resetQueries({ queryKey: [key, path], exact: true }),
+        ),
+    );
+
 export const useGetDeviceOperationListPerf = () => {
     const { data: operations } = useOperationsList();
     const deviceOperationOrderCandidates = getDeviceOperationOrderCandidates(operations);
@@ -1017,12 +1032,14 @@ export const fetchReportMetadata = async (): Promise<ReportMetadata> => {
     } as ReportMetadata;
 };
 
+export const REPORT_METADATA_QUERY_KEY = 'get-report-metadata';
+
 // The endpoint returns 422 on legacy reports that lack the table
 export const useReportMetadata = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
     return useQuery<ReportMetadata, AxiosError>({
-        queryKey: ['get-report-metadata', activeProfilerReport?.path],
+        queryKey: [REPORT_METADATA_QUERY_KEY, activeProfilerReport?.path],
         queryFn: fetchReportMetadata,
         enabled: activeProfilerReport !== null,
         retry: false,

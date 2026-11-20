@@ -94,7 +94,8 @@ vi.mock('../src/hooks/useAPI', async () => {
         useGetClusterDescription: () => ({ data: null }),
         // The footer's data hooks: its range slider is where a failed performance report is handled.
         useGetLatestAppVersion: () => ({ data: undefined, isPending: false, isError: false }),
-        useOperationsList: () => ({ data: undefined }),
+        // Settled, so a memory report's load is decided by its metadata alone here
+        useOperationsList: () => ({ data: [], error: null }),
         useGetDeviceOperationListPerf: () => [],
         useOperationListRange: () => null,
         // The Performance route's other data hooks, settled so only the report itself can
