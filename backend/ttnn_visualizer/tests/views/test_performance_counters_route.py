@@ -233,7 +233,20 @@ def test_the_models_placeholder_compute_time_reads_as_unmodelled(app, client, tm
 
 @pytest.mark.parametrize("perf_id", [0, 1, 10_000])
 def test_a_row_past_either_end_is_not_found(client, counted, perf_id):
-    assert _get(client, counted, perf_id).status_code == HTTPStatus.NOT_FOUND
+    response = _get(client, counted, perf_id)
+
+    assert response.status_code == HTTPStatus.NOT_FOUND
+    assert response.get_json()["error"] == f"No performance row {perf_id}."
+
+
+@pytest.mark.parametrize("perf_id", ["abc", "<b>7"])
+def test_an_id_that_is_not_a_whole_number_is_refused_without_echoing_it(
+    client, counted, perf_id
+):
+    response = _get(client, counted, perf_id)
+
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert perf_id not in response.get_data(as_text=True)
 
 
 def _write(directory: Path, content: bytes) -> None:

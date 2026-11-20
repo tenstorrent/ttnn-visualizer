@@ -1436,9 +1436,10 @@ def get_performance_counters(perf_id, instance: Instance):
     _apply_requested_performance_name(instance)
 
     try:
-        position = int(perf_id) - REPORT_ROW_ID_OFFSET
+        row_id = int(perf_id)
     except ValueError:
-        return response_bad_request(f"Invalid performance row id: {perf_id}")
+        return response_bad_request("Invalid performance row id.")
+    position = row_id - REPORT_ROW_ID_OFFSET
 
     try:
         path = OpsPerformanceQueries.get_local_ops_perf_file_path(instance)
@@ -1450,7 +1451,7 @@ def get_performance_counters(perf_id, instance: Instance):
         return response_unprocessable_entity(str(error))
 
     if row is None:
-        return response_not_found(f"No performance row {perf_id}.")
+        return response_not_found(f"No performance row {row_id}.")
 
     counters = hardware_counters.operation_counters(
         row,
@@ -1458,7 +1459,7 @@ def get_performance_counters(perf_id, instance: Instance):
         DeviceLogProfilerQueries.architecture(instance),
     )
     return Response(
-        orjson.dumps({"perf_id": int(perf_id), **counters}),
+        orjson.dumps({"perf_id": row_id, **counters}),
         mimetype="application/json",
     )
 
