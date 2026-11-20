@@ -66,6 +66,7 @@ from ttnn_visualizer.models import (
     InputTensor,
     Operation,
     OutputTensor,
+    StackTrace,
     Tensor,
 )
 from ttnn_visualizer.queries import DatabaseQueries
@@ -102,7 +103,11 @@ MAX_LISTED_PRODUCERS = 5
 MAX_CALL_SITE_TEXT_CHARS = 300
 _MAX_SOURCE_LINE = 1 << 31
 # Ids per `stack_traces` read, inside SQLite's oldest bound of 999 parameters.
-_STACK_TRACE_IDS_PER_READ = 500
+STACK_TRACE_IDS_PER_READ = 500
+# Past this many ids, the traces are read in one streamed pass instead. Nothing
+# indexes `stack_traces.operation_id`, so each batch scans the whole table: past
+# four batches, one scan costs less than the batches would.
+STACK_TRACE_SCAN_IDS = 4 * STACK_TRACE_IDS_PER_READ
 # The tables behind each answer's figures, so its rank refusal covers every one.
 # `query_tensors` joins `device_tensors` by id alone where it has no `rank`.
 _FALLBACK_TABLES = (
@@ -792,7 +797,7 @@ def report_late_deallocations(
         run_start_count=late.run_start_count(operation_ids, held.held_by_operation),
         holds=holds,
         names=names,
-        call_sites=_call_sites(
+        call_sites=read_call_sites(
             queries,
             scope,
             {hold.last_use_operation_id for hold in holds},
@@ -805,9 +810,13 @@ def report_late_deallocations(
     )
 
 
-def _call_site(trace: Optional[str]) -> Optional[Dict[str, object]]:
+def _call_site(trace: object) -> Optional[Dict[str, object]]:
+    # A BLOB a report keeps where text belongs names no frame, as `getCallSiteFrame`'s
+    # `typeof` check reads it, rather than failing the whole answer.
+    if not isinstance(trace, str):
+        return None
     try:
-        frames = parse_frames(trace or "", limit=1)
+        frames = parse_frames(trace, limit=1)
     except ValueError:
         # A line number past Python's 4,300-digit int bound; real traces never have one.
         return None
@@ -818,19 +827,41 @@ def _call_site(trace: Optional[str]) -> Optional[Dict[str, object]]:
     return frames[0]
 
 
-def _call_sites(
+def read_call_sites(
     queries: DatabaseQueries, scope: RankScope, operation_ids: Iterable[int]
 ) -> Dict[int, Optional[Dict[str, object]]]:
-    """Frame 0 of each operation's first stack trace, as `operation_provenance` reads it."""
+    """Frame 0 of each operation's first stack trace, as `operation_provenance` reads it.
+
+    Only frame 0 outlives the read: each trace is dropped once its call site is parsed.
+    Operations with the same frame 0, as a loop's are, share one site, which every
+    caller only reads. Keyed by the frame rather than the trace, so traces whose outer
+    frames differ per call are not all kept alive to the end of the read.
+    """
     ids = sorted(operation_ids)
     sites: Dict[int, Optional[Dict[str, object]]] = {}
-    for start in range(0, len(ids), _STACK_TRACE_IDS_PER_READ):
-        batch = ids[start : start + _STACK_TRACE_IDS_PER_READ]
+    site_by_frame: Dict[Tuple[object, ...], Dict[str, object]] = {}
+
+    def keep(trace: StackTrace) -> None:
+        if trace.operation_id in sites:
+            return
+        site = _call_site(trace.stack_trace)
+        if site is not None:
+            key = tuple(site[field] for field in ("file", "line", "function", "code"))
+            site = site_by_frame.setdefault(key, site)
+        sites[trace.operation_id] = site
+
+    if len(ids) > STACK_TRACE_SCAN_IDS:
+        wanted = set(ids)
+        for trace in queries.iter_stack_traces(scoped(queries, "stack_traces", scope)):
+            if trace.operation_id in wanted:
+                keep(trace)
+        return sites
+    for start in range(0, len(ids), STACK_TRACE_IDS_PER_READ):
+        batch = ids[start : start + STACK_TRACE_IDS_PER_READ]
         for trace in queries.query_stack_traces(
             scoped(queries, "stack_traces", scope, operation_id=batch)
         ):
-            if trace.operation_id not in sites:
-                sites[trace.operation_id] = _call_site(trace.stack_trace)
+            keep(trace)
     return sites
 
 
@@ -854,12 +885,15 @@ def _hold_totals(holds: Sequence[late.Hold]) -> _HoldTotals:
     }
 
 
-def _call_site_entry(site: Optional[Dict[str, object]]) -> Optional[Dict[str, object]]:
+def call_site_entry(site: Optional[Dict[str, object]]) -> Optional[Dict[str, object]]:
     if site is None:
         return None
     entry: Dict[str, object] = {}
     for field in ("file", "line", "function", "code"):
-        entry.update(cut_text(field, site[field], MAX_CALL_SITE_TEXT_CHARS))
+        # With a digest, so two long paths that share their cut stay told apart.
+        entry.update(
+            cut_text(field, site[field], MAX_CALL_SITE_TEXT_CHARS, digest=True)
+        )
     return entry
 
 
@@ -902,7 +936,7 @@ def _call_site_groups(
         )
         entries.append(
             {
-                "call_site": _call_site_entry(
+                "call_site": call_site_entry(
                     report.call_sites.get(members[0].last_use_operation_id)
                 ),
                 **totals[key],
@@ -1181,14 +1215,18 @@ __all__ = [
     "MAX_PARSED_MESSAGE_CHARS",
     "MAX_PEAK_CONTRIBUTORS",
     "MAX_REPEAT_OPERATION_IDS",
+    "STACK_TRACE_IDS_PER_READ",
+    "STACK_TRACE_SCAN_IDS",
     "DramFallbackReport",
     "L1PeakReport",
     "LateDeallocationReport",
+    "call_site_entry",
     "dram_fallbacks",
     "errors",
     "l1_peak",
     "late_deallocations",
     "operation_failure_fields",
+    "read_call_sites",
     "report_dram_fallbacks",
     "report_l1_peak",
     "report_late_deallocations",
