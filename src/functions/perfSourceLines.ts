@@ -95,9 +95,10 @@ const getTopOpCodes = (deviceTimeByOpCode: Map<string, number>): string[] =>
  * change to either side by hand. The tool answers the same question, but differs from this view:
  * - Range: this covers the rows it is given, which `PerfReport` takes from the range slider;
  *   the tool reads the whole report or a signpost range.
- * - No call site: `PerfReport` disables the grouping when no operation in the memory report,
- *   linked or not, has a trace naming a Python frame. The tool refuses only when no
- *   `stack_traces` row has any text, and otherwise files every linked row under `no_trace`.
+ * - No call site: both decline when no trace names a Python frame. `PerfReport` checks every
+ *   operation in the memory report, linked or not; the tool checks only the linked operations'
+ *   traces, at the linked rank. So a call site only on an unlinked operation leaves this enabled
+ *   while the tool refuses.
  * - Unmerged devices: this keeps a group per line per device, each a share of its device.
  * - Trace: this reads the call site from the operation list's `stack_trace`, which keeps an
  *   operation's last `stack_traces` row, keyed by operation and rank. The tool reads the first,

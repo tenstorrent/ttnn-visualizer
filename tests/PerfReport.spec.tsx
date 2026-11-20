@@ -1027,6 +1027,13 @@ describe('PerformanceReport stacked view grouped by source line', () => {
         expect(getSourceLineRows()[0]).toHaveTextContent('model.py:42');
     });
 
+    it('shows the skeleton, not an empty-table reason, while the operations list loads', () => {
+        (useOperationsList as Mock).mockReturnValue({ data: undefined, isLoading: true });
+        renderReport({ data: LINKED_ROWS, stackedGroupBy: StackedGroupBy.SOURCE_LINE });
+
+        expect(screen.getByTestId(TEST_IDS.PERF_TABLE_SKELETON)).toBeInTheDocument();
+    });
+
     it('explains an empty table when Source line stays selected and no trace names a Python frame', () => {
         (useOperationsList as Mock).mockReturnValue({
             data: [

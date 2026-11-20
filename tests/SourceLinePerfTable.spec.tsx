@@ -205,6 +205,21 @@ describe('SourceLinePerfTable', () => {
         expect(getFunctions()).toEqual(['in_b', 'in_a']);
     });
 
+    it('orders two files sharing a basename by line number before full path', () => {
+        const at = (directory: string, lineNumber: number) =>
+            group({
+                key: `${directory}-${lineNumber}`,
+                basename: 'model.py',
+                filePath: `/${directory}/model.py`,
+                lineNumber,
+            });
+        renderTable({ groups: [at('a', 10), at('b', 8)] });
+        const getLabels = () => getRows().map((row) => row.textContent?.match(/\w+\.py:\d+/)?.[0]);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Source line' }));
+        expect(getLabels()).toEqual(['model.py:8', 'model.py:10']);
+    });
+
     it('scrolls back to the top when a header re-sorts the lines', () => {
         renderTable();
         const scrollRegion = screen.getByRole('region', { name: 'Performance table' });
