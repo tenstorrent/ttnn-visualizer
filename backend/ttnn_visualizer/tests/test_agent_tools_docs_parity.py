@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Dict, Set
 
 import pytest
+from ttnn_visualizer import hardware_counters
 from ttnn_visualizer.agent import (
     hw_utilisation,
     op_configurations,
@@ -473,6 +474,7 @@ def test_the_page_carries_the_hw_utilisation_caveats():
     assert (
         "`--profiler-capture-perf-counters=<group>` for each `counters` field" in page
     )
+    assert f"`{hardware_counters.EXAMPLE_GROUPS}`" in page
 
 
 def test_the_page_names_each_hardware_counter_sort_key():

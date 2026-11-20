@@ -24,7 +24,7 @@ from typing import (
 )
 
 from ttnn_visualizer import hardware_counters
-from ttnn_visualizer.agent.cells import finite_number, whole_number
+from ttnn_visualizer.cells import finite_number, whole_number
 from ttnn_visualizer.csv_queries import PROGRAM_CACHE_HIT_COLUMN, PROGRAM_HASH_COLUMN
 from ttnn_visualizer.device_architecture import DeviceArchitecture
 
@@ -199,11 +199,7 @@ _FIELDS: Dict[DetailGroup, Tuple[_Field, ...]] = {
                 counter_label=unit.label,
             )
             for unit in hardware_counters.HEADLINE_UNITS
-            for suffix in (
-                "",
-                hardware_counters.MIN_KEY_SUFFIX,
-                hardware_counters.MAX_KEY_SUFFIX,
-            )
+            for _, suffix in hardware_counters.ROW_KEY_STATS
         ),
         *(
             _Field(

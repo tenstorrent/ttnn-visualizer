@@ -35,7 +35,6 @@ from ttnn_visualizer.decorators import (
     refuse_in_direct_report_mode,
     with_instance,
 )
-from ttnn_visualizer.device_architecture import architecture_of
 from ttnn_visualizer.enums import (
     ConnectionTestStates,
     HostKeyIssue,
@@ -1338,8 +1337,8 @@ def _apply_requested_performance_name(instance: Instance) -> None:
     ``_rank<N>`` qualifier — so it is resolved as given rather than guessed at: a
     rank fallback here could answer with a different rank's numbers.
 
-    All three routes that honour ``?name=`` come through here, so the query value
-    is collapsed to a single segment once rather than trusted at each caller.
+    Every route that honours ``?name=`` comes through here, so the query value is
+    collapsed to a single segment once rather than trusted at each caller.
     """
     name = request.args.get("name", None)
     if not name or current_app.config["SERVER_MODE"]:
@@ -1436,11 +1435,10 @@ def get_performance_counters(perf_id, instance: Instance):
     if row is None:
         return response_not_found(f"No performance row {perf_id}.")
 
-    meta = DeviceLogProfilerQueries.read_device_meta(instance)
     counters = hardware_counters.operation_counters(
         row,
         hardware_counters.discover(header),
-        architecture_of(meta.architecture if meta else None),
+        DeviceLogProfilerQueries.architecture(instance),
     )
     return Response(
         orjson.dumps({"perf_id": int(perf_id), **counters}),

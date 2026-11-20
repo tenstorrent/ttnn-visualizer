@@ -51,6 +51,7 @@ import pandas as pd
 import zstd
 from tt_perf_report import perf_report
 from ttnn_visualizer import hardware_counters
+from ttnn_visualizer.device_architecture import DeviceArchitecture, architecture_of
 from ttnn_visualizer.exceptions import (
     DataFormatError,
     InvalidSignpostRange,
@@ -1503,6 +1504,16 @@ class DeviceLogProfilerQueries:
             return None
         with open(path, "r", encoding="utf-8", errors="ignore") as handle:
             return parse_device_meta(handle.readline(_META_LINE_LIMIT).strip())
+
+    @classmethod
+    def architecture(cls, instance: Instance) -> DeviceArchitecture:
+        """The architecture the device log names, unknown where it names none or cannot
+        be read; the counters route and the agent name fill hints for it alike."""
+        try:
+            meta = cls.read_device_meta(instance)
+        except OSError:
+            return DeviceArchitecture.UNKNOWN
+        return architecture_of(meta.architecture if meta is not None else None)
 
     @classmethod
     def clock_mhz(cls, instance: Instance) -> Optional[int]:

@@ -45,7 +45,6 @@ from ttnn_visualizer.agent.bounds import (
     require_name_fits,
     shown_op_code,
 )
-from ttnn_visualizer.agent.cells import finite_number, whole_number
 from ttnn_visualizer.agent.handles import (
     CacheVariant,
     ReportRegistry,
@@ -55,6 +54,7 @@ from ttnn_visualizer.agent.handles import (
     read_once,
     without_performance_csv,
 )
+from ttnn_visualizer.cells import finite_number, whole_number
 from ttnn_visualizer.csv_queries import (
     L1_ZONE_MARKER_CAPACITY,
     MAX_COUNTED_ZONE_NAMES,
@@ -82,7 +82,7 @@ from ttnn_visualizer.csv_queries import (
     read_signposts,
     signpost_range_ignored,
 )
-from ttnn_visualizer.device_architecture import DeviceArchitecture, architecture_of
+from ttnn_visualizer.device_architecture import DeviceArchitecture
 from ttnn_visualizer.exceptions import (
     DataFormatError,
     InvalidSignpostRange,
@@ -709,9 +709,8 @@ def _device_meta(instance: Instance) -> Optional[DeviceLogMeta]:
 
 
 def device_architecture(registry: ReportRegistry, handle: str) -> DeviceArchitecture:
-    """The architecture the handle's device log names, read as the flags read it."""
-    meta = _device_meta(registry.get(handle))
-    return architecture_of(meta.architecture if meta is not None else None)
+    """The architecture the handle's device log names, as the counters route reads it."""
+    return DeviceLogProfilerQueries.architecture(registry.get(handle))
 
 
 def counters_architecture(
@@ -1097,7 +1096,7 @@ def hardware_counter_table(
         raise ValueError(
             f"the performance CSV behind {handle!r} has no hardware counter columns. "
             f"Capture with {hardware_counters.CAPTURE_FLAG}=<groups>, such as "
-            "fpu,pack,unpack,instrn,l1_0 in one pass, or all with "
+            f"{hardware_counters.EXAMPLE_GROUPS} in one pass, or all with "
             f"{hardware_counters.MULTIPASS_FLAG}."
         )
     return table

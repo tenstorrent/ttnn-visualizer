@@ -24,6 +24,7 @@ from ttnn_visualizer.tests.hardware_counter_capture import (
     label_values,
     stat_column,
     write_counter_capture,
+    write_device_log,
 )
 from ttnn_visualizer.tests.smoke_capture import smoke_rows, write_ops_perf
 
@@ -490,6 +491,41 @@ class TestRanking:
 
         assert len(ranked["ops"]) == 1
         assert ranked["op_count"] > 1
+
+
+class TestPartitionedCapture:
+    """Summed device time overstates elapsed time over sub-devices that ran at once."""
+
+    @staticmethod
+    def _handle(tmp_path, name, rows):
+        partitioned = [
+            {**row, "SUB DEVICE ID": str(position % 2)}
+            for position, row in enumerate(rows)
+        ]
+        write_ops_perf(tmp_path / name, partitioned)
+        write_device_log(tmp_path / name)
+        registry = ReportRegistry()
+        return (
+            registry,
+            load_report(registry, performance_path=str(tmp_path / name))["handle"],
+        )
+
+    def test_the_summary_names_the_partitioning(self, tmp_path):
+        registry, handle = self._handle(tmp_path, "counted", counter_rows())
+
+        caveat = hw_utilisation.hw_utilisation(registry, handle)["caveat"]
+
+        assert "spans 2 sub-devices" in caveat
+
+    def test_ranking_an_uncounted_one_by_a_counter_says_each_caveat_once(
+        self, tmp_path
+    ):
+        registry, handle = self._handle(tmp_path, "plain", smoke_rows())
+
+        caveat = tools.top_ops(registry, handle, by="hw_fpu_util")["caveat"]
+
+        assert caveat.count("spans 2 sub-devices") == 1
+        assert caveat.count("No row carries hw_fpu_util") == 1
 
 
 class TestTransport:

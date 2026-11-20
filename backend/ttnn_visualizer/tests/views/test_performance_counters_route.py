@@ -7,10 +7,14 @@
 import csv
 from http import HTTPStatus
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
+from ttnn_visualizer.agent import hw_utilisation
+from ttnn_visualizer.agent.handles import ReportRegistry, load_report
 from ttnn_visualizer.csv_queries import (
     REPORT_ROW_ID_OFFSET,
+    DeviceLogProfilerQueries,
     OpsPerformanceReportQueries,
 )
 from ttnn_visualizer.extensions import db
@@ -22,7 +26,9 @@ from ttnn_visualizer.tests.hardware_counter_capture import (
     counter_rows,
     is_counted,
     label_values,
+    stat_column,
     write_counter_capture,
+    write_device_log,
 )
 from ttnn_visualizer.tests.smoke_capture import smoke_rows, write_ops_perf
 
@@ -138,6 +144,46 @@ def test_it_says_whether_an_op_without_counters_has_a_compute_kernel(
 
     assert body["op_has_counters"] is False
     assert body["has_compute_kernel"] is has_kernel
+
+
+def test_a_device_log_that_cannot_be_read_leaves_the_architecture_unknown(
+    client, counted
+):
+    """As the agent reads it, so the panel's fill hints and the agent's agree."""
+    with patch.object(
+        DeviceLogProfilerQueries,
+        "read_device_meta",
+        side_effect=PermissionError("unreadable"),
+    ):
+        response = _get(client, counted, COUNTED_POSITION + REPORT_ROW_ID_OFFSET)
+
+    assert response.status_code == HTTPStatus.OK
+    body = response.get_json()
+    assert body["architecture"] is None
+    assert _units(body)["noc_ring1"]["fill_hint"].endswith("=l1_1")
+
+
+def test_the_panel_and_the_agent_say_alike_why_a_unit_has_no_value(
+    client, counted, tmp_path
+):
+    body = _get(client, counted, COUNTED_POSITION + REPORT_ROW_ID_OFFSET).get_json()
+    registry = ReportRegistry()
+    handle = load_report(registry, performance_path=str(tmp_path / "counted"))["handle"]
+    agent = {
+        unit["unit"]: unit
+        for unit in hw_utilisation.hw_utilisation(registry, handle)["units"]
+    }
+
+    panel = {
+        unit: (reading["absence"], reading["fill_hint"])
+        for unit, reading in _units(body).items()
+        if reading["absence"] in ("not_captured", "not_on_architecture")
+    }
+
+    assert set(panel) == {"packer", "noc_ring1"}
+    assert panel == {
+        unit: (agent[unit]["state"], agent[unit].get("fill_hint")) for unit in panel
+    }
 
 
 def test_a_label_this_version_does_not_know_is_listed_under_other(client, counted):
@@ -274,6 +320,56 @@ class TestMultiDevice:
         row = next(row for row in merged_rows if row["op_code"] == op_code)
 
         assert _get(client, counted, row["id"]).get_json()["device_id"] == device
+
+
+class TestRequestedName:
+    """The panel always names its report's folder, which can be a sibling of the one
+    the instance mounts; read from the mounted one, the numbers would still look right.
+    """
+
+    SIBLING_FPU_AVG = 77.5
+
+    @pytest.fixture
+    def mounted(self, app, tmp_path):
+        write_counter_capture(tmp_path / "mounted")
+        rows = counter_rows()
+        rows[COUNTED_POSITION] = {
+            **rows[COUNTED_POSITION],
+            stat_column("FPU Util", "Avg"): repr(self.SIBLING_FPU_AVG),
+        }
+        write_ops_perf(tmp_path / "sibling", rows)
+        write_device_log(tmp_path / "sibling", WORMHOLE_PREAMBLE)
+        return _mount(app, tmp_path / "mounted")
+
+    def _read(self, client, instance_id, **query):
+        body = client.get(
+            f"{ROUTE}/{COUNTED_POSITION + REPORT_ROW_ID_OFFSET}",
+            query_string={"instanceId": instance_id, **query},
+        ).get_json()
+        return body["architecture"], _units(body)["fpu"]["avg"]
+
+    def _mounted_fpu_avg(self):
+        *_, average = label_values(PERCENT_LABELS.index("FPU Util"), COUNTED_POSITION)
+        return average
+
+    def test_the_named_report_answers_rather_than_the_mounted_one(
+        self, app, client, mounted
+    ):
+        app.config["SERVER_MODE"] = False
+
+        assert self._read(client, mounted, name="sibling") == (
+            "wormhole_b0",
+            self.SIBLING_FPU_AVG,
+        )
+        assert self._read(client, mounted) == ("blackhole", self._mounted_fpu_avg())
+
+    def test_server_mode_ignores_the_name(self, app, client, mounted):
+        assert app.config["SERVER_MODE"] is True
+
+        assert self._read(client, mounted, name="sibling") == (
+            "blackhole",
+            self._mounted_fpu_avg(),
+        )
 
 
 def test_an_id_that_is_not_a_number_is_a_bad_request(client, counted):

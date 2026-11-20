@@ -26,7 +26,7 @@ from typing import (
     Tuple,
 )
 
-from ttnn_visualizer.agent.cells import whole_number
+from ttnn_visualizer.cells import whole_number
 from ttnn_visualizer.models import Tensor
 
 NO_CONSUMER_OPERATION_ID = -1

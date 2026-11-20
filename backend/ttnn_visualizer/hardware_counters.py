@@ -9,6 +9,7 @@ import csv
 import math
 import re
 from array import array
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import (
@@ -25,7 +26,7 @@ from typing import (
     Tuple,
 )
 
-from ttnn_visualizer.agent.cells import whole_number
+from ttnn_visualizer.cells import whole_number
 from ttnn_visualizer.device_architecture import DeviceArchitecture
 from ttnn_visualizer.exceptions import DataFormatError
 
@@ -67,6 +68,18 @@ BLACKHOLE_ONLY_GROUPS = (
 )
 _BLACKHOLE_L1_GROUPS = frozenset(BLACKHOLE_ONLY_GROUPS)
 _L1_GROUPS = frozenset({CaptureGroup.L1_0, CaptureGroup.L1_1, *BLACKHOLE_ONLY_GROUPS})
+
+# tt-metal's one-pass example, one L1 group to a pass; the frontend's copy is pinned to it.
+EXAMPLE_GROUPS = ",".join(
+    group.value
+    for group in (
+        CaptureGroup.FPU,
+        CaptureGroup.PACK,
+        CaptureGroup.UNPACK,
+        CaptureGroup.INSTRN,
+        CaptureGroup.L1_0,
+    )
+)
 
 
 class CounterFamily(str, Enum):
@@ -550,6 +563,12 @@ FULL_GRID_UNITS: Tuple[GridUnit, ...] = (
 # The Min and Max beside a headline Avg, which only the agent's rows carry (#2330).
 MIN_KEY_SUFFIX = "_min"
 MAX_KEY_SUFFIX = "_max"
+# Each stat a headline unit's row keys carry, with its key's suffix; none carries a Median.
+ROW_KEY_STATS: Tuple[Tuple[CounterStat, str], ...] = (
+    (CounterStat.AVG, ""),
+    (CounterStat.MIN, MIN_KEY_SUFFIX),
+    (CounterStat.MAX, MAX_KEY_SUFFIX),
+)
 
 
 def _exists(group: CaptureGroup, architecture: DeviceArchitecture) -> bool:
@@ -626,7 +645,7 @@ REPORT_ROW_KEYS = frozenset(
         *(
             unit.row_key + suffix
             for unit in HEADLINE_UNITS
-            for suffix in ("", MIN_KEY_SUFFIX, MAX_KEY_SUFFIX)
+            for _, suffix in ROW_KEY_STATS
         ),
         *(grid.row_key for grid in FULL_GRID_UNITS),
     }
@@ -733,6 +752,25 @@ class CounterHeader:
         return CounterAbsence.NOT_CAPTURED
 
 
+class AbsenceHint(NamedTuple):
+    absence: CounterAbsence
+    # What a capture must ask for, set only where the label was not captured.
+    fill_hint: Optional[str]
+
+
+def absence_hint(
+    header: CounterHeader, label: str, architecture: DeviceArchitecture
+) -> Optional[AbsenceHint]:
+    """Why the capture has no column for `label` and what would fill it, as the panel
+    and the agent both say it; None when it has one."""
+    absence = header.absence(label, architecture)
+    if absence is None:
+        return None
+    if absence is CounterAbsence.NOT_CAPTURED:
+        return AbsenceHint(absence, label_fill_hint(label, architecture))
+    return AbsenceHint(absence, None)
+
+
 def discover(header: Iterable[object]) -> CounterHeader:
     """The counter columns among `header`, found by the shapes tt-metal writes."""
     discovered = CounterHeader()
@@ -766,17 +804,9 @@ def report_columns(header: CounterHeader, detail: bool) -> Dict[str, str]:
     so such a report's rows are unchanged, and the Min and Max only with `detail`."""
     columns: Dict[str, str] = {}
     for unit in HEADLINE_UNITS:
-        average = header.column(unit.label, CounterStat.AVG)
-        if average is not None:
-            columns[unit.row_key] = average
-        if not detail:
-            continue
-        for stat, suffix in (
-            (CounterStat.MIN, MIN_KEY_SUFFIX),
-            (CounterStat.MAX, MAX_KEY_SUFFIX),
-        ):
+        for stat, suffix in ROW_KEY_STATS:
             name = header.column(unit.label, stat)
-            if name is not None:
+            if name is not None and (detail or stat is CounterStat.AVG):
                 columns[unit.row_key + suffix] = name
     for grid in FULL_GRID_UNITS:
         name = header.full_grid.get(grid.unit.value)
@@ -802,7 +832,8 @@ def _reading(
     architecture: DeviceArchitecture,
 ) -> Dict[str, object]:
     stats = _stats(row, header, label)
-    absence = header.absence(label, architecture)
+    missing = absence_hint(header, label, architecture)
+    absence = missing.absence if missing is not None else None
     if absence is None and all(value is None for value in stats.values()):
         absence = CounterAbsence.NO_VALUE
     measure = header.measures.get(label)
@@ -811,11 +842,7 @@ def _reading(
         "measure": measure.value if measure else None,
         **stats,
         "absence": absence.value if absence else None,
-        "fill_hint": (
-            label_fill_hint(label, architecture)
-            if absence is CounterAbsence.NOT_CAPTURED
-            else None
-        ),
+        "fill_hint": missing.fill_hint if missing is not None else None,
     }
 
 
@@ -926,11 +953,22 @@ def _rows(source: TextIO) -> Iterator[List[str]]:
             yield row
 
 
+@contextmanager
+def _readable_csv() -> Iterator[None]:
+    """A CSV the reader refuses, as the `DataFormatError` both reads raise."""
+    try:
+        yield
+    except (csv.Error, UnicodeDecodeError) as error:
+        raise DataFormatError(
+            f"the performance CSV could not be read: {error}"
+        ) from error
+
+
 def read_row(
     source: TextIO, position: int
 ) -> Tuple[List[str], Optional[Dict[str, str]]]:
     """The header and the data row at `position`, or None past the last one."""
-    try:
+    with _readable_csv():
         rows = _rows(source)
         header = next(rows, [])
         if position < 0:
@@ -939,60 +977,70 @@ def read_row(
             if index == position:
                 return header, dict(zip(header, row))
         return header, None
-    except (csv.Error, UnicodeDecodeError) as error:
-        raise DataFormatError(
-            f"the performance CSV could not be read: {error}"
-        ) from error
 
 
 @dataclass(frozen=True)
 class CounterTable:
-    """Every counter column of a capture, one float per data row, NaN where blank."""
+    """A capture's columns of each stat in `ROW_KEY_STATS`, and its full-grid ones: one
+    float per data row as its cell reads, NaN where the cell is blank or unreadable."""
 
     header: CounterHeader
     values: Dict[str, "array[float]"]
     row_count: int
 
     def value(self, column: Optional[str], position: int) -> Optional[float]:
+        """The cell as `cell_value` reads it, rounded here so a capture's read need not."""
         if column is None or not 0 <= position < self.row_count:
             return None
         number = self.values[column][position]
-        return None if math.isnan(number) else number
+        return round(number, _DECIMALS) if math.isfinite(number) else None
 
 
-def _float_or_nan(cell: str) -> float:
-    value = cell_value(cell)
-    return math.nan if value is None else value
+def _table_columns(header: CounterHeader) -> List[str]:
+    return [
+        *(
+            name
+            for stats in header.columns.values()
+            for stat, _ in ROW_KEY_STATS
+            if (name := stats.get(stat)) is not None
+        ),
+        *header.full_grid.values(),
+    ]
 
 
 def read_table(source: TextIO) -> CounterTable:
-    """The capture's counter columns for every row, read in one pass."""
-    try:
+    """The columns a `CounterTable` holds, for every row, read in one pass."""
+    with _readable_csv():
         rows = _rows(source)
         header = next(rows, [])
         counters = discover(header)
-        index_by_column = {name: header.index(name) for name in counters.every_column()}
         values: Dict[str, "array[float]"] = {
-            name: array("d") for name in index_by_column
+            name: array("d") for name in _table_columns(counters)
         }
+        appends = [
+            (header.index(name), column.append) for name, column in values.items()
+        ]
+        nan = math.nan
         row_count = 0
         for row in rows:
             row_count += 1
             width = len(row)
-            for name, index in index_by_column.items():
-                values[name].append(
-                    _float_or_nan(row[index]) if index < width else math.nan
-                )
+            for index, append in appends:
+                cell = row[index] if index < width else ""
+                if not cell:
+                    append(nan)
+                    continue
+                try:
+                    append(float(cell))
+                except ValueError:
+                    append(nan)
         return CounterTable(counters, values, row_count)
-    except (csv.Error, UnicodeDecodeError) as error:
-        raise DataFormatError(
-            f"the performance CSV could not be read: {error}"
-        ) from error
 
 
 __all__ = [
     "BLACKHOLE_ONLY_GROUPS",
     "CAPTURE_FLAG",
+    "EXAMPLE_GROUPS",
     "FAMILY_BY_LABEL",
     "FAMILY_GROUPS",
     "FULL_GRID_UNITS",
@@ -1003,6 +1051,8 @@ __all__ = [
     "MULTIPASS_FLAG",
     "Requirement",
     "REPORT_ROW_KEYS",
+    "ROW_KEY_STATS",
+    "AbsenceHint",
     "CaptureGroup",
     "CounterAbsence",
     "CounterFamily",
@@ -1014,6 +1064,7 @@ __all__ = [
     "GridUnit",
     "GroupState",
     "HeadlineUnit",
+    "absence_hint",
     "cell_value",
     "counter_column",
     "discover",

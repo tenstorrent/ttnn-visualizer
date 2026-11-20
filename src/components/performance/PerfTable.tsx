@@ -448,7 +448,7 @@ const PerformanceTable = ({
                                                             'align-right': h.key === ColumnKeys.MathFidelity,
                                                         })}
                                                     >
-                                                        {comparisonKeys.includes(h.key) &&
+                                                        {comparisonKeys.has(h.key) &&
                                                             subRow &&
                                                             formatCell(
                                                                 subRow,

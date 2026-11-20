@@ -17,11 +17,11 @@ import { IconNames } from '@blueprintjs/icons';
 import { DrilldownTarget } from '../../definitions/EventLogEvent';
 import {
     HARDWARE_COUNTER_ABSENCE_LABELS,
-    HARDWARE_COUNTER_CAPTURE_FLAG,
-    HARDWARE_COUNTER_EXAMPLE_GROUPS,
     HARDWARE_COUNTER_FAMILY_LABELS,
     HARDWARE_COUNTER_UNIT_LABELS,
     HardwareCounterAbsence,
+    HardwareCounterMeasure,
+    getHardwareCounterCaptureAdvice,
 } from '../../definitions/HardwareCounters';
 import { LoadingSpinnerSizes } from '../../definitions/LoadingSpinner';
 import { TEST_IDS } from '../../definitions/TestIds';
@@ -55,6 +55,7 @@ const NO_COMPUTE_KERNEL =
     'No counters for this operation: it has no compute kernel, and tt-metal reads counters only while one runs.';
 const NOT_RECORDED = 'No counters were recorded for this operation.';
 const NO_VALUE_REASON = HARDWARE_COUNTER_ABSENCE_LABELS[HardwareCounterAbsence.NO_VALUE];
+const NOT_CAPTURED_LABEL = HARDWARE_COUNTER_ABSENCE_LABELS[HardwareCounterAbsence.NOT_CAPTURED];
 const NO_REPORT_COUNTERS = 'This performance report has no hardware counters.';
 const FULL_GRID_LABEL = 'Full grid, idle cores counted';
 const MODEL_TITLE = 'Performance model';
@@ -77,8 +78,11 @@ const formatStat = (value: number | null, reading: HardwareCounterReading): stri
 const getAbsenceLabel = (reading: HardwareCounterReading): string =>
     HARDWARE_COUNTER_ABSENCE_LABELS[reading.absence ?? HardwareCounterAbsence.NO_VALUE];
 
+const getMissingReason = (label: string, fillHint: string | null): string =>
+    fillHint ? `${label}: ${fillHint}` : label;
+
 const getAbsenceReason = (reading: HardwareCounterReading): string =>
-    reading.fill_hint ? `${getAbsenceLabel(reading)}: ${reading.fill_hint}` : getAbsenceLabel(reading);
+    getMissingReason(getAbsenceLabel(reading), reading.fill_hint);
 
 const getPanelCaption = (deviceId: number | null): string => {
     const cores = deviceId === null ? 'the cores' : `the cores of device ${deviceId}`;
@@ -91,10 +95,13 @@ interface MissingValueProps {
     reason: string;
 }
 
+// The role lets the dash carry the reason as its name: ARIA ignores `aria-label` on a bare span.
 const MissingValue = ({ reason }: MissingValueProps) => (
     <span
         className='hardware-counter-missing'
         title={reason}
+        role='img'
+        aria-label={reason}
     >
         {MISSING_VALUE}
     </span>
@@ -105,10 +112,13 @@ interface AbsenceProps {
     className: string;
 }
 
+// Takes a unit's bar's place, so it is an image named like the bar, with what fills the unit.
 const Absence = ({ reading, className }: AbsenceProps) => (
     <span
         className={className}
         title={reading.fill_hint ?? undefined}
+        role='img'
+        aria-label={getAbsenceReason(reading)}
     >
         {getAbsenceLabel(reading)}
     </span>
@@ -196,8 +206,9 @@ const FamilyRows = ({ family }: FamilyRowsProps) => (
                     colSpan={STAT_COLUMNS.length + 1}
                     className='hardware-counter-absent'
                     title={family.fill_hint}
+                    aria-label={getMissingReason(NOT_CAPTURED_LABEL, family.fill_hint)}
                 >
-                    {HARDWARE_COUNTER_ABSENCE_LABELS[HardwareCounterAbsence.NOT_CAPTURED]}
+                    {NOT_CAPTURED_LABEL}
                 </td>
             </tr>
         )}
@@ -262,7 +273,7 @@ const OperationCounters = ({ counters, deviceId }: OperationCountersProps) => {
                             {index > 0 && ' · '}
                             {HARDWARE_COUNTER_UNIT_LABELS[grid.unit]}{' '}
                             {grid.value !== null ? (
-                                formatPercentage(grid.value, MODEL_DECIMALS)
+                                formatHardwareCounterValue(grid.value, HardwareCounterMeasure.PERCENT)
                             ) : (
                                 <MissingValue reason={NO_VALUE_REASON} />
                             )}
@@ -313,11 +324,9 @@ export const HardwareCounterPanel = ({ counters, isMultiDevice = false }: Hardwa
                 >
                     <p>{NO_REPORT_COUNTERS}</p>
                     <p>
-                        Capture with <code>{HARDWARE_COUNTER_CAPTURE_FLAG}=&lt;groups&gt;</code>, such as{' '}
-                        <code>
-                            {HARDWARE_COUNTER_CAPTURE_FLAG}={HARDWARE_COUNTER_EXAMPLE_GROUPS}
-                        </code>
-                        , to see how busy each unit was.
+                        {getHardwareCounterCaptureAdvice((fragment) => (
+                            <code key={fragment}>{fragment}</code>
+                        ))}
                     </p>
                 </div>
             )}
@@ -331,6 +340,7 @@ export const HardwareCounterPanel = ({ counters, isMultiDevice = false }: Hardwa
                         variant={ButtonVariant.MINIMAL}
                         size={Size.SMALL}
                         endIcon={isShowingAll ? IconNames.CARET_UP : IconNames.CARET_DOWN}
+                        aria-expanded={isShowingAll}
                         onClick={() => setIsShowingAll((isOpen) => !isOpen)}
                     >
                         {ALL_COUNTERS_LABEL}

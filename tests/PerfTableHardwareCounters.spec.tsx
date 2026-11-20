@@ -32,7 +32,9 @@ import { getEligiblePerfColumns } from '../src/functions/perfTableColumns';
 import { DEFAULT_MAX_CORES } from '../src/functions/getCoreCount';
 import { useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList, usePerfMeta } from '../src/hooks/useAPI';
 import { TypedPerfTableRow } from '../src/model/PerfTable';
+import { comparisonPerformanceReportListAtom, isStackedViewAtom } from '../src/store/app';
 import { TestProviders } from './helpers/TestProviders';
+import { AtomProviderInitialValues } from './helpers/atomProvider';
 
 const { recordEvent } = vi.hoisted(() => ({ recordEvent: vi.fn() }));
 
@@ -46,6 +48,7 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
 }));
 
 const SWITCH_LABEL = 'Hardware counters';
+const COMPARISON_REPORT = 'comparison-report';
 
 const row = (id: number, counters: Partial<TypedPerfTableRow> = {}): TypedPerfTableRow =>
     ({
@@ -65,6 +68,7 @@ const row = (id: number, counters: Partial<TypedPerfTableRow> = {}): TypedPerfTa
 const counted = row(1, { hw_fpu_util: 9.396, hw_sfpu_util: 0, hw_math_util: 9.396, hw_grid_fpu_util: 5.994 });
 const uncounted = row(2, { hw_fpu_util: null, hw_sfpu_util: null, hw_math_util: null, hw_grid_fpu_util: null });
 const plain = row(3);
+const busier = row(4, { hw_fpu_util: 50, hw_sfpu_util: 0, hw_math_util: 50, hw_grid_fpu_util: 25 });
 
 const FPU_ONLY_KEYS = [
     ColumnKeys.HW_FPU_UTIL,
@@ -117,7 +121,7 @@ describe('hardware counter helpers', () => {
 
     it('reads one list of counter columns for the table, its eligibility and its comparison rows', () => {
         expect([...HARDWARE_COUNTER_COLUMN_KEYS]).toEqual(HardwareCounterColumns.map((column) => column.key));
-        expect(comparisonKeys).toEqual(expect.arrayContaining([...HARDWARE_COUNTER_COLUMN_KEYS]));
+        expect([...comparisonKeys]).toEqual(expect.arrayContaining([...HARDWARE_COUNTER_COLUMN_KEYS]));
     });
 
     it('formats a percentage and a ratio apart', () => {
@@ -195,15 +199,49 @@ describe('PerfTable with hardware counters', () => {
         expect(columnCells('HW FPU')).toEqual(['9.4%', '']);
         expect(screen.getByRole('table')).not.toHaveTextContent('NaN');
     });
+
+    it('sorts a placeholder row without the counter last, either way', () => {
+        // As `normalisePerformanceData` pads a report: a row with none of the counter keys.
+        const placeholder = row(2, { op_code: 'MISSING', raw_op_code: 'MISSING' });
+        renderTable(
+            [row(1, { hw_fpu_util: 80 }), placeholder, row(3, { hw_fpu_util: 20 }), row(4, { hw_fpu_util: 40 })],
+            true,
+        );
+        const sortByFpu = () => fireEvent.click(screen.getByRole('button', { name: 'HW FPU' }));
+
+        sortByFpu();
+
+        expect(columnCells('HW FPU')).toEqual(['20%', '40%', '80%', '']);
+
+        sortByFpu();
+
+        expect(columnCells('HW FPU')).toEqual(['80%', '40%', '20%', '']);
+    });
 });
 
 describe('PerformanceReport hardware counters switch', () => {
-    const renderReport = (data: TypedPerfTableRow[], hasHardwareCounters = true) =>
-        render(
-            <TestProviders>
+    interface ReportOptions {
+        comparisonData?: TypedPerfTableRow[][];
+        comparisonReports?: string[];
+        isStackedView?: boolean;
+    }
+
+    const renderReport = (
+        data: TypedPerfTableRow[],
+        hasHardwareCounters = true,
+        { comparisonData = [], comparisonReports, isStackedView = false }: ReportOptions = {},
+    ) => {
+        const initialAtomValues: AtomProviderInitialValues = [[isStackedViewAtom, isStackedView]];
+
+        if (comparisonReports) {
+            initialAtomValues.push([comparisonPerformanceReportListAtom, comparisonReports]);
+        }
+
+        return render(
+            <TestProviders initialAtomValues={initialAtomValues}>
                 <PerformanceReport
                     data={data}
-                    comparisonData={[]}
+                    comparisonData={comparisonData}
                     stackedData={[]}
                     comparisonStackedData={[]}
                     maxCores={DEFAULT_MAX_CORES}
@@ -211,6 +249,9 @@ describe('PerformanceReport hardware counters switch', () => {
                 />
             </TestProviders>,
         );
+    };
+
+    const counterSwitch = () => screen.getByTestId(TEST_IDS.PERF_HARDWARE_COUNTERS_SWITCH);
 
     const switchHint = async (hint: string) => {
         fireEvent.mouseEnter(screen.getByLabelText(SWITCH_LABEL));
@@ -261,5 +302,38 @@ describe('PerformanceReport hardware counters switch', () => {
         renderReport([counted]);
 
         await switchHint(HARDWARE_COUNTERS_SWITCH_HINT);
+    });
+
+    it('is not offered in the stacked view, whose table has no counter columns', () => {
+        renderReport([counted], true, { isStackedView: true });
+
+        expect(screen.queryByTestId(TEST_IDS.PERF_HARDWARE_COUNTERS_SWITCH)).toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Standard' }));
+
+        expect(counterSwitch()).toBeEnabled();
+    });
+
+    it("can be switched on when only a comparison report's rows carry the columns", () => {
+        renderReport([plain], true, { comparisonData: [[counted]] });
+
+        expect(counterSwitch()).toBeEnabled();
+
+        fireEvent.click(counterSwitch());
+
+        expect(hardwareCounterHeaders()).toContain('HW FPU');
+        expect(columnCells('HW FPU')).toEqual(['', '9.4%']);
+        expect(screen.getByRole('table')).not.toHaveTextContent('NaN');
+    });
+
+    it("shows the columns on a comparison report's tab too, with that report's rows", () => {
+        renderReport([counted], true, { comparisonData: [[busier]], comparisonReports: [COMPARISON_REPORT] });
+
+        fireEvent.click(counterSwitch());
+        fireEvent.click(screen.getByRole('tab', { name: COMPARISON_REPORT }));
+
+        expect(screen.getByRole('tab', { name: COMPARISON_REPORT })).toHaveAttribute('aria-selected', 'true');
+        expect(hardwareCounterHeaders()).toEqual(['HW FPU', 'HW SFPU', 'HW MATH', 'HW FPU Full Grid']);
+        expect(columnCells('HW FPU')).toEqual(['50%', '9.4%']);
     });
 });

@@ -168,6 +168,35 @@ class TestVendoredLabels:
         found = hardware_counters.discover(_header(["FPU Util"]))
 
         assert found.absence("FPU Util", DeviceArchitecture.BLACKHOLE) is None
+        assert (
+            hardware_counters.absence_hint(
+                found, "FPU Util", DeviceArchitecture.BLACKHOLE
+            )
+            is None
+        )
+
+    @pytest.mark.parametrize(
+        ("label", "absence", "fill_hint"),
+        [
+            (
+                "Packer Utilization",
+                CounterAbsence.NOT_CAPTURED,
+                hardware_counters.label_fill_hint(
+                    "Packer Utilization", DeviceArchitecture.BLACKHOLE
+                ),
+            ),
+            ("Thread 3 Stall Rate", CounterAbsence.NOT_ON_ARCHITECTURE, None),
+        ],
+    )
+    def test_only_a_label_a_capture_could_have_held_names_what_fills_it(
+        self, label, absence, fill_hint
+    ):
+        """The one rule the panel's readings and the agent's units both answer by."""
+        found = hardware_counters.discover(_header(["FPU Util"]))
+
+        assert hardware_counters.absence_hint(
+            found, label, DeviceArchitecture.BLACKHOLE
+        ) == (absence, fill_hint)
 
     def test_quasar_only_labels_are_listed_only_on_quasar(self):
         assert not hardware_counters.is_listed(
@@ -505,6 +534,38 @@ class TestReading:
         assert table.value(None, 0) is None
         assert set(table.values) == {"FPU Util Avg (%)", "Thread 0 Stall Rate Avg (%)"}
         assert math.isnan(table.values["FPU Util Avg (%)"][1])
+
+    def test_the_table_holds_no_median_which_nothing_reads(self):
+        header = _header(["FPU Util"], ("Min", "Median", "Max", "Avg"))
+        source = io.StringIO(",".join(header) + "\n1,2,3,4\n")
+
+        table = hardware_counters.read_table(source)
+
+        assert set(table.values) == {
+            "FPU Util Min (%)",
+            "FPU Util Max (%)",
+            "FPU Util Avg (%)",
+        }
+
+    @pytest.mark.parametrize(
+        "cell",
+        ["", " ", "nan", "NaN", "inf", "-inf", "1e400", "x", " 12.5 ", "0"]
+        + ["9.395752740029262", "-0.0004"],
+    )
+    def test_a_cell_reads_as_cell_value_reads_it(self, cell):
+        table = hardware_counters.read_table(
+            io.StringIO(f'FPU Util Avg (%),OP CODE\n"{cell}",Matmul\n')
+        )
+
+        assert table.value("FPU Util Avg (%)", 0) == hardware_counters.cell_value(cell)
+
+    def test_a_row_short_of_a_column_has_no_value_there(self):
+        table = hardware_counters.read_table(
+            io.StringIO("OP CODE,FPU Util Avg (%)\nMatmul\n")
+        )
+
+        assert table.row_count == 1
+        assert table.value("FPU Util Avg (%)", 0) is None
 
     @pytest.mark.parametrize(
         "read",

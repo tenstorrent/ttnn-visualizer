@@ -3,11 +3,10 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 @use '../definitions/colours' as *;
+@use '../definitions/variables' as variables;
 
 $panel-width: 460px;
 $panel-max-height: 70vh;
-$bar-height: 10px;
-$bar-radius: 2px;
 $range-height: 2px;
 
 .hardware-counter-popover .hardware-counter-panel {
@@ -65,8 +64,8 @@ $range-height: 2px;
 
     .hardware-counter-bar {
         position: relative;
-        height: $bar-height;
-        border-radius: $bar-radius;
+        height: variables.$meter-bar-height;
+        border-radius: variables.$meter-bar-radius;
         overflow: hidden;
         background-color: $tt-grey-3;
     }

@@ -25,6 +25,7 @@ import { TestProviders } from './helpers/TestProviders';
 import { makeRawPerfRow } from './helpers/perfRowFixtures';
 import { openPopover } from './helpers/testForPortal';
 import { TEST_IDS } from '../src/definitions/TestIds';
+import { OperationHardwareCounters } from '../src/model/HardwareCounters';
 
 // The always-mounted `CircularBufferPressureModal` is the subtree's only API caller, besides the
 // Utilization panel a device operation opens.
@@ -788,6 +789,51 @@ describe('DeviceOperationsFullRender - device operation perf (#1512)', () => {
 
         expect(utilizationTriggers()).toHaveLength(1);
         expect(utilizationTriggers()[0].closest('.collapsible-controls')).toHaveTextContent('MatmulDeviceOperation');
+    });
+
+    describe('naming the device whose row the counters read', () => {
+        // The row tt-perf-report kept for the op is device 1's.
+        const DEVICE_ONE_COUNTERS: OperationHardwareCounters = {
+            perf_id: 3,
+            has_counters: false,
+            op_has_counters: false,
+            architecture: null,
+            device_id: 1,
+            has_compute_kernel: null,
+            units: [],
+            full_grid: [],
+            families: [],
+            performance_model: { fpu_util: null },
+        };
+
+        const openCounters = async (isMultiDeviceReport: boolean) => {
+            const matmul = functionStart('MatmulDeviceOperation');
+            mockUseDeviceOperationPerf.mockReturnValue({
+                ...linkedTo(matmul, perfRow('3', 'MatmulDeviceOperation', '40', '8'), true),
+                isMultiDeviceReport,
+            });
+            mockUseOperationHardwareCounters.mockReturnValue({
+                data: DEVICE_ONE_COUNTERS,
+                error: null,
+                isLoading: false,
+            });
+
+            renderGraph([captureStart(), matmul, functionEnd('MatmulDeviceOperation')]);
+            await openPopover(utilizationTriggers()[0]);
+            await screen.findByTestId(TEST_IDS.HARDWARE_COUNTER_PANEL);
+        };
+
+        it('names it on a report of several devices', async () => {
+            await openCounters(true);
+
+            expect(screen.getByTestId(TEST_IDS.HARDWARE_COUNTER_DEVICE)).toHaveTextContent('Device 1');
+        });
+
+        it('names none on a report of one', async () => {
+            await openCounters(false);
+
+            expect(screen.queryByTestId(TEST_IDS.HARDWARE_COUNTER_DEVICE)).toBeNull();
+        });
     });
 
     it("shows a scope's perf and its Arguments button together, and the button still opens", () => {

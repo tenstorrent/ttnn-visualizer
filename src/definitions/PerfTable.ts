@@ -208,7 +208,7 @@ export const DISPLAY_COLUMNS_LABEL = 'Display columns';
 // lookups are both keyed to that report), so it cannot be attributed per comparison report.
 // ColumnKeys.L1Fullness is intentionally excluded here — comparison sub-rows render an empty
 // L1 cell rather than the active report's numbers misattributed to another report.
-export const comparisonKeys: ColumnKeys[] = [
+export const comparisonKeys: ReadonlySet<ColumnKeys> = new Set([
     ColumnKeys.Bound,
     ColumnKeys.BufferType,
     ColumnKeys.Cores,
@@ -239,7 +239,7 @@ export const comparisonKeys: ColumnKeys[] = [
     ColumnKeys.Hash,
     ColumnKeys.CacheHit,
     ...HARDWARE_COUNTER_COLUMN_KEYS,
-];
+]);
 
 export type PerfTableFilters = Partial<Record<ColumnKeys, string>> | null;
 

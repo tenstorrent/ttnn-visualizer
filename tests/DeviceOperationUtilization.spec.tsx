@@ -12,10 +12,13 @@ import { DeviceArchitecture } from '../src/definitions/DeviceArchitecture';
 import { DrilldownTarget, EventLogEvent } from '../src/definitions/EventLogEvent';
 import {
     HARDWARE_COUNTER_CAPTURE_FLAG,
+    HARDWARE_COUNTER_UNIT_LABELS,
     HardwareCounterAbsence,
     HardwareCounterFamily,
     HardwareCounterMeasure,
     HardwareCounterUnit,
+    NO_HARDWARE_COUNTERS_HINT,
+    getHardwareCounterCaptureAdvice,
 } from '../src/definitions/HardwareCounters';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { useOperationHardwareCounters } from '../src/hooks/useAPI';
@@ -41,6 +44,7 @@ const PACK_HINT = hint('pack');
 const L1_1_HINT = hint('l1_1');
 const NOC_RING1_HINT = hint('l1_1 or =l1_3');
 const NO_VALUE = 'no value for this operation';
+const NOT_CAPTURED = 'not captured';
 
 const reading = (label: string, overrides: Partial<HardwareCounterReading> = {}): HardwareCounterReading => ({
     label,
@@ -218,6 +222,37 @@ const CONCAT: OperationHardwareCounters = {
 // A compute op whose counters were never recorded, as when the profiler's buffer filled.
 const UNRECORDED: OperationHardwareCounters = { ...CONCAT, has_compute_kernel: true };
 
+// What fills each unit on Blackhole, as the route names it for a capture without the unit's group.
+const UNIT_FILL_HINTS: Record<HardwareCounterUnit, string> = {
+    [HardwareCounterUnit.FPU]: hint('fpu'),
+    [HardwareCounterUnit.SFPU]: hint('fpu'),
+    [HardwareCounterUnit.MATH]: hint('fpu'),
+    [HardwareCounterUnit.PACKER]: PACK_HINT,
+    [HardwareCounterUnit.UNPACKER0]: hint('unpack'),
+    [HardwareCounterUnit.UNPACKER1]: hint('unpack'),
+    [HardwareCounterUnit.L1_BANDWIDTH]: hint('l1_0'),
+    [HardwareCounterUnit.NOC_RING0]: hint('l1_0 or =l1_2'),
+    [HardwareCounterUnit.NOC_RING1]: NOC_RING1_HINT,
+};
+
+// A capture of instrn alone: the op has counters, but none of a unit's.
+const INSTRN_ONLY: OperationHardwareCounters = {
+    ...MATMUL,
+    units: MATMUL.units.map((metric) => ({
+        ...metric,
+        ...reading(metric.label, {
+            absence: HardwareCounterAbsence.NOT_CAPTURED,
+            fill_hint: UNIT_FILL_HINTS[metric.unit],
+        }),
+    })),
+    full_grid: [],
+    families: MATMUL.families.filter(
+        (familyReading) =>
+            familyReading.family === HardwareCounterFamily.INSTRUCTION_ISSUE ||
+            familyReading.family === HardwareCounterFamily.STALLS,
+    ),
+};
+
 const NO_COUNTERS: OperationHardwareCounters = {
     perf_id: 2,
     has_counters: false,
@@ -257,7 +292,11 @@ const unitCells = (name: string) => {
 
 const familyRow = (label: string) => screen.getByText(label, { selector: 'td' }).closest('tr')!;
 
-const showAllCounters = () => fireEvent.click(screen.getByText('All counters'));
+const allCountersToggle = () => screen.getByRole('button', { name: 'All counters' });
+
+const showAllCounters = () => fireEvent.click(allCountersToggle());
+
+const utilizationTrigger = () => screen.getByRole('button', { name: 'Utilization' });
 
 afterEach(cleanup);
 
@@ -303,10 +342,38 @@ describe('HardwareCounterPanel', () => {
     it('says a group the capture lacks was not captured, naming what fills it, never 0', () => {
         renderPanel(MATMUL);
 
-        const absence = screen.getByText('not captured', { selector: '.hardware-counter-units *' });
+        expect(unitCells('NoC ring 1')).toBe(NOT_CAPTURED);
+        expect(screen.getByLabelText(`${NOT_CAPTURED}: ${NOC_RING1_HINT}`)).toHaveTextContent(NOT_CAPTURED);
+    });
 
-        expect(unitCells('NoC ring 1')).toBe('not captured');
-        expect(absence).toHaveAttribute('title', NOC_RING1_HINT);
+    it('reads every unit as not captured, naming its group, for a capture of other groups only', () => {
+        renderPanel(INSTRN_ONLY);
+
+        INSTRN_ONLY.units.forEach((metric) =>
+            expect(unitCells(HARDWARE_COUNTER_UNIT_LABELS[metric.unit])).toBe(NOT_CAPTURED),
+        );
+        expect(screen.getAllByRole('img').map((element) => element.getAttribute('aria-label'))).toEqual(
+            INSTRN_ONLY.units.map((metric) => `${NOT_CAPTURED}: ${UNIT_FILL_HINTS[metric.unit]}`),
+        );
+        expect(document.querySelector('.hardware-counter-bar')).toBeNull();
+    });
+
+    it('keeps a range past 100% inside its bar, and still reads the value', () => {
+        renderPanel({
+            ...MATMUL,
+            units: MATMUL.units.map((metric) =>
+                metric.unit === HardwareCounterUnit.PACKER
+                    ? { ...metric, min: 90, median: 98, avg: 98, max: 104 }
+                    : metric,
+            ),
+        });
+
+        const bar = screen.getByTestId(`${TEST_IDS.HARDWARE_COUNTER_UNIT}-${HardwareCounterUnit.PACKER}`);
+        const range = bar.querySelector<HTMLElement>('.hardware-counter-bar-range')!;
+
+        expect(parseFloat(range.style.left) + parseFloat(range.style.width)).toBeLessThanOrEqual(100);
+        expect(bar.querySelector<HTMLElement>('.hardware-counter-bar-fill')!.style.width).toBe('98%');
+        expect(unitCells('Packer')).toContain('90%–104%');
     });
 
     it('keeps the text for one unit with no value on an operation that has counters', () => {
@@ -346,7 +413,7 @@ describe('HardwareCounterPanel', () => {
         expect(screen.getByText(/Full grid, idle cores counted/)).toHaveTextContent('FPU 6% · SFPU 0% · MATH 6%');
     });
 
-    it('marks a full-grid figure with no value with a dash, giving the reason on hover', () => {
+    it('marks a full-grid figure with no value with a dash named for the reason', () => {
         renderPanel({
             ...MATMUL,
             full_grid: MATMUL.full_grid.map((figure) =>
@@ -357,7 +424,7 @@ describe('HardwareCounterPanel', () => {
         const line = screen.getByText(/Full grid, idle cores counted/);
 
         expect(line).toHaveTextContent('FPU 6% · SFPU — · MATH 6%');
-        expect(within(line).getByText('—')).toHaveAttribute('title', NO_VALUE);
+        expect(within(line).getByLabelText(NO_VALUE)).toHaveTextContent('—');
     });
 
     it("keeps the performance model's figure beside the counters, labelled as the model", () => {
@@ -382,9 +449,13 @@ describe('HardwareCounterPanel', () => {
         const empty = screen.getByTestId(TEST_IDS.HARDWARE_COUNTER_EMPTY);
 
         expect(empty).toHaveTextContent(`${HARDWARE_COUNTER_CAPTURE_FLAG}=<groups>`);
+        // The same sentence the table's switch gives as its reason.
+        const advice = getHardwareCounterCaptureAdvice((fragment) => fragment).join('');
+        expect(empty).toHaveTextContent(advice);
+        expect(NO_HARDWARE_COUNTERS_HINT).toContain(advice);
         expect(screen.queryByRole('img')).toBeNull();
         expect(screen.getByTestId(TEST_IDS.HARDWARE_COUNTER_MODEL)).toHaveTextContent('FPU 42.5%');
-        expect(screen.queryByText('All counters')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'All counters' })).toBeNull();
     });
 
     it('lists every label by family on request, ratios as ratios', () => {
@@ -397,19 +468,17 @@ describe('HardwareCounterPanel', () => {
         expect(efficiency).not.toHaveTextContent('%');
     });
 
-    it('marks each label the capture or architecture lacks with a dash, giving the reason on hover', () => {
+    it('marks each label the capture or architecture lacks with a dash named for the reason', () => {
         renderPanel(MATMUL);
 
         showAllCounters();
 
-        expect(within(familyRow('Packer Engine 0 Util')).getByText('—')).toHaveAttribute(
-            'title',
-            'N/A on this architecture',
+        expect(within(familyRow('Packer Engine 0 Util')).getByLabelText('N/A on this architecture')).toHaveTextContent(
+            '—',
         );
-        expect(within(familyRow('L1 Packer Port 8 Util')).getByText('—')).toHaveAttribute(
-            'title',
-            `not captured: ${L1_1_HINT}`,
-        );
+        expect(
+            within(familyRow('L1 Packer Port 8 Util')).getByLabelText(`${NOT_CAPTURED}: ${L1_1_HINT}`),
+        ).toHaveTextContent('—');
         expect(familyRow('Packer Engine 0 Util')).not.toHaveTextContent('N/A');
     });
 
@@ -432,7 +501,7 @@ describe('HardwareCounterPanel', () => {
 
         const row = familyRow('SrcB Write Actual Efficiency');
         expect(row).toHaveTextContent(/^SrcB Write Actual Efficiency—$/);
-        expect(within(row).getByText('—')).toHaveAttribute('title', NO_VALUE);
+        expect(within(row).getByLabelText(NO_VALUE)).toHaveTextContent('—');
     });
 
     it('lists an operation without counters with a dash per label, never the sentence', () => {
@@ -460,8 +529,17 @@ describe('HardwareCounterPanel', () => {
         showAllCounters();
 
         const pack = screen.getByText('Pack').closest('tbody')!;
-        expect(pack).toHaveTextContent('not captured');
-        expect(within(pack).getByText('not captured')).toHaveAttribute('title', PACK_HINT);
+        expect(within(pack).getByLabelText(`${NOT_CAPTURED}: ${PACK_HINT}`)).toHaveTextContent(NOT_CAPTURED);
+    });
+
+    it('says whether the list of every counter is open', () => {
+        renderPanel(MATMUL);
+
+        expect(allCountersToggle()).toHaveAttribute('aria-expanded', 'false');
+
+        showAllCounters();
+
+        expect(allCountersToggle()).toHaveAttribute('aria-expanded', 'true');
     });
 
     it('names the device whose row it reads on a report of several, and says how the report picks it', () => {
@@ -499,10 +577,20 @@ describe('DeviceOperationUtilization', () => {
 
         expect(useOperationHardwareCounters).not.toHaveBeenCalled();
 
-        await openPopover(screen.getByTestId(TEST_IDS.HARDWARE_COUNTER_TRIGGER));
+        await openPopover(utilizationTrigger());
 
         expect(useOperationHardwareCounters).toHaveBeenCalledWith(2);
         expect(await screen.findByTestId(TEST_IDS.HARDWARE_COUNTER_PANEL)).toBeInTheDocument();
+    });
+
+    it('shows a spinner rather than the panel while the counters load', async () => {
+        (useOperationHardwareCounters as Mock).mockReturnValue({ data: undefined, error: null, isLoading: true });
+        render(<DeviceOperationUtilization perfId={2} />);
+
+        await openPopover(utilizationTrigger());
+
+        expect(document.querySelector('.hardware-counter-popover .loading-spinner')).not.toBeNull();
+        expect(screen.queryByTestId(TEST_IDS.HARDWARE_COUNTER_PANEL)).toBeNull();
     });
 
     it('names the device in the panel it opens on a report of several devices', async () => {
@@ -518,14 +606,14 @@ describe('DeviceOperationUtilization', () => {
             />,
         );
 
-        await openPopover(screen.getByTestId(TEST_IDS.HARDWARE_COUNTER_TRIGGER));
+        await openPopover(utilizationTrigger());
 
         expect(await screen.findByTestId(TEST_IDS.HARDWARE_COUNTER_DEVICE)).toHaveTextContent('Device 1');
     });
 
     it('records each opening of the panel as a drilldown, and a close as nothing', async () => {
         render(<DeviceOperationUtilization perfId={2} />);
-        const trigger = screen.getByTestId(TEST_IDS.HARDWARE_COUNTER_TRIGGER);
+        const trigger = utilizationTrigger();
 
         await openPopover(trigger);
 
@@ -553,7 +641,7 @@ describe('DeviceOperationUtilization', () => {
         });
         render(<DeviceOperationUtilization perfId={2} />);
 
-        await openPopover(screen.getByTestId(TEST_IDS.HARDWARE_COUNTER_TRIGGER));
+        await openPopover(utilizationTrigger());
 
         expect(await screen.findByText('No performance row 2.')).toBeInTheDocument();
     });

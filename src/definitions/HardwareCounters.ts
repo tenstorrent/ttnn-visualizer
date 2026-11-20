@@ -2,7 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-// The enums mirror `backend/ttnn_visualizer/hardware_counters.py`; a backend parity test holds them.
+// The enums, capture flag and example groups mirror `backend/ttnn_visualizer/hardware_counters.py`; a backend
+// parity test holds them.
 export enum HardwareCounterUnit {
     FPU = 'fpu',
     SFPU = 'sfpu',
@@ -41,6 +42,15 @@ export const HARDWARE_COUNTER_CAPTURE_FLAG = '--profiler-capture-perf-counters';
 // tt-metal's one-pass example: at most one L1 group fits a pass.
 export const HARDWARE_COUNTER_EXAMPLE_GROUPS = 'fpu,pack,unpack,instrn,l1_0';
 
+// One sentence for the panel and the table's switch; `code` sets each command-line fragment.
+export const getHardwareCounterCaptureAdvice = <T>(code: (fragment: string) => T): (string | T)[] => [
+    'Capture with ',
+    code(`${HARDWARE_COUNTER_CAPTURE_FLAG}=<groups>`),
+    ', such as ',
+    code(`${HARDWARE_COUNTER_CAPTURE_FLAG}=${HARDWARE_COUNTER_EXAMPLE_GROUPS}`),
+    ', to see how busy each unit was.',
+];
+
 export const HARDWARE_COUNTER_UNIT_LABELS: Record<HardwareCounterUnit, string> = {
     [HardwareCounterUnit.FPU]: 'FPU',
     [HardwareCounterUnit.SFPU]: 'SFPU',
@@ -73,6 +83,8 @@ export const HARDWARE_COUNTER_ABSENCE_LABELS: Record<HardwareCounterAbsence, str
 export const HARDWARE_COUNTERS_SWITCH_LABEL = 'Hardware counters';
 export const HARDWARE_COUNTERS_SWITCH_HINT =
     "Each unit's average utilization across an operation's cores, from tt-metal's hardware counters";
-export const NO_HARDWARE_COUNTERS_HINT = `This report has no hardware counter columns. Capture with ${HARDWARE_COUNTER_CAPTURE_FLAG}=<groups>, such as ${HARDWARE_COUNTER_EXAMPLE_GROUPS}, to fill them.`;
-export const NO_HARDWARE_COUNTER_COLUMNS_HINT =
-    "This report's hardware counters include none of the table's units: FPU, SFPU, MATH, packer, unpackers, L1 bandwidth or NoC rings.";
+export const NO_HARDWARE_COUNTERS_HINT = `This report has no hardware counter columns. ${getHardwareCounterCaptureAdvice((fragment) => fragment).join('')}`;
+
+const UNIT_NAMES = Object.values(HARDWARE_COUNTER_UNIT_LABELS);
+
+export const NO_HARDWARE_COUNTER_COLUMNS_HINT = `This report's hardware counters include none of the table's units: ${UNIT_NAMES.slice(0, -1).join(', ')} or ${UNIT_NAMES[UNIT_NAMES.length - 1]}.`;

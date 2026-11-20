@@ -7,7 +7,7 @@ time; and the ops ranked by any counter label. #2371"""
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, Iterable, List, Optional
+from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
 from ttnn_visualizer import hardware_counters
 from ttnn_visualizer.agent import tools
@@ -87,7 +87,7 @@ def _rounded(value: Optional[float]) -> Optional[float]:
 def _stats(table: CounterTable, label: str, position: int) -> Dict[str, object]:
     return {
         stat.value: table.value(table.header.column(label, stat), position)
-        for stat in (CounterStat.AVG, CounterStat.MIN, CounterStat.MAX)
+        for stat, _ in hardware_counters.ROW_KEY_STATS
     }
 
 
@@ -122,15 +122,32 @@ def _idle_us(value: float, device_time: float) -> float:
     return max(0.0, 1 - value / 100) * device_time
 
 
+def _weighed_ops(
+    table: CounterTable,
+    column: Optional[str],
+    ops: List[_Op],
+    weigh: Callable[[float, float], float],
+) -> List[Tuple[float, _Op]]:
+    """The ops carrying the column and a device time, heaviest first by `weigh`."""
+    weighed = [
+        (weigh(value, op.device_time), op)
+        for op in ops
+        if op.device_time is not None
+        and (value := table.value(column, op.position)) is not None
+    ]
+    weighed.sort(key=lambda entry: entry[0], reverse=True)
+    return weighed
+
+
 def _absent(
     header: CounterHeader, label: str, architecture: DeviceArchitecture
 ) -> Optional[Dict[str, object]]:
-    absence = header.absence(label, architecture)
-    if absence is None:
+    missing = hardware_counters.absence_hint(header, label, architecture)
+    if missing is None:
         return None
-    absent: Dict[str, object] = {"state": absence.value}
-    if absence is CounterAbsence.NOT_CAPTURED:
-        absent["fill_hint"] = hardware_counters.label_fill_hint(label, architecture)
+    absent: Dict[str, object] = {"state": missing.absence.value}
+    if missing.fill_hint is not None:
+        absent["fill_hint"] = missing.fill_hint
     return absent
 
 
@@ -151,12 +168,7 @@ def _unit(
     if absent is not None or column is None:
         return {**summary, **(absent or {"state": CounterAbsence.NOT_CAPTURED.value})}
 
-    busiest = []
-    for op in ops:
-        value = table.value(column, op.position)
-        if value is not None and op.device_time is not None:
-            busiest.append((_busy_us(value, op.device_time), op))
-    busiest.sort(key=lambda entry: entry[0], reverse=True)
+    busiest = _weighed_ops(table, column, ops, _busy_us)
     return {
         **summary,
         **_weighted(table, column, ops, report_total),
@@ -223,15 +235,11 @@ def _resolve_label(
     folded = {known.casefold(): known for known in header.columns}
     if label.casefold() in folded:
         return folded[label.casefold()]
-    family = hardware_counters.FAMILY_BY_LABEL.get(label)
-    if family is not None:
-        absence = header.absence(label, architecture)
-        if absence is CounterAbsence.NOT_ON_ARCHITECTURE:
+    missing = hardware_counters.absence_hint(header, label, architecture)
+    if missing is not None and label in hardware_counters.FAMILY_BY_LABEL:
+        if missing.absence is CounterAbsence.NOT_ON_ARCHITECTURE:
             raise ValueError(f"{label!r} is not available on this architecture")
-        raise ValueError(
-            f"{label!r} was not captured: it is "
-            + hardware_counters.label_fill_hint(label, architecture)
-        )
+        raise ValueError(f"{label!r} was not captured: it is {missing.fill_hint}")
     raise ValueError(
         f"no counter labelled {echoed(label)} in this capture; call hw_utilisation "
         "without label for the labels it holds, listed under families"
@@ -257,19 +265,16 @@ def _ranked(
             "device time; pass weighted false to rank by its value"
         )
     column = table.header.column(resolved, CounterStat.AVG)
-    weigh = _busy_us if order is RankOrder.HIGHEST else _idle_us
-    entries = []
-    for op in ops:
-        value = table.value(column, op.position)
-        if value is None:
-            continue
-        if not weighted:
-            entries.append((value, op))
-        elif op.device_time is not None:
-            entries.append((weigh(value, op.device_time), op))
-    entries.sort(
-        key=lambda entry: entry[0], reverse=weighted or order is RankOrder.HIGHEST
-    )
+    if weighted:
+        weigh = _busy_us if order is RankOrder.HIGHEST else _idle_us
+        entries = _weighed_ops(table, column, ops, weigh)
+    else:
+        entries = [
+            (value, op)
+            for op in ops
+            if (value := table.value(column, op.position)) is not None
+        ]
+        entries.sort(key=lambda entry: entry[0], reverse=order is RankOrder.HIGHEST)
     weight_field = "busy_us" if order is RankOrder.HIGHEST else "idle_us"
     return {
         "label": resolved,
