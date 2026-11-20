@@ -150,6 +150,8 @@ describe('StackedPerformanceTable footer', () => {
         const percent = document.querySelector(`tfoot .${Classes.TOOLTIP_INDICATOR}`) as HTMLElement;
 
         expect(percent).toHaveTextContent('100%');
+        // Reachable from the keyboard: the tooltip makes its target focusable, which `fireEvent.focus` alone would not show.
+        expect(percent).toHaveAttribute('tabindex', '0');
         fireEvent.focus(percent);
         expect(await screen.findByText(PERF_FOOTER_ALL_DEVICES_NOTE)).toBeInTheDocument();
     });

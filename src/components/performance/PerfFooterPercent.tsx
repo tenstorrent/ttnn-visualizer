@@ -14,21 +14,15 @@ interface PerfFooterPercentProps {
 
 /**
  * A stacked table's footer Total %. While devices are unmerged each row is a share of its own
- * device, but the footer is a share of all devices, so it is marked and explained.
+ * device, but the footer is a share of all devices, so it is marked and explained. The tooltip
+ * makes its target focusable, so the explanation is reachable without a pointer.
  */
 const PerfFooterPercent = ({ percent, mergeDevices }: PerfFooterPercentProps) =>
     mergeDevices ? (
         percent
     ) : (
         <Tooltip content={PERF_FOOTER_ALL_DEVICES_NOTE}>
-            <span
-                className={Classes.TOOLTIP_INDICATOR}
-                // Focusable so the explanation is reachable without a pointer.
-                // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
-                tabIndex={0}
-            >
-                {percent}
-            </span>
+            <span className={Classes.TOOLTIP_INDICATOR}>{percent}</span>
         </Tooltip>
     );
 
