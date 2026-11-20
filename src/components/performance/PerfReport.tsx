@@ -96,7 +96,7 @@ interface PerformanceReportProps {
      * Whether any row of the whole report links to a memory-report operation. `data` holds only
      * the range slider's rows, which can all be unlinked while the report is linked.
      */
-    hasLinkedOperations?: boolean;
+    hasLinkedOperations: boolean;
 }
 
 const EMPTY_ALLOCATION_FAILURE_LISTINGS: AllocationFailureListing[] = [];
@@ -109,7 +109,7 @@ const STACKED_GROUP_BY = [
 ];
 const EMPTY_SOURCE_LINE_GROUPS: SourceLineGroup[] = [];
 const SOURCE_LINE_UNLINKED = 'Needs a memory report linked to this performance report';
-const SOURCE_LINE_NO_TRACES = 'The linked memory report recorded no stack traces';
+const SOURCE_LINE_NO_TRACES = 'No stack trace in the linked memory report names a Python frame';
 const SOURCE_LINE_RANGE_NOTE = 'Source line also follows the range slider, which the other groupings ignore';
 const SOURCE_LINE_COMPARISON_NOTE =
     "Source lines come from the active memory report's stack traces, so they are shown for the active performance report only.";
@@ -156,7 +156,7 @@ const PerformanceReport = ({
     maxCores,
     comparisonMaxCores = [],
     allocationFailureListings = EMPTY_ALLOCATION_FAILURE_LISTINGS,
-    hasLinkedOperations = false,
+    hasLinkedOperations,
 }: PerformanceReportProps) => {
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const activeReportFolderName = useAtomValue(activePerformanceReportFolderNameAtom);

@@ -9,7 +9,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SourceLinePerfTable, { MAX_LISTED_OPERATIONS } from '../src/components/performance/SourceLinePerfTable';
 import { StackSourceOrigin } from '../src/definitions/StackTrace';
 import { TEST_IDS } from '../src/definitions/TestIds';
-import { SourceLineGroup, SourceLineGroupKind } from '../src/functions/perfSourceLines';
+import {
+    SOURCE_LINE_NO_TRACE_LABEL,
+    SOURCE_LINE_UNLINKED_LABEL,
+    SourceLineGroup,
+    SourceLineGroupKind,
+} from '../src/functions/perfSourceLines';
 import { mergeDevicesAtom } from '../src/store/app';
 import { TestProviders } from './helpers/TestProviders';
 import { AtomProviderInitialValues } from './helpers/atomProvider';
@@ -146,6 +151,56 @@ describe('SourceLinePerfTable', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Source line' }));
         expect(getLabels()).toEqual(['model.py:100', 'model.py:10', 'model.py:9']);
+    });
+
+    it('sorts the lines without a call site last, in either direction', () => {
+        const atFile = (basename: string) =>
+            group({ key: basename, basename, filePath: `/m/${basename}`, lineNumber: 3 });
+        const withoutCallSite = (kind: SourceLineGroupKind) =>
+            group({ key: kind, kind, basename: null, filePath: null, lineNumber: null, functionName: null });
+        renderTable({
+            groups: [
+                atFile('Zeta.py'),
+                withoutCallSite(SourceLineGroupKind.NO_TRACE),
+                atFile('Attention.py'),
+                withoutCallSite(SourceLineGroupKind.UNLINKED),
+            ],
+        });
+        const getLabels = () =>
+            getRows().map(
+                (row) =>
+                    row.textContent?.match(
+                        new RegExp(`\\w+\\.py:\\d+|${SOURCE_LINE_NO_TRACE_LABEL}|${SOURCE_LINE_UNLINKED_LABEL}`),
+                    )?.[0],
+            );
+        const withoutCallSiteLabels = [SOURCE_LINE_NO_TRACE_LABEL, SOURCE_LINE_UNLINKED_LABEL].sort();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Source line' }));
+        expect(getLabels().slice(0, 2)).toEqual(['Attention.py:3', 'Zeta.py:3']);
+        expect(getLabels().slice(2).sort()).toEqual(withoutCallSiteLabels);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Source line' }));
+        expect(getLabels().slice(0, 2)).toEqual(['Zeta.py:3', 'Attention.py:3']);
+        expect(getLabels().slice(2).sort()).toEqual(withoutCallSiteLabels);
+    });
+
+    it('orders two files sharing a basename and line by their full path', () => {
+        const inDirectory = (directory: string) =>
+            group({
+                key: directory,
+                basename: 'model.py',
+                filePath: `/${directory}/model.py`,
+                lineNumber: 3,
+                functionName: `in_${directory}`,
+            });
+        renderTable({ groups: [inDirectory('b'), inDirectory('a')] });
+        const getFunctions = () => getRows().map((row) => row.textContent?.match(/in_[ab]/)?.[0]);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Source line' }));
+        expect(getFunctions()).toEqual(['in_a', 'in_b']);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Source line' }));
+        expect(getFunctions()).toEqual(['in_b', 'in_a']);
     });
 
     it('scrolls back to the top when a header re-sorts the lines', () => {

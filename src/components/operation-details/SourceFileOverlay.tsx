@@ -53,7 +53,7 @@ function SourceFileOverlay({
     // they arrive a render after this component's effects have run.
     const [controlsEl, setControlsEl] = useState<HTMLDivElement | null>(null);
     const [codeEl, setCodeEl] = useState<HTMLElement | null>(null);
-    // Read from the committed controls element, so a reopen finds its new scroll container.
+    // Read from the committed controls element, which a reopen renders anew, so the lookup reruns.
     const scrollContainerEl = useMemo(
         () => controlsEl?.closest(`.${Classes.OVERLAY_SCROLL_CONTAINER}`) ?? null,
         [controlsEl],

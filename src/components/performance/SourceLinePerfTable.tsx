@@ -68,13 +68,14 @@ const EMPTY_MESSAGE = 'No data to display';
 // `sortTableFields` takes flat records, so groups are sorted through this projection.
 // Sorted by basename, then line number, then full path. `sortTableFields` compares strings by
 // code unit, so the NUL separator sorts a shorter basename first and the zero-padded line
-// number sorts `:9` before `:10`, which comparing the `basename:line` label would not.
+// number sorts `:9` before `:10`, which comparing the `basename:line` label would not. The two
+// groups without a call site sort as `null`, which `sortTableFields` puts last either way.
 const LOCATION_SORT_SEPARATOR = '\u0000';
 const LINE_NUMBER_SORT_WIDTH = 10;
 
-const getLocationSortValue = (group: SourceLineGroup): string =>
+const getLocationSortValue = (group: SourceLineGroup): string | null =>
     group.basename === null
-        ? getSourceLineGroupLabel(group)
+        ? null
         : [
               group.basename,
               String(group.lineNumber ?? 0).padStart(LINE_NUMBER_SORT_WIDTH, '0'),

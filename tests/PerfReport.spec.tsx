@@ -10,7 +10,12 @@ import PerformanceReport from '../src/components/performance/PerfReport';
 import { TypedPerfTableRow } from '../src/model/PerfTable';
 import { PERF_DURATION_BUCKET_FILTER_PLACEHOLDER } from '../src/definitions/PerfDurationHistogram';
 import { OpType } from '../src/definitions/Performance';
-import { OperationCategories, StackedGroupBy } from '../src/definitions/StackedPerfTable';
+import {
+    OperationCategories,
+    StackedColumnKeys,
+    StackedGroupBy,
+    TypedStackedPerfRow,
+} from '../src/definitions/StackedPerfTable';
 import { MathFidelity } from '../src/definitions/MathFidelity';
 import { DeviceOperationLayoutTypes } from '../src/model/APIData';
 import { BufferType } from '../src/model/BufferType';
@@ -70,12 +75,23 @@ const row = (
         id,
     }) as unknown as TypedPerfTableRow;
 
+const stackedRow = (opCode: string, deviceTimeUs: number, percent: number): TypedStackedPerfRow =>
+    ({
+        [StackedColumnKeys.Percent]: percent,
+        [StackedColumnKeys.OpCode]: opCode,
+        [StackedColumnKeys.Device]: 0,
+        [StackedColumnKeys.DeviceTimeSumUs]: deviceTimeUs,
+        [StackedColumnKeys.OpsCount]: 1,
+    }) as unknown as TypedStackedPerfRow;
+
 interface RenderOptions {
     isLoading?: boolean;
     isComparisonLoading?: boolean;
     comparisonData?: TypedPerfTableRow[][];
     comparisonReports?: string[] | null;
     data?: TypedPerfTableRow[];
+    stackedData?: TypedStackedPerfRow[];
+    comparisonStackedData?: TypedStackedPerfRow[][];
     rawOpCodeFilterList?: string[];
     durationBucketFilterList?: number[];
     opCategoryFilterList?: OperationCategories[];
@@ -92,6 +108,8 @@ function renderReport({
     comparisonData = [],
     comparisonReports = null,
     data = [row('Matmul')],
+    stackedData = [],
+    comparisonStackedData = [],
     rawOpCodeFilterList = [],
     durationBucketFilterList = [],
     opCategoryFilterList = [],
@@ -141,8 +159,8 @@ function renderReport({
             <PerformanceReport
                 data={data}
                 comparisonData={comparisonData}
-                stackedData={[]}
-                comparisonStackedData={[]}
+                stackedData={stackedData}
+                comparisonStackedData={comparisonStackedData}
                 isLoading={isLoading}
                 isComparisonLoading={isComparisonLoading}
                 maxCores={DEFAULT_MAX_CORES}
@@ -985,7 +1003,11 @@ describe('PerformanceReport stacked view grouped by source line', () => {
         fireEvent.mouseEnter(within(item).getByText('Source line'));
 
         expect(
-            await screen.findByText('The linked memory report recorded no stack traces', {}, WAIT_FOR_OPTIONS),
+            await screen.findByText(
+                'No stack trace in the linked memory report names a Python frame',
+                {},
+                WAIT_FOR_OPTIONS,
+            ),
         ).toBeInTheDocument();
     });
 
@@ -1003,6 +1025,18 @@ describe('PerformanceReport stacked view grouped by source line', () => {
         expect(await screen.findByTestId(TEST_IDS.PERF_SOURCE_LINE_TABLE)).toBeInTheDocument();
         expect(getSourceLineRows()).toHaveLength(1);
         expect(getSourceLineRows()[0]).toHaveTextContent('model.py:42');
+    });
+
+    it('explains an empty table when Source line stays selected and no trace names a Python frame', () => {
+        (useOperationsList as Mock).mockReturnValue({
+            data: [
+                { id: 7, name: 'ttnn.matmul', stack_trace: '#0 0x7f in ttnn::run()', stack_trace_source_file_id: null },
+            ],
+            isLoading: false,
+        });
+        renderReport({ data: LINKED_ROWS, stackedGroupBy: StackedGroupBy.SOURCE_LINE });
+
+        expect(screen.getByText('No stack trace in the linked memory report names a Python frame')).toBeInTheDocument();
     });
 
     it('explains an empty table when Source line stays selected without a link', () => {
@@ -1081,5 +1115,35 @@ describe('PerformanceReport stacked view grouped by source line', () => {
         fireEvent.click(screen.getByRole('tab', { name: COMPARISON_REPORT }));
 
         expect(screen.getByTestId(TEST_IDS.PERF_SOURCE_LINE_COMPARISON_NOTICE)).toBeInTheDocument();
+    });
+});
+
+describe('PerformanceReport stacked footer', () => {
+    const getTotalPercent = () => document.querySelector('tfoot td')?.textContent;
+
+    it("gives a filtered row's share of the whole report, not of the rows left", () => {
+        renderReport({
+            stackedGroupBy: StackedGroupBy.OP,
+            data: [row('Matmul'), row('Softmax', 2)],
+            stackedData: [stackedRow('Matmul', 75, 75), stackedRow('Softmax', 25, 25)],
+            rawOpCodeFilterList: ['Softmax'],
+        });
+
+        expect(getTotalPercent()).toBe('25%');
+    });
+
+    it("reads a comparison tab's rows against its own report's total", () => {
+        renderReport({
+            stackedGroupBy: StackedGroupBy.OP,
+            stackedData: [stackedRow('Matmul', 200, 100)],
+            comparisonData: [[row('Matmul')]],
+            comparisonStackedData: [[stackedRow('Matmul', 100, 100)]],
+            comparisonReports: [COMPARISON_REPORT],
+        });
+
+        fireEvent.click(screen.getByRole('tab', { name: COMPARISON_REPORT }));
+
+        // The active report's total would read 50%.
+        expect(getTotalPercent()).toBe('100%');
     });
 });

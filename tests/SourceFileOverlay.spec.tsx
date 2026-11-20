@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
+import { Classes } from '@blueprintjs/core';
 import { cleanup, fireEvent, render } from '@testing-library/react';
 import { ComponentProps } from 'react';
 import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -140,6 +141,20 @@ describe('SourceFileOverlay', () => {
                 delete (Element.prototype as Partial<Element>).scrollTo;
             }
         }
+    });
+
+    it('keeps its controls in view as its container scrolls', () => {
+        renderOverlay();
+        const scrollContainer = document.querySelector(`.${Classes.OVERLAY_SCROLL_CONTAINER}`) as HTMLElement;
+        const controls = document.querySelector('.source-file-controls') as HTMLElement;
+
+        scrollContainer.scrollTop = 120;
+        fireEvent.scroll(scrollContainer);
+        expect(controls.style.transform).toBe('translateY(120px)');
+
+        scrollContainer.scrollTop = 0;
+        fireEvent.scroll(scrollContainer);
+        expect(controls.style.transform).toBe('');
     });
 
     it('does not scroll on open when not asked to, but its locate button does', () => {

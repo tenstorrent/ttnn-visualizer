@@ -11,6 +11,7 @@ import {
     SourceLineGroupKind,
     SourceLineOperation,
     TOP_OP_CODE_COUNT,
+    countSourceLines,
     getSourceLineGroups,
     isSourceLineGroupMatch,
 } from '../src/functions/perfSourceLines';
@@ -245,6 +246,7 @@ describe('isSourceLineGroupMatch', () => {
         ['the basename', 'RESNET.py'],
         ['the location', 'resnet.py:135'],
         ['the function', 'downsample'],
+        ['a query with spaces around it', ' resnet.py:135 '],
     ])('matches a line on %s', (_, query) => {
         expect(isSourceLineGroupMatch(lineGroup, query)).toBe(true);
     });
@@ -257,6 +259,31 @@ describe('isSourceLineGroupMatch', () => {
         expect(isSourceLineGroupMatch(unlinkedGroup, SOURCE_LINE_UNLINKED_LABEL.slice(0, 9))).toBe(true);
         expect(isSourceLineGroupMatch(noTraceGroup, SOURCE_LINE_NO_TRACE_LABEL)).toBe(true);
         expect(isSourceLineGroupMatch(noTraceGroup, 'resnet')).toBe(false);
+    });
+});
+
+describe('countSourceLines', () => {
+    it('counts two files that share a basename and line as two lines', () => {
+        const groups = getSourceLineGroups(
+            [perfRow({ op: 1 }), perfRow({ op: 2 })],
+            operations([
+                [1, trace('/m/a/model.py', 3, 'f')],
+                [2, trace('/m/b/model.py', 3, 'f')],
+            ]),
+            MERGED,
+        );
+
+        expect(countSourceLines(groups)).toBe(2);
+    });
+
+    it('counts a line once across unmerged devices, and no group without a call site', () => {
+        const groups = getSourceLineGroups(
+            [perfRow({ op: 1, device: 0 }), perfRow({ op: 1, device: 1 }), perfRow({}), perfRow({ op: 2 })],
+            operations([[1, trace('/m/model.py', 3, 'f')]]),
+            { mergeDevices: false },
+        );
+
+        expect(countSourceLines(groups)).toBe(1);
     });
 });
 

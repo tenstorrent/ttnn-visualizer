@@ -90,15 +90,20 @@ const getTopOpCodes = (deviceTimeByOpCode: Map<string, number>): string[] =>
  * Sorted by device time, largest first.
  *
  * Mirrored as `source_line_groups` in `backend/ttnn_visualizer/agent/source_lines.py`, behind
- * the `source_lines` MCP tool (#2364). No golden holds the two together, so mirror a change to
- * either side by hand. The tool answers the same question, but differs from this view:
+ * the `source_lines` MCP tool (#2364). No golden holds the two together yet (#2370), so mirror a
+ * change to either side by hand. The tool answers the same question, but differs from this view:
  * - Range: this covers the rows it is given, which `PerfReport` takes from the range slider;
  *   the tool reads the whole report or a signpost range.
- * - No traces: `PerfReport` disables the grouping when no linked operation has a call site;
- *   the tool refuses.
+ * - No call site: `PerfReport` disables the grouping when no operation in the memory report,
+ *   linked or not, has a trace naming a Python frame. The tool refuses only when no
+ *   `stack_traces` row has any text, and otherwise files every linked row under `no_trace`.
  * - Unmerged devices: this keeps a group per line per device, each a share of its device.
- * - Trace: this reads the call site from the operation list's `stack_trace`, which may come
- *   from a different `stack_traces` row than the one the tool picks on a multi-rank report.
+ * - Trace: this reads the call site from the operation list's `stack_trace`, which keeps an
+ *   operation's last `stack_traces` row, keyed by operation and rank. The tool reads the first,
+ *   so the two can differ for an operation with several traces, on one rank or several.
+ * The tool's `SOURCE_LINES_NOTE` lists the rest: line 0 or past 2**31, which the tool files
+ * under `no_trace`; ties in path or op code, which the tool breaks by code point and this by
+ * locale; `null` shares where this shows 0%; and its count of host ops among unlinked rows.
  */
 export const getSourceLineGroups = (
     rows: TypedPerfTableRow[],
@@ -194,11 +199,6 @@ export const getSourceLineGroups = (
         .sort((a, b) => b.deviceTimeUs - a.deviceTimeUs || a.key.localeCompare(b.key));
 };
 
-/**
- * Whether a group matches the op-code search box, which under Source line searches the call
- * site's path, basename, `basename:line` and function. The two groups without a call site
- * match on their labels.
- */
 /** The search text as it is matched, and as matches are highlighted. */
 export const normaliseSourceLineQuery = (query: string): string => query.trim();
 
@@ -213,6 +213,11 @@ export const countSourceLines = (groups: readonly SourceLineGroup[]): number =>
             .map((group) => [group.filePath, group.lineNumber].join(KEY_SEPARATOR)),
     ).size;
 
+/**
+ * Whether a group matches the op-code search box, which under Source line searches the call
+ * site's path, basename, `basename:line` and function. The two groups without a call site
+ * match on their labels.
+ */
 export const isSourceLineGroupMatch = (group: SourceLineGroup, query: string): boolean => {
     const needle = normaliseSourceLineQuery(query).toLowerCase();
 
