@@ -17,6 +17,18 @@ export interface OperationError {
     rank: number;
 }
 
+/** One row of `GET /api/source-files`: a source file the memory report can serve. */
+export interface SourceFileResponse {
+    id: number;
+    path: string;
+}
+
+/** The report's source files, by id and by path, for checking a stack trace frame against. */
+export interface ReportSourceFiles {
+    ids: ReadonlySet<number>;
+    paths: ReadonlySet<string>;
+}
+
 export interface Operation {
     id: number;
     name: string;

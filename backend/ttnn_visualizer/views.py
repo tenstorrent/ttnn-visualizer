@@ -119,6 +119,7 @@ from ttnn_visualizer.report_fingerprint import (
     profiler_run_fingerprint,
 )
 from ttnn_visualizer.report_source_file import (
+    list_report_source_files,
     read_report_source_file,
     report_source_file_available,
 )
@@ -764,6 +765,22 @@ def report_metadata(instance: Instance):
         payload = {row[0]: row[1] for row in rows}
         return Response(
             orjson.dumps(payload),
+            mimetype="application/json",
+        )
+
+
+@api.route("/source-files", methods=["GET"])
+@with_instance
+@timer
+def source_files_list(instance: Instance):
+    """The report's own source files, by id and path, without their contents.
+
+    Not ``@local_only``: ``/remote/stack-trace/read`` already serves these files'
+    contents under ``SERVER_MODE``, and this names only their paths.
+    """
+    with DatabaseQueries(instance) as db:
+        return Response(
+            orjson.dumps(list_report_source_files(db)),
             mimetype="application/json",
         )
 

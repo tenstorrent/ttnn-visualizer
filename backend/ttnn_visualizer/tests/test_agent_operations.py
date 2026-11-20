@@ -1673,26 +1673,36 @@ class TestOperationProvenance:
 class TestFrameParity:
     """`parse_frames` against the rule `src/functions/stackTraceSource.ts` applies.
 
-    The frontend takes the first `File "..."` and the first `line N,` for the
-    operation details panel. The claim in `parse_frames`' comment is that the call
-    site here is that frame, so these pin where the two agree -- and, for the inputs
-    where the frontend's looser regexes would answer differently, which answer this
-    side gives. Three prose claims of parity with nothing enforcing them was the
-    worst of the available shapes. #2021
+    The frontend links every frame on the operation details panel and opens frame 0
+    from its Source button. The claim in `parse_frames`' comment is that the call
+    site here is that frame, so these pin that the two read the same frames from the
+    same traces, including the inputs the frontend's old unanchored regexes read
+    differently. Three prose claims of parity with nothing enforcing them was the
+    worst of the available shapes. #2021, #2358
     """
 
-    # The frontend's two regexes, transcribed. Separate patterns over the whole
-    # trace, so its file and its line number need not come from the same frame.
-    _TS_FILE = re.compile(r'File "(.*)"')
-    _TS_LINE = re.compile(r"line (\d*),")
+    # `TRACE_FRAME_REGEX`, transcribed: JavaScript's `$` without the `m` flag is
+    # Python's `\Z`, and the frontend splits lines on CRLF, CR and LF before matching.
+    # `re.ASCII` because JavaScript's `\d` matches only ASCII digits, and the class in
+    # place of `.` because JavaScript's `.` also stops at U+2028 and U+2029.
+    _TS_FRAME = re.compile(
+        r'^([ \t]*File )"([^"]*)", line (\d+)(, in [^\r\n\u2028\u2029]*)\Z', re.ASCII
+    )
+    _TS_LINE_BREAK = re.compile(r"\r\n|\r|\n")
 
     def _frontend(self, trace: str):
-        file_match = self._TS_FILE.search(trace)
-        line_match = self._TS_LINE.search(trace)
-        return (
-            file_match.group(1) if file_match else "",
-            int(line_match.group(1)) if line_match and line_match.group(1) else None,
-        )
+        frames = []
+        for text in self._TS_LINE_BREAK.split(trace):
+            match = self._TS_FRAME.match(text)
+            if match:
+                frames.append((match.group(2), int(match.group(3))))
+        return frames
+
+    def _backend(self, trace: str):
+        return [
+            (frame["file"], frame["line"])
+            for frame in agent_operations.parse_frames(trace)
+        ]
 
     def test_they_agree_on_a_real_traceback(self):
         trace = (
@@ -1701,26 +1711,31 @@ class TestFrameParity:
             '  File "/m/tests/infra.py", line 317, in run\n'
             "    self.output = self.model(\n"
         )
-        call_site = agent_operations.parse_frames(trace)[0]
 
-        assert (call_site["file"], call_site["line"]) == self._frontend(trace)
+        assert self._backend(trace) == self._frontend(trace)
+        assert self._backend(trace)[0] == ("/m/models/resnet.py", 135)
 
-    def test_a_frame_line_without_a_function_is_skipped_here(self):
-        """The frontend's `File "(.*)"` does not require `, line N, in fn`, so it
-        accepts a line this parser skips. Recorded rather than resolved: a line that
-        names no line number and no function is not a frame, and a call site of
-        `("/m/partial.py", None)` would be worse than none."""
+    def test_they_agree_on_a_crlf_traceback(self):
+        trace = (
+            '  File "/m/outer.py", line 1, in outer\r\n'
+            '  File "/m/inner.py", line 2, in inner\r\n'
+            "    x()\r\n"
+        )
+
+        assert self._backend(trace) == self._frontend(trace)
+        assert len(self._frontend(trace)) == 2
+
+    def test_both_skip_a_frame_line_without_a_function(self):
+        """A line that names no line number and no function is not a frame, and a
+        call site of `("/m/partial.py", None)` would be worse than none. The frontend
+        once accepted it, pairing its file with the next frame's line number."""
         trace = '  File "/m/partial.py"\n  File "/m/real.py", line 7, in fn\n    x()\n'
 
-        frames = agent_operations.parse_frames(trace)
+        assert self._backend(trace) == self._frontend(trace) == [("/m/real.py", 7)]
 
-        assert [frame["file"] for frame in frames] == ["/m/real.py"]
-        assert self._frontend(trace)[0] == "/m/partial.py"
-
-    def test_a_quote_in_the_path_is_read_as_no_frame_at_all(self):
-        """The one divergence that matters. `File "(.*)"` is greedy, so the frontend
-        reports the path up to the last quote; `[^"]*` cannot span a quote, so this
-        anchored pattern matches nothing and reports no frame.
+    def test_both_read_a_quote_in_the_path_as_no_frame_at_all(self):
+        """`[^"]*` cannot span a quote, so neither side reports a frame, where the
+        frontend's old greedy `File "(.*)"` reported the path up to the last quote.
 
         That is the honest outcome — a path this parser cannot delimit is not a
         location it should assert — but it has to reach the agent as "unknown",
@@ -1728,8 +1743,7 @@ class TestFrameParity:
         rather than the absence of a row."""
         trace = '  File "/m/we"ird.py", line 20, in f\n    x()\n'
 
-        assert agent_operations.parse_frames(trace) == []
-        assert self._frontend(trace) == ('/m/we"ird.py', 20)
+        assert self._backend(trace) == self._frontend(trace) == []
 
     def test_a_source_line_is_never_taken_from_another_frame(self):
         """Compact tracebacks put frames on adjacent lines. The window used to look
@@ -1749,6 +1763,30 @@ class TestFrameParity:
     def test_it_reads_nothing_out_of_a_non_python_trace(self):
         assert agent_operations.parse_frames("#0 0x7f in ttnn::run()") == []
         assert agent_operations.parse_frames("") == []
+
+    def test_the_transcription_reads_no_frame_where_javascript_reads_none(self):
+        """A plain Python copy of the pattern reads a frame from each of these lines,
+        where JavaScript reads none. This pins `_TS_FRAME` to JavaScript's reading.
+
+        `parse_frames` does read them, a known difference the agent README notes:
+        its `\\d` matches non-ASCII digits, which CPython never writes, and
+        `splitlines()` ends the line at U+2028, leaving the frame before it whole."""
+        arabic_indic_line = '  File "/m/a.py", line \u0663, in f\n'
+        line_separator = '  File "/m/a.py", line 3, in f\u2028x\n'
+
+        assert self._frontend(arabic_indic_line) == []
+        assert self._frontend(line_separator) == []
+        assert self._backend(arabic_indic_line) == [("/m/a.py", 3)]
+        assert self._backend(line_separator) == [("/m/a.py", 3)]
+
+    def test_a_separator_inside_the_path_is_a_frame_only_in_the_app(self):
+        """The other direction: JavaScript's `[^"]*` takes U+2028, while
+        `splitlines()` cuts the frame in two. CPython writes file names as they
+        are, so a module whose name holds one gives this trace."""
+        trace = '  File "/m/a\u2028b.py", line 3, in f\n'
+
+        assert self._frontend(trace) == [("/m/a\u2028b.py", 3)]
+        assert self._backend(trace) == []
 
 
 class TestFindOperations:

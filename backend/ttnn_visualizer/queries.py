@@ -145,6 +145,15 @@ class LocalQueryRunner:
             self.connection.close()
 
 
+# A ``source_files`` row a read can return: one with contents. The probe, the frontend's
+# list of linkable files and the read, which checks ``bool(contents)`` in Python
+# (``_source_file_has_contents``), must agree on it, or a frame links to a file that will
+# not open. Hence an empty BLOB counts as empty too: SQLite never equates it with ``''``.
+# The comparison spares SQLite the character count ``length(contents) > 0`` makes, but
+# not the read: SQLite still loads every file's text to compare it.
+_SERVABLE_SOURCE_FILE = "contents IS NOT NULL AND contents NOT IN ('', x'')"
+
+
 class DatabaseQueries:
 
     instance: Optional[Instance] = None
@@ -632,11 +641,12 @@ class DatabaseQueries:
     ) -> Optional[str]:
         """
         Return ``source_files.path`` for the first row whose ``contents`` is
-        non-empty, **without** loading the (potentially large) blob.
+        non-empty. The contents are not returned, but SQLite still reads them to
+        test them, so a probe's cost grows with the file's size.
 
-        Used by availability probes (``GET /api/remote/stack-trace/test``) so the
-        cost scales with row count, not with embedded source size. ``source_file_id``
-        is preferred over ``file_path`` (mirrors ``lookup_report_source_file``).
+        Used by availability probes (``GET /api/remote/stack-trace/test``).
+        ``source_file_id`` is preferred over ``file_path`` (mirrors
+        ``lookup_report_source_file``).
         """
         if source_file_id is None and not file_path:
             return None
@@ -645,7 +655,7 @@ class DatabaseQueries:
         if source_file_id is not None:
             rows = self.query_runner.execute_query(
                 "SELECT path FROM source_files "
-                "WHERE id = ? AND contents IS NOT NULL AND length(contents) > 0 "
+                f"WHERE id = ? AND {_SERVABLE_SOURCE_FILE} "
                 "LIMIT 1",
                 [source_file_id],
             )
@@ -654,13 +664,29 @@ class DatabaseQueries:
         if file_path:
             rows = self.query_runner.execute_query(
                 "SELECT path FROM source_files "
-                "WHERE path = ? AND contents IS NOT NULL AND length(contents) > 0 "
+                f"WHERE path = ? AND {_SERVABLE_SOURCE_FILE} "
                 "LIMIT 1",
                 [file_path],
             )
             if rows:
                 return rows[0][0]
         return None
+
+    def query_source_file_index(self) -> List[Tuple[int, str]]:
+        """``(id, path)`` of every ``source_files`` row a read can return.
+
+        The same rows ``get_source_file_path_if_present`` approves: a path and
+        non-empty contents. The contents are not returned, but SQLite still reads
+        them to test them.
+        """
+        if not self._check_table_exists("source_files"):
+            return []
+        rows = self.query_runner.execute_query(
+            "SELECT id, path FROM source_files "
+            f"WHERE path IS NOT NULL AND {_SERVABLE_SOURCE_FILE} "
+            "ORDER BY id"
+        )
+        return [(row[0], row[1]) for row in rows]
 
     def query_error_records(
         self, filters: Optional[Dict[str, Any]] = None
