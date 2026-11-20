@@ -538,34 +538,38 @@ That report itself is not generated: the answer is computed from the rows, which
 it the op-to-op gap the stacked report leaves out.
 
 **`source_lines` groups the same rows by the model-code line that launched them**, as the
-performance view's stacked table does under Source line. Each row is filed under frame 0 of
-its linked memory report operation's stack trace — the `ttnn.<op>` call in the model code,
-which `operation_provenance` gives as the call site — keyed by full path and line, so two
-files that share a name stay apart. Device time is summed per line, as tt-perf-report's
-`Device_Time_Sum_us` sums it, so each group's `device_time_share_percent` is of
-`device_time_total`, the rows read, and the shares add up to 100; the graph view weighs an
-operation by its slowest row instead, so its numbers can differ. Every row but a signpost
-adds to `row_count`, and only a positive device time adds to `device_time`. Each group
-names its `top_op_codes`, the 3 raw op codes with the most device time, and the first 20
-of its `operation_ids`, with `operation_count` for all of them. Rows with no linked
-operation form one `unlinked` group, counted by why in `unlinked_by_reason`: host ops,
-which the application's stacked table hides by default, and rows past the end of the
-memory report capture. Rows whose operation recorded no stack trace, or none naming a
-frame, form one `no_trace` group, and its count is in the caveat; so does a frame at line 0
-or past 2³¹, which the application groups as a line of its own. Groups with equal device
-time are ordered by kind, path and line as text, and `top_op_codes` with equal device time
-by op code, each by code point, where the application compares them by locale: two paths
-that differ in case or punctuation (`_`, `-` or `.`) can come out swapped, and of tied op
-codes that differ so, a different 3 can be listed. With no countable device time at all,
-every `device_time_share_percent` is `null`, where the application shows 0%. `limit` caps
-the groups at 25, ranked by device time, and those past it are summed into `rest`. Over a
+performance view's stacked table does under Source line. Each row is filed under frame 0
+of its linked memory report operation's stack trace — the `ttnn.<op>` call in the model
+code, which `operation_provenance` gives as the call site — keyed by full path and line,
+so two files that share a name stay apart. Device time is summed per line, as
+tt-perf-report's `Device_Time_Sum_us` sums it, so each group's `device_time_share_percent`
+is of `device_time_total`, the rows read, and the shares add up to 100, to rounding; the
+graph view weighs an operation by its slowest row instead, so its numbers can differ.
+Every row but a signpost adds to `row_count`, and only a positive device time adds to
+`device_time`. Each group names its `top_op_codes`, the 3 raw op codes with the most
+device time, and the first 20 of its `operation_ids`, with `operation_count` for all of
+them. A call site's `file`, `function` or `code` past 300 characters is cut, with its
+`_full_length` and a `_digest` of the whole, so two long paths cut alike stay apart. Rows
+with no linked operation form one `unlinked` group, counted by why in
+`unlinked_by_reason`: host ops, which the application's stacked table hides by default,
+and rows past the end of the memory report capture. Rows whose operation recorded no stack
+trace, or none naming a frame, form one `no_trace` group, and its count is in the caveat;
+so does a frame at line 0 or past 2³¹, which the application groups as a line of its own.
+An operation with several stack traces is filed under its first, where the application's
+operations list keeps its last. Groups with equal device time are ordered by kind, path
+and line as text, and `top_op_codes` with equal device time by op code, each by code
+point, where the application compares them by locale: two paths that differ in case or
+punctuation (`_`, `-` or `.`) can come out swapped, and of tied op codes that differ so, a
+different 3 can be listed. With no countable device time at all, every
+`device_time_share_percent` is `null`, where the application shows 0%. `limit` caps the
+groups at 25, ranked by device time, and those past it are summed into `rest`. Over a
 range, the rows and shares are the window's, the unlinked group's `unlinked_by_reason`
 included, while `operation_link` carries `scope: whole_report`, as `top_ops`'s does, since
-its `matched_rows` counts the whole report. The tool refuses a handle whose two reports did not link, and a capture
-that records no stack traces, where every row would read `no_trace`; it reads the linked
-rank only. The first call reads every linked operation's stack trace, 500 at a time, or in
-one streamed pass past 2,000 operations, and keeps only each one's call site; later calls,
-over any range, reuse them.
+its `matched_rows` counts the whole report. The tool refuses a handle whose two reports
+did not link, and a capture that records no stack traces, where every row would read
+`no_trace`; it reads the linked rank only. The first call reads every linked operation's
+stack trace, 500 at a time, or in one streamed pass past 2,000 operations, and keeps only
+each one's call site; later calls, over any range, reuse them.
 
 **`diff_reports` calls a move a change only when it is bigger than run-to-run noise.** Two
 captures of the same code never time an operation identically, so a diff that ranks every
@@ -1018,9 +1022,10 @@ its CSV position in either read, so its `operation_id` is the one it has unrange
 `top_ops`'s own `op_count` and totals describe the window.
 
 The link is resolved once per handle, on the first `top_ops`, `program_cache`,
-`operation_detail`, `critical_path` or `source_lines` that needs it, and reads every
-captured graph at the linked rank. On a handle with both reports, the first `operation_detail` therefore also generates the performance report, which can
-take seconds on a large capture; every later call reuses both. A link that failed on a read
+`operation_detail`, `critical_path`, `op_configurations` or `source_lines` that needs it,
+and reads every captured graph at the linked rank. On a handle with both reports, the first
+`operation_detail` therefore also generates the performance report, which can take seconds
+on a large capture; every later call reuses both. A link that failed on a read
 that might pass next time — a locked database, a temp-file error in tt-perf-report — is not
 kept, so the next call tries again. A handle keeps answering from the capture it first
 read, so it never mixes two. A read that needs the CSV again after it was rewritten, or

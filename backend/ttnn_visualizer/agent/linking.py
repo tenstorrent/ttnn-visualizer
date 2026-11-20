@@ -956,8 +956,8 @@ def op_configurations(
 def _read_call_sites(
     queries: DatabaseQueries, scope: operations.RankScope, operation_ids: Iterable[int]
 ) -> Dict[int, Optional[source_lines.CallSite]]:
-    """`failures.read_call_sites`, logged: the first read on a large capture is the
-    slow part of `source_lines`, and the log says how slow and over how many."""
+    """`failures.read_call_sites`, logged: the first read on a large capture reads
+    every linked operation's trace, and the log says how long it took over how many."""
     started = time.perf_counter()
     sites = failures.read_call_sites(queries, scope, operation_ids)
     logger.info(

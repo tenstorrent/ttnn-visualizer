@@ -810,9 +810,13 @@ def report_late_deallocations(
     )
 
 
-def _call_site(trace: Optional[str]) -> Optional[Dict[str, object]]:
+def _call_site(trace: object) -> Optional[Dict[str, object]]:
+    # A BLOB a report keeps where text belongs names no frame, as `getCallSiteFrame`'s
+    # `typeof` check reads it, rather than failing the whole answer.
+    if not isinstance(trace, str):
+        return None
     try:
-        frames = parse_frames(trace or "", limit=1)
+        frames = parse_frames(trace, limit=1)
     except ValueError:
         # A line number past Python's 4,300-digit int bound; real traces never have one.
         return None
@@ -886,7 +890,10 @@ def call_site_entry(site: Optional[Dict[str, object]]) -> Optional[Dict[str, obj
         return None
     entry: Dict[str, object] = {}
     for field in ("file", "line", "function", "code"):
-        entry.update(cut_text(field, site[field], MAX_CALL_SITE_TEXT_CHARS))
+        # With a digest, so two long paths that share their cut stay told apart.
+        entry.update(
+            cut_text(field, site[field], MAX_CALL_SITE_TEXT_CHARS, digest=True)
+        )
     return entry
 
 

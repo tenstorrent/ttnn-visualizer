@@ -78,7 +78,7 @@ _TRACES = {
 }
 
 
-def _add_traces(profiler_path: str, traces: Dict[int, str]) -> None:
+def _add_traces(profiler_path: str, traces: Dict[int, object]) -> None:
     """A `stack_traces` table with no `rank` column, as a single-host capture writes."""
     connection = sqlite3.connect(Path(profiler_path, "db.sqlite"))
     try:
@@ -394,6 +394,18 @@ class TestSourceLines:
             3,
             4,
         ]
+
+    def test_a_blob_trace_reads_as_no_trace(self, traced):
+        """A trace stored as a BLOB names no frame, as `getCallSiteFrame` reads a
+        non-string, rather than failing the whole answer. #2364"""
+        traces: Dict[int, object] = {**_TRACES, 3: _TRACES[3].encode()}
+        registry, handle = traced(traces=traces)
+
+        result = linking.source_lines_by_call_site(registry, handle)
+
+        (untraced,) = [g for g in result["groups"] if g["kind"] == "no_trace"]
+        assert untraced["operation_ids"] == [3]
+        assert ("/model/a/block.py", 10) in _by_location(result)
 
     def test_an_unknown_signpost_is_refused_before_the_link_is_asked(self, traced):
         # Unlinked as well, so the order of the two refusals decides which is raised.
