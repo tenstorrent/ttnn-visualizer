@@ -182,6 +182,49 @@ def test_summary_reports_no_soc_descriptor_when_the_report_has_none(tmp_path):
     assert summary["soc_descriptor"] is None
 
 
+def test_summary_reports_fabric_events_when_any_transfer_is_fabric(tmp_path):
+    # The last transfer only: the flag covers the whole trace, which a windowed
+    # client cannot see, not just the transfers of an early window. #2356
+    obj = _make_npe_object(n_transfers=3)
+    obj["noc_transfers"][-1]["fabric_event_type"] = True
+    npe_path = _write_npe(tmp_path, obj)
+
+    summary = read_summary(ensure_index(npe_path))
+
+    assert summary["has_fabric_events"] is True
+
+
+def test_summary_reports_fabric_events_from_a_transfer_with_no_id(tmp_path):
+    # The build skips a transfer with no id, but the whole-file path still sees
+    # it, so the flag must be decided before that skip.
+    obj = _make_npe_object(n_transfers=3)
+    obj["noc_transfers"][-1]["fabric_event_type"] = True
+    del obj["noc_transfers"][-1]["id"]
+    npe_path = _write_npe(tmp_path, obj)
+
+    summary = read_summary(ensure_index(npe_path))
+
+    assert summary["has_fabric_events"] is True
+
+
+def test_summary_reports_no_fabric_events_when_none_are_fabric(tmp_path):
+    obj = _make_npe_object(n_transfers=3)
+    obj["noc_transfers"][0]["fabric_event_type"] = False
+    npe_path = _write_npe(tmp_path, obj)
+
+    summary = read_summary(ensure_index(npe_path))
+
+    assert summary["has_fabric_events"] is False
+
+
+def test_summary_reports_no_fabric_events_for_an_empty_trace(tmp_path):
+    npe_path = _write_npe(tmp_path, _make_npe_object(n_transfers=0, n_timesteps=0))
+
+    summary = read_summary(ensure_index(npe_path))
+
+    assert summary["has_fabric_events"] is False
+
+
 def test_summary_max_link_demand_values(tmp_path):
     # Values, not just array lengths: idle step 0 has no link_demand and no source
     # scalar → derived None; active steps derive the worst-link scalar from

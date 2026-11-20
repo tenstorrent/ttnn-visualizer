@@ -61,7 +61,9 @@ INDEX_SUFFIX = ".npeidx.sqlite"
 # Bump when the schema or build logic changes so stale caches are rebuilt.
 # 5: carries `soc_descriptor` in meta, so a report-supplied SoC descriptor
 #    survives the windowed path as well as the whole-file one. #1776
-INDEX_VERSION = 5
+# 6: carries `has_fabric_events` in meta, so the windowed event filter is decided
+#    for the whole trace rather than per window. #2356
+INDEX_VERSION = 6
 
 _TRANSFER_INSERT_BATCH = 5000
 
@@ -400,7 +402,13 @@ def _write_index(
 
         batch = []
         skipped_no_id = 0
+        has_fabric_events = False
         for transfer in transfers:
+            # A truthy `fabric_event_type`, the rule the frontend's whole-file check
+            # also applies. Checked before the no-id skip so the flag describes the
+            # trace the whole-file path sees.
+            if transfer.get("fabric_event_type"):
+                has_fabric_events = True
             tid = _transfer_id(transfer)
             if tid is None:
                 # A transfer with no id can't be resolved (active_transfers are id
@@ -421,6 +429,12 @@ def _write_index(
             )
         if skipped_no_id:
             logger.warning(f"NPE index: skipped {skipped_no_id} transfer(s) with no id")
+        # Stored rather than derived on read: a windowed client only ever holds
+        # one window's transfers, so it cannot tell for itself. #2356
+        conn.execute(
+            "INSERT INTO meta (key, value) VALUES (?, ?)",
+            ("has_fabric_events", orjson.dumps(has_fabric_events)),
+        )
 
         timestep_rows = []
         for t, step in enumerate(timesteps):
@@ -854,6 +868,8 @@ def read_summary(db_path: Path) -> dict:
         "soc_descriptor": orjson.loads(meta.get("soc_descriptor") or b"null"),
         "chips": orjson.loads(meta["chips"]),
         "zones": orjson.loads(meta["zones"]),
+        # Indexed, not `.get`: INDEX_VERSION 6 rebuilds every index written without it.
+        "has_fabric_events": orjson.loads(meta["has_fabric_events"]),
         "n_timesteps": int(meta["n_timesteps"]),
         "timesteps": timesteps,
     }

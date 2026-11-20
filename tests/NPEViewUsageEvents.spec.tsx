@@ -76,19 +76,32 @@ const FABRIC_TRANSFER = {
     route: [],
 };
 
-const viewTree = (nocTransfers: unknown[]) => (
+const viewTree = (nocTransfers: unknown[], hasFabricEvents?: boolean) => (
     <TestProviders>
-        <NPEView npeData={makeNpeData(nocTransfers)} />
+        <NPEView
+            npeData={makeNpeData(nocTransfers)}
+            hasFabricEvents={hasFabricEvents}
+        />
     </TestProviders>
 );
 
-function renderView(nocTransfers: unknown[] = []) {
-    const view = render(viewTree(nocTransfers));
+function renderView(nocTransfers: unknown[] = [], hasFabricEvents?: boolean) {
+    const view = render(viewTree(nocTransfers, hasFabricEvents));
 
-    return { ...view, showTrace: (transfers: unknown[]) => view.rerender(viewTree(transfers)) };
+    return {
+        ...view,
+        showTrace: (transfers: unknown[], nextHasFabricEvents = hasFabricEvents) =>
+            view.rerender(viewTree(transfers, nextHasFabricEvents)),
+    };
 }
 
 const click = (name: string) => fireEvent.click(screen.getByRole('button', { name }));
+
+const switchState = (label: string) => {
+    const input = screen.getByLabelText(label) as HTMLInputElement;
+    return { checked: input.checked, enabled: !input.disabled };
+};
+const eventFilterSwitches = () => ({ fabric: switchState('Fabric events'), local: switchState('Local events') });
 
 beforeEach(() => {
     vi.useFakeTimers();
@@ -293,5 +306,73 @@ describe('NPEView usage events', () => {
 
         expect(screen.getByLabelText('Fabric events')).toBeChecked();
         expect(recordEvent).toHaveBeenCalledExactlyOnceWith(modeChanged(NpeMode.LOCAL_EVENTS));
+    });
+
+    // #2356: a windowed trace holds one window's transfers, so the whole trace's
+    // answer comes in as a prop and a window without fabric events must not reset it.
+    it('keeps the event filter when a windowed trace with fabric events shows a window without any', () => {
+        const { showTrace } = renderView([FABRIC_TRANSFER], true);
+
+        fireEvent.click(screen.getByLabelText('Fabric events'));
+        showTrace([]);
+
+        expect(eventFilterSwitches()).toEqual({
+            fabric: { checked: false, enabled: true },
+            local: { checked: true, enabled: true },
+        });
+        expect(recordEvent).toHaveBeenCalledExactlyOnceWith(modeChanged(NpeMode.LOCAL_EVENTS));
+    });
+
+    it('enables the event filter for a windowed trace with fabric events when the first window has none', () => {
+        renderView([], true);
+
+        expect(eventFilterSwitches()).toEqual({
+            fabric: { checked: true, enabled: true },
+            local: { checked: true, enabled: true },
+        });
+
+        fireEvent.click(screen.getByLabelText('Fabric events'));
+
+        expect(eventFilterSwitches()).toEqual({
+            fabric: { checked: false, enabled: true },
+            local: { checked: true, enabled: true },
+        });
+        expect(recordEvent).toHaveBeenCalledExactlyOnceWith(modeChanged(NpeMode.LOCAL_EVENTS));
+    });
+
+    it('disables the event filter for a windowed trace without fabric events even when a window has one', () => {
+        renderView([FABRIC_TRANSFER], false);
+
+        expect(eventFilterSwitches()).toEqual({
+            fabric: { checked: true, enabled: false },
+            local: { checked: true, enabled: false },
+        });
+    });
+
+    // Re-uploading under the same file name keeps the windowed view mounted, so the
+    // whole-trace flag can change under a filter the user already chose.
+    it('resets the event filter when the whole trace stops having fabric events', () => {
+        const { showTrace } = renderView([], true);
+
+        fireEvent.click(screen.getByLabelText('Fabric events'));
+        showTrace([], false);
+
+        expect(eventFilterSwitches()).toEqual({
+            fabric: { checked: true, enabled: false },
+            local: { checked: true, enabled: false },
+        });
+        expect(recordEvent).toHaveBeenCalledExactlyOnceWith(modeChanged(NpeMode.LOCAL_EVENTS));
+    });
+
+    it('enables the event filter when the whole trace starts having fabric events', () => {
+        const { showTrace } = renderView([], false);
+
+        showTrace([], true);
+
+        expect(eventFilterSwitches()).toEqual({
+            fabric: { checked: true, enabled: true },
+            local: { checked: true, enabled: true },
+        });
+        expect(recordEvent).not.toHaveBeenCalled();
     });
 });
