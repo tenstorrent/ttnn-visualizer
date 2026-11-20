@@ -42,7 +42,7 @@ const renderOverlay = (props: Partial<ComponentProps<typeof SourceFileOverlay>> 
     );
 
 describe('SourceFileOverlay', () => {
-    // jsdom implements neither, so both are stubbed for these tests and put back after.
+    // jsdom has no `scrollIntoView`, so it is stubbed for these tests and put back after.
     const originalScrollIntoView = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollIntoView');
     let scrollIntoView: Mock;
 
@@ -77,6 +77,21 @@ describe('SourceFileOverlay', () => {
         renderOverlay();
 
         expect(getScrolledLineNumbers()).toEqual([`${LINE_NUMBER}`]);
+    });
+
+    it('scrolls to its own highlighted line, not another one on the page', () => {
+        const stray = document.createElement('div');
+        stray.className = 'highlighted-line';
+        stray.innerHTML = '<span class="line-number">7</span>';
+        document.body.prepend(stray);
+
+        try {
+            renderOverlay();
+
+            expect(getScrolledLineNumbers()).toEqual([`${LINE_NUMBER}`]);
+        } finally {
+            stray.remove();
+        }
     });
 
     it('scrolls again when it is closed and reopened', () => {

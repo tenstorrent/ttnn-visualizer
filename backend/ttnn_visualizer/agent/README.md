@@ -85,11 +85,16 @@ site, that its Source button opens —
 two answers to "where is this op from" that disagreed would be worse than one. Both match
 one anchored pattern per line, so a frame's file and line always come from the same line,
 and a path with a quote in it is no frame on either side. The frontend splits lines on
-CRLF, CR and LF, where `splitlines()` also splits on a few rarer separators, and
-`parse_frames`' `\d` matches any Unicode digit, where JavaScript's matches only ASCII. So a
-frame line holding U+2028, or a line number in, say, Arabic-Indic digits, is a frame here
-and not in the app; CPython writes neither. `TestFrameParity` transcribes the frontend
-pattern, pins that both read the same frames, and pins those two differences.
+CRLF, CR and LF, where `splitlines()` also splits on a few rarer separators (U+2028, U+2029,
+form feed, VT, NEL, U+001C to U+001E). Which side reads such a line depends on where the
+separator falls. After the line number, the frame is read only here, since `splitlines()`
+leaves the frame whole and JavaScript's `.` stops at it. Inside the quoted path, it is read
+only in the app, since JavaScript's `[^"]*` takes it and `splitlines()` cuts the frame in
+two. CPython writes file names as they are, so a file named that way does reach a trace.
+Separately, `parse_frames`' `\d` matches any Unicode digit, where JavaScript's matches only
+ASCII, so a line number in, say, Arabic-Indic digits is a frame only here; CPython never
+writes one. `TestFrameParity` transcribes the frontend pattern, pins that both read the
+same frames, and pins these differences.
 
 The frontend has a second input, `stack_trace_source_file_id`, with no equivalent here.
 It is one id per trace, for frame 0's file (tt-metal's writer stores the first file a trace

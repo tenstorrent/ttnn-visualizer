@@ -75,8 +75,8 @@ def report_source_file_available(
     """
     Lightweight availability probe used by ``GET /api/remote/stack-trace/test``.
 
-    Avoids loading ``source_files.contents`` (which can be large) by asking the
-    DB only for the stored ``path``. The same path validation that gates
+    Returns only the stored ``path``, not ``source_files.contents``, though SQLite
+    still reads the contents to check that they are non-empty. The same path validation that gates
     ``read_report_source_file`` applies here so unsafe stored paths report as
     unavailable instead of being approved for a read that would later fail.
     """

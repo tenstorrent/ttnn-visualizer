@@ -1769,8 +1769,8 @@ class TestFrameParity:
         where JavaScript reads none. This pins `_TS_FRAME` to JavaScript's reading.
 
         `parse_frames` does read them, a known difference the agent README notes:
-        its `\\d` matches non-ASCII digits, and `splitlines()` ends a line at U+2028.
-        Neither occurs in a CPython traceback."""
+        its `\\d` matches non-ASCII digits, which CPython never writes, and
+        `splitlines()` ends the line at U+2028, leaving the frame before it whole."""
         arabic_indic_line = '  File "/m/a.py", line \u0663, in f\n'
         line_separator = '  File "/m/a.py", line 3, in f\u2028x\n'
 
@@ -1778,6 +1778,15 @@ class TestFrameParity:
         assert self._frontend(line_separator) == []
         assert self._backend(arabic_indic_line) == [("/m/a.py", 3)]
         assert self._backend(line_separator) == [("/m/a.py", 3)]
+
+    def test_a_separator_inside_the_path_is_a_frame_only_in_the_app(self):
+        """The other direction: JavaScript's `[^"]*` takes U+2028, while
+        `splitlines()` cuts the frame in two. CPython writes file names as they
+        are, so a module whose name holds one gives this trace."""
+        trace = '  File "/m/a\u2028b.py", line 3, in f\n'
+
+        assert self._frontend(trace) == [("/m/a\u2028b.py", 3)]
+        assert self._backend(trace) == []
 
 
 class TestFindOperations:

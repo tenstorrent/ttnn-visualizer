@@ -641,11 +641,12 @@ class DatabaseQueries:
     ) -> Optional[str]:
         """
         Return ``source_files.path`` for the first row whose ``contents`` is
-        non-empty, **without** loading the (potentially large) blob.
+        non-empty. The contents are not returned, but SQLite still reads them to
+        test them, so a probe's cost grows with the file's size.
 
-        Used by availability probes (``GET /api/remote/stack-trace/test``) so the
-        cost scales with row count, not with embedded source size. ``source_file_id``
-        is preferred over ``file_path`` (mirrors ``lookup_report_source_file``).
+        Used by availability probes (``GET /api/remote/stack-trace/test``).
+        ``source_file_id`` is preferred over ``file_path`` (mirrors
+        ``lookup_report_source_file``).
         """
         if source_file_id is None and not file_path:
             return None
