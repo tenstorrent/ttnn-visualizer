@@ -1803,7 +1803,7 @@ class TestFrameParity:
         are, so a module whose name holds one gives this trace."""
         trace = '  File "/m/a\u2028b.py", line 3, in f\n'
 
-        assert self._frontend(trace) == [("/m/a\u2028b.py", 3)]
+        assert self._frontend(trace) == [("/m/a\u2028b.py", 3, "f")]
         assert self._backend(trace) == []
 
 
