@@ -68,6 +68,15 @@ export const getLinkedPerformanceReportParams = (): PerformanceReportParams => (
     ...LINKED_PERFORMANCE_REPORT_FILTERS,
 });
 
+/**
+ * @description The grouping tt-perf-report is asked for. Source line is rolled up in
+ * the browser from the per-row report, which an operation-grouped request already
+ * returns, so it is sent as `OP`. Sent as is, tt-perf-report would get a grouping it
+ * does not know, and switching between the two would refetch the whole report.
+ */
+export const toBackendStackedGroupBy = (groupBy: StackedGroupBy): StackedGroupBy =>
+    groupBy === StackedGroupBy.SOURCE_LINE ? StackedGroupBy.OP : groupBy;
+
 const getSignpostKey = (label: string, signpost: Signpost | null) =>
     `${label}:${signpost ? `${signpost.id}:${signpost.op_code}` : null}`;
 

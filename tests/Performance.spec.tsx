@@ -657,6 +657,27 @@ describe('Performance route', () => {
         expect(useAllocationFailures).toHaveBeenCalledWith(perfTableOpIdsMap);
     });
 
+    // Source line judges availability on the whole report's links, not the range's rows.
+    it.each([
+        { opIds: [], expected: false },
+        { opIds: [{ perfId: '9', opId: 7 }], expected: true },
+    ])('passes hasLinkedOperations as $expected from the table lookup', ({ opIds, expected }) => {
+        (usePerformanceReport as Mock).mockReturnValue({
+            data: { report: [DRAM_PERF_ROW], stacked_report: [], signposts: [] },
+            isLoading: false,
+            error: null,
+        });
+        (useOpToPerfIdForPerfTable as Mock).mockReturnValue(opIds);
+
+        render(
+            <TestProviders initialAtomValues={[[activePerformanceReportAtom, REPORT_A]]}>
+                <Performance />
+            </TestProviders>,
+        );
+
+        expect(perfReportProps.mock.calls.at(-1)?.[0].hasLinkedOperations).toBe(expected);
+    });
+
     // Both hooks are mocked, so only this ties the retry signal to the failures the route parsed.
     it('detects DRAM fallbacks against the allocation failures it already parsed', () => {
         const allocationFailureByOpId = new Map([[7, makeAllocationFailure({ operationId: 7 })]]);

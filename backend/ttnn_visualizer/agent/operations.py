@@ -660,11 +660,11 @@ def _device_capacity(devices: Sequence[Device]) -> Dict[str, object]:
 # of kilobytes in a response that is supposed to be bounded.
 MAX_ARGUMENT_VALUE_CHARS = 500
 
-# One frame of a Python traceback. Deliberately the same shape
-# `src/functions/stackTraceSource.ts` reads: it takes the *first* `File "..."` and
-# the first `line N`, so the call site here is the frame the operation details panel
-# already shows for the same operation. Two answers to "where is this op from" that
-# disagreed would be worse than one.
+# One frame of a Python traceback. Deliberately the same pattern as
+# `TRACE_FRAME_REGEX` in `src/functions/stackTraceSource.ts`, which finds the frames
+# the operation details panel links and frame 0, which its Source button opens, so the
+# call site here is the frame the panel shows for the same operation. Two answers to
+# "where is this op from" that disagreed would be worse than one.
 _TRACE_FRAME = re.compile(
     r'^[ \t]*File "(?P<file>[^"]*)", line (?P<line>\d+), in (?P<function>.*)$'
 )
@@ -676,7 +676,7 @@ def parse_frames(trace: str, limit: Optional[int] = None) -> List[Dict[str, obje
     Innermost first is the order the capture writes: frame 0 is the `ttnn.<op>` call
     in the model code, and the chain runs outward to the entry point. So the call
     site needs no heuristic about which frame belongs to the user -- which is the
-    same reason the frontend can take the first match and stop.
+    same reason the frontend can take its first frame as the call site.
     """
     lines = trace.splitlines()
     frames: List[Dict[str, object]] = []
