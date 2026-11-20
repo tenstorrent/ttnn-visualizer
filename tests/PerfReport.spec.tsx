@@ -4,13 +4,18 @@
 
 import '@testing-library/jest-dom/vitest';
 import { Classes } from '@blueprintjs/core';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PerformanceReport from '../src/components/performance/PerfReport';
 import { TypedPerfTableRow } from '../src/model/PerfTable';
 import { PERF_DURATION_BUCKET_FILTER_PLACEHOLDER } from '../src/definitions/PerfDurationHistogram';
 import { OpType } from '../src/definitions/Performance';
-import { OperationCategories } from '../src/definitions/StackedPerfTable';
+import {
+    OperationCategories,
+    StackedColumnKeys,
+    StackedGroupBy,
+    TypedStackedPerfRow,
+} from '../src/definitions/StackedPerfTable';
 import { MathFidelity } from '../src/definitions/MathFidelity';
 import { DeviceOperationLayoutTypes } from '../src/model/APIData';
 import { BufferType } from '../src/model/BufferType';
@@ -20,10 +25,12 @@ import {
     bufferTypeFilterListAtom,
     comparisonPerformanceReportListAtom,
     durationBucketFilterListAtom,
+    isStackedViewAtom,
     layoutFilterListAtom,
     mathFilterListAtom,
     opCategoryFilterListAtom,
     rawOpCodeFilterListAtom,
+    stackedGroupByAtom,
 } from '../src/store/app';
 import { formatDurationBucketRange } from '../src/functions/formatDurationBucketRange';
 import { AtomProviderInitialValues } from './helpers/atomProvider';
@@ -68,18 +75,31 @@ const row = (
         id,
     }) as unknown as TypedPerfTableRow;
 
+const stackedRow = (opCode: string, deviceTimeUs: number, percent: number): TypedStackedPerfRow =>
+    ({
+        [StackedColumnKeys.Percent]: percent,
+        [StackedColumnKeys.OpCode]: opCode,
+        [StackedColumnKeys.Device]: 0,
+        [StackedColumnKeys.DeviceTimeSumUs]: deviceTimeUs,
+        [StackedColumnKeys.OpsCount]: 1,
+    }) as unknown as TypedStackedPerfRow;
+
 interface RenderOptions {
     isLoading?: boolean;
     isComparisonLoading?: boolean;
     comparisonData?: TypedPerfTableRow[][];
     comparisonReports?: string[] | null;
     data?: TypedPerfTableRow[];
+    stackedData?: TypedStackedPerfRow[];
+    comparisonStackedData?: TypedStackedPerfRow[][];
     rawOpCodeFilterList?: string[];
     durationBucketFilterList?: number[];
     opCategoryFilterList?: OperationCategories[];
     mathFilterList?: string[];
     bufferTypeFilterList?: BufferType[];
     layoutFilterList?: DeviceOperationLayoutTypes[];
+    stackedGroupBy?: StackedGroupBy | null;
+    hasLinkedOperations?: boolean;
 }
 
 function renderReport({
@@ -88,14 +108,23 @@ function renderReport({
     comparisonData = [],
     comparisonReports = null,
     data = [row('Matmul')],
+    stackedData = [],
+    comparisonStackedData = [],
     rawOpCodeFilterList = [],
     durationBucketFilterList = [],
     opCategoryFilterList = [],
     mathFilterList = [],
     bufferTypeFilterList = [],
     layoutFilterList = [],
+    stackedGroupBy = null,
+    // The route derives this from the whole report's links; the rows passed stand in for it.
+    hasLinkedOperations = data.some((dataRow) => dataRow.op !== undefined),
 }: RenderOptions = {}) {
     const initialAtomValues: AtomProviderInitialValues = [];
+
+    if (stackedGroupBy) {
+        initialAtomValues.push([isStackedViewAtom, true], [stackedGroupByAtom, stackedGroupBy]);
+    }
 
     if (comparisonReports) {
         initialAtomValues.push([comparisonPerformanceReportListAtom, comparisonReports]);
@@ -130,11 +159,12 @@ function renderReport({
             <PerformanceReport
                 data={data}
                 comparisonData={comparisonData}
-                stackedData={[]}
-                comparisonStackedData={[]}
+                stackedData={stackedData}
+                comparisonStackedData={comparisonStackedData}
                 isLoading={isLoading}
                 isComparisonLoading={isComparisonLoading}
                 maxCores={DEFAULT_MAX_CORES}
+                hasLinkedOperations={hasLinkedOperations}
             />
         </TestProviders>,
     );
@@ -920,5 +950,207 @@ describe('PerformanceReport usage events', () => {
         fireEvent.change(screen.getByPlaceholderText('Filter by operation name'), { target: { value: 'Conv' } });
 
         expect(recordEvent).toHaveBeenCalledTimes(2);
+    });
+});
+
+describe('PerformanceReport stacked view grouped by source line', () => {
+    const MODEL_TRACE = '  File "/m/models/model.py", line 42, in forward\n    y = ttnn.matmul(a, b)';
+    const linkedRow = (opCode: string, id: number, op: number) => ({ ...row(opCode, id, 10), op }) as TypedPerfTableRow;
+    const LINKED_ROWS = [linkedRow('Matmul', 1, 7), linkedRow('Softmax', 2, 7)];
+
+    beforeEach(() => {
+        (useOperationsList as Mock).mockReturnValue({
+            data: [{ id: 7, name: 'ttnn.matmul', stack_trace: MODEL_TRACE, stack_trace_source_file_id: null }],
+            isLoading: false,
+        });
+    });
+
+    const getSourceLineRows = () => screen.queryAllByTestId(TEST_IDS.PERF_SOURCE_LINE_ROW);
+    // Merged devices: Total %, Source line, Device Time, Ops Count.
+    const getOpsCountCell = (tableRow: HTMLElement) => tableRow.querySelectorAll('td')[3];
+
+    // A list option's `li` carries the role; its anchor takes the click and the disabled state.
+    const findGroupByItem = async (name: string) => {
+        await openPopover(screen.getByRole('button', { name: 'Operation' }), WAIT_FOR_OPTIONS);
+        const option = await screen.findByRole('option', { name }, WAIT_FOR_OPTIONS);
+
+        return option.querySelector('a')!;
+    };
+
+    it('disables the option, with its reason, when no row is linked to an operation', async () => {
+        renderReport({ stackedGroupBy: StackedGroupBy.OP });
+
+        const item = await findGroupByItem('Source line');
+        expect(item).toHaveAttribute('aria-disabled', 'true');
+
+        fireEvent.mouseEnter(within(item).getByText('Source line'));
+
+        expect(
+            await screen.findByText('Needs a memory report linked to this performance report', {}, WAIT_FOR_OPTIONS),
+        ).toBeInTheDocument();
+    });
+
+    it('disables the option, with its reason, when the linked memory report has no stack traces', async () => {
+        (useOperationsList as Mock).mockReturnValue({
+            data: [{ id: 7, name: 'ttnn.matmul', stack_trace: null, stack_trace_source_file_id: null }],
+            isLoading: false,
+        });
+        renderReport({ data: LINKED_ROWS, stackedGroupBy: StackedGroupBy.OP });
+
+        const item = await findGroupByItem('Source line');
+        expect(item).toHaveAttribute('aria-disabled', 'true');
+
+        fireEvent.mouseEnter(within(item).getByText('Source line'));
+
+        expect(
+            await screen.findByText(
+                'No stack trace in the linked memory report names a Python frame',
+                {},
+                WAIT_FOR_OPTIONS,
+            ),
+        ).toBeInTheDocument();
+    });
+
+    it('offers the option when the range holds only unlinked rows of a linked report', async () => {
+        renderReport({ data: [row('Matmul')], stackedGroupBy: StackedGroupBy.OP, hasLinkedOperations: true });
+
+        expect(await findGroupByItem('Source line')).not.toHaveAttribute('aria-disabled', 'true');
+    });
+
+    it('swaps in the source-line table when the option is chosen', async () => {
+        renderReport({ data: LINKED_ROWS, stackedGroupBy: StackedGroupBy.OP });
+
+        fireEvent.click(await findGroupByItem('Source line'));
+
+        expect(await screen.findByTestId(TEST_IDS.PERF_SOURCE_LINE_TABLE)).toBeInTheDocument();
+        expect(getSourceLineRows()).toHaveLength(1);
+        expect(getSourceLineRows()[0]).toHaveTextContent('model.py:42');
+    });
+
+    it('shows the skeleton, not an empty-table reason, while the operations list loads', () => {
+        (useOperationsList as Mock).mockReturnValue({ data: undefined, isLoading: true });
+        renderReport({ data: LINKED_ROWS, stackedGroupBy: StackedGroupBy.SOURCE_LINE });
+
+        expect(screen.getByTestId(TEST_IDS.PERF_TABLE_SKELETON)).toBeInTheDocument();
+    });
+
+    it('explains an empty table when Source line stays selected and no trace names a Python frame', () => {
+        (useOperationsList as Mock).mockReturnValue({
+            data: [
+                { id: 7, name: 'ttnn.matmul', stack_trace: '#0 0x7f in ttnn::run()', stack_trace_source_file_id: null },
+            ],
+            isLoading: false,
+        });
+        renderReport({ data: LINKED_ROWS, stackedGroupBy: StackedGroupBy.SOURCE_LINE });
+
+        expect(screen.getByText('No stack trace in the linked memory report names a Python frame')).toBeInTheDocument();
+    });
+
+    it('explains an empty table when Source line stays selected without a link', () => {
+        renderReport({ stackedGroupBy: StackedGroupBy.SOURCE_LINE });
+
+        expect(screen.getByText('Needs a memory report linked to this performance report')).toBeInTheDocument();
+    });
+
+    it("ignores the Standard view's hidden filters", () => {
+        renderReport({
+            data: LINKED_ROWS,
+            stackedGroupBy: StackedGroupBy.SOURCE_LINE,
+            bufferTypeFilterList: [BufferType.L1],
+        });
+
+        expect(getSourceLineRows()).toHaveLength(1);
+        expect(getOpsCountCell(getSourceLineRows()[0])).toHaveTextContent(/^2$/);
+    });
+
+    it('ignores a raw op-code selection and disables its control', () => {
+        renderReport({
+            data: LINKED_ROWS,
+            stackedGroupBy: StackedGroupBy.SOURCE_LINE,
+            rawOpCodeFilterList: ['Softmax'],
+        });
+
+        expect(getSourceLineRows()).toHaveLength(1);
+        expect(getOpsCountCell(getSourceLineRows()[0])).toHaveTextContent(/^2$/);
+        expect(document.querySelector(`.${Classes.TAG_INPUT}.${Classes.DISABLED}`)).toHaveTextContent('Softmax');
+    });
+
+    it('filters lines by file or function after grouping', () => {
+        renderReport({ data: LINKED_ROWS, stackedGroupBy: StackedGroupBy.SOURCE_LINE });
+
+        fireEvent.change(screen.getByPlaceholderText('Filter by file or function'), { target: { value: 'forw' } });
+        expect(getSourceLineRows()).toHaveLength(1);
+
+        fireEvent.change(screen.getByPlaceholderText('Filter by file or function'), { target: { value: 'nothing' } });
+        expect(getSourceLineRows()).toHaveLength(0);
+    });
+
+    it("keeps a filtered line's share of the whole range", () => {
+        (useOperationsList as Mock).mockReturnValue({
+            data: [
+                { id: 7, name: 'ttnn.matmul', stack_trace: MODEL_TRACE, stack_trace_source_file_id: null },
+                {
+                    id: 8,
+                    name: 'ttnn.softmax',
+                    stack_trace: '  File "/m/models/head.py", line 7, in head\n    y = ttnn.softmax(a)',
+                    stack_trace_source_file_id: null,
+                },
+            ],
+            isLoading: false,
+        });
+        renderReport({
+            data: [linkedRow('Matmul', 1, 7), linkedRow('Softmax', 2, 8)],
+            stackedGroupBy: StackedGroupBy.SOURCE_LINE,
+        });
+
+        fireEvent.change(screen.getByPlaceholderText('Filter by file or function'), { target: { value: 'head' } });
+
+        expect(getSourceLineRows()).toHaveLength(1);
+        // Re-scaling the filtered lines would read 100% in both.
+        expect(getSourceLineRows()[0].querySelector('td')?.textContent).toBe('50%');
+        expect(document.querySelector('tfoot td')?.textContent).toBe('50%');
+    });
+
+    it('shows a notice instead of a table on a comparison tab', () => {
+        renderReport({
+            data: LINKED_ROWS,
+            stackedGroupBy: StackedGroupBy.SOURCE_LINE,
+            comparisonData: [[row('Matmul')]],
+            comparisonReports: [COMPARISON_REPORT],
+        });
+
+        fireEvent.click(screen.getByRole('tab', { name: COMPARISON_REPORT }));
+
+        expect(screen.getByTestId(TEST_IDS.PERF_SOURCE_LINE_COMPARISON_NOTICE)).toBeInTheDocument();
+    });
+});
+
+describe('PerformanceReport stacked footer', () => {
+    const getTotalPercent = () => document.querySelector('tfoot td')?.textContent;
+
+    it("gives a filtered row's share of the whole report, not of the rows left", () => {
+        renderReport({
+            stackedGroupBy: StackedGroupBy.OP,
+            data: [row('Matmul'), row('Softmax', 2)],
+            stackedData: [stackedRow('Matmul', 75, 75), stackedRow('Softmax', 25, 25)],
+            rawOpCodeFilterList: ['Softmax'],
+        });
+
+        expect(getTotalPercent()).toBe('25%');
+    });
+
+    it("reads a comparison tab's rows against its own report's total", () => {
+        renderReport({
+            stackedGroupBy: StackedGroupBy.OP,
+            stackedData: [stackedRow('Matmul', 200, 100)],
+            comparisonData: [[row('Matmul')]],
+            comparisonStackedData: [[stackedRow('Matmul', 100, 100)]],
+            comparisonReports: [COMPARISON_REPORT],
+        });
+
+        fireEvent.click(screen.getByRole('tab', { name: COMPARISON_REPORT }));
+
+        // The active report's total would read 50%.
+        expect(getTotalPercent()).toBe('100%');
     });
 });

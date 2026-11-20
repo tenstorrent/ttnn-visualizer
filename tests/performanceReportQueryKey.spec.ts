@@ -15,6 +15,7 @@ import {
     getLinkedPerformanceReportParams,
     getPerformanceComparisonReportQueryKey,
     getPerformanceReportQueryKey,
+    toBackendStackedGroupBy,
 } from '../src/functions/performanceReportQueryKey';
 import { StackedGroupBy } from '../src/definitions/StackedPerfTable';
 import { ReportLocation } from '../src/definitions/Reports';
@@ -171,5 +172,24 @@ describe('getPerformanceComparisonReportQueryKey', () => {
         expect(comparisonKey(COMPARISON_NAMES, defaultViewParams)).not.toEqual(
             comparisonKey(COMPARISON_NAMES, { ...defaultViewParams, mergeDevices: false }),
         );
+    });
+});
+
+describe('toBackendStackedGroupBy', () => {
+    it('asks tt-perf-report for operations when the view groups by source line', () => {
+        expect(toBackendStackedGroupBy(StackedGroupBy.SOURCE_LINE)).toBe(StackedGroupBy.OP);
+    });
+
+    it.each([StackedGroupBy.CATEGORY, StackedGroupBy.MEMORY, StackedGroupBy.OP])('passes %s through', (groupBy) => {
+        expect(toBackendStackedGroupBy(groupBy)).toBe(groupBy);
+    });
+
+    it('keys a source-line view on the operation-grouped report', () => {
+        const sourceLineParams = {
+            ...defaultViewParams,
+            groupBy: toBackendStackedGroupBy(StackedGroupBy.SOURCE_LINE),
+        };
+
+        expect(reportKey(sourceLineParams)).toEqual(reportKey(defaultViewParams));
     });
 });

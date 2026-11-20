@@ -1678,7 +1678,9 @@ class TestFrameParity:
     site here is that frame, so these pin that the two read the same frames from the
     same traces, including the inputs the frontend's old unanchored regexes read
     differently. Three prose claims of parity with nothing enforcing them was the
-    worst of the available shapes. #2021, #2358
+    worst of the available shapes. The function name is held too, since the
+    Performance page's Source line grouping shows it beside the call site.
+    #2021, #2358, #2359
     """
 
     # `TRACE_FRAME_REGEX`, transcribed: JavaScript's `$` without the `m` flag is
@@ -1689,18 +1691,21 @@ class TestFrameParity:
         r'^([ \t]*File )"([^"]*)", line (\d+)(, in [^\r\n\u2028\u2029]*)\Z', re.ASCII
     )
     _TS_LINE_BREAK = re.compile(r"\r\n|\r|\n")
+    # `FRAME_FUNCTION_PREFIX`, which the frontend slices off the suffix before trimming.
+    _TS_FUNCTION_PREFIX = ", in "
 
     def _frontend(self, trace: str):
         frames = []
         for text in self._TS_LINE_BREAK.split(trace):
             match = self._TS_FRAME.match(text)
             if match:
-                frames.append((match.group(2), int(match.group(3))))
+                function = match.group(4)[len(self._TS_FUNCTION_PREFIX) :].strip()
+                frames.append((match.group(2), int(match.group(3)), function))
         return frames
 
     def _backend(self, trace: str):
         return [
-            (frame["file"], frame["line"])
+            (frame["file"], frame["line"], frame["function"])
             for frame in agent_operations.parse_frames(trace)
         ]
 
@@ -1713,7 +1718,11 @@ class TestFrameParity:
         )
 
         assert self._backend(trace) == self._frontend(trace)
-        assert self._backend(trace)[0] == ("/m/models/resnet.py", 135)
+        assert self._backend(trace)[0] == (
+            "/m/models/resnet.py",
+            135,
+            "run_downsample_if_req",
+        )
 
     def test_they_agree_on_a_crlf_traceback(self):
         trace = (
@@ -1731,7 +1740,16 @@ class TestFrameParity:
         once accepted it, pairing its file with the next frame's line number."""
         trace = '  File "/m/partial.py"\n  File "/m/real.py", line 7, in fn\n    x()\n'
 
-        assert self._backend(trace) == self._frontend(trace) == [("/m/real.py", 7)]
+        assert (
+            self._backend(trace) == self._frontend(trace) == [("/m/real.py", 7, "fn")]
+        )
+
+    def test_both_trim_whitespace_around_the_function_name(self):
+        trace = '  File "/m/a.py", line 3, in forward  \t\n    x()\n'
+
+        assert (
+            self._backend(trace) == self._frontend(trace) == [("/m/a.py", 3, "forward")]
+        )
 
     def test_both_read_a_quote_in_the_path_as_no_frame_at_all(self):
         """`[^"]*` cannot span a quote, so neither side reports a frame, where the
@@ -1776,8 +1794,8 @@ class TestFrameParity:
 
         assert self._frontend(arabic_indic_line) == []
         assert self._frontend(line_separator) == []
-        assert self._backend(arabic_indic_line) == [("/m/a.py", 3)]
-        assert self._backend(line_separator) == [("/m/a.py", 3)]
+        assert self._backend(arabic_indic_line) == [("/m/a.py", 3, "f")]
+        assert self._backend(line_separator) == [("/m/a.py", 3, "f")]
 
     def test_a_separator_inside_the_path_is_a_frame_only_in_the_app(self):
         """The other direction: JavaScript's `[^"]*` takes U+2028, while
@@ -1785,7 +1803,7 @@ class TestFrameParity:
         are, so a module whose name holds one gives this trace."""
         trace = '  File "/m/a\u2028b.py", line 3, in f\n'
 
-        assert self._frontend(trace) == [("/m/a\u2028b.py", 3)]
+        assert self._frontend(trace) == [("/m/a\u2028b.py", 3, "f")]
         assert self._backend(trace) == []
 
 

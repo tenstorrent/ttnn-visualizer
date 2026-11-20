@@ -69,6 +69,10 @@ export const TEST_IDS = Object.freeze({
     PERF_SIGNPOST_RANGE_IGNORED: 'perf-signpost-range-ignored',
     PERF_CHART_HINT: 'perf-chart-hint',
     PERF_NPE_LINK: 'perf-npe-link',
+    PERF_SOURCE_LINE_TABLE: 'perf-source-line-table',
+    PERF_SOURCE_LINE_ROW: 'perf-source-line-row',
+    PERF_SOURCE_LINE_OPERATIONS: 'perf-source-line-operations',
+    PERF_SOURCE_LINE_COMPARISON_NOTICE: 'perf-source-line-comparison-notice',
 
     // Allocation failures in the memory report
     ALLOCATION_FAILURE_DETAILS: 'allocation-failure-details',

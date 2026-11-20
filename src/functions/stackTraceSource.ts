@@ -32,7 +32,21 @@ export interface StackTraceFrame {
     // The line's text either side of `"<file>", line <line>`.
     prefix: string;
     suffix: string;
+    // The suffix's name after `, in `, trimmed as `parse_frames` strips it.
+    function: string;
 }
+
+const FRAME_FUNCTION_PREFIX = ', in ';
+
+const toStackTraceFrame = (match: RegExpExecArray, index: number, lineIndex: number): StackTraceFrame => ({
+    index,
+    lineIndex,
+    file: match[2],
+    line: parseInt(match[3], 10),
+    prefix: match[1],
+    suffix: match[4],
+    function: match[4].slice(FRAME_FUNCTION_PREFIX.length).trim(),
+});
 
 export const splitStackTraceLines = (stackTrace: string): string[] => stackTrace.split(LINE_BREAK_REGEX);
 
@@ -49,18 +63,44 @@ export const parseStackTraceFrames = (stackTrace: string): StackTraceFrame[] => 
         const match = TRACE_FRAME_REGEX.exec(text);
 
         if (match) {
-            frames.push({
-                index: frames.length,
-                lineIndex,
-                file: match[2],
-                line: parseInt(match[3], 10),
-                prefix: match[1],
-                suffix: match[4],
-            });
+            frames.push(toStackTraceFrame(match, frames.length, lineIndex));
         }
     });
 
     return frames;
+};
+
+/**
+ * Frame 0, the `ttnn.<op>` call site, or `null` when the trace has no frame. The same frame
+ * `parseStackTraceFrames(stackTrace)[0]` returns, but read one line at a time and stopping
+ * there: traces average about 7 KB, and grouping a performance report by call site reads every
+ * operation's, so splitting and matching every line of each would be wasted.
+ */
+export const getCallSiteFrame = (stackTrace: string): StackTraceFrame | null => {
+    if (typeof stackTrace !== 'string') {
+        return null;
+    }
+
+    // A fresh global copy per call, so `lastIndex` is never shared between callers. It breaks
+    // lines exactly where `splitStackTraceLines` does, so `lineIndex` agrees with it.
+    const lineBreak = new RegExp(LINE_BREAK_REGEX.source, 'g');
+    let lineStart = 0;
+
+    for (let lineIndex = 0; ; lineIndex++) {
+        const lineBreakMatch = lineBreak.exec(stackTrace);
+        const lineEnd = lineBreakMatch ? lineBreakMatch.index : stackTrace.length;
+        const match = TRACE_FRAME_REGEX.exec(stackTrace.slice(lineStart, lineEnd));
+
+        if (match) {
+            return toStackTraceFrame(match, 0, lineIndex);
+        }
+
+        if (!lineBreakMatch) {
+            return null;
+        }
+
+        lineStart = lineBreak.lastIndex;
+    }
 };
 
 /**
@@ -86,13 +126,8 @@ export const isFrameSourceInReport = (
     return sourceFiles.paths.has(frame.file) || (frameSourceFileId != null && sourceFiles.ids.has(frameSourceFileId));
 };
 
-export const getStackTraceFilePath = (stackTrace: string): string => parseStackTraceFrames(stackTrace)[0]?.file ?? '';
-
-export const getStackTraceLineNumber = (stackTrace: string): number | null =>
-    parseStackTraceFrames(stackTrace)[0]?.line ?? null;
-
 export const extractOperationSourceData = (operation: OperationStackTraceFields): OperationSourceData | null => {
-    const callSite = parseStackTraceFrames(operation.stack_trace)[0];
+    const callSite = getCallSiteFrame(operation.stack_trace);
     const filePath = callSite?.file ?? '';
     const hasSource = !!filePath || operation.stack_trace_source_file_id != null;
 

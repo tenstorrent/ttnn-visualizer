@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
+import { Classes } from '@blueprintjs/core';
 import { cleanup, fireEvent, render } from '@testing-library/react';
 import { ComponentProps } from 'react';
 import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -117,6 +118,43 @@ describe('SourceFileOverlay', () => {
         rerender(overlay(true));
 
         expect(getScrolledLineNumbers()).toEqual([`${LINE_NUMBER}`, `${LINE_NUMBER}`]);
+    });
+
+    it('scrolls its container to the top and bottom when it first opens', () => {
+        const scrollTo = vi.fn();
+        const originalScrollTo = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTo');
+        Element.prototype.scrollTo = scrollTo;
+
+        try {
+            renderOverlay();
+
+            fireEvent.click(document.querySelector('[data-icon="double-chevron-up"]')!.closest('button')!);
+            fireEvent.click(document.querySelector('[data-icon="double-chevron-down"]')!.closest('button')!);
+
+            expect(scrollTo).toHaveBeenCalledTimes(2);
+            expect(scrollTo.mock.contexts[0]).toHaveClass('bp6-overlay-scroll-container');
+            expect(scrollTo.mock.calls[0][0]).toMatchObject({ top: 0 });
+        } finally {
+            if (originalScrollTo) {
+                Object.defineProperty(Element.prototype, 'scrollTo', originalScrollTo);
+            } else {
+                delete (Element.prototype as Partial<Element>).scrollTo;
+            }
+        }
+    });
+
+    it('keeps its controls in view as its container scrolls', () => {
+        renderOverlay();
+        const scrollContainer = document.querySelector(`.${Classes.OVERLAY_SCROLL_CONTAINER}`) as HTMLElement;
+        const controls = document.querySelector('.source-file-controls') as HTMLElement;
+
+        scrollContainer.scrollTop = 120;
+        fireEvent.scroll(scrollContainer);
+        expect(controls.style.transform).toBe('translateY(120px)');
+
+        scrollContainer.scrollTop = 0;
+        fireEvent.scroll(scrollContainer);
+        expect(controls.style.transform).toBe('');
     });
 
     it('does not scroll on open when not asked to, but its locate button does', () => {

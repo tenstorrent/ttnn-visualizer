@@ -5,9 +5,8 @@
 import { describe, expect, it } from 'vitest';
 import {
     extractOperationSourceData,
+    getCallSiteFrame,
     getFrameSourceFileId,
-    getStackTraceFilePath,
-    getStackTraceLineNumber,
     isFrameSourceInReport,
     parseStackTraceFrames,
 } from '../src/functions/stackTraceSource';
@@ -34,6 +33,7 @@ describe('parseStackTraceFrames', () => {
                 line: 135,
                 prefix: '  File ',
                 suffix: ', in run_downsample_if_req',
+                function: 'run_downsample_if_req',
             },
             {
                 index: 1,
@@ -42,6 +42,7 @@ describe('parseStackTraceFrames', () => {
                 line: 317,
                 prefix: '  File ',
                 suffix: ', in run',
+                function: 'run',
             },
         ]);
     });
@@ -61,8 +62,7 @@ describe('parseStackTraceFrames', () => {
         expect(parseStackTraceFrames(trace).map(({ index, file, line }) => [index, file, line])).toEqual([
             [0, '/m/real.py', 7],
         ]);
-        expect(getStackTraceFilePath(trace)).toBe('/m/real.py');
-        expect(getStackTraceLineNumber(trace)).toBe(7);
+        expect(getCallSiteFrame(trace)).toMatchObject({ file: '/m/real.py', line: 7 });
     });
 
     it('reads a path with a quote in it as no frame', () => {
@@ -96,6 +96,41 @@ describe('parseStackTraceFrames', () => {
     });
 });
 
+describe('getCallSiteFrame', () => {
+    it("returns frame 0's file, line and function from a multi-frame trace", () => {
+        expect(getCallSiteFrame(MULTI_FRAME_TRACE)).toMatchObject({
+            index: 0,
+            file: '/m/models/resnet.py',
+            line: 135,
+            function: 'run_downsample_if_req',
+        });
+    });
+
+    it('trims whitespace around the function name, as the backend strips it', () => {
+        expect(getCallSiteFrame('  File "/m/a.py", line 3, in forward  \n    x()')?.function).toBe('forward');
+    });
+
+    it('returns null when the trace has no frame', () => {
+        expect(getCallSiteFrame('#0 0x7f in ttnn::run()')).toBeNull();
+        expect(getCallSiteFrame('')).toBeNull();
+        expect(getCallSiteFrame('  File "/m/we"ird.py", line 20, in f\n    x()')).toBeNull();
+        expect(getCallSiteFrame(null as unknown as string)).toBeNull();
+    });
+
+    it.each([
+        ['a multi-frame trace', MULTI_FRAME_TRACE],
+        ['a CRLF trace', MULTI_FRAME_TRACE.replace(/\n/g, '\r\n')],
+        ['a CR-only trace', MULTI_FRAME_TRACE.replace(/\n/g, '\r')],
+        ['a frame after a partial File line', '  File "/m/partial.py"\n  File "/m/real.py", line 7, in fn\n    x()'],
+        ['a frame after leading blank lines', '\n\r\n  File "/m/late.py", line 9, in late'],
+        ['a trace ending in a line break', '  File "/m/end.py", line 4, in end\n'],
+        ['a one-line trace', PYTHON_TRACE],
+        ['a trace with no frame', 'no frame here'],
+    ])('agrees with the first frame parseStackTraceFrames reads, on %s', (_, trace) => {
+        expect(getCallSiteFrame(trace)).toEqual(parseStackTraceFrames(trace)[0] ?? null);
+    });
+});
+
 describe('getFrameSourceFileId', () => {
     it("passes the report's source file id to frame 0 only", () => {
         const [callSite, caller] = parseStackTraceFrames(MULTI_FRAME_TRACE);
@@ -124,31 +159,18 @@ describe('isFrameSourceInReport', () => {
     });
 });
 
-describe('getStackTraceFilePath', () => {
-    it('extracts the file path from a trace', () => {
-        expect(getStackTraceFilePath(PYTHON_TRACE)).toBe('/models/resnet/ttnn_functional_resnet50.py');
+describe('getCallSiteFrame on a single frame or none', () => {
+    it("reads a single frame's file and line", () => {
+        expect(getCallSiteFrame(PYTHON_TRACE)).toMatchObject({
+            file: '/models/resnet/ttnn_functional_resnet50.py',
+            line: 641,
+        });
     });
 
-    it('returns an empty string when no file path is present', () => {
-        expect(getStackTraceFilePath('no file here')).toBe('');
-        expect(getStackTraceFilePath('File "/x.py" with no line')).toBe('');
-        expect(getStackTraceFilePath('')).toBe('');
-    });
-});
-
-describe('getStackTraceLineNumber', () => {
-    it("is frame 0's line, matching frame 0's file", () => {
-        expect(getStackTraceFilePath(MULTI_FRAME_TRACE)).toBe('/m/models/resnet.py');
-        expect(getStackTraceLineNumber(MULTI_FRAME_TRACE)).toBe(135);
-    });
-
-    it('extracts the line number from a trace', () => {
-        expect(getStackTraceLineNumber(PYTHON_TRACE)).toBe(641);
-    });
-
-    it('returns null when no line number is present', () => {
-        expect(getStackTraceLineNumber('File "/x.py" with no line')).toBeNull();
-        expect(getStackTraceLineNumber('')).toBeNull();
+    it('is null when no line is a whole frame', () => {
+        expect(getCallSiteFrame('no file here')).toBeNull();
+        expect(getCallSiteFrame('File "/x.py" with no line')).toBeNull();
+        expect(getCallSiteFrame('')).toBeNull();
     });
 });
 
