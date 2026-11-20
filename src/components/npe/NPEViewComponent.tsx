@@ -86,9 +86,8 @@ interface NPEViewProps {
     // across scrubs (its O(n_timesteps) memo runs once per report); whole-file
     // mode omits it and the timeline falls back to `npeData.timestep_data`.
     timelineData?: TimestepData[];
-    // #2356 windowed loading: whether the whole trace has fabric transfers. The
-    // windowed npeData holds one window's transfers only, so deciding from it would
-    // reset the event filter while scrubbing. Whole-file mode omits it.
+    // #2356 windowed loading: the summary's whole-trace `has_fabric_events`, which
+    // decides the event filter instead of the window's transfers. Whole-file mode omits it.
     hasFabricEvents?: boolean;
 }
 

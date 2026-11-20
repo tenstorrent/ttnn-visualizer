@@ -11,6 +11,7 @@ import { fetchNpeText, useNPETimelineFile, useNpe, useNpeSummary, useNpeWindow }
 import axiosInstance from '../src/libs/axiosInstance';
 import Endpoints from '../src/definitions/Endpoints';
 import { NPE_QUERY_KEY, NPE_TIMELINE_QUERY_KEY, NpeClientErrorKind } from '../src/definitions/NPEData';
+import { CommonInfo, NpeSummary } from '../src/model/NPEModel';
 import { minimalValidNpeData } from './helpers/npeFixtures';
 
 const h = vi.hoisted(() => ({
@@ -33,10 +34,11 @@ const makeWrapper = (client = makeClient()) => {
     );
 };
 
-const validSummary = {
-    common_info: { version: '1.0.0' },
+const validSummary: NpeSummary = {
+    common_info: { version: '1.0.0' } as CommonInfo,
     chips: {},
     zones: [],
+    has_fabric_events: false,
     n_timesteps: 2,
     timesteps: {
         start_cycle: [0, 10],

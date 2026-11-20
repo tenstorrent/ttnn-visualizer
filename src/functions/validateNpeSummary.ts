@@ -35,5 +35,11 @@ export default function validateNpeSummary(data: unknown): string | null {
         }
     }
 
+    // Without it NPEView would fall back to deciding the event filter from one
+    // window's transfers, which resets the filter while scrubbing. #2356
+    if (typeof summary.has_fabric_events !== 'boolean') {
+        return 'NPE summary is missing its fabric-event flag.';
+    }
+
     return null;
 }

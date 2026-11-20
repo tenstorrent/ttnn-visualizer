@@ -97,6 +97,12 @@ function renderView(nocTransfers: unknown[] = [], hasFabricEvents?: boolean) {
 
 const click = (name: string) => fireEvent.click(screen.getByRole('button', { name }));
 
+const switchState = (label: string) => {
+    const input = screen.getByLabelText(label) as HTMLInputElement;
+    return { checked: input.checked, enabled: !input.disabled };
+};
+const eventFilterSwitches = () => ({ fabric: switchState('Fabric events'), local: switchState('Local events') });
+
 beforeEach(() => {
     vi.useFakeTimers();
     recordEvent.mockClear();
@@ -310,32 +316,37 @@ describe('NPEView usage events', () => {
         fireEvent.click(screen.getByLabelText('Fabric events'));
         showTrace([]);
 
-        expect(screen.getByLabelText('Fabric events')).not.toBeChecked();
-        expect(screen.getByLabelText('Fabric events')).toBeEnabled();
-        expect(screen.getByLabelText('Local events')).toBeChecked();
-        expect(screen.getByLabelText('Local events')).toBeEnabled();
+        expect(eventFilterSwitches()).toEqual({
+            fabric: { checked: false, enabled: true },
+            local: { checked: true, enabled: true },
+        });
         expect(recordEvent).toHaveBeenCalledExactlyOnceWith(modeChanged(NpeMode.LOCAL_EVENTS));
     });
 
     it('enables the event filter for a windowed trace with fabric events when the first window has none', () => {
         renderView([], true);
 
-        expect(screen.getByLabelText('Fabric events')).toBeEnabled();
-        expect(screen.getByLabelText('Local events')).toBeEnabled();
+        expect(eventFilterSwitches()).toEqual({
+            fabric: { checked: true, enabled: true },
+            local: { checked: true, enabled: true },
+        });
 
         fireEvent.click(screen.getByLabelText('Fabric events'));
 
-        expect(screen.getByLabelText('Local events')).toBeChecked();
+        expect(eventFilterSwitches()).toEqual({
+            fabric: { checked: false, enabled: true },
+            local: { checked: true, enabled: true },
+        });
         expect(recordEvent).toHaveBeenCalledExactlyOnceWith(modeChanged(NpeMode.LOCAL_EVENTS));
     });
 
     it('disables the event filter for a windowed trace without fabric events even when a window has one', () => {
         renderView([FABRIC_TRANSFER], false);
 
-        expect(screen.getByLabelText('Fabric events')).toBeDisabled();
-        expect(screen.getByLabelText('Local events')).toBeDisabled();
-        expect(screen.getByLabelText('Fabric events')).toBeChecked();
-        expect(screen.getByLabelText('Local events')).toBeChecked();
+        expect(eventFilterSwitches()).toEqual({
+            fabric: { checked: true, enabled: false },
+            local: { checked: true, enabled: false },
+        });
     });
 
     // Re-uploading under the same file name keeps the windowed view mounted, so the
@@ -346,10 +357,10 @@ describe('NPEView usage events', () => {
         fireEvent.click(screen.getByLabelText('Fabric events'));
         showTrace([], false);
 
-        expect(screen.getByLabelText('Fabric events')).toBeChecked();
-        expect(screen.getByLabelText('Local events')).toBeChecked();
-        expect(screen.getByLabelText('Fabric events')).toBeDisabled();
-        expect(screen.getByLabelText('Local events')).toBeDisabled();
+        expect(eventFilterSwitches()).toEqual({
+            fabric: { checked: true, enabled: false },
+            local: { checked: true, enabled: false },
+        });
         expect(recordEvent).toHaveBeenCalledExactlyOnceWith(modeChanged(NpeMode.LOCAL_EVENTS));
     });
 
@@ -358,8 +369,10 @@ describe('NPEView usage events', () => {
 
         showTrace([], true);
 
-        expect(screen.getByLabelText('Fabric events')).toBeEnabled();
-        expect(screen.getByLabelText('Local events')).toBeEnabled();
+        expect(eventFilterSwitches()).toEqual({
+            fabric: { checked: true, enabled: true },
+            local: { checked: true, enabled: true },
+        });
         expect(recordEvent).not.toHaveBeenCalled();
     });
 });

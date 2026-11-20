@@ -19,6 +19,7 @@ const validSummary = (n = 3) => ({
     common_info: { version: '1.0.0' },
     chips: {},
     zones: [],
+    has_fabric_events: false,
     n_timesteps: n,
     timesteps: validColumns(n),
 });
@@ -42,6 +43,13 @@ describe('validateNpeSummary', () => {
         expect(validateNpeSummary({ ...s, n_timesteps: -1 })).toMatch(/timestep count/);
         expect(validateNpeSummary({ ...s, n_timesteps: undefined })).toMatch(/timestep count/);
         expect(validateNpeSummary({ ...s, n_timesteps: 1.5 })).toMatch(/timestep count/);
+    });
+
+    it('rejects a missing or non-boolean fabric-event flag', () => {
+        const s = validSummary();
+        expect(validateNpeSummary({ ...s, has_fabric_events: undefined })).toMatch(/fabric-event flag/);
+        expect(validateNpeSummary({ ...s, has_fabric_events: 'true' })).toMatch(/fabric-event flag/);
+        expect(validateNpeSummary({ ...s, has_fabric_events: true })).toBeNull();
     });
 
     it('rejects missing timestep columns', () => {

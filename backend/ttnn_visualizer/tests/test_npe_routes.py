@@ -110,6 +110,17 @@ def test_summary_happy_path(client, make_npe_instance):
     assert body["has_fabric_events"] is False
 
 
+def test_summary_reports_fabric_events_for_a_fabric_trace(client, make_npe_instance):
+    obj = _make_npe_object(n_timesteps=4)
+    obj["noc_transfers"][-1]["fabric_event_type"] = True
+    instance_id = make_npe_instance(orjson.dumps(obj))
+
+    resp = client.get(f"{API}/npe/summary", query_string={"instanceId": instance_id})
+
+    assert resp.status_code == 200
+    assert resp.get_json()["has_fabric_events"] is True
+
+
 def test_window_happy_path(client, make_npe_instance):
     instance_id = make_npe_instance(orjson.dumps(_make_npe_object(n_timesteps=4)))
     resp = client.get(
