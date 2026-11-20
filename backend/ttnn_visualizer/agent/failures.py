@@ -829,20 +829,22 @@ def read_call_sites(
     """Frame 0 of each operation's first stack trace, as `operation_provenance` reads it.
 
     Only frame 0 outlives the read: each trace is dropped once its call site is parsed.
-    A trace a loop repeats is parsed once, and its operations share one site, which
-    every caller only reads.
+    Operations with the same frame 0, as a loop's are, share one site, which every
+    caller only reads. Keyed by the frame rather than the trace, so traces whose outer
+    frames differ per call are not all kept alive to the end of the read.
     """
     ids = sorted(operation_ids)
     sites: Dict[int, Optional[Dict[str, object]]] = {}
-    site_by_trace: Dict[Optional[str], Optional[Dict[str, object]]] = {}
+    site_by_frame: Dict[Tuple[object, ...], Dict[str, object]] = {}
 
     def keep(trace: StackTrace) -> None:
         if trace.operation_id in sites:
             return
-        text = trace.stack_trace
-        if text not in site_by_trace:
-            site_by_trace[text] = _call_site(text)
-        sites[trace.operation_id] = site_by_trace[text]
+        site = _call_site(trace.stack_trace)
+        if site is not None:
+            key = tuple(site[field] for field in ("file", "line", "function", "code"))
+            site = site_by_frame.setdefault(key, site)
+        sites[trace.operation_id] = site
 
     if len(ids) > STACK_TRACE_SCAN_IDS:
         wanted = set(ids)

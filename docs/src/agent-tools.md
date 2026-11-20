@@ -553,11 +553,15 @@ which the application's stacked table hides by default, and rows past the end of
 memory report capture. Rows whose operation recorded no stack trace, or none naming a
 frame, form one `no_trace` group, and its count is in the caveat; so does a frame at line 0
 or past 2³¹, which the application groups as a line of its own. Groups with equal device
-time are ordered by kind, path and line as text, by code point, where the application
-compares them by locale, so two paths that differ only in case can come out swapped. `limit` caps the groups
-at 25, ranked by device time, and those past it are summed into `rest`. Over a range, the
-rows and shares are the window's, while `operation_link` carries `scope: whole_report`, as
-`top_ops`'s does. The tool refuses a handle whose two reports did not link, and a capture
+time are ordered by kind, path and line as text, and `top_op_codes` with equal device time
+by op code, each by code point, where the application compares them by locale: two paths
+that differ in case or punctuation (`_`, `-` or `.`) can come out swapped, and of tied op
+codes that differ so, a different 3 can be listed. With no countable device time at all,
+every `device_time_share_percent` is `null`, where the application shows 0%. `limit` caps
+the groups at 25, ranked by device time, and those past it are summed into `rest`. Over a
+range, the rows and shares are the window's, the unlinked group's `unlinked_by_reason`
+included, while `operation_link` carries `scope: whole_report`, as `top_ops`'s does, since
+its `matched_rows` counts the whole report. The tool refuses a handle whose two reports did not link, and a capture
 that records no stack traces, where every row would read `no_trace`; it reads the linked
 rank only. The first call reads every linked operation's stack trace, 500 at a time, or in
 one streamed pass past 2,000 operations, and keeps only each one's call site; later calls,

@@ -40,8 +40,12 @@ SOURCE_LINES_NOTE = (
     "operation recorded no stack trace this tool can read, including a frame at line "
     "0 or past 2**31, which the app groups as a line. operation_ids are the memory "
     "report database's, in the order the rows first name them. Groups with equal "
-    "device time are ordered by kind, path and line as text, by code point, where the "
-    "app compares them by locale, so two paths differing only in case can swap."
+    "device time are ordered by kind, path and line as text, and top_op_codes with "
+    "equal device time by op code, each by code point, where the app compares them "
+    "by locale: two paths can swap when they differ in case or punctuation (_, - or "
+    "a dot), and of tied op codes so differing, a different 3 can be listed. With no "
+    "countable device time at all, every device_time_share_percent is null, where "
+    "the app shows 0%."
 )
 
 
@@ -70,8 +74,9 @@ class SourceLineGroup:
     def sort_key(self) -> Tuple[float, str, str, str]:
         """`getSourceLineGroupKey`'s order behind the device time: kind, path, line,
         each as text. Compared by code point, where the app's `localeCompare` is
-        locale-aware: the two agree on ASCII of one case, and can differ on case or
-        punctuation alone, which two real paths rarely do."""
+        locale-aware: the two agree on ASCII letters and digits of one case, and can
+        differ on case or on punctuation such as `_`, `-` and `.`, where paths in one
+        directory often first differ."""
         site = self.call_site or {}
         return (
             -self.device_time,
@@ -81,7 +86,9 @@ class SourceLineGroup:
         )
 
     def top_op_codes(self) -> List[Tuple[str, float]]:
-        """`getTopOpCodes`: the op codes with the most device time, ties by name."""
+        """`getTopOpCodes`: the op codes with the most device time, ties by name, by
+        code point where the app compares by locale, so a tie of op codes differing
+        in case or punctuation can keep a different 3."""
         return sorted(
             self.device_time_by_op_code.items(), key=lambda item: (-item[1], item[0])
         )[:TOP_OP_CODE_COUNT]

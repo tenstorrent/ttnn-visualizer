@@ -11,7 +11,7 @@ as `test_agent_linking.py` builds one, with a `stack_traces` table added.
 
 import sqlite3
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict
 from unittest.mock import patch
 
 import pytest
@@ -367,16 +367,28 @@ class TestSourceLines:
             == 5
         )
 
-    def test_a_repeated_trace_is_parsed_once(self, traced):
-        same = _trace("/model/a/block.py", 10)
-        registry, handle = traced(traces={2: same, 3: same, 4: same})
+    def test_operations_with_one_frame_0_share_one_site(self, traced):
+        """Shared by frame 0, not by trace text, so traces whose outer frames differ
+        per call are not all held to the end of the read. #2364"""
+        traces = {
+            operation_id: _trace("/model/a/block.py", 10).replace(
+                "line 1, in <module>", f"line {operation_id}, in <module>"
+            )
+            for operation_id in (2, 3, 4)
+        }
+        registry, handle = traced(traces=traces)
+        read_call_sites = failures.read_call_sites
+        read = []
 
-        with patch.object(
-            failures, "_call_site", side_effect=failures._call_site
-        ) as parsed:
+        def recorded(*args, **kwargs):
+            read.append(read_call_sites(*args, **kwargs))
+            return read[-1]
+
+        with patch.object(failures, "read_call_sites", side_effect=recorded):
             result = linking.source_lines_by_call_site(registry, handle)
 
-        assert parsed.call_count == 1
+        (sites,) = read
+        assert len({id(sites[operation_id]) for operation_id in (2, 3, 4)}) == 1
         assert _by_location(result)[("/model/a/block.py", 10)]["operation_ids"] == [
             2,
             3,
@@ -411,8 +423,13 @@ class TestSourceLines:
         assert result["device_time_total"] == 14.5
         assert result["projection"]["start_signpost"] == "signpost-start"
         assert result["operation_link"]["scope"] == linking.WHOLE_REPORT_SCOPE
-        assert result["operation_link"]["note"] == linking.RANGED_LINK_NOTE
+        assert result["operation_link"]["note"] == linking.SOURCE_LINES_RANGED_LINK_NOTE
         assert result["operation_link"]["matched_rows"] == 3
+        # Of the window's total, not of the whole report's 17.5. #2364
+        assert [group["device_time_share_percent"] for group in result["groups"]] == [
+            tools.share_percent(group["device_time"], 14.5)
+            for group in result["groups"]
+        ]
 
     def test_the_limit_caps_the_groups_and_rest_sums_the_others(self, traced):
         registry, handle = traced()
@@ -521,8 +538,10 @@ class TestSourceLines:
         assert result["groups"] == batched["groups"]
 
     @pytest.mark.parametrize("rank", [None, 0])
+    # 0 takes the streamed read, which every capture past the threshold takes.
+    @pytest.mark.parametrize("scan_ids", [failures.STACK_TRACE_SCAN_IDS, 0])
     def test_a_multi_host_report_files_rows_by_the_linked_ranks_traces(
-        self, linked, tmp_path, rank
+        self, linked, tmp_path, rank, scan_ids
     ):
         # Rank 1's operation 2 has a trace of its own; filed under rank 0's rows,
         # it would name a path rank 0 never ran.
@@ -536,7 +555,8 @@ class TestSourceLines:
         )
         registry, handle, _ = linked(profiler_path=path)
 
-        result = linking.source_lines_by_call_site(registry, handle, rank=rank)
+        with patch.object(failures, "STACK_TRACE_SCAN_IDS", scan_ids):
+            result = linking.source_lines_by_call_site(registry, handle, rank=rank)
 
         files = {
             group["call_site"]["file"]

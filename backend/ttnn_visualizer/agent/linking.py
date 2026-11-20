@@ -613,16 +613,28 @@ RANGED_LINK_NOTE = (
 )
 
 
+# `source_lines` has no ranked rows, and its one unlinked_by_reason is the unlinked
+# group's, which counts the window's rows, unlike the whole-report counts in top_ops'.
+SOURCE_LINES_RANGED_LINK_NOTE = (
+    "A signpost range narrows the grouped rows only: operation_link's matched_rows "
+    "counts the whole report's rows, while every group, the unlinked group's "
+    "unlinked_by_reason included, counts the window's rows only."
+)
+
+
 def _scope_link_response(
-    response: Dict[str, object], projection: object, note: Optional[str] = None
+    response: Dict[str, object],
+    projection: object,
+    note: Optional[str] = None,
+    ranged_note: str = RANGED_LINK_NOTE,
 ) -> None:
     """`note` on a link response, and on a ranged read the whole-report scope and
-    the note saying so. Read from the projection, which already names any range it
-    read, so the note can never disagree with it."""
+    `ranged_note` saying so. Read from the projection, which already names any range
+    it read, so the note can never disagree with it."""
     ranged = tools.is_ranged(projection)
     if ranged:
         response["scope"] = WHOLE_REPORT_SCOPE
-    notes = [text for text in (note, RANGED_LINK_NOTE if ranged else None) if text]
+    notes = [text for text in (note, ranged_note if ranged else None) if text]
     if notes:
         response["note"] = " ".join(notes)
 
@@ -1056,7 +1068,11 @@ def source_lines_by_call_site(
         caveats.append(partitioned)
     result.update(operations.caveat_field(scope, *caveats))
     link_response = link.as_response()
-    _scope_link_response(link_response, result["projection"])
+    _scope_link_response(
+        link_response,
+        result["projection"],
+        ranged_note=SOURCE_LINES_RANGED_LINK_NOTE,
+    )
     result["operation_link"] = link_response
     return result
 
