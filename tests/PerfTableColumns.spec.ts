@@ -16,6 +16,7 @@ describe('PerfTable column helpers', () => {
             hasNpe: true,
             hasSubDeviceIds: true,
             hasMultipleAvailableCoreBudgets: true,
+            hardwareCounterKeys: new Set(),
         });
 
         expect(eligibleColumns.map((column) => column.key)).toEqual([
@@ -66,6 +67,7 @@ describe('PerfTable column helpers', () => {
             hasNpe: false,
             hasSubDeviceIds: false,
             hasMultipleAvailableCoreBudgets: false,
+            hardwareCounterKeys: new Set(),
         });
 
         expect(eligibleColumns.map((column) => column.key)).toContain(ColumnKeys.Flags);

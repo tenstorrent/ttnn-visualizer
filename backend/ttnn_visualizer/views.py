@@ -22,7 +22,9 @@ import yaml
 import zstd
 from flask import Blueprint, Response, abort, current_app, jsonify, request, session
 from pydantic import ValidationError
+from ttnn_visualizer import hardware_counters
 from ttnn_visualizer.csv_queries import (
+    REPORT_ROW_ID_OFFSET,
     DeviceLogProfilerQueries,
     NPEQueries,
     OpsPerformanceQueries,
@@ -1352,8 +1354,8 @@ def _apply_requested_performance_name(instance: Instance) -> None:
     ``_rank<N>`` qualifier — so it is resolved as given rather than guessed at: a
     rank fallback here could answer with a different rank's numbers.
 
-    All three routes that honour ``?name=`` come through here, so the query value
-    is collapsed to a single segment once rather than trusted at each caller.
+    Every route that honours ``?name=`` comes through here, so the query value is
+    collapsed to a single segment once rather than trusted at each caller.
     """
     name = request.args.get("name", None)
     if not name or current_app.config["SERVER_MODE"]:
@@ -1420,6 +1422,46 @@ def get_performance_results_report(instance: Instance):
         return response_unprocessable_entity(str(error))
 
     return Response(report_json, mimetype="application/json")
+
+
+@api.route("/performance/counters/<perf_id>", methods=["GET"])
+@with_instance
+@timer
+def get_performance_counters(perf_id, instance: Instance):
+    """One performance row's hardware counters, every label, with the model's FPU
+    figure beside them; the table's rows carry only a headline subset (#2330)."""
+    if not instance.performance_path:
+        raise PerformanceReportNotLoadedException()
+
+    _apply_requested_performance_name(instance)
+
+    try:
+        row_id = int(perf_id)
+    except ValueError:
+        return response_bad_request("Invalid performance row id.")
+    position = row_id - REPORT_ROW_ID_OFFSET
+
+    try:
+        path = OpsPerformanceQueries.get_local_ops_perf_file_path(instance)
+        with open(path, newline="") as csv_file:
+            header, row = hardware_counters.read_row(csv_file, position)
+    except FileNotFoundError:
+        return response_not_found("No performance results file found.")
+    except DataFormatError as error:
+        return response_unprocessable_entity(str(error))
+
+    if row is None:
+        return response_not_found(f"No performance row {row_id}.")
+
+    counters = hardware_counters.operation_counters(
+        row,
+        hardware_counters.discover(header),
+        DeviceLogProfilerQueries.architecture(instance),
+    )
+    return Response(
+        orjson.dumps({"perf_id": row_id, **counters}),
+        mimetype="application/json",
+    )
 
 
 # this is no longer used atm. keeping for now until confirmed "not needed"

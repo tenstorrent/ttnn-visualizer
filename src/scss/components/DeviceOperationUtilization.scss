@@ -1,0 +1,145 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+@use '../definitions/colours' as *;
+@use '../definitions/variables' as variables;
+
+$panel-width: 460px;
+$panel-max-height: 70vh;
+$range-height: 2px;
+$dialog-width: 640px;
+$dialog-table-max-height: 60vh;
+
+.hardware-counter-popover .hardware-counter-panel {
+    width: $panel-width;
+    max-height: min(#{$panel-max-height}, var(--popover-room, #{$panel-max-height}));
+    overflow-y: auto;
+    padding: 12px;
+}
+
+.bp6-dialog.hardware-counter-dialog {
+    width: $dialog-width;
+}
+
+.hardware-counter-dialog-table {
+    max-height: $dialog-table-max-height;
+    overflow-y: auto;
+
+    .hardware-counter-family-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-variant-numeric: tabular-nums;
+
+        th,
+        td {
+            padding: 2px 6px;
+            text-align: right;
+        }
+
+        th:first-child,
+        td:first-child {
+            text-align: left;
+        }
+
+        thead th {
+            position: sticky;
+            top: 0;
+            background-color: $tt-dialog-background;
+        }
+
+        .hardware-counter-family-heading th {
+            padding-top: 8px;
+            text-align: left;
+        }
+
+        // The dash stands for the whole Min–Avg span, so it must not read as the Avg alone.
+        .hardware-counter-missing-cell {
+            text-align: center;
+        }
+    }
+}
+
+.hardware-counter-panel,
+.hardware-counter-dialog-body {
+    font-size: 13px;
+
+    .hardware-counter-heading {
+        font-weight: bold;
+        margin-bottom: 4px;
+    }
+
+    .hardware-counter-caption,
+    .hardware-counter-note,
+    .hardware-counter-grid {
+        margin: 0 0 8px;
+        font-size: 12px;
+    }
+
+    .hardware-counter-caption,
+    .hardware-counter-absent,
+    .hardware-counter-range,
+    .hardware-counter-missing {
+        color: $tt-grey-5;
+    }
+
+    .hardware-counter-absent {
+        font-style: italic;
+    }
+
+    .hardware-counter-missing {
+        cursor: help;
+    }
+
+    .hardware-counter-device {
+        font-weight: normal;
+    }
+
+    .hardware-counter-units {
+        display: grid;
+        grid-template-columns: max-content 1fr max-content;
+        gap: 6px 10px;
+        align-items: center;
+        margin-bottom: 8px;
+
+        .hardware-counter-absent {
+            grid-column: span 2;
+        }
+    }
+
+    .hardware-counter-bar {
+        position: relative;
+        height: variables.$meter-bar-height;
+        border-radius: variables.$meter-bar-radius;
+        overflow: hidden;
+        background-color: $tt-grey-3;
+    }
+
+    .hardware-counter-bar-fill {
+        height: 100%;
+        background-color: $tt-teal;
+    }
+
+    .hardware-counter-bar-range {
+        position: absolute;
+        top: 50%;
+        height: $range-height;
+        transform: translateY(-50%);
+        background-color: $tt-white;
+    }
+
+    .hardware-counter-value {
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+
+    .hardware-counter-model {
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px solid $tt-grey-3;
+    }
+
+    code {
+        white-space: nowrap;
+    }
+}

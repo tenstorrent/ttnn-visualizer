@@ -50,6 +50,8 @@ import orjson
 import pandas as pd
 import zstd
 from tt_perf_report import perf_report
+from ttnn_visualizer import hardware_counters
+from ttnn_visualizer.device_architecture import DeviceArchitecture, architecture_of
 from ttnn_visualizer.exceptions import (
     DataFormatError,
     InvalidSignpostRange,
@@ -1504,6 +1506,16 @@ class DeviceLogProfilerQueries:
             return parse_device_meta(handle.readline(_META_LINE_LIMIT).strip())
 
     @classmethod
+    def architecture(cls, instance: Instance) -> DeviceArchitecture:
+        """The architecture the device log names, unknown where it names none or cannot
+        be read; the counters route and the agent name fill hints for it alike."""
+        try:
+            meta = cls.read_device_meta(instance)
+        except OSError:
+            return DeviceArchitecture.UNKNOWN
+        return architecture_of(meta.architecture if meta is not None else None)
+
+    @classmethod
     def clock_mhz(cls, instance: Instance) -> Optional[int]:
         """The device clock the log's first line names, or None where it names none.
 
@@ -2455,6 +2467,9 @@ class OpsPerformanceReportQueries:
                 degraded = True
 
             logger.info(f"Found {len(signposts)} signposts...")
+            counter_header = hardware_counters.discover(
+                ops_perf_results[0] if ops_perf_results else ()
+            )
 
             report: List[Dict] = []
 
@@ -2480,6 +2495,9 @@ class OpsPerformanceReportQueries:
                                     {**cls.PASSTHROUGH_COLUMNS, **cls.DETAIL_COLUMNS}
                                     if options.detail_columns
                                     else cls.PASSTHROUGH_COLUMNS
+                                )
+                                counter_columns = hardware_counters.report_columns(
+                                    counter_header, detail=options.detail_columns
                                 )
                                 for row in reader:
                                     try:
@@ -2517,6 +2535,17 @@ class OpsPerformanceReportQueries:
                                                 processed_row[key] = None
                                         if options.detail_columns:
                                             _intern_detail_cells(processed_row)
+                                        for (
+                                            key,
+                                            column,
+                                        ) in counter_columns.items():
+                                            processed_row[key] = (
+                                                hardware_counters.cell_value(
+                                                    ops_perf_results[idx].get(column)
+                                                )
+                                                if 0 <= idx < len(ops_perf_results)
+                                                else None
+                                            )
 
                                         # Get the op type from the raw file for this row as it is not returned from tt-perf-report
                                         cls.set_op_type_from_results(
@@ -2609,6 +2638,12 @@ class OpsPerformanceReportQueries:
                 "signpost_range_ignored": signpost_range_ignored(
                     resolved_signposts, options.start_signpost, options.end_signpost
                 ),
+                # Whether the CSV has any counter column, which the headline keys on
+                # the rows cannot say for a capture of other groups only. #2371
+                "has_hardware_counters": counter_header.has_counters,
+                # A merged row is one device's, so a reader names which on a report
+                # of more than one.
+                "device_count": resolved_signposts.device_count,
             }
             if degraded:
                 raise DegradedPerformanceReport(result)

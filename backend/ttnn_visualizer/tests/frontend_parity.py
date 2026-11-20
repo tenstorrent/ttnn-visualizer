@@ -32,3 +32,17 @@ def typescript_enum_values(path: Path, name: str) -> Set[str]:
         raise AssertionError(f"`export enum {name}` in {path.name} declares no members")
 
     return values
+
+
+def typescript_string_constant(path: Path, name: str) -> str:
+    """The value of one `export const NAME = '...';` in ``path``, or a failure."""
+    found = re.search(
+        rf"^export const {name} = '([^']*)';$",
+        path.read_text(encoding="utf-8"),
+        re.MULTILINE,
+    )
+
+    if found is None:
+        raise AssertionError(f"No `export const {name} = '...';` in {path.name}")
+
+    return found.group(1)

@@ -35,7 +35,7 @@ from typing import (
     cast,
 )
 
-from ttnn_visualizer import npe_index
+from ttnn_visualizer import hardware_counters, npe_index
 from ttnn_visualizer.csv_queries import (
     PROGRAM_CACHE_HIT_COLUMN,
     PROGRAM_HASH_COLUMN,
@@ -98,6 +98,8 @@ class CacheVariant(str, Enum):
     OP_GRAPH = "op_graph"
     # Every call grouped into its configuration by rank, which `op_configurations` lists.
     OP_CONFIGURATIONS = "op_configurations"
+    # Every hardware counter column by CSV position, which `hw_utilisation` ranks.
+    HARDWARE_COUNTERS = "hardware_counters"
     # Frame 0 of every linked operation's stack trace by rank, which `source_lines`
     # files each performance row under.
     CALL_SITES = "call_sites"
@@ -734,6 +736,7 @@ PERF_CSV_TOOLS = frozenset(
         "program_cache",
         "core_spread",
         "critical_path",
+        "hw_utilisation",
         "source_lines",
     }
 )
@@ -768,6 +771,7 @@ def _inventory(instance: Instance, perf_csv: Optional[Path]) -> Dict[str, object
     record_perf(
         "program_cache", {PROGRAM_HASH_COLUMN, PROGRAM_CACHE_HIT_COLUMN} <= perf_columns
     )
+    record_perf("hw_utilisation", hardware_counters.discover(perf_columns).has_counters)
 
     profiler_path = instance.profiler_path
     device_log_columns = _answerable_device_log_columns(instance)
