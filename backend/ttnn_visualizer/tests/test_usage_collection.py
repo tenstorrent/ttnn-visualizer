@@ -1074,6 +1074,7 @@ _PRIVACY_REVIEWED_ATTRIBUTES: dict[str, dict[str, frozenset[str] | str]] = {
                 "zone_timings",
                 "zone_intervals",
                 "core_spread",
+                "hw_utilisation",
                 "noc_congestion",
                 "diff_reports",
                 "find_operations",
@@ -1139,6 +1140,7 @@ _PRIVACY_REVIEWED_ATTRIBUTES: dict[str, dict[str, frozenset[str] | str]] = {
                 "matmul_advice",
                 "highlight_high_dispatch",
                 "normalise_data",
+                "hardware_counters",
             }
         ),
     },
@@ -1166,7 +1168,13 @@ _PRIVACY_REVIEWED_ATTRIBUTES: dict[str, dict[str, frozenset[str] | str]] = {
     },
     "ttnn_visualizer_drilldown_opened_total": {
         "drilldown_target": frozenset(
-            {"tensor_details", "buffer_details", "stack_trace", "source_file"}
+            {
+                "tensor_details",
+                "buffer_details",
+                "stack_trace",
+                "source_file",
+                "hardware_counters",
+            }
         ),
     },
     "ttnn_visualizer_filter_used_total": {

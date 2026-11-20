@@ -21,6 +21,7 @@ enum Endpoints {
     OPERATION_BUFFERS = '/api/operation-buffers',
     OPERATIONS_LIST = '/api/operations',
     PERFORMANCE = '/api/performance',
+    PERFORMANCE_COUNTERS = '/api/performance/counters',
     PERFORMANCE_RESULTS_REPORT = '/api/performance/perf-results/report',
     PROFILER = '/api/profiler',
     REMOTE = '/api/remote',

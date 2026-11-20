@@ -22,7 +22,9 @@ import yaml
 import zstd
 from flask import Blueprint, Response, abort, current_app, jsonify, request, session
 from pydantic import ValidationError
+from ttnn_visualizer import hardware_counters
 from ttnn_visualizer.csv_queries import (
+    REPORT_ROW_ID_OFFSET,
     DeviceLogProfilerQueries,
     NPEQueries,
     OpsPerformanceQueries,
@@ -33,6 +35,7 @@ from ttnn_visualizer.decorators import (
     refuse_in_direct_report_mode,
     with_instance,
 )
+from ttnn_visualizer.device_architecture import architecture_of
 from ttnn_visualizer.enums import (
     ConnectionTestStates,
     HostKeyIssue,
@@ -1403,6 +1406,46 @@ def get_performance_results_report(instance: Instance):
         return response_unprocessable_entity(str(error))
 
     return Response(report_json, mimetype="application/json")
+
+
+@api.route("/performance/counters/<perf_id>", methods=["GET"])
+@with_instance
+@timer
+def get_performance_counters(perf_id, instance: Instance):
+    """One performance row's hardware counters, every label, with the model's FPU
+    figure beside them; the table's rows carry only a headline subset (#2330)."""
+    if not instance.performance_path:
+        raise PerformanceReportNotLoadedException()
+
+    _apply_requested_performance_name(instance)
+
+    try:
+        position = int(perf_id) - REPORT_ROW_ID_OFFSET
+    except ValueError:
+        return response_bad_request(f"Invalid performance row id: {perf_id}")
+
+    try:
+        path = OpsPerformanceQueries.get_local_ops_perf_file_path(instance)
+        with open(path, newline="") as csv_file:
+            header, row = hardware_counters.read_row(csv_file, position)
+    except FileNotFoundError:
+        return response_not_found("No performance results file found.")
+    except DataFormatError as error:
+        return response_unprocessable_entity(str(error))
+
+    if row is None:
+        return response_not_found(f"No performance row {perf_id}.")
+
+    meta = DeviceLogProfilerQueries.read_device_meta(instance)
+    counters = hardware_counters.operation_counters(
+        row,
+        hardware_counters.discover(header),
+        architecture_of(meta.architecture if meta else None),
+    )
+    return Response(
+        orjson.dumps({"perf_id": int(perf_id), **counters}),
+        mimetype="application/json",
+    )
 
 
 # this is no longer used atm. keeping for now until confirmed "not needed"

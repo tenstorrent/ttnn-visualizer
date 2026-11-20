@@ -23,11 +23,16 @@ import { enrichRowData } from '../src/functions/enrichPerfRowData';
 import { PerfTableRow } from '../src/model/PerfTable';
 import { TestProviders } from './helpers/TestProviders';
 import { makeRawPerfRow } from './helpers/perfRowFixtures';
+import { openPopover } from './helpers/testForPortal';
+import { TEST_IDS } from '../src/definitions/TestIds';
 
-// The always-mounted `CircularBufferPressureModal` is the subtree's only API caller.
+// The always-mounted `CircularBufferPressureModal` is the subtree's only API caller, besides the
+// Utilization panel a device operation opens.
 const mockUseDevices = vi.fn();
+const mockUseOperationHardwareCounters = vi.fn();
 vi.mock('../src/hooks/useAPI.tsx', () => ({
     useDevices: () => mockUseDevices(),
+    useOperationHardwareCounters: (perfId: number | null) => mockUseOperationHardwareCounters(perfId),
 }));
 
 const mockUseDeviceOperationPerf = vi.fn();
@@ -41,6 +46,8 @@ const PERF_LOADING: DeviceOperationPerf = {
     hasPerformanceReport: false,
     rowByStartNodeId: new Map(),
     totalDeviceTimeUs: 0,
+    hasHardwareCounters: false,
+    isMultiDeviceReport: false,
 };
 
 // Unsorted, as a real capture emits them, so nothing here can lean on ascending
@@ -137,6 +144,7 @@ beforeEach(() => {
     nextId = 0;
     mockUseDevices.mockReturnValue({ data: [{ num_x_cores: 2, num_y_cores: 2, worker_l1_size: 1_000_000 }] });
     mockUseDeviceOperationPerf.mockReturnValue(PERF_LOADING);
+    mockUseOperationHardwareCounters.mockReturnValue({ data: undefined, error: null, isLoading: true });
 });
 
 afterEach(() => {
@@ -687,6 +695,7 @@ describe('DeviceOperationsFullRender - device operation perf (#1512)', () => {
         const accumulation = functionStart('AccumulationDeviceOperation');
         const secondPermute = functionStart('PermuteDeviceOperation');
         mockUseDeviceOperationPerf.mockReturnValue({
+            ...PERF_LOADING,
             linkStatus: ReportLinkMatchResult.LINKED,
             hasPerformanceReport: true,
             totalDeviceTimeUs: 50_000,
@@ -721,11 +730,64 @@ describe('DeviceOperationsFullRender - device operation perf (#1512)', () => {
         );
     });
 
-    const linkedTo = (scope: Node, row: ReturnType<typeof perfRow>): DeviceOperationPerf => ({
+    const linkedTo = (
+        scope: Node,
+        row: ReturnType<typeof perfRow>,
+        hasHardwareCounters = false,
+    ): DeviceOperationPerf => ({
+        ...PERF_LOADING,
         linkStatus: ReportLinkMatchResult.LINKED,
         hasPerformanceReport: true,
         totalDeviceTimeUs: 50_000,
         rowByStartNodeId: new Map([[scope.id, row]]),
+        hasHardwareCounters,
+    });
+
+    const utilizationTriggers = () => screen.queryAllByTestId(TEST_IDS.HARDWARE_COUNTER_TRIGGER);
+
+    it("offers a linked device operation's hardware counters, opening its own row's", async () => {
+        const matmul = functionStart('MatmulDeviceOperation');
+        mockUseDeviceOperationPerf.mockReturnValue(
+            linkedTo(matmul, perfRow('3', 'MatmulDeviceOperation', '40', '8'), true),
+        );
+
+        renderGraph([captureStart(), matmul, functionEnd('MatmulDeviceOperation')]);
+
+        expect(utilizationTriggers()).toHaveLength(1);
+        expect(mockUseOperationHardwareCounters).not.toHaveBeenCalled();
+
+        await openPopover(utilizationTriggers()[0]);
+
+        expect(new Set(mockUseOperationHardwareCounters.mock.calls.map(([perfId]) => perfId))).toEqual(new Set([3]));
+    });
+
+    it('offers no hardware counters when the linked report has none', () => {
+        const matmul = functionStart('MatmulDeviceOperation');
+        mockUseDeviceOperationPerf.mockReturnValue(linkedTo(matmul, perfRow('3', 'MatmulDeviceOperation', '40', '8')));
+
+        const container = renderGraph([captureStart(), matmul, functionEnd('MatmulDeviceOperation')]);
+
+        expect(perfByScope(container)).toEqual([['MatmulDeviceOperation', '40 µs·8 cores·<0.1% of device time']]);
+        expect(utilizationTriggers()).toHaveLength(0);
+    });
+
+    it('offers hardware counters only on the scopes with a performance row', () => {
+        const reshape = functionStart('Tensor::reshape');
+        const matmul = functionStart('MatmulDeviceOperation');
+        mockUseDeviceOperationPerf.mockReturnValue(
+            linkedTo(matmul, perfRow('3', 'MatmulDeviceOperation', '40', '8'), true),
+        );
+
+        renderGraph([
+            captureStart(),
+            reshape,
+            functionEnd('Tensor::reshape'),
+            matmul,
+            functionEnd('MatmulDeviceOperation'),
+        ]);
+
+        expect(utilizationTriggers()).toHaveLength(1);
+        expect(utilizationTriggers()[0].closest('.collapsible-controls')).toHaveTextContent('MatmulDeviceOperation');
     });
 
     it("shows a scope's perf and its Arguments button together, and the button still opens", () => {

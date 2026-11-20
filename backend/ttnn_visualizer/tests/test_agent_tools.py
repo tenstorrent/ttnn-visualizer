@@ -66,6 +66,7 @@ from ttnn_visualizer.tests.event_log_readers import (
     parse_event_log_line,
     read_event_log_lines,
 )
+from ttnn_visualizer.tests.hardware_counter_capture import counter_rows
 from ttnn_visualizer.tests.smoke_capture import (
     SIGNPOST_START_POSITION,
     SIGNPOSTED_WINDOW_IDS,
@@ -250,7 +251,9 @@ class TestPerfCsvTools:
                 patch.object(
                     handles,
                     "_csv_columns",
-                    return_value=frozenset({"PROGRAM HASH", "PROGRAM CACHE HIT"}),
+                    return_value=frozenset(
+                        {"PROGRAM HASH", "PROGRAM CACHE HIT", "FPU Util Avg (%)"}
+                    ),
                 ),
                 patch.object(
                     handles,
@@ -268,14 +271,16 @@ class TestPerfCsvTools:
 
     @staticmethod
     def _capture(directory, parses):
-        """Beside a device log, with the program-cache columns, so every moved tool
-        but `critical_path`, which needs a database, starts answerable."""
+        """Beside a device log, with the program-cache and counter columns, so every
+        moved tool but `critical_path`, which needs a database, starts answerable."""
         write_ops_perf(
             directory,
-            [
-                {**row, "PROGRAM HASH": "1", "PROGRAM CACHE HIT": "False"}
-                for row in smoke_rows()
-            ],
+            counter_rows(
+                [
+                    {**row, "PROGRAM HASH": "1", "PROGRAM CACHE HIT": "False"}
+                    for row in smoke_rows()
+                ]
+            ),
         )
         write_device_log(directory, MODERN_HEADER, ZONED_ROWS)
         if not parses:
@@ -353,6 +358,8 @@ class TestReportInventory:
         assert set(loaded["unanswerable"]) == {
             # The CSV here has no PROGRAM HASH or PROGRAM CACHE HIT column.
             "program_cache",
+            # Nor any hardware counter column.
+            "hw_utilisation",
             "find_operations",
             "operation_detail",
             "memory_profile",
@@ -3311,6 +3318,7 @@ class TestTransport:
             "zone_timings",
             "zone_intervals",
             "core_spread",
+            "hw_utilisation",
             "noc_congestion",
             "diff_reports",
             "find_operations",

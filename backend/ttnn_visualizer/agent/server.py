@@ -26,6 +26,7 @@ from typing import Callable, Dict, List, Optional, TextIO
 from ttnn_visualizer.agent import (
     app_links,
     failures,
+    hw_utilisation,
     linking,
     noc_congestion,
     op_configurations,
@@ -208,7 +209,11 @@ _INCLUDE_SCHEMA = {
         "Field groups to add to each row, for asking why an op took its time: "
         "config (fidelity, dtypes, input memory, block sizes), utilisation (DRAM and "
         "FLOPs against peak, the perf model's ideal times), noc (NoC, DRAM and "
-        "Ethernet utilisation, NPE congestion), riscs (per-RISC kernel time, compute "
+        "Ethernet utilisation, NPE congestion), counters (hardware counters: FPU, "
+        "SFPU, MATH, packer, unpacker, L1 bandwidth and NoC ring utilisation, each "
+        "the average, minimum and maximum across the op's cores, and the full-grid "
+        "FPU, SFPU and MATH averages that count idle cores), riscs (per-RISC kernel "
+        "time, compute "
         "CB waits), cores (available cores, launch skew, per-core spread), dispatch "
         "(op-to-op gap, dispatch waits, trace ids), cache (program hash, cache hit), "
         "kernels (kernel sources and hashes), advice (tt-perf-report's advice), flags "
@@ -302,9 +307,13 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "modelled, flops_only means DRAM and bound are never derived, and full "
                 "with a null bound means the trace lacked the inputs the model needs. "
                 "op_category's Other is time no category explains, and later "
-                "tt-perf-report releases can add categories. include adds field groups "
-                "to each row for asking why an op is slow; the response's detail_note "
-                "says where they come from and how to read a null among them."
+                "tt-perf-report releases can add categories. hw_fpu_util, hw_sfpu_util "
+                "and hw_math_util rank by a hardware counter, each unit's busy "
+                "percentage averaged across the op's cores, highest first; a capture "
+                "without counters ranks no rows and says what fills them. include adds "
+                "field groups to each row for asking why an op is slow; the response's "
+                "detail_note says where they come from and how to read a null among "
+                "them."
             ),
             "schema": {
                 "type": "object",
@@ -474,6 +483,70 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "required": ["handle"],
             },
             "handler": lambda arguments: tools.core_spread(registry, **arguments),
+        },
+        McpToolName.HW_UTILISATION: {
+            "title": "Hardware unit utilisation",
+            "description": (
+                "How busy each Tensix unit was, from tt-metal's hardware counters "
+                "(captured with --profiler-capture-perf-counters): FPU, SFPU, MATH, "
+                "packer, unpackers 0 and 1, L1 bandwidth and NoC rings 0 and 1, each "
+                "averaged over the whole report weighted by device time, with the "
+                f"{hw_utilisation.TOP_OPS_PER_UNIT} ops that kept it busy longest. "
+                "Says which capture groups the capture filled and which are not on "
+                "its architecture, every counter label it holds by family, and a "
+                "fill hint for each unit it lacks. Given a label, ranks ops by it: "
+                "highest by busy time (avg times device time) or lowest by idle time "
+                "for a percentage, or by the avg itself with weighted false, as a "
+                "ratio always is. Counters are per op, across the cores that ran its "
+                "compute kernel, not a time series; an op without a compute kernel "
+                "has none and is left out rather than read as 0. A multi-device op's "
+                "counters are the merged row's, the slowest device's but for a "
+                "collective. Reads the whole report, with no signpost range. Refused "
+                "for a capture without counter columns."
+            ),
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "handle": {"type": "string"},
+                    "label": {
+                        "type": "string",
+                        "maxLength": hw_utilisation.MAX_COUNTER_LABEL_LENGTH,
+                        "description": (
+                            "A counter label as the capture writes it, such as "
+                            "FPU Util or Packer Utilization, to rank ops by its "
+                            "average across cores. Omit it for the summary alone."
+                        ),
+                    },
+                    "order": {
+                        "type": "string",
+                        "enum": sorted(hw_utilisation.RANK_ORDERS),
+                        "description": (
+                            "highest (the default) or lowest. Weighted, lowest "
+                            "ranks by idle time: the costly ops that left the unit "
+                            "idle."
+                        ),
+                    },
+                    "weighted": {
+                        "type": "boolean",
+                        "description": (
+                            "Rank a percentage label by busy or idle time rather "
+                            "than its value. Defaults to true for a percentage; a "
+                            "ratio label takes false only."
+                        ),
+                    },
+                    "limit": {
+                        **_LIMIT_SCHEMA,
+                        "description": (
+                            f"Ranked ops to return, capped at {MAX_LIMIT}. Applies "
+                            "only with label."
+                        ),
+                    },
+                },
+                "required": ["handle"],
+            },
+            "handler": lambda arguments: hw_utilisation.hw_utilisation(
+                registry, **arguments
+            ),
         },
         McpToolName.NOC_CONGESTION: {
             "title": "NoC congestion",

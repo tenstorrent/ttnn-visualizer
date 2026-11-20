@@ -68,6 +68,14 @@ export const TEST_IDS = Object.freeze({
     PERF_SIGNPOST_RANGE_IGNORED: 'perf-signpost-range-ignored',
     PERF_CHART_HINT: 'perf-chart-hint',
     PERF_NPE_LINK: 'perf-npe-link',
+    PERF_HARDWARE_COUNTERS_SWITCH: 'perf-hardware-counters-switch',
+    HARDWARE_COUNTER_TRIGGER: 'hardware-counter-trigger',
+    HARDWARE_COUNTER_PANEL: 'hardware-counter-panel',
+    HARDWARE_COUNTER_UNIT: 'hardware-counter-unit',
+    HARDWARE_COUNTER_EMPTY: 'hardware-counter-empty',
+    HARDWARE_COUNTER_MODEL: 'hardware-counter-model',
+    HARDWARE_COUNTER_NOTE: 'hardware-counter-note',
+    HARDWARE_COUNTER_DEVICE: 'hardware-counter-device',
 
     // Allocation failures in the memory report
     ALLOCATION_FAILURE_DETAILS: 'allocation-failure-details',
