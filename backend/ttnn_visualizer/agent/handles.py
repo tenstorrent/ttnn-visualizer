@@ -98,6 +98,9 @@ class CacheVariant(str, Enum):
     OP_GRAPH = "op_graph"
     # Every call grouped into its configuration by rank, which `op_configurations` lists.
     OP_CONFIGURATIONS = "op_configurations"
+    # Frame 0 of every linked operation's stack trace by rank, which `source_lines`
+    # files each performance row under.
+    CALL_SITES = "call_sites"
 
 
 # Snapshots narrowed by a scope -- a signpost range -- kept at once, across every
@@ -395,6 +398,8 @@ TOOL_TABLES: Dict[str, frozenset] = {
 
 # The graph, and the captured graphs the link aligns to weigh it.
 _CRITICAL_PATH_TABLES = TOOL_TABLES["subgraph_between"] | {"captured_graph"}
+# The captured graphs the link aligns, and the stack traces each linked row is filed by.
+_SOURCE_LINES_TABLES = frozenset({"operations", "captured_graph", "stack_traces"})
 
 
 def read_only_connection(db_file: Path) -> sqlite3.Connection:
@@ -723,7 +728,14 @@ def _answerable_device_log_columns(instance: Instance) -> Optional[frozenset]:
 # The tools that cannot answer without the performance CSV, which `_inventory` lists
 # only for a CSV tt-perf-report can read; `operation_detail` answers without its rows.
 PERF_CSV_TOOLS = frozenset(
-    {"top_ops", "op_breakdown", "program_cache", "core_spread", "critical_path"}
+    {
+        "top_ops",
+        "op_breakdown",
+        "program_cache",
+        "core_spread",
+        "critical_path",
+        "source_lines",
+    }
 )
 
 
@@ -779,6 +791,7 @@ def _inventory(instance: Instance, perf_csv: Optional[Path]) -> Dict[str, object
     # Weighs the graph by the linked rows' device time, so it needs the graph's
     # tables, the captured graphs the link aligns, and a CSV to align them with.
     record_perf("critical_path", _CRITICAL_PATH_TABLES <= tables)
+    record_perf("source_lines", _SOURCE_LINES_TABLES <= tables)
 
     # Only its first bytes here; the first call reads it whole and refuses it then.
     record(

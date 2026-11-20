@@ -40,6 +40,7 @@ import getResponseError from '../functions/getResponseError';
 import { clampSelectionToRange } from '../functions/perfRangeSelection';
 import { PERFORMANCE_LOAD_FAILED } from '../definitions/Performance';
 import useTransitionalRange from '../hooks/useTransitionalRange';
+import indexFirstById from '../functions/indexFirstById';
 
 const RANGE_STEP = 25;
 
@@ -449,21 +450,6 @@ function Range() {
         <LoadingSpinner />
     );
 }
-
-// The first item per id wins when ids repeat
-const indexFirstById = <T,>(items: T[] | undefined, getId: (item: T) => number): Map<number, T> => {
-    const itemById = new Map<number, T>();
-
-    for (const item of items ?? []) {
-        const id = getId(item);
-
-        if (!itemById.has(id)) {
-            itemById.set(id, item);
-        }
-    }
-
-    return itemById;
-};
 
 const getStepSize = (max: number) => (RANGE_STEP > max ? 1 : Math.ceil(max / RANGE_STEP));
 

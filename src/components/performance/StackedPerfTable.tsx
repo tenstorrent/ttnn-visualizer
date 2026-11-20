@@ -4,7 +4,7 @@
 
 import { Fragment, useMemo } from 'react';
 import classNames from 'classnames';
-import { Button, ButtonVariant, Icon, Intent, Size } from '@blueprintjs/core';
+import { Icon, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtomValue } from 'jotai';
 import {
@@ -14,16 +14,21 @@ import {
     stackedTableColumns,
 } from '../../definitions/StackedPerfTable';
 import 'styles/components/PerfReport.scss';
-import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
+import useSortTable from '../../hooks/useSortTable';
 import { useGetNPEManifest } from '../../hooks/useAPI';
-import { formatStackedCell } from '../../functions/stackedPerfFunctions';
-import { formatSize } from '../../functions/math';
+import { formatStackedCell, sumStackedDeviceTime } from '../../functions/stackedPerfFunctions';
+import { formatPercentage, formatSize } from '../../functions/math';
 import PerfDeviceArchitecture from './PerfDeviceArchitecture';
 import PerfTableFrame from './PerfTableFrame';
 import PerfTableSkeleton from './PerfTableSkeleton';
+import SortableHeaderLabel from './SortableHeaderLabel';
 import { PATTERN_COUNT } from '../../definitions/Performance';
 import { mergeDevicesAtom } from '../../store/app';
+import PerfFooterPercent from './PerfFooterPercent';
 import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
+
+// The footer's total is formatted as the Total % cells above it are.
+const PERCENT_DECIMALS = stackedTableColumns.find((column) => column.key === StackedColumnKeys.Percent)?.decimals;
 
 interface StackedPerformanceTableProps {
     stackedData: TypedStackedPerfRow[];
@@ -33,6 +38,8 @@ interface StackedPerformanceTableProps {
     reportFolderName: string | null;
     maxCores: number;
     isLoading?: boolean;
+    /** Device time of every row before filtering; the footer's Total % is the visible rows' share of it. */
+    totalDeviceTimeUs: number;
 }
 
 const StackedPerformanceTable = ({
@@ -42,6 +49,7 @@ const StackedPerformanceTable = ({
     reportFolderName,
     maxCores,
     isLoading = false,
+    totalDeviceTimeUs,
 }: StackedPerformanceTableProps) => {
     const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(null);
     const { error: npeManifestError } = useGetNPEManifest();
@@ -59,7 +67,10 @@ const StackedPerformanceTable = ({
         [mergeDevices],
     );
 
-    const footerTotals = useMemo(() => computeFooterTotals(stackedData), [stackedData]);
+    const footerTotals = useMemo(
+        () => computeFooterTotals(stackedData, totalDeviceTimeUs),
+        [stackedData, totalDeviceTimeUs],
+    );
 
     const renderTable = () => {
         if (isLoading) {
@@ -78,54 +89,21 @@ const StackedPerformanceTable = ({
             <PerfTableFrame scrollResetKey={tableFields}>
                 <thead className='table-header'>
                     <tr>
-                        {computedTableColumns.map((column) => {
-                            const targetSortDirection =
-                                // eslint-disable-next-line no-nested-ternary
-                                sortingColumn === column.key
-                                    ? sortDirection === SortingDirection.ASC
-                                        ? SortingDirection.DESC
-                                        : SortingDirection.ASC
-                                    : sortDirection;
-
-                            return (
-                                <th
-                                    key={column.key}
-                                    className='cell-header'
-                                >
-                                    {column.sortable ? (
-                                        <Button
-                                            onClick={() => changeSorting(column.key)(targetSortDirection)}
-                                            variant={ButtonVariant.MINIMAL}
-                                            size={Size.SMALL}
-                                        >
-                                            <span className='header-label'>{column.label}</span>
-                                            {sortingColumn === column.key ? (
-                                                <Icon
-                                                    className={classNames(
-                                                        {
-                                                            'is-active': sortingColumn === column.key,
-                                                        },
-                                                        'sort-icon',
-                                                    )}
-                                                    icon={
-                                                        sortDirection === SortingDirection.ASC
-                                                            ? IconNames.CARET_UP
-                                                            : IconNames.CARET_DOWN
-                                                    }
-                                                />
-                                            ) : (
-                                                <Icon
-                                                    className={classNames('sort-icon')}
-                                                    icon={IconNames.CARET_DOWN}
-                                                />
-                                            )}
-                                        </Button>
-                                    ) : (
-                                        <span className='header-label no-button'>{column.label}</span>
-                                    )}
-                                </th>
-                            );
-                        })}
+                        {computedTableColumns.map((column) => (
+                            <th
+                                key={column.key}
+                                className='cell-header'
+                            >
+                                <SortableHeaderLabel
+                                    columnKey={column.key}
+                                    label={column.label}
+                                    sortable={column.sortable}
+                                    sortingColumn={sortingColumn}
+                                    sortDirection={sortDirection}
+                                    onSort={changeSorting}
+                                />
+                            </th>
+                        ))}
                     </tr>
                 </thead>
 
@@ -185,7 +163,14 @@ const StackedPerformanceTable = ({
                                         'no-wrap': column.key === StackedColumnKeys.OpCode,
                                     })}
                                 >
-                                    {footerTotals[column.key] ?? ''}
+                                    {column.key === StackedColumnKeys.Percent ? (
+                                        <PerfFooterPercent
+                                            percent={footerTotals[column.key] ?? ''}
+                                            mergeDevices={mergeDevices}
+                                        />
+                                    ) : (
+                                        (footerTotals[column.key] ?? '')
+                                    )}
                                 </td>
                             ))}
                     </tr>
@@ -219,18 +204,21 @@ const StackedPerformanceTable = ({
     );
 };
 
-const computeFooterTotals = (data: TypedStackedPerfRow[]): Partial<Record<StackedColumnKeys, string>> => {
+const computeFooterTotals = (
+    data: TypedStackedPerfRow[],
+    totalDeviceTimeUs: number,
+): Partial<Record<StackedColumnKeys, string>> => {
     const rows = data ?? [];
-    let deviceTimeSum = 0;
-    let opsCountSum = 0;
-
-    for (const row of rows) {
-        deviceTimeSum += row[StackedColumnKeys.DeviceTimeSumUs] || 0;
-        opsCountSum += row[StackedColumnKeys.OpsCount] || 0;
-    }
+    const deviceTimeSum = sumStackedDeviceTime(rows);
+    const opsCountSum = rows.reduce((total, row) => total + (row[StackedColumnKeys.OpsCount] || 0), 0);
 
     return {
-        [StackedColumnKeys.Percent]: '100%',
+        // The visible rows' share of all device time (see `sumStackedDeviceTime`): 100% unfiltered,
+        // less under a filter, whether or not devices are merged.
+        [StackedColumnKeys.Percent]: formatPercentage(
+            totalDeviceTimeUs > 0 ? (deviceTimeSum / totalDeviceTimeUs) * 100 : 0,
+            PERCENT_DECIMALS,
+        ),
         [StackedColumnKeys.DeviceTimeSumUs]: `${formatSize(deviceTimeSum, 2)} µs`,
         [StackedColumnKeys.OpCode]: `${rows.length} op types`,
         [StackedColumnKeys.OpsCount]: `${opsCountSum}`,
