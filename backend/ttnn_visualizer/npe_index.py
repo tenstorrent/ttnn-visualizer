@@ -404,8 +404,9 @@ def _write_index(
         skipped_no_id = 0
         has_fabric_events = False
         for transfer in transfers:
-            # Truthy, as NPEView's whole-file check reads it. Counted before the
-            # no-id skip so the flag describes the trace the whole-file path sees.
+            # A truthy `fabric_event_type`, the rule the frontend's whole-file check
+            # also applies. Checked before the no-id skip so the flag describes the
+            # trace the whole-file path sees.
             if transfer.get("fabric_event_type"):
                 has_fabric_events = True
             tid = _transfer_id(transfer)
@@ -867,7 +868,8 @@ def read_summary(db_path: Path) -> dict:
         "soc_descriptor": orjson.loads(meta.get("soc_descriptor") or b"null"),
         "chips": orjson.loads(meta["chips"]),
         "zones": orjson.loads(meta["zones"]),
-        "has_fabric_events": orjson.loads(meta.get("has_fabric_events") or b"false"),
+        # Indexed, not `.get`: INDEX_VERSION 6 rebuilds every index written without it.
+        "has_fabric_events": orjson.loads(meta["has_fabric_events"]),
         "n_timesteps": int(meta["n_timesteps"]),
         "timesteps": timesteps,
     }

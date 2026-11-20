@@ -90,7 +90,8 @@ function renderView(nocTransfers: unknown[] = [], hasFabricEvents?: boolean) {
 
     return {
         ...view,
-        showTrace: (transfers: unknown[]) => view.rerender(viewTree(transfers, hasFabricEvents)),
+        showTrace: (transfers: unknown[], nextHasFabricEvents = hasFabricEvents) =>
+            view.rerender(viewTree(transfers, nextHasFabricEvents)),
     };
 }
 
@@ -333,5 +334,32 @@ describe('NPEView usage events', () => {
 
         expect(screen.getByLabelText('Fabric events')).toBeDisabled();
         expect(screen.getByLabelText('Local events')).toBeDisabled();
+        expect(screen.getByLabelText('Fabric events')).toBeChecked();
+        expect(screen.getByLabelText('Local events')).toBeChecked();
+    });
+
+    // Re-uploading under the same file name keeps the windowed view mounted, so the
+    // whole-trace flag can change under a filter the user already chose.
+    it('resets the event filter when the whole trace stops having fabric events', () => {
+        const { showTrace } = renderView([], true);
+
+        fireEvent.click(screen.getByLabelText('Fabric events'));
+        showTrace([], false);
+
+        expect(screen.getByLabelText('Fabric events')).toBeChecked();
+        expect(screen.getByLabelText('Local events')).toBeChecked();
+        expect(screen.getByLabelText('Fabric events')).toBeDisabled();
+        expect(screen.getByLabelText('Local events')).toBeDisabled();
+        expect(recordEvent).toHaveBeenCalledExactlyOnceWith(modeChanged(NpeMode.LOCAL_EVENTS));
+    });
+
+    it('enables the event filter when the whole trace starts having fabric events', () => {
+        const { showTrace } = renderView([], false);
+
+        showTrace([], true);
+
+        expect(screen.getByLabelText('Fabric events')).toBeEnabled();
+        expect(screen.getByLabelText('Local events')).toBeEnabled();
+        expect(recordEvent).not.toHaveBeenCalled();
     });
 });

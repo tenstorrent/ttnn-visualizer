@@ -5,24 +5,9 @@
 import { describe, expect, it } from 'vitest';
 import assembleWindowedNpeData, { buildTimestepSkeleton } from '../src/functions/assembleWindowedNpeData';
 import { CommonInfo, NPERootZone, NoCID, NoCTransfer, NoCType, NpeSummary, NpeWindow } from '../src/model/NPEModel';
+import { summary as baseSummary } from './helpers/npeFixtures';
 
-const makeSummary = (overrides: Partial<NpeSummary> = {}): NpeSummary => ({
-    common_info: { version: '1.0.0' } as CommonInfo,
-    chips: {},
-    zones: [],
-    has_fabric_events: false,
-    n_timesteps: 3,
-    timesteps: {
-        start_cycle: [0, 10, 20],
-        end_cycle: [9, 19, 29],
-        avg_link_demand: [1, 2, 3],
-        avg_link_util: [4, 5, 6],
-        max_link_demand: [7, 8, 9],
-        mcast_write_link_util: [0.1, 0.2, 0.3],
-        active_count: [0, 2, 0],
-    },
-    ...overrides,
-});
+const makeSummary = (overrides: Partial<NpeSummary> = {}): NpeSummary => ({ ...baseSummary, ...overrides });
 
 const makeWindow = (t = 1): NpeWindow => ({
     t,
