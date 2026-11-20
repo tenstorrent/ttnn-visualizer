@@ -89,7 +89,9 @@ const getTopOpCodes = (deviceTimeByOpCode: Map<string, number>): string[] =>
  *
  * Sorted by device time, largest first.
  *
- * The `source_lines` MCP tool (#2364) answers the same question, but differs from this view:
+ * Mirrored as `source_line_groups` in `backend/ttnn_visualizer/agent/source_lines.py`, behind
+ * the `source_lines` MCP tool (#2364). No golden holds the two together, so mirror a change to
+ * either side by hand. The tool answers the same question, but differs from this view:
  * - Range: this covers the rows it is given, which `PerfReport` takes from the range slider;
  *   the tool reads the whole report or a signpost range.
  * - No traces: `PerfReport` disables the grouping when no linked operation has a call site;
