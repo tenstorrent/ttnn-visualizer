@@ -1,0 +1,146 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+@use '../definitions/colours' as *;
+@use '../definitions/variables' as variables;
+
+// Fixed so every thread's bar starts and ends at the same place.
+$name-width: 140px;
+$value-width: 170px;
+$wait-indent: 12px;
+$wait-bar-height: 6px;
+$swatch-size: 10px;
+
+.pipeline-stalls {
+    font-size: 13px;
+
+    .pipeline-stall-heading {
+        font-weight: bold;
+        margin: 10px 0 4px;
+    }
+
+    .pipeline-stall-summary {
+        margin: 0 0 8px;
+        font-weight: bold;
+    }
+
+    .pipeline-stall-caption,
+    .pipeline-stall-note,
+    .pipeline-stall-empty,
+    .pipeline-stall-zero-waits {
+        margin: 0 0 8px;
+        font-size: 12px;
+    }
+
+    .pipeline-stall-caption,
+    .pipeline-stall-muted,
+    .pipeline-stall-zero-waits,
+    .pipeline-stall-absent {
+        color: $tt-grey-5;
+    }
+
+    .pipeline-stall-absent {
+        font-style: italic;
+        grid-column: span 2;
+    }
+
+    .pipeline-stall-subline {
+        display: block;
+        font-size: 11px;
+    }
+
+    .pipeline-stall-zero-waits {
+        margin-left: $wait-indent;
+        cursor: help;
+    }
+
+    .pipeline-stall-legend {
+        display: flex;
+        gap: 12px;
+        margin: 0 0 8px;
+        padding: 0;
+        list-style: none;
+        font-size: 12px;
+
+        li {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+    }
+
+    .pipeline-stall-swatch {
+        display: inline-block;
+        width: $swatch-size;
+        height: $swatch-size;
+        border-radius: variables.$meter-bar-radius;
+    }
+
+    .pipeline-stall-thread {
+        margin-bottom: 6px;
+    }
+
+    .pipeline-stall-thread-row,
+    .pipeline-stall-grid {
+        display: grid;
+        grid-template-columns: $name-width 1fr $value-width;
+        gap: 6px 10px;
+        align-items: center;
+        margin-bottom: 4px;
+    }
+
+    .pipeline-stall-waits {
+        display: grid;
+        grid-template-columns: ($name-width - $wait-indent) 1fr $value-width;
+        gap: 2px 10px;
+        align-items: center;
+        margin: 0 0 4px $wait-indent;
+        font-size: 12px;
+    }
+
+    .pipeline-stall-bar,
+    .pipeline-stall-wait-bar {
+        display: flex;
+        overflow: hidden;
+        border-radius: variables.$meter-bar-radius;
+        background-color: $tt-grey-3;
+    }
+
+    .pipeline-stall-bar {
+        height: variables.$meter-bar-height;
+    }
+
+    .pipeline-stall-wait-bar {
+        height: $wait-bar-height;
+    }
+
+    .pipeline-stall-issuing {
+        background-color: $tt-teal;
+    }
+
+    .pipeline-stall-stalled {
+        background-color: $tt-red;
+    }
+
+    .pipeline-stall-idle {
+        background-color: $tt-grey-3;
+    }
+
+    .pipeline-stall-wait-fill {
+        background-color: $tt-yellow;
+    }
+
+    .pipeline-stall-poll {
+        background-color: $tt-purple;
+    }
+
+    .pipeline-stall-value {
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+
+    code {
+        white-space: nowrap;
+    }
+}

@@ -132,7 +132,7 @@ This is the intentionally revisable v1 definition of deliberate activity used fo
 
 Recorded by `ttnn-visualizer-mcp` when a registered tool reaches its handler, not by the SPA. It answers which tools are chosen and how often they refuse or fail (Q4 and Q5 in #1819). It does not fire on `initialize`, `ping`, `tools/list`, unknown tool names, or malformed `params`/`arguments`: only calls that get as far as a handler are counted.
 
-- `tool`: `load_report`, `top_ops`, `op_breakdown`, `program_cache`, `zone_timings`, `zone_intervals`, `core_spread`, `noc_congestion`, `diff_reports`, `find_operations`, `operation_detail`, `memory_profile`, `tensor_flow`, `operation_provenance`, `op_configurations`, `errors`, `dram_fallbacks`, `l1_peak`, `late_deallocations`, `critical_path`, `source_lines`, `subgraph_between`.
+- `tool`: `load_report`, `top_ops`, `op_breakdown`, `program_cache`, `zone_timings`, `zone_intervals`, `core_spread`, `hw_utilisation`, `stall_breakdown`, `noc_congestion`, `diff_reports`, `find_operations`, `operation_detail`, `memory_profile`, `tensor_flow`, `operation_provenance`, `op_configurations`, `errors`, `dram_fallbacks`, `l1_peak`, `late_deallocations`, `critical_path`, `source_lines`, `subgraph_between`.
 - `outcome`: `ok`, `refused`, `error`.
 
 `refused` is a tool declining a well-formed call it cannot answer (unknown handle, argument out of range). `error` is an unexpected failure the server did not anticipate.
@@ -151,9 +151,9 @@ The matmul and conv charts show a placeholder when the report has no such operat
 
 Recorded when a switch above the performance table is flipped. It answers which table options are used (Q4). The direction is not recorded.
 
-- `perf_table_option`: `hide_host_ops`, `merge_devices`, `tracing_mode`, `matmul_advice`, `highlight_high_dispatch`, `normalise_data`.
+- `perf_table_option`: `hide_host_ops`, `merge_devices`, `tracing_mode`, `matmul_advice`, `highlight_high_dispatch`, `normalise_data`, `hardware_counters`.
 
-`normalise_data` can only be flipped while comparison reports are selected.
+`normalise_data` can only be flipped while comparison reports are selected, and `hardware_counters` only on a report with hardware counter columns.
 
 ### `perf_comparison_used`
 
@@ -179,12 +179,13 @@ Recorded when an NPE view control is switched. It answers which NPE modes are us
 
 Recorded when a detail surface is opened. It answers how deep use goes (Q4).
 
-- `drilldown_target`: `tensor_details`, `buffer_details`, `stack_trace`, `source_file`.
+- `drilldown_target`: `tensor_details`, `buffer_details`, `stack_trace`, `source_file`, `hardware_counters`.
 
   - `tensor_details`: the tensor details drawer in the performance table, or a tensor's per-core allocation view.
   - `buffer_details`: a buffer or tensor focused by a click in a memory view, or a "Buffer details" link clicked. A click on the buffer already focused records nothing, and neither does the focus that link's navigation applies, so a reload does not count it again.
   - `stack_trace`: a stack trace expanded. Opening an operation's error records nothing until its trace is expanded, and expanding the error message never records. In the error overlay a trace opened after the message was expanded is shown expanded, so switching to it records, once, and only if the trace is long enough to expand. On the operation page, a trace that opens expanded because the previous operation's trace was left expanded records nothing: moving between operations carries the state over, and the expansion that set it was already counted.
   - `source_file`: a source file opened, from a stack trace, an operation-list row, the Performance tensor drawer or the operation graph's info panel.
+  - `hardware_counters`: a device operation's Counters popover opened in operation details, whichever of its Utilization and Stalls tabs is then viewed. Switching tabs or closing it records nothing.
 
 Operation details are not a target: `view_opened` already counts them with `view` set to `operation_details`.
 

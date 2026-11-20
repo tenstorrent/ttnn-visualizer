@@ -66,6 +66,7 @@ from ttnn_visualizer.tests.event_log_readers import (
     parse_event_log_line,
     read_event_log_lines,
 )
+from ttnn_visualizer.tests.hardware_counter_capture import counter_rows
 from ttnn_visualizer.tests.smoke_capture import (
     SIGNPOST_START_POSITION,
     SIGNPOSTED_WINDOW_IDS,
@@ -256,7 +257,14 @@ class TestPerfCsvTools:
                 patch.object(
                     handles,
                     "_csv_columns",
-                    return_value=frozenset({"PROGRAM HASH", "PROGRAM CACHE HIT"}),
+                    return_value=frozenset(
+                        {
+                            "PROGRAM HASH",
+                            "PROGRAM CACHE HIT",
+                            "FPU Util Avg (%)",
+                            "Thread 0 Stall Rate Avg (%)",
+                        }
+                    ),
                 ),
                 patch.object(
                     handles,
@@ -274,15 +282,17 @@ class TestPerfCsvTools:
 
     @staticmethod
     def _capture(directory, parses):
-        """Beside a device log, with the program-cache columns, so every moved tool
-        but `critical_path` and `source_lines`, which need a database, starts
-        answerable."""
+        """Beside a device log, with the program-cache and counter columns, so every
+        moved tool but `critical_path` and `source_lines`, which need a database,
+        starts answerable."""
         write_ops_perf(
             directory,
-            [
-                {**row, "PROGRAM HASH": "1", "PROGRAM CACHE HIT": "False"}
-                for row in smoke_rows()
-            ],
+            counter_rows(
+                [
+                    {**row, "PROGRAM HASH": "1", "PROGRAM CACHE HIT": "False"}
+                    for row in smoke_rows()
+                ]
+            ),
         )
         write_device_log(directory, MODERN_HEADER, ZONED_ROWS)
         if not parses:
@@ -360,6 +370,9 @@ class TestReportInventory:
         assert set(loaded["unanswerable"]) == {
             # The CSV here has no PROGRAM HASH or PROGRAM CACHE HIT column.
             "program_cache",
+            # Nor any hardware counter column.
+            "hw_utilisation",
+            "stall_breakdown",
             "find_operations",
             "operation_detail",
             "memory_profile",
@@ -3319,6 +3332,8 @@ class TestTransport:
             "zone_timings",
             "zone_intervals",
             "core_spread",
+            "hw_utilisation",
+            "stall_breakdown",
             "noc_congestion",
             "diff_reports",
             "find_operations",
@@ -4352,3 +4367,44 @@ class TestCountableDeviceTime:
 
     def test_a_row_without_the_column_counts_for_nothing(self):
         assert tools.countable_device_time({}) is None
+
+
+class TestRowSelection:
+    """How the tools name rows by id, and rank the costliest."""
+
+    ROWS = [
+        {"id": "2", "op_code": "Add", "device_time": "4"},
+        {"id": "3", "op_code": "PERF_START", "op_type": "signpost"},
+        {"id": "4", "op_code": "Matmul", "device_time": "9"},
+        {"id": "5", "op_code": "Untilize", "device_time": "0"},
+        {"id": "6", "op_code": "Gelu", "device_time": "6"},
+    ]
+
+    def test_ids_name_their_rows_in_the_order_given(self):
+        rows = tools.perf_rows(self.ROWS, [6, "2"])
+
+        assert [row["op_code"] for row in rows] == ["Gelu", "Add"]
+
+    @pytest.mark.parametrize(
+        ("perf_id", "refusal"),
+        [("99", "not an operation_id"), ("3", "is the signpost 'PERF_START'")],
+    )
+    def test_an_unknown_id_or_a_signpost_is_refused(self, perf_id, refusal):
+        with pytest.raises(ValueError, match=refusal):
+            tools.perf_rows(self.ROWS, [perf_id])
+
+    def test_the_costliest_rows_are_the_app_countable_ones_by_device_time(self):
+        """A zero device time is not countable, as `isCountableDeviceTime` reads it."""
+        rows = tools.costliest_rows(self.ROWS)
+
+        assert [row["id"] for row in rows] == ["4", "6", "2"]
+        assert [
+            row["id"]
+            for row in tools.costliest_rows(self.ROWS, lambda row: row["id"] != "4")
+        ] == ["6", "2"]
+
+    @pytest.mark.parametrize(
+        ("row_id", "position"), [("2", 0), (7, 5), ("x", None), (None, None)]
+    )
+    def test_a_rows_csv_position_is_its_id_less_the_header(self, row_id, position):
+        assert tools.csv_position({"id": row_id}) == position
