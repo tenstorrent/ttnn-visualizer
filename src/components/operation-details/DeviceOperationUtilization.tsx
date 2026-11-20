@@ -10,7 +10,7 @@ import {
     Icon,
     Popover,
     PopoverInteractionKind,
-    Position,
+    type PopperModifierOverrides,
     Size,
 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
@@ -25,6 +25,7 @@ import {
 } from '../../definitions/HardwareCounters';
 import { LoadingSpinnerSizes } from '../../definitions/LoadingSpinner';
 import { TEST_IDS } from '../../definitions/TestIds';
+import { BELOW_TRIGGER, fitPopoverToWindow } from '../../functions/fitPopoverToWindow';
 import getResponseError from '../../functions/getResponseError';
 import { formatHardwareCounterValue } from '../../functions/hardwareCounters';
 import { formatPercentage } from '../../functions/math';
@@ -69,6 +70,10 @@ const STAT_COLUMNS: { heading: string; read: (reading: HardwareCounterReading) =
     { heading: 'Max', read: (reading) => reading.max },
     { heading: 'Avg', read: (reading) => reading.avg },
 ];
+
+// Flip would move a panel that fits on neither side back below its trigger, past the window's edge.
+const POPOVER_MODIFIERS: PopperModifierOverrides = { flip: { enabled: false } };
+const POPOVER_CUSTOM_MODIFIERS = [fitPopoverToWindow];
 
 const clampPercent = (value: number): number => Math.min(Math.max(value, 0), MAX_PERCENT);
 
@@ -429,7 +434,9 @@ const DeviceOperationUtilization = ({ perfId, isMultiDevice = false }: DeviceOpe
             interactionKind={PopoverInteractionKind.CLICK}
             isOpen={isOpen}
             onInteraction={handleInteraction}
-            position={Position.BOTTOM_LEFT}
+            placement={BELOW_TRIGGER}
+            modifiers={POPOVER_MODIFIERS}
+            modifiersCustom={POPOVER_CUSTOM_MODIFIERS}
             popoverClassName='hardware-counter-popover'
         >
             <Button

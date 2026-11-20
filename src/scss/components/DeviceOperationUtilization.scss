@@ -11,7 +11,7 @@ $range-height: 2px;
 
 .hardware-counter-popover .hardware-counter-panel {
     width: $panel-width;
-    max-height: $panel-max-height;
+    max-height: min(#{$panel-max-height}, var(--popover-room, #{$panel-max-height}));
     overflow-y: auto;
     padding: 12px;
 }
