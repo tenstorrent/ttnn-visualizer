@@ -18,7 +18,11 @@ from unittest.mock import patch
 import pytest
 from ttnn_visualizer.agent import failures
 from ttnn_visualizer.agent import late_deallocations as late
-from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_OPERATION_NAME_CHARS
+from ttnn_visualizer.agent.bounds import (
+    MAX_DETAILED_LIMIT,
+    MAX_OPERATION_NAME_CHARS,
+    short_digest,
+)
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
 from ttnn_visualizer.agent.operations import BUFFER_SIZE_UNIT
 from ttnn_visualizer.models import BufferType, Tensor
@@ -880,7 +884,7 @@ class TestCallSites:
         assert "1 of the 1 holds have no call site" in result["caveat"]
 
     def test_the_last_uses_past_one_read_of_traces_get_their_call_sites(self, tmp_path):
-        count = failures._STACK_TRACE_IDS_PER_READ + 1
+        count = failures.STACK_TRACE_IDS_PER_READ + 1
         uses = [
             (10, _trace("/m/model.py", index + 1), "ttnn.matmul")
             for index in range(count)
@@ -965,11 +969,14 @@ class TestCallSites:
         assert site["call_site"] == {
             "file": file[:cap],
             "file_full_length": len(file),
+            "file_digest": short_digest(file),
             "line": 10,
             "function": "g" * cap,
             "function_full_length": 400,
+            "function_digest": short_digest("g" * 400),
             "code": "c" * cap,
             "code_full_length": 400,
+            "code_digest": short_digest("c" * 400),
         }
         assert site["last_use_operation_names"] == [name[:MAX_OPERATION_NAME_CHARS]]
         hold = result["top_holds"][0]

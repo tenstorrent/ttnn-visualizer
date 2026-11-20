@@ -209,6 +209,23 @@ describe('useLinkedPerformanceReport', () => {
         await waitFor(() => expect(getReportRequests().at(-1)?.group_by).toBe(StackedGroupBy.MEMORY));
     });
 
+    it('makes no request when the tab switches between Operation and Source line', async () => {
+        // Source line is rolled up from the operation-grouped report in the browser, so
+        // tt-perf-report is never asked for it and the switch reuses the cached report.
+        const store = createStore();
+        const { result } = renderWithStore(useBothReports, store);
+
+        await waitFor(() => expect(result.current[0].data).toBeDefined());
+        const requestCount = getReportRequests().length;
+
+        act(() => store.set(stackedGroupByAtom, StackedGroupBy.SOURCE_LINE));
+
+        expect(result.current[0].data).toBeDefined();
+        expect(result.current[0].isFetching).toBe(false);
+        expect(getReportRequests()).toHaveLength(requestCount);
+        expect(getReportRequests().every((request) => request.group_by === StackedGroupBy.OP)).toBe(true);
+    });
+
     it('fetches separately once a view filter is applied, leaving the tab request filtered', async () => {
         renderWithView(useBothReports, FILTERED_VIEW);
 

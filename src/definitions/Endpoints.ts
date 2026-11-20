@@ -32,6 +32,7 @@ enum Endpoints {
     REMOTE_SSH_CONFIG_HOSTS = '/api/remote/ssh-config-hosts',
     REPORT_FINGERPRINTS = '/api/report-fingerprints',
     REPORT_METADATA = '/api/report-metadata',
+    SOURCE_FILES = '/api/source-files',
     SYSTEM_CAPABILITIES = '/api/system-capabilities', // Currently unused
     TENSOR_LIST = '/api/tensors',
     EVENT_LOGGING = '/api/event-log/events',
