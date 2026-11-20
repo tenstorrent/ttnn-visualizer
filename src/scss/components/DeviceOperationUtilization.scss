@@ -8,6 +8,8 @@
 $panel-width: 460px;
 $panel-max-height: 70vh;
 $range-height: 2px;
+$dialog-width: 640px;
+$dialog-table-max-height: 60vh;
 
 .hardware-counter-popover .hardware-counter-panel {
     width: $panel-width;
@@ -16,7 +18,50 @@ $range-height: 2px;
     padding: 12px;
 }
 
-.hardware-counter-panel {
+.bp6-dialog.hardware-counter-dialog {
+    width: $dialog-width;
+}
+
+.hardware-counter-dialog-table {
+    max-height: $dialog-table-max-height;
+    overflow-y: auto;
+
+    .hardware-counter-family-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-variant-numeric: tabular-nums;
+
+        th,
+        td {
+            padding: 2px 6px;
+            text-align: right;
+        }
+
+        th:first-child,
+        td:first-child {
+            text-align: left;
+        }
+
+        thead th {
+            position: sticky;
+            top: 0;
+            background-color: $tt-dialog-background;
+        }
+
+        .hardware-counter-family-heading th {
+            padding-top: 8px;
+            text-align: left;
+        }
+
+        // The dash stands for the whole Min–Avg span, so it must not read as the Avg alone.
+        .hardware-counter-missing-cell {
+            text-align: center;
+        }
+    }
+}
+
+.hardware-counter-panel,
+.hardware-counter-dialog-body {
     font-size: 13px;
 
     .hardware-counter-heading {
@@ -92,28 +137,6 @@ $range-height: 2px;
         margin-top: 8px;
         padding-top: 8px;
         border-top: 1px solid $tt-grey-3;
-    }
-
-    .hardware-counter-family-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-variant-numeric: tabular-nums;
-
-        th,
-        td {
-            padding: 2px 6px;
-            text-align: right;
-        }
-
-        th:first-child,
-        td:first-child {
-            text-align: left;
-        }
-
-        .hardware-counter-family-heading th {
-            padding-top: 8px;
-            text-align: left;
-        }
     }
 
     code {

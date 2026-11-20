@@ -4,16 +4,21 @@
 
 import type { Placement, PopperCustomModifier } from '@blueprintjs/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { POPOVER_ROOM_PROPERTY, fitPopoverToWindow } from '../src/functions/fitPopoverToWindow';
+import {
+    ABOVE_TRIGGER,
+    BELOW_TRIGGER,
+    POPOVER_ROOM_PROPERTY,
+    WINDOW_MARGIN,
+    fitPopoverToWindow,
+} from '../src/functions/fitPopoverToWindow';
 
 const WINDOW_HEIGHT = 900;
 const TRIGGER_HEIGHT = 24;
 const ARROW_GAP = 15;
-const WINDOW_MARGIN = 8;
 
 type ModifierArguments = Parameters<NonNullable<PopperCustomModifier['fn']>>[0];
 
-const fit = (triggerTop: number, placement: Placement = 'bottom-start') => {
+const fit = (triggerTop: number, placement: Placement = BELOW_TRIGGER) => {
     const state = {
         elements: {
             reference: { getBoundingClientRect: () => ({ top: triggerTop, bottom: triggerTop + TRIGGER_HEIGHT }) },
@@ -22,7 +27,7 @@ const fit = (triggerTop: number, placement: Placement = 'bottom-start') => {
         placement,
         reset: false,
         modifiersData: {
-            offset: { 'bottom-start': { x: 0, y: ARROW_GAP }, 'top-start': { x: 0, y: -ARROW_GAP } },
+            offset: { [BELOW_TRIGGER]: { x: 0, y: ARROW_GAP }, [ABOVE_TRIGGER]: { x: 0, y: -ARROW_GAP } },
         },
     };
     fitPopoverToWindow.fn?.({ state, options: {}, name: 'fitPopoverToWindow' } as unknown as ModifierArguments);
@@ -38,7 +43,7 @@ describe('fitPopoverToWindow', () => {
         const triggerTop = 100;
         const fitted = fit(triggerTop);
 
-        expect(fitted.placement).toBe('bottom-start');
+        expect(fitted.placement).toBe(BELOW_TRIGGER);
         expect(fitted.reset).toBe(false);
         expect(fitted.room).toBe(`${WINDOW_HEIGHT - triggerTop - TRIGGER_HEIGHT - ARROW_GAP - WINDOW_MARGIN}px`);
     });
@@ -48,10 +53,10 @@ describe('fitPopoverToWindow', () => {
         const triggerTop = 494;
         const moved = fit(triggerTop);
 
-        expect(moved.placement).toBe('top-start');
+        expect(moved.placement).toBe(ABOVE_TRIGGER);
         expect(moved.reset).toBe(true);
 
-        const fitted = fit(triggerTop, 'top-start');
+        const fitted = fit(triggerTop, ABOVE_TRIGGER);
 
         expect(fitted.reset).toBe(false);
         expect(fitted.room).toBe(`${triggerTop - ARROW_GAP - WINDOW_MARGIN}px`);

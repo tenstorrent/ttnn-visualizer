@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
+import { Classes } from '@blueprintjs/core';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DeviceOperationUtilization, {
@@ -21,6 +22,7 @@ import {
     getHardwareCounterCaptureAdvice,
 } from '../src/definitions/HardwareCounters';
 import { TEST_IDS } from '../src/definitions/TestIds';
+import { POPOVER_ROOM_PROPERTY } from '../src/functions/fitPopoverToWindow';
 import { useOperationHardwareCounters } from '../src/hooks/useAPI';
 import {
     HardwareCounterFamilyReading,
@@ -292,9 +294,13 @@ const unitCells = (name: string) => {
 
 const familyRow = (label: string) => screen.getByText(label, { selector: 'td' }).closest('tr')!;
 
-const allCountersToggle = () => screen.getByRole('button', { name: 'All counters' });
+const allCountersButton = () => screen.getByRole('button', { name: 'All counters' });
 
-const showAllCounters = () => fireEvent.click(allCountersToggle());
+const showAllCounters = () => {
+    fireEvent.click(allCountersButton());
+
+    return screen.getByRole('dialog');
+};
 
 const utilizationTrigger = () => screen.getByRole('button', { name: 'Utilization' });
 
@@ -532,14 +538,30 @@ describe('HardwareCounterPanel', () => {
         expect(within(pack).getByLabelText(`${NOT_CAPTURED}: ${PACK_HINT}`)).toHaveTextContent(NOT_CAPTURED);
     });
 
-    it('says whether the list of every counter is open', () => {
+    it('lists every counter in a dialog rather than in the panel', () => {
         renderPanel(MATMUL);
 
-        expect(allCountersToggle()).toHaveAttribute('aria-expanded', 'false');
+        expect(allCountersButton()).toHaveAttribute('aria-haspopup', 'dialog');
+        expect(screen.queryByText('FPU Execution Efficiency')).toBeNull();
 
-        showAllCounters();
+        const dialog = showAllCounters();
 
-        expect(allCountersToggle()).toHaveAttribute('aria-expanded', 'true');
+        expect(dialog).toHaveAccessibleName('All hardware counters');
+        expect(within(dialog).getByText('FPU Execution Efficiency')).toBeInTheDocument();
+        expect(within(dialog).getByText(/Min, Median, Max and Avg are taken/)).toHaveTextContent(
+            'across the cores that ran',
+        );
+    });
+
+    it('names the device in the dialog of every counter on a report of several devices', () => {
+        renderPanel({ ...MATMUL, device_id: 1 }, true);
+
+        const dialog = showAllCounters();
+
+        expect(dialog).toHaveAccessibleName('All hardware counters · Device 1');
+        expect(within(dialog).getByText(/Min, Median, Max and Avg are taken/)).toHaveTextContent(
+            'across the cores of device 1',
+        );
     });
 
     it('names the device whose row it reads on a report of several, and says how the report picks it', () => {
@@ -631,6 +653,48 @@ describe('DeviceOperationUtilization', () => {
         await openPopover(trigger);
 
         expect(recordEvent).toHaveBeenCalledTimes(2);
+    });
+
+    it('sizes the open panel to the room beside its button', async () => {
+        render(<DeviceOperationUtilization perfId={2} />);
+
+        await openPopover(utilizationTrigger());
+
+        const container = screen
+            .getByTestId(TEST_IDS.HARDWARE_COUNTER_PANEL)
+            .closest<HTMLElement>(`.${Classes.POPOVER_TRANSITION_CONTAINER}`)!;
+        await waitFor(() => expect(container.style.getPropertyValue(POPOVER_ROOM_PROPERTY)).toMatch(/^\d+px$/));
+    });
+
+    it('closes the dialog of every counter back to the open panel, with focus on the button', async () => {
+        render(<DeviceOperationUtilization perfId={2} />);
+        const trigger = utilizationTrigger();
+
+        await openPopover(trigger);
+        allCountersButton().focus();
+        fireEvent.keyDown(showAllCounters(), { key: 'Escape', code: 'Escape', keyCode: 27 });
+
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+        expect(trigger).toHaveAttribute('aria-expanded', 'true');
+        await waitFor(() => expect(document.activeElement).toBe(allCountersButton()));
+    });
+
+    // jsdom runs no microtask between a press's listeners, so it cannot show the browser's race, where the dialog
+    // leaves Blueprint's overlay stack before the popover's outside-click listener sees the press; this pins its cause.
+    it("closes only the dialog on a press of its backdrop, which never reaches the popover's listener", async () => {
+        render(<DeviceOperationUtilization perfId={2} />);
+        const trigger = utilizationTrigger();
+        const pressReachedDocument = vi.fn();
+
+        await openPopover(trigger);
+        showAllCounters();
+        document.addEventListener('mousedown', pressReachedDocument);
+        fireEvent.mouseDown(document.querySelector(`.${Classes.OVERLAY_BACKDROP}`)!);
+        document.removeEventListener('mousedown', pressReachedDocument);
+
+        expect(pressReachedDocument).not.toHaveBeenCalled();
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+        expect(trigger).toHaveAttribute('aria-expanded', 'true');
     });
 
     it('says why when the counters cannot be loaded', async () => {

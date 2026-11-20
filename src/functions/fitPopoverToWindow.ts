@@ -5,8 +5,8 @@
 import type { Placement, PopperCustomModifier } from '@blueprintjs/core';
 
 export const BELOW_TRIGGER: Placement = 'bottom-start';
-const ABOVE_TRIGGER: Placement = 'top-start';
-const WINDOW_MARGIN = 8;
+export const ABOVE_TRIGGER: Placement = 'top-start';
+export const WINDOW_MARGIN = 8;
 // A popover's stylesheet caps its content's height with this, so the content scrolls rather than leaving the window.
 export const POPOVER_ROOM_PROPERTY = '--popover-room';
 

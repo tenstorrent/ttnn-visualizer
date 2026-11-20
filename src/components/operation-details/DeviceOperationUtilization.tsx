@@ -2,11 +2,13 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { Fragment, useState } from 'react';
+import { Fragment, type MouseEvent, useState } from 'react';
 import {
     Button,
     ButtonVariant,
-    Collapse,
+    Classes,
+    Dialog,
+    DialogBody,
     Icon,
     Popover,
     PopoverInteractionKind,
@@ -14,6 +16,7 @@ import {
     Size,
 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
+import classNames from 'classnames';
 import { DrilldownTarget } from '../../definitions/EventLogEvent';
 import {
     HARDWARE_COUNTER_ABSENCE_LABELS,
@@ -63,6 +66,7 @@ const MODEL_TITLE = 'Performance model';
 const MODEL_CAPTION = 'Modelled compute time over the measured kernel time: an estimate, not a hardware counter.';
 const NOT_MODELLED = 'not modelled for this operation';
 const ALL_COUNTERS_LABEL = 'All counters';
+const ALL_COUNTERS_TITLE = 'All hardware counters';
 const LOAD_FAILED = 'Hardware counters could not be loaded.';
 const STAT_COLUMNS: { heading: string; read: (reading: HardwareCounterReading) => number | null }[] = [
     { heading: 'Min', read: (reading) => reading.min },
@@ -74,6 +78,8 @@ const STAT_COLUMNS: { heading: string; read: (reading: HardwareCounterReading) =
 // Flip would move a panel that fits on neither side back below its trigger, past the window's edge.
 const POPOVER_MODIFIERS: PopperModifierOverrides = { flip: { enabled: false } };
 const POPOVER_CUSTOM_MODIFIERS = [fitPopoverToWindow];
+// Once the dialog has closed on this press, the popover would take it as an outside click and close too.
+const DIALOG_BACKDROP_PROPS = { onMouseDown: (event: MouseEvent) => event.stopPropagation() };
 
 const clampPercent = (value: number): number => Math.min(Math.max(value, 0), MAX_PERCENT);
 
@@ -89,12 +95,17 @@ const getMissingReason = (label: string, fillHint: string | null): string =>
 const getAbsenceReason = (reading: HardwareCounterReading): string =>
     getMissingReason(getAbsenceLabel(reading), reading.fill_hint);
 
+const describeCores = (deviceId: number | null): string =>
+    deviceId === null ? 'the cores' : `the cores of device ${deviceId}`;
+
 const getPanelCaption = (deviceId: number | null): string => {
-    const cores = deviceId === null ? 'the cores' : `the cores of device ${deviceId}`;
-    const caption = `Each bar is the unit's average utilization across ${cores} that ran the operation's compute kernel, ${CAPTION_RANGE}`;
+    const caption = `Each bar is the unit's average utilization across ${describeCores(deviceId)} that ran the operation's compute kernel, ${CAPTION_RANGE}`;
 
     return deviceId === null ? caption : `${caption} ${MERGED_DEVICES_CAPTION}`;
 };
+
+const getAllCountersCaption = (deviceId: number | null): string =>
+    `Min, Median, Max and Avg are taken across ${describeCores(deviceId)} that ran the operation's compute kernel, read once over the kernel.`;
 
 interface MissingValueProps {
     reason: string;
@@ -195,7 +206,10 @@ const FamilyRows = ({ family }: FamilyRowsProps) => (
                 <tr key={metric.label}>
                     <td>{metric.label}</td>
                     {metric.absence !== null ? (
-                        <td colSpan={STAT_COLUMNS.length}>
+                        <td
+                            colSpan={STAT_COLUMNS.length}
+                            className='hardware-counter-missing-cell'
+                        >
                             <MissingValue reason={getAbsenceReason(metric)} />
                         </td>
                     ) : (
@@ -218,6 +232,56 @@ const FamilyRows = ({ family }: FamilyRowsProps) => (
             </tr>
         )}
     </tbody>
+);
+
+interface AllCountersDialogProps {
+    families: HardwareCounterFamilyReading[];
+    deviceId: number | null;
+    isOpen: boolean;
+    onClose: () => void;
+}
+
+const AllCountersDialog = ({ families, deviceId, isOpen, onClose }: AllCountersDialogProps) => (
+    <Dialog
+        title={deviceId === null ? ALL_COUNTERS_TITLE : `${ALL_COUNTERS_TITLE} · Device ${deviceId}`}
+        icon={IconNames.DASHBOARD}
+        isOpen={isOpen}
+        onClose={onClose}
+        className={classNames(Classes.DARK, 'hardware-counter-dialog')}
+        backdropProps={DIALOG_BACKDROP_PROPS}
+    >
+        <DialogBody
+            className='hardware-counter-dialog-body'
+            useOverflowScrollContainer={false}
+        >
+            <p className='hardware-counter-caption'>{getAllCountersCaption(deviceId)}</p>
+            <div
+                className='hardware-counter-dialog-table'
+                role='region'
+                aria-label={ALL_COUNTERS_TITLE}
+                // A scroll container must take focus to be keyboard-scrollable (WCAG 2.1.1).
+                // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+                tabIndex={0}
+            >
+                <table className='hardware-counter-family-table'>
+                    <thead>
+                        <tr>
+                            <th>Counter</th>
+                            {STAT_COLUMNS.map(({ heading }) => (
+                                <th key={heading}>{heading}</th>
+                            ))}
+                        </tr>
+                    </thead>
+                    {families.map((family) => (
+                        <FamilyRows
+                            key={family.family}
+                            family={family}
+                        />
+                    ))}
+                </table>
+            </div>
+        </DialogBody>
+    </Dialog>
 );
 
 interface PerformanceModelProps {
@@ -297,7 +361,7 @@ interface HardwareCounterPanelProps {
 }
 
 export const HardwareCounterPanel = ({ counters, isMultiDevice = false }: HardwareCounterPanelProps) => {
-    const [isShowingAll, setIsShowingAll] = useState(false);
+    const [isAllCountersOpen, setIsAllCountersOpen] = useState(false);
     const deviceId = isMultiDevice ? counters.device_id : null;
 
     return (
@@ -341,33 +405,20 @@ export const HardwareCounterPanel = ({ counters, isMultiDevice = false }: Hardwa
             {counters.families.length > 0 && (
                 <>
                     <Button
-                        className='hardware-counter-all-toggle'
                         variant={ButtonVariant.MINIMAL}
                         size={Size.SMALL}
-                        endIcon={isShowingAll ? IconNames.CARET_UP : IconNames.CARET_DOWN}
-                        aria-expanded={isShowingAll}
-                        onClick={() => setIsShowingAll((isOpen) => !isOpen)}
+                        endIcon={IconNames.MAXIMIZE}
+                        aria-haspopup='dialog'
+                        onClick={() => setIsAllCountersOpen(true)}
                     >
                         {ALL_COUNTERS_LABEL}
                     </Button>
-                    <Collapse isOpen={isShowingAll}>
-                        <table className='hardware-counter-family-table'>
-                            <thead>
-                                <tr>
-                                    <th>Counter</th>
-                                    {STAT_COLUMNS.map(({ heading }) => (
-                                        <th key={heading}>{heading}</th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            {counters.families.map((family) => (
-                                <FamilyRows
-                                    key={family.family}
-                                    family={family}
-                                />
-                            ))}
-                        </table>
-                    </Collapse>
+                    <AllCountersDialog
+                        families={counters.families}
+                        deviceId={deviceId}
+                        isOpen={isAllCountersOpen}
+                        onClose={() => setIsAllCountersOpen(false)}
+                    />
                 </>
             )}
         </div>
