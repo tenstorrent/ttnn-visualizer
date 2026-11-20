@@ -24,6 +24,7 @@ import PerfTableSkeleton from './PerfTableSkeleton';
 import SortableHeaderLabel from './SortableHeaderLabel';
 import { PATTERN_COUNT } from '../../definitions/Performance';
 import { mergeDevicesAtom } from '../../store/app';
+import PerfFooterPercent from './PerfFooterPercent';
 import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
 
 // The footer's total is formatted as the Total % cells above it are.
@@ -162,7 +163,14 @@ const StackedPerformanceTable = ({
                                         'no-wrap': column.key === StackedColumnKeys.OpCode,
                                     })}
                                 >
-                                    {footerTotals[column.key] ?? ''}
+                                    {column.key === StackedColumnKeys.Percent ? (
+                                        <PerfFooterPercent
+                                            percent={footerTotals[column.key] ?? ''}
+                                            mergeDevices={mergeDevices}
+                                        />
+                                    ) : (
+                                        (footerTotals[column.key] ?? '')
+                                    )}
                                 </td>
                             ))}
                     </tr>

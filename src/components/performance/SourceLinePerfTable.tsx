@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { Fragment, useCallback, useMemo, useState } from 'react';
+import { Fragment, ReactNode, useCallback, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import classNames from 'classnames';
 import { Button, ButtonVariant, Classes, PopoverPosition, Size, Tooltip } from '@blueprintjs/core';
@@ -25,6 +25,7 @@ import { mergeDevicesAtom } from '../../store/app';
 import HighlightedText from '../HighlightedText';
 import SourceFileButton from '../operation-details/SourceFileButton';
 import PerfDeviceArchitecture from './PerfDeviceArchitecture';
+import PerfFooterPercent from './PerfFooterPercent';
 import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
 import PerfTableFrame from './PerfTableFrame';
 import PerfTableSkeleton from './PerfTableSkeleton';
@@ -272,7 +273,9 @@ const SourceLinePerfTable = ({
                 <tfoot className='table-footer'>
                     <tr>
                         {columns.map((column) => (
-                            <td key={`footer-${column.key}`}>{getFooterCell(column.key, groups, footerTotals)}</td>
+                            <td key={`footer-${column.key}`}>
+                                {getFooterCell(column.key, groups, footerTotals, mergeDevices)}
+                            </td>
                         ))}
                     </tr>
                 </tfoot>
@@ -298,10 +301,16 @@ const getFooterCell = (
     key: SourceLineColumnKey,
     groups: SourceLineGroup[],
     totals: { percent: number; deviceTimeUs: number; rowCount: number },
-): string => {
+    mergeDevices: boolean,
+): ReactNode => {
     switch (key) {
         case SourceLineColumnKey.PERCENT:
-            return formatPercentage(totals.percent, PERCENT_DECIMALS);
+            return (
+                <PerfFooterPercent
+                    percent={formatPercentage(totals.percent, PERCENT_DECIMALS)}
+                    mergeDevices={mergeDevices}
+                />
+            );
         case SourceLineColumnKey.LOCATION: {
             const lineCount = countSourceLines(groups);
             return `${lineCount} source ${lineCount === 1 ? 'line' : 'lines'}`;

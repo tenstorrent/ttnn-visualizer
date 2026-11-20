@@ -3,7 +3,8 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { Classes } from '@blueprintjs/core';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import StackedPerformanceTable from '../src/components/performance/StackedPerfTable';
 import { StackedColumnKeys, TypedStackedPerfRow } from '../src/definitions/StackedPerfTable';
@@ -11,6 +12,8 @@ import { TEST_IDS } from '../src/definitions/TestIds';
 import { useGetNPEManifest, usePerfMeta } from '../src/hooks/useAPI';
 import { TestProviders } from './helpers/TestProviders';
 import { DEFAULT_MAX_CORES } from '../src/functions/getCoreCount';
+import { PERF_FOOTER_ALL_DEVICES_NOTE } from '../src/components/performance/PerfFooterPercent';
+import { mergeDevicesAtom } from '../src/store/app';
 
 vi.mock('../src/hooks/useAPI.tsx', () => ({
     useGetNPEManifest: vi.fn(),
@@ -37,11 +40,17 @@ interface RenderOptions {
     stackedData?: TypedStackedPerfRow[];
     isLoading?: boolean;
     totalDeviceTimeUs?: number;
+    mergeDevices?: boolean;
 }
 
-function renderStacked({ stackedData = [], isLoading = false, totalDeviceTimeUs = 0 }: RenderOptions = {}) {
+function renderStacked({
+    stackedData = [],
+    isLoading = false,
+    totalDeviceTimeUs = 0,
+    mergeDevices = true,
+}: RenderOptions = {}) {
     return render(
-        <TestProviders>
+        <TestProviders initialAtomValues={[[mergeDevicesAtom, mergeDevices]]}>
             <StackedPerformanceTable
                 stackedData={stackedData}
                 stackedComparisonData={[]}
@@ -130,5 +139,24 @@ describe('StackedPerformanceTable footer', () => {
         renderStacked({ stackedData, totalDeviceTimeUs });
 
         expect(getTotalPercent()).toBe(expected);
+    });
+
+    it("marks Total % as a share of all devices' time while devices are unmerged", async () => {
+        renderStacked({
+            stackedData: [stackedRow('Matmul', { device: 0 }), stackedRow('Matmul', { device: 1 })],
+            totalDeviceTimeUs: 2,
+            mergeDevices: false,
+        });
+        const percent = document.querySelector(`tfoot .${Classes.TOOLTIP_INDICATOR}`) as HTMLElement;
+
+        expect(percent).toHaveTextContent('100%');
+        fireEvent.focus(percent);
+        expect(await screen.findByText(PERF_FOOTER_ALL_DEVICES_NOTE)).toBeInTheDocument();
+    });
+
+    it('leaves Total % unmarked while devices are merged', () => {
+        renderStacked({ stackedData: [stackedRow('Matmul')], totalDeviceTimeUs: 1 });
+
+        expect(document.querySelector(`tfoot .${Classes.TOOLTIP_INDICATOR}`)).toBeNull();
     });
 });

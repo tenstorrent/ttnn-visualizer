@@ -200,6 +200,28 @@ describe('getSourceLineGroups', () => {
         expect(percentByLine['a.py@1']).toBe(100);
     });
 
+    it('orders unmerged lines by device, then device time, so each device reads in order', () => {
+        // Sorted by device time alone, the devices would interleave: a@0, x@1, b@0, y@1.
+        const rows = [
+            perfRow({ op: 1, device: 0, deviceTime: 60 }),
+            perfRow({ op: 2, device: 0, deviceTime: 40 }),
+            perfRow({ op: 3, device: 1, deviceTime: 55 }),
+            perfRow({ op: 4, device: 1, deviceTime: 45 }),
+        ];
+        const operationById = operations([
+            [1, trace('/m/a.py', 1)],
+            [2, trace('/m/b.py', 1)],
+            [3, trace('/m/x.py', 1)],
+            [4, trace('/m/y.py', 1)],
+        ]);
+
+        expect(
+            getSourceLineGroups(rows, operationById, { mergeDevices: false }).map(
+                (group) => `${group.basename}@${group.device}`,
+            ),
+        ).toEqual(['a.py@0', 'b.py@0', 'x.py@1', 'y.py@1']);
+    });
+
     it('keeps two files that share a basename apart', () => {
         const groups = getSourceLineGroups(
             [perfRow({ op: 1 }), perfRow({ op: 2 })],

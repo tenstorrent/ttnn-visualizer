@@ -3,10 +3,12 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
+import { Classes } from '@blueprintjs/core';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SourceLinePerfTable, { MAX_LISTED_OPERATIONS } from '../src/components/performance/SourceLinePerfTable';
+import { PERF_FOOTER_ALL_DEVICES_NOTE } from '../src/components/performance/PerfFooterPercent';
 import { StackSourceOrigin } from '../src/definitions/StackTrace';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import {
@@ -331,6 +333,20 @@ describe('SourceLinePerfTable', () => {
         );
 
         expect(screen.getByText('2 source lines')).toBeInTheDocument();
+    });
+
+    it("marks Total % as a share of all devices' time only while devices are unmerged", async () => {
+        renderTable({}, [[mergeDevicesAtom, true]]);
+        expect(document.querySelector(`tfoot .${Classes.TOOLTIP_INDICATOR}`)).toBeNull();
+
+        cleanup();
+
+        renderTable({}, [[mergeDevicesAtom, false]]);
+        const percent = document.querySelector(`tfoot .${Classes.TOOLTIP_INDICATOR}`) as HTMLElement;
+        expect(percent).toHaveTextContent('100%');
+
+        fireEvent.focus(percent);
+        expect(await screen.findByText(PERF_FOOTER_ALL_DEVICES_NOTE)).toBeInTheDocument();
     });
 
     it('says "1 source line" for one', () => {

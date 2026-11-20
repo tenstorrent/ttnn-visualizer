@@ -87,7 +87,8 @@ const getTopOpCodes = (deviceTimeByOpCode: Map<string, number>): string[] =>
  * numbers can differ. Every non-signpost row adds to its group's row count; only countable
  * device time (`isCountableDeviceTime`) adds to its time.
  *
- * Sorted by device time, largest first.
+ * Sorted by device time, largest first. While devices are unmerged, sorted by device first, as
+ * tt-perf-report orders its stacked CSV, so each device's shares read in order.
  *
  * Mirrored as `source_line_groups` in `backend/ttnn_visualizer/agent/source_lines.py`, behind
  * the `source_lines` MCP tool (#2364). No golden holds the two together yet (#2370), so mirror a
@@ -196,7 +197,10 @@ export const getSourceLineGroups = (
                 topOpCodes: getTopOpCodes(deviceTimeByOpCode),
             };
         })
-        .sort((a, b) => b.deviceTimeUs - a.deviceTimeUs || a.key.localeCompare(b.key));
+        .sort(
+            (a, b) =>
+                (a.device ?? 0) - (b.device ?? 0) || b.deviceTimeUs - a.deviceTimeUs || a.key.localeCompare(b.key),
+        );
 };
 
 /** The search text as it is matched, and as matches are highlighted. */
