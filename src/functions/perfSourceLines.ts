@@ -41,7 +41,8 @@ export interface SourceLineGroup {
     topOpCodes: string[];
     // Unique, in the order the rows first name them.
     operationIds: number[];
-    // The first linked operation's, assumed to belong to frame 0 (see `getFrameSourceFileId`).
+    // The first linked operation's. It is frame 0's file: tt-metal's writer stores one file per
+    // trace, its first frame's (see `getFrameSourceFileId`).
     sourceFileId: number | null;
 }
 
@@ -196,8 +197,22 @@ export const getSourceLineGroups = (
  * site's path, basename, `basename:line` and function. The two groups without a call site
  * match on their labels.
  */
+/** The search text as it is matched, and as matches are highlighted. */
+export const normaliseSourceLineQuery = (query: string): string => query.trim();
+
+/**
+ * The number of distinct source lines among the groups: each per-device group of a line counts
+ * once, and the groups with no call site not at all.
+ */
+export const countSourceLines = (groups: readonly SourceLineGroup[]): number =>
+    new Set(
+        groups
+            .filter((group) => group.kind === SourceLineGroupKind.LINE)
+            .map((group) => [group.filePath, group.lineNumber].join(KEY_SEPARATOR)),
+    ).size;
+
 export const isSourceLineGroupMatch = (group: SourceLineGroup, query: string): boolean => {
-    const needle = query.trim().toLowerCase();
+    const needle = normaliseSourceLineQuery(query).toLowerCase();
 
     if (!needle) {
         return true;

@@ -12,7 +12,13 @@ import ROUTES from '../../definitions/Routes';
 import { StackTraceLanguage } from '../../definitions/StackTrace';
 import { TEST_IDS } from '../../definitions/TestIds';
 import { formatPercentage, formatSize } from '../../functions/math';
-import { SourceLineGroup, SourceLineGroupKind, getSourceLineGroupLabel } from '../../functions/perfSourceLines';
+import {
+    SourceLineGroup,
+    SourceLineGroupKind,
+    countSourceLines,
+    getSourceLineGroupLabel,
+    normaliseSourceLineQuery,
+} from '../../functions/perfSourceLines';
 import useSortTable from '../../hooks/useSortTable';
 import { Operation } from '../../model/APIData';
 import { mergeDevicesAtom } from '../../store/app';
@@ -116,6 +122,8 @@ const SourceLinePerfTable = ({
     const mergeDevices = useAtomValue(mergeDevicesAtom);
     const [expandedKeys, setExpandedKeys] = useState<ReadonlySet<string>>(() => new Set());
     const columns = mergeDevices ? MERGED_COLUMNS : COLUMNS;
+    // Trimmed as matching trims it, so a trailing space still highlights the rows it matched.
+    const highlightQuery = normaliseSourceLineQuery(filterQuery);
 
     const groupByKey = useMemo(() => new Map(groups.map((group) => [group.key, group])), [groups]);
     const sortedGroups = useMemo(
@@ -159,7 +167,7 @@ const SourceLinePerfTable = ({
                 return (
                     <SourceLineLocation
                         group={group}
-                        filterQuery={filterQuery}
+                        filterQuery={highlightQuery}
                         isExpanded={expandedKeys.has(group.key)}
                         onToggle={toggleExpanded}
                     />
@@ -244,7 +252,7 @@ const SourceLinePerfTable = ({
                             </tr>
 
                             {expandedKeys.has(group.key) && (
-                                <tr className='source-line-operations'>
+                                <tr>
                                     <td
                                         className='cell'
                                         colSpan={columns.length}
@@ -293,8 +301,10 @@ const getFooterCell = (
     switch (key) {
         case SourceLineColumnKey.PERCENT:
             return formatPercentage(totals.percent, PERCENT_DECIMALS);
-        case SourceLineColumnKey.LOCATION:
-            return `${groups.length} source lines`;
+        case SourceLineColumnKey.LOCATION: {
+            const lineCount = countSourceLines(groups);
+            return `${lineCount} source ${lineCount === 1 ? 'line' : 'lines'}`;
+        }
         case SourceLineColumnKey.DEVICE_TIME:
             return `${formatSize(totals.deviceTimeUs, DEVICE_TIME_DECIMALS)} µs`;
         case SourceLineColumnKey.ROW_COUNT:

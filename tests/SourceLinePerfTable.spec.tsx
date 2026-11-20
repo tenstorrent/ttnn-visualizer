@@ -250,6 +250,40 @@ describe('SourceLinePerfTable', () => {
         expect(screen.getByText('Needs a linked memory report')).toBeInTheDocument();
     });
 
+    it('highlights a match even when the search ends in a space', () => {
+        renderTable({ filterQuery: 'big ' });
+
+        expect(screen.getByText('big', { selector: 'mark' })).toBeInTheDocument();
+    });
+
+    it('counts each source line once in the footer, not its per-device rows or the groups without one', () => {
+        renderTable(
+            {
+                groups: [
+                    group({ key: 'a0', device: 0 }),
+                    group({ key: 'a1', device: 1 }),
+                    group({ key: 'b0', lineNumber: 7, device: 0 }),
+                    group({
+                        key: 'unlinked',
+                        kind: SourceLineGroupKind.UNLINKED,
+                        filePath: null,
+                        basename: null,
+                        lineNumber: null,
+                    }),
+                ],
+            },
+            [[mergeDevicesAtom, false]],
+        );
+
+        expect(screen.getByText('2 source lines')).toBeInTheDocument();
+    });
+
+    it('says "1 source line" for one', () => {
+        renderTable({ groups: [GROUPS[0]] });
+
+        expect(screen.getByText('1 source line')).toBeInTheDocument();
+    });
+
     it('adds a Device column only while devices are unmerged', () => {
         renderTable({}, [[mergeDevicesAtom, false]]);
         expect(screen.getByRole('button', { name: /^Device\b(?! Time)/ })).toBeInTheDocument();
