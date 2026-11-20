@@ -16,6 +16,7 @@ import {
     getPerformanceComparisonReportQueryKey,
     getPerformanceCountersQueryKey,
     getPerformanceReportQueryKey,
+    toBackendStackedGroupBy,
 } from '../src/functions/performanceReportQueryKey';
 import { StackedGroupBy } from '../src/definitions/StackedPerfTable';
 import { ReportLocation } from '../src/definitions/Reports';
@@ -187,5 +188,24 @@ describe('getPerformanceCountersQueryKey', () => {
         expect(countersKey(2)).not.toEqual(countersKey(2, 'another-report'));
         expect(countersKey(2)).not.toEqual(countersKey(2, REPORT_NAME, ReportLocation.REMOTE));
         expect(countersKey(2)).not.toEqual(countersKey(3));
+    });
+});
+
+describe('toBackendStackedGroupBy', () => {
+    it('asks tt-perf-report for operations when the view groups by source line', () => {
+        expect(toBackendStackedGroupBy(StackedGroupBy.SOURCE_LINE)).toBe(StackedGroupBy.OP);
+    });
+
+    it.each([StackedGroupBy.CATEGORY, StackedGroupBy.MEMORY, StackedGroupBy.OP])('passes %s through', (groupBy) => {
+        expect(toBackendStackedGroupBy(groupBy)).toBe(groupBy);
+    });
+
+    it('keys a source-line view on the operation-grouped report', () => {
+        const sourceLineParams = {
+            ...defaultViewParams,
+            groupBy: toBackendStackedGroupBy(StackedGroupBy.SOURCE_LINE),
+        };
+
+        expect(reportKey(sourceLineParams)).toEqual(reportKey(defaultViewParams));
     });
 });

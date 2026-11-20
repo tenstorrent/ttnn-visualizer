@@ -1088,6 +1088,7 @@ _PRIVACY_REVIEWED_ATTRIBUTES: dict[str, dict[str, frozenset[str] | str]] = {
                 "l1_peak",
                 "late_deallocations",
                 "critical_path",
+                "source_lines",
                 "subgraph_between",
             }
         ),

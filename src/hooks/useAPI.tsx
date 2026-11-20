@@ -23,6 +23,8 @@ import {
     OperationDetailsData,
     ReportError,
     ReportMetadataResponse,
+    ReportSourceFiles,
+    SourceFileResponse,
     Tensor,
     defaultBuffer,
     defaultOperation,
@@ -43,6 +45,7 @@ import {
     getPerformanceComparisonReportQueryKey,
     getPerformanceCountersQueryKey,
     getPerformanceReportQueryKey,
+    toBackendStackedGroupBy,
 } from '../functions/performanceReportQueryKey';
 import { OperationHardwareCounters } from '../model/HardwareCounters';
 import { L1PressureResult } from '../model/L1Pressure';
@@ -1036,6 +1039,31 @@ export const useReportMetadata = () => {
     });
 };
 
+export const fetchReportSourceFiles = async (): Promise<ReportSourceFiles> => {
+    const { data } = await axiosInstance.get<SourceFileResponse[]>(Endpoints.SOURCE_FILES);
+
+    return {
+        ids: new Set<number>(data.map(({ id }) => id)),
+        paths: new Set<string>(data.map(({ path }) => path)),
+    };
+};
+
+/**
+ * The source files the memory report holds. Stack trace frames link only to these, which
+ * the viewer can read in either mode without probing each frame.
+ */
+export const useReportSourceFiles = () => {
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+
+    return useQuery<ReportSourceFiles, AxiosError>({
+        queryKey: ['get-report-source-files', activeProfilerReport?.path],
+        queryFn: fetchReportSourceFiles,
+        enabled: activeProfilerReport !== null,
+        retry: false,
+        staleTime: Infinity,
+    });
+};
+
 const REPORT_FINGERPRINTS_QUERY_KEY = 'fetch-report-fingerprints';
 
 /**
@@ -1304,7 +1332,7 @@ const useViewPerformanceReportParams = (): PerformanceReportParams => {
             hideHostOps,
             mergeDevices,
             tracingMode,
-            groupBy,
+            groupBy: toBackendStackedGroupBy(groupBy),
         }),
         [startSignpost, endSignpost, hideHostOps, mergeDevices, tracingMode, groupBy],
     );

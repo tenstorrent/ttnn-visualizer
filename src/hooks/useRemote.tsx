@@ -337,7 +337,9 @@ const useRemoteConnection = () => {
         [],
     );
 
-    const readRemoteFile = async (filePath: string, sourceFileId?: number | null) => {
+    // Memoised, like `isSourceFileAvailable`, so a viewer's read effect can depend on it
+    // without reading the file again on every render.
+    const readRemoteFile = useCallback(async (filePath: string, sourceFileId?: number | null) => {
         try {
             const params: { filePath?: string; sourceFileId?: number } = {};
             if (filePath) {
@@ -374,7 +376,7 @@ const useRemoteConnection = () => {
 
             return standardError;
         }
-    };
+    }, []);
 
     return {
         testConnection,

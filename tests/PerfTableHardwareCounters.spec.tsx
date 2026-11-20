@@ -246,6 +246,7 @@ describe('PerformanceReport hardware counters switch', () => {
                     comparisonStackedData={[]}
                     maxCores={DEFAULT_MAX_CORES}
                     hasHardwareCounters={hasHardwareCounters}
+                    hasLinkedOperations={false}
                 />
             </TestProviders>,
         );

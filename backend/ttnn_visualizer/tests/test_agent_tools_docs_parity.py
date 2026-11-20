@@ -19,10 +19,12 @@ from typing import Dict, Set
 import pytest
 from ttnn_visualizer import hardware_counters
 from ttnn_visualizer.agent import (
+    failures,
     hw_utilisation,
     op_configurations,
     report_diff,
     server,
+    source_lines,
     tools,
 )
 from ttnn_visualizer.agent.bounds import (
@@ -256,6 +258,29 @@ def test_the_op_configurations_caps_the_page_states_are_the_enforced_ones():
     assert "`next_offset` starts the next page" in page
 
 
+def test_the_source_lines_caps_the_page_states_are_the_enforced_ones():
+    page = " ".join(_read(_AGENT_DOCS).split())
+
+    assert (
+        f"the {source_lines.TOP_OP_CODE_COUNT} raw op codes with the most device time"
+        in page
+    )
+    assert (
+        f"the first {source_lines.MAX_LISTED_OPERATION_IDS} of its `operation_ids`"
+        in page
+    )
+    assert f"`limit` caps the groups at {MAX_DETAILED_LIMIT}" in page
+    # The call-site wording, since the signature sentence states a 300 cut as well.
+    assert (
+        f"`function` or `code` past {failures.MAX_CALL_SITE_TEXT_CHARS} characters "
+        "is cut"
+    ) in page
+    assert (
+        f"{failures.STACK_TRACE_IDS_PER_READ} at a time, or in one streamed pass "
+        f"past {failures.STACK_TRACE_SCAN_IDS:,} operations"
+    ) in page
+
+
 def test_the_op_configurations_rules_the_page_names_are_the_restated_ones():
     """The page names the tracer's dropped arguments and the commit its rules come from
     by hand, so nothing else ties them to the code on the next re-sync."""
@@ -429,7 +454,7 @@ def test_the_page_names_every_tool_a_csv_that_cannot_be_read_costs():
     named = re.findall(r"`([a-z_]+)`", sentence.group(2))
     assert set(named) == PERF_CSV_TOOLS
     assert len(named) == len(PERF_CSV_TOOLS)
-    assert sentence.group(1) == "six"
+    assert sentence.group(1) == "seven"
 
 
 def test_the_signpost_listing_cap_the_page_states_is_the_enforced_one():

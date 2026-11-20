@@ -432,6 +432,7 @@ export default function Performance() {
                             comparisonMaxCores={comparisonMaxCores}
                             allocationFailureListings={allocationFailureListings}
                             hasHardwareCounters={hasHardwareCounters}
+                            hasLinkedOperations={perfTableOpIdsMap.length > 0}
                         />
                     }
                 />

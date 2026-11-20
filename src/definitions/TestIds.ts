@@ -47,6 +47,7 @@ export const TEST_IDS = Object.freeze({
     NO_CONNECTION: 'no-connection',
     FETCH_REMOTE_FOLDERS: 'fetch-remote-folders-list',
     SHOW_OPERATION_SOURCE_BUTTON: 'show-operation-source-button',
+    STACK_TRACE_FRAME_LINK: 'stack-trace-frame-link',
 
     // Performance components
     PERFORMANCE_CHART: 'performance-chart',
@@ -76,6 +77,10 @@ export const TEST_IDS = Object.freeze({
     HARDWARE_COUNTER_MODEL: 'hardware-counter-model',
     HARDWARE_COUNTER_NOTE: 'hardware-counter-note',
     HARDWARE_COUNTER_DEVICE: 'hardware-counter-device',
+    PERF_SOURCE_LINE_TABLE: 'perf-source-line-table',
+    PERF_SOURCE_LINE_ROW: 'perf-source-line-row',
+    PERF_SOURCE_LINE_OPERATIONS: 'perf-source-line-operations',
+    PERF_SOURCE_LINE_COMPARISON_NOTICE: 'perf-source-line-comparison-notice',
 
     // Allocation failures in the memory report
     ALLOCATION_FAILURE_DETAILS: 'allocation-failure-details',

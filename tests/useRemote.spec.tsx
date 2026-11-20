@@ -194,6 +194,18 @@ describe('useRemoteConnection - stack source GETs', () => {
         expect(out.error).toBeNull();
     });
 
+    it('keeps readRemoteFile and isSourceFileAvailable stable across renders', () => {
+        // A source viewer's read effect depends on them, so a new identity per render
+        // would read the file again on every render.
+        const { result, rerender } = renderHook(() => useRemoteConnection());
+        const { readRemoteFile, isSourceFileAvailable } = result.current;
+
+        rerender();
+
+        expect(result.current.readRemoteFile).toBe(readRemoteFile);
+        expect(result.current.isSourceFileAvailable).toBe(isSourceFileAvailable);
+    });
+
     it('readRemoteFile returns the standard error shape when the GET fails', async () => {
         const axiosInstance = await import('../src/libs/axiosInstance');
         const mockGet = vi.mocked(axiosInstance.default.get);

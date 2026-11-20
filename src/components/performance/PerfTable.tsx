@@ -28,7 +28,7 @@ import { formatCell, isHostOp } from '../../functions/perfFunctions';
 import { getEligiblePerfColumns, getFooterColumns, getVisiblePerfColumns } from '../../functions/perfTableColumns';
 import { getHardwareCounterKeys } from '../../functions/hardwareCounters';
 import { useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList } from '../../hooks/useAPI';
-import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
+import useSortTable from '../../hooks/useSortTable';
 import { OperationDescription } from '../../model/APIData';
 import { hiddenPerfTableColumnsAtom, hideHostOpsAtom, mergeDevicesAtom, selectedPerfRowIdAtom } from '../../store/app';
 import PerfBoundAnalysisCoverage from './PerfBoundAnalysisCoverage';
@@ -37,6 +37,7 @@ import PerfDeviceArchitecture from './PerfDeviceArchitecture';
 import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
 import PerfTableFrame from './PerfTableFrame';
 import PerfTableSkeleton from './PerfTableSkeleton';
+import SortableHeaderLabel from './SortableHeaderLabel';
 import PerfTensorDrawer from './PerfTensorDrawer';
 import PerfTableToolbar from './PerfTableToolbar';
 import { recordDrilldownOpened } from '../../functions/surfaceEvents';
@@ -319,51 +320,19 @@ const PerformanceTable = ({
                             aria-label='Tensor details'
                         />
                         {visibleColumns.map((h) => {
-                            const targetSortDirection =
-                                // eslint-disable-next-line no-nested-ternary
-                                sortingColumn === h.key
-                                    ? sortDirection === SortingDirection.ASC
-                                        ? SortingDirection.DESC
-                                        : SortingDirection.ASC
-                                    : sortDirection;
-
                             return (
                                 <th
                                     key={h.key}
                                     className='cell-header'
                                 >
-                                    {h.sortable ? (
-                                        <Button
-                                            onClick={() => changeSorting(h.key)(targetSortDirection)}
-                                            variant={ButtonVariant.MINIMAL}
-                                            size={Size.SMALL}
-                                        >
-                                            <span className='header-label'>{h.name}</span>
-
-                                            {sortingColumn === h.key ? (
-                                                <Icon
-                                                    className={classNames(
-                                                        {
-                                                            'is-active': sortingColumn === h.key,
-                                                        },
-                                                        'sort-icon',
-                                                    )}
-                                                    icon={
-                                                        sortDirection === SortingDirection.ASC
-                                                            ? IconNames.CARET_UP
-                                                            : IconNames.CARET_DOWN
-                                                    }
-                                                />
-                                            ) : (
-                                                <Icon
-                                                    className={classNames('sort-icon')}
-                                                    icon={IconNames.CARET_DOWN}
-                                                />
-                                            )}
-                                        </Button>
-                                    ) : (
-                                        <span className='header-label no-button'>{h.name}</span>
-                                    )}
+                                    <SortableHeaderLabel
+                                        columnKey={h.key}
+                                        label={h.name}
+                                        sortable={h.sortable}
+                                        sortingColumn={sortingColumn}
+                                        sortDirection={sortDirection}
+                                        onSort={changeSorting}
+                                    />
 
                                     {/* TODO: May want this in the near future */}
                                     {/* {h?.filterable && (
