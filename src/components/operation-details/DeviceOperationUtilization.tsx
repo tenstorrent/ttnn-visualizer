@@ -14,6 +14,8 @@ import {
     PopoverInteractionKind,
     type PopperModifierOverrides,
     Size,
+    Tab,
+    Tabs,
 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
@@ -24,13 +26,14 @@ import {
     HARDWARE_COUNTER_UNIT_LABELS,
     HardwareCounterAbsence,
     HardwareCounterMeasure,
+    HardwareCounterTab,
     getHardwareCounterCaptureAdvice,
 } from '../../definitions/HardwareCounters';
 import { LoadingSpinnerSizes } from '../../definitions/LoadingSpinner';
 import { TEST_IDS } from '../../definitions/TestIds';
 import { BELOW_TRIGGER, fitPopoverToWindow } from '../../functions/fitPopoverToWindow';
 import getResponseError from '../../functions/getResponseError';
-import { formatHardwareCounterValue } from '../../functions/hardwareCounters';
+import { formatHardwareCounterValue, getMissingReason } from '../../functions/hardwareCounters';
 import { formatPercentage } from '../../functions/math';
 import { recordDrilldownOpened } from '../../functions/surfaceEvents';
 import { useOperationHardwareCounters } from '../../hooks/useAPI';
@@ -41,15 +44,19 @@ import {
     OperationHardwareCounters,
 } from '../../model/HardwareCounters';
 import LoadingSpinner from '../LoadingSpinner';
+import DeviceOperationStalls from './DeviceOperationStalls';
+import MissingValue from './MissingValue';
 import 'styles/components/DeviceOperationUtilization.scss';
 
 const MAX_PERCENT = 100;
 const MODEL_DECIMALS = 1;
-const MISSING_VALUE = '—';
 
-const TRIGGER_LABEL = 'Utilization';
-const TRIGGER_TITLE = 'How busy each unit was, from hardware counters';
+const TRIGGER_LABEL = 'Counters';
+const TRIGGER_TITLE = 'How busy each unit was and where each thread stalled, from hardware counters';
 const PANEL_TITLE = 'Hardware counters';
+const TABS_ID = 'hardware-counter-tabs';
+const UTILIZATION_TAB_TITLE = 'Utilization';
+const STALLS_TAB_TITLE = 'Stalls';
 const CAPTION_RANGE = 'with the Min–Max range across those cores, read once over the kernel.';
 // tt-perf-report's `merge_device_rows`, which keeps one device's row for each operation.
 const MERGED_DEVICES_CAPTION =
@@ -89,9 +96,6 @@ const formatStat = (value: number | null, reading: HardwareCounterReading): stri
 const getAbsenceLabel = (reading: HardwareCounterReading): string =>
     HARDWARE_COUNTER_ABSENCE_LABELS[reading.absence ?? HardwareCounterAbsence.NO_VALUE];
 
-const getMissingReason = (label: string, fillHint: string | null): string =>
-    fillHint ? `${label}: ${fillHint}` : label;
-
 const getAbsenceReason = (reading: HardwareCounterReading): string =>
     getMissingReason(getAbsenceLabel(reading), reading.fill_hint);
 
@@ -106,22 +110,6 @@ const getPanelCaption = (deviceId: number | null): string => {
 
 const getAllCountersCaption = (deviceId: number | null): string =>
     `Min, Median, Max and Avg are taken across ${describeCores(deviceId)} that ran the operation's compute kernel, read once over the kernel.`;
-
-interface MissingValueProps {
-    reason: string;
-}
-
-// The role lets the dash carry the reason as its name: ARIA ignores `aria-label` on a bare span.
-const MissingValue = ({ reason }: MissingValueProps) => (
-    <span
-        className='hardware-counter-missing'
-        title={reason}
-        role='img'
-        aria-label={reason}
-    >
-        {MISSING_VALUE}
-    </span>
-);
 
 interface AbsenceProps {
     reading: HardwareCounterReading;
@@ -354,33 +342,16 @@ const OperationCounters = ({ counters, deviceId }: OperationCountersProps) => {
     );
 };
 
-interface HardwareCounterPanelProps {
+interface UtilizationTabProps {
     counters: OperationHardwareCounters;
-    // On a report of several devices the merged row is one device's, which the panel names.
-    isMultiDevice?: boolean;
+    deviceId: number | null;
 }
 
-export const HardwareCounterPanel = ({ counters, isMultiDevice = false }: HardwareCounterPanelProps) => {
+const UtilizationTab = ({ counters, deviceId }: UtilizationTabProps) => {
     const [isAllCountersOpen, setIsAllCountersOpen] = useState(false);
-    const deviceId = isMultiDevice ? counters.device_id : null;
 
     return (
-        <div
-            className='hardware-counter-panel'
-            data-testid={TEST_IDS.HARDWARE_COUNTER_PANEL}
-        >
-            <div className='hardware-counter-heading'>
-                {PANEL_TITLE}
-                {deviceId !== null && (
-                    <span
-                        className='hardware-counter-device'
-                        data-testid={TEST_IDS.HARDWARE_COUNTER_DEVICE}
-                    >
-                        {' '}
-                        · Device {deviceId}
-                    </span>
-                )}
-            </div>
+        <>
             {counters.has_counters ? (
                 <OperationCounters
                     counters={counters}
@@ -421,6 +392,59 @@ export const HardwareCounterPanel = ({ counters, isMultiDevice = false }: Hardwa
                     />
                 </>
             )}
+        </>
+    );
+};
+
+interface HardwareCounterPanelProps {
+    counters: OperationHardwareCounters;
+    // On a report of several devices the merged row is one device's, which the panel names.
+    isMultiDevice?: boolean;
+}
+
+export const HardwareCounterPanel = ({ counters, isMultiDevice = false }: HardwareCounterPanelProps) => {
+    const [selectedTab, setSelectedTab] = useState(HardwareCounterTab.UTILIZATION);
+    const deviceId = isMultiDevice ? counters.device_id : null;
+
+    return (
+        <div
+            className='hardware-counter-panel'
+            data-testid={TEST_IDS.HARDWARE_COUNTER_PANEL}
+        >
+            <div className='hardware-counter-heading'>
+                {PANEL_TITLE}
+                {deviceId !== null && (
+                    <span
+                        className='hardware-counter-device'
+                        data-testid={TEST_IDS.HARDWARE_COUNTER_DEVICE}
+                    >
+                        {' '}
+                        · Device {deviceId}
+                    </span>
+                )}
+            </div>
+            <Tabs
+                id={TABS_ID}
+                selectedTabId={selectedTab}
+                onChange={(tab: HardwareCounterTab) => setSelectedTab(tab)}
+                renderActiveTabPanelOnly
+            >
+                <Tab
+                    id={HardwareCounterTab.UTILIZATION}
+                    title={UTILIZATION_TAB_TITLE}
+                    panel={
+                        <UtilizationTab
+                            counters={counters}
+                            deviceId={deviceId}
+                        />
+                    }
+                />
+                <Tab
+                    id={HardwareCounterTab.STALLS}
+                    title={STALLS_TAB_TITLE}
+                    panel={<DeviceOperationStalls stalls={counters.stalls} />}
+                />
+            </Tabs>
         </div>
     );
 };

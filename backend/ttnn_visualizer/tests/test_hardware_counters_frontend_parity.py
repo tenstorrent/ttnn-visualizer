@@ -2,7 +2,8 @@
 #
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-"""Pins the frontend's copies of the hardware counter vocabulary to this package's. #2371"""
+"""Pins the frontend's copies of the hardware counter vocabulary, and of the stall
+breakdown's, to this package's. #2371 #2372"""
 
 from enum import Enum
 from pathlib import Path
@@ -15,6 +16,13 @@ from ttnn_visualizer.hardware_counters import (
     CounterFamily,
     CounterMeasure,
     CounterUnit,
+)
+from ttnn_visualizer.pipeline_stalls import (
+    CbWaitZone,
+    PipelineThread,
+    StallSource,
+    StallState,
+    ThreadRole,
 )
 from ttnn_visualizer.tests.frontend_parity import (
     typescript_enum_values,
@@ -60,3 +68,19 @@ def test_the_capture_advice_quotes_this_packages_flag_and_groups(name: str, valu
     assert (
         typescript_string_constant(_DEFINITIONS / "HardwareCounters.ts", name) == value
     )
+
+
+@pytest.mark.parametrize(
+    ("name", "enum"),
+    [
+        ("PipelineThread", PipelineThread),
+        ("PipelineThreadRole", ThreadRole),
+        ("CbWaitZone", CbWaitZone),
+        ("StallSource", StallSource),
+        ("StallState", StallState),
+    ],
+)
+def test_each_stall_enum_matches_its_frontend_copy(name: str, enum: Type[Enum]):
+    assert typescript_enum_values(_DEFINITIONS / "PipelineStalls.ts", name) == {
+        member.value for member in enum
+    }

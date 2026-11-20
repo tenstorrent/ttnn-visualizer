@@ -2,7 +2,8 @@
 #
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-"""`GET /api/performance/counters/<perf_id>`: one row's every counter label. #2371"""
+"""`GET /api/performance/counters/<perf_id>`: one row's every counter label (#2371)
+and its stalls per thread (#2372)."""
 
 import csv
 from http import HTTPStatus
@@ -10,6 +11,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from ttnn_visualizer import pipeline_stalls
 from ttnn_visualizer.agent import hw_utilisation
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
 from ttnn_visualizer.csv_queries import (
@@ -31,6 +33,18 @@ from ttnn_visualizer.tests.hardware_counter_capture import (
     write_device_log,
 )
 from ttnn_visualizer.tests.smoke_capture import smoke_rows, write_ops_perf
+from ttnn_visualizer.tests.stall_capture import (
+    CB_RESERVE_BACK,
+    CB_WAIT_FRONT,
+    CORE_COUNT,
+    INPUT_STARVED_POSITION,
+    STALE_CB_POSITION,
+    STALL_OPS,
+    counter_average,
+    kernel_share,
+    stall_rows,
+    write_stall_capture,
+)
 
 ROUTE = "/api/performance/counters"
 COUNTED_POSITION = 0
@@ -391,3 +405,122 @@ def test_an_id_that_is_not_a_number_is_a_bad_request(client, counted):
 
 def test_it_needs_an_instance(client):
     assert client.get(f"{ROUTE}/2").status_code == HTTPStatus.BAD_REQUEST
+
+
+class TestStalls:
+    """The Stalls tab's figures ride the same fetch. #2372"""
+
+    @pytest.fixture
+    def stalled(self, app, tmp_path):
+        write_stall_capture(tmp_path / "stalled")
+        return _mount(app, tmp_path / "stalled")
+
+    def _stalls(self, client, instance_id, position):
+        response = _get(client, instance_id, position + REPORT_ROW_ID_OFFSET)
+        assert response.status_code == HTTPStatus.OK
+        return response.get_json()["stalls"]
+
+    def test_each_thread_carries_its_counters_and_the_cb_waits_per_core(
+        self, client, stalled
+    ):
+        op = STALL_OPS[INPUT_STARVED_POSITION]
+
+        stalls = self._stalls(client, stalled, INPUT_STARVED_POSITION)
+        threads = {thread["thread"]: thread for thread in stalls["threads"]}
+
+        assert [thread["role"] for thread in stalls["threads"]] == [
+            "unpack",
+            "math",
+            "pack",
+        ]
+        assert threads["t0"]["hardware_counters"]["stall_rate"]["avg"] == (
+            counter_average(INPUT_STARVED_POSITION, "Thread 0 Stall Rate")
+        )
+        assert threads["t0"]["instrumentation"]["cb_wait_front"] == {
+            "sum_us": op.cb_wait_front_ns / 1000,
+            "per_core_us": op.cb_wait_front_ns / op.cores / 1000,
+            "kernel_share_percent": kernel_share(
+                INPUT_STARVED_POSITION, op.cb_wait_front_ns
+            ),
+        }
+        assert stalls["core_count"] == op.cores
+        assert stalls["kernel_duration_us"] == op.kernel_ns / 1000
+        assert stalls["largest_wait"]["label"] == "cb_wait_front"
+
+    def test_an_op_without_a_compute_kernel_ignores_its_copied_cb_sums(
+        self, client, stalled
+    ):
+        stalls = self._stalls(client, stalled, STALE_CB_POSITION)
+
+        assert stalls["has_compute_kernel"] is False
+        assert stalls["cb_waits"]["state"] == "ignored"
+        assert stalls["stalled_percent"] is None
+        assert all(thread["instrumentation"] is None for thread in stalls["threads"])
+
+    def test_a_counter_capture_without_sum_profiling_names_what_fills_its_cb_waits(
+        self, client, counted
+    ):
+        """The counters fixture's compute ops carry a thread stall rate and no CB sums."""
+        body = _get(client, counted, COUNTED_POSITION + REPORT_ROW_ID_OFFSET).get_json()
+
+        assert body["stalls"]["counters"] == {"state": "filled", "fill_hint": None}
+        assert body["stalls"]["cb_waits"] == {
+            "state": "not_captured",
+            "fill_hint": pipeline_stalls.CB_WAITS_FILL_HINT,
+        }
+
+    def test_a_compute_op_without_cb_sums_in_a_sum_profiled_capture_has_no_value(
+        self, app, client, tmp_path
+    ):
+        """Never told to add a flag the capture already ran with."""
+        rows = stall_rows()
+        rows[INPUT_STARVED_POSITION] = {
+            **rows[INPUT_STARVED_POSITION],
+            CB_WAIT_FRONT: "",
+            CB_RESERVE_BACK: "",
+        }
+        write_ops_perf(tmp_path / "one-blank", rows)
+        instance_id = _mount(app, tmp_path / "one-blank")
+
+        stalls = self._stalls(client, instance_id, INPUT_STARVED_POSITION)
+
+        assert stalls["cb_waits"] == {"state": "no_value", "fill_hint": None}
+
+    def test_the_capture_is_read_for_sum_profiling_only_when_asked_and_once(
+        self, client, counted, stalled
+    ):
+        """Only a compute op without CB sums asks, and the answer is kept per file."""
+        with patch.object(
+            pipeline_stalls,
+            "capture_has_cb_waits",
+            wraps=pipeline_stalls.capture_has_cb_waits,
+        ) as read:
+            for position in (INPUT_STARVED_POSITION, STALE_CB_POSITION):
+                self._stalls(client, stalled, position)
+            self._stalls(client, counted, UNCOUNTED_WITHOUT_KERNEL_POSITION)
+            unasked = read.call_count
+            for _ in range(2):
+                self._stalls(client, counted, COUNTED_POSITION)
+
+        assert unasked == 0
+        assert read.call_count == 1
+
+    @pytest.mark.parametrize("cell", ["1e30", "0", "-8"])
+    def test_a_core_count_that_is_no_count_leaves_the_shares_null(
+        self, app, client, tmp_path, cell
+    ):
+        """A count past 64 bits once failed the whole answer, the Utilization tab's too."""
+        rows = stall_rows()
+        rows[INPUT_STARVED_POSITION] = {
+            **rows[INPUT_STARVED_POSITION],
+            CORE_COUNT: cell,
+        }
+        write_ops_perf(tmp_path / "bad-count", rows)
+        instance_id = _mount(app, tmp_path / "bad-count")
+
+        stalls = self._stalls(client, instance_id, INPUT_STARVED_POSITION)
+        front = stalls["threads"][0]["instrumentation"]["cb_wait_front"]
+
+        assert stalls["core_count"] is None
+        assert front["per_core_us"] is None
+        assert front["kernel_share_percent"] is None

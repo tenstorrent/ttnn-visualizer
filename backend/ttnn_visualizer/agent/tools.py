@@ -40,6 +40,7 @@ from ttnn_visualizer.agent.bounds import (
     MAX_LIMIT,
     bounded,
     cut_op_code,
+    echoed,
     name_fits,
     require_choice,
     require_name_fits,
@@ -172,6 +173,47 @@ def _rounded(value: Optional[float]) -> Optional[float]:
 
 def is_signpost_row(row: Dict) -> bool:
     return row.get("op_type") == SIGNPOST_OP_TYPE
+
+
+def csv_position(row: Dict) -> Optional[int]:
+    """The CSV data row a report row's id names, as the generator numbers them, or None
+    for an id that is not a whole number."""
+    row_id = whole_number(row.get("id"))
+    return None if row_id is None else row_id - REPORT_ROW_ID_OFFSET
+
+
+def perf_rows(rows: List[Dict], perf_ids: Sequence[object]) -> List[Dict]:
+    """The rows `perf_ids` name, in their order; refused for an id no row has, as an
+    operation_id passed by mistake is, and for a signpost."""
+    by_id = {str(row.get("id")): row for row in rows}
+    named = []
+    for perf_id in perf_ids:
+        row = by_id.get(str(perf_id))
+        if row is None:
+            raise ValueError(
+                f"no performance row has id {echoed(perf_id)}; pass a top_ops row's "
+                "id, not an operation_id"
+            )
+        if is_signpost_row(row):
+            raise ValueError(
+                f"row {perf_id} is the signpost {shown_op_code(_display_op_code(row))}, "
+                "which runs on no core"
+            )
+        named.append(row)
+    return named
+
+
+def costliest_rows(
+    rows: Iterable[Dict], eligible: Callable[[Dict], bool] = lambda row: True
+) -> List[Dict]:
+    """The eligible rows with a countable device time, costliest first."""
+    timed = [
+        (time, row)
+        for row in rows
+        if eligible(row) and (time := countable_device_time(row)) is not None
+    ]
+    timed.sort(key=lambda entry: entry[0], reverse=True)
+    return [row for _, row in timed]
 
 
 def share_percent(part: Optional[float], whole: float) -> Optional[float]:
@@ -1078,13 +1120,13 @@ def _read_hardware_counters(instance: Instance) -> hardware_counters.CounterTabl
         return hardware_counters.read_table(csv_file)
 
 
-def hardware_counter_table(
+def counter_table(
     registry: ReportRegistry, handle: str
 ) -> hardware_counters.CounterTable:
     """Every counter column of the handle's capture by CSV position, read once per
-    capture; refused, naming the flag, for a capture without them."""
+    capture, and empty for a capture without them."""
     try:
-        table = _per_capture(
+        return _per_capture(
             registry,
             handle,
             CacheVariant.HARDWARE_COUNTERS,
@@ -1092,6 +1134,13 @@ def hardware_counter_table(
         )
     except DataFormatError as error:
         raise ValueError(f"{handle!r}: {error}") from error
+
+
+def hardware_counter_table(
+    registry: ReportRegistry, handle: str
+) -> hardware_counters.CounterTable:
+    """`counter_table`, refused, naming the flag, for a capture without counters."""
+    table = counter_table(registry, handle)
     if not table.header.has_counters:
         raise ValueError(
             f"the performance CSV behind {handle!r} has no hardware counter columns. "
@@ -1112,11 +1161,12 @@ def _signature_key(
     op_code = _raw_op_code(row)
     if not op_code:
         return None
-    try:
-        position = int(row["id"]) - REPORT_ROW_ID_OFFSET
-    except (KeyError, TypeError, ValueError):
-        position = -1
-    signature = signatures[position] if 0 <= position < len(signatures) else None
+    position = csv_position(row)
+    signature = (
+        signatures[position]
+        if position is not None and 0 <= position < len(signatures)
+        else None
+    )
     return op_code, signature or ""
 
 
@@ -1409,22 +1459,11 @@ def _spread_rows(
             reverse=True,
         )[: bounded(limit, MAX_DETAILED_LIMIT)]
 
-    row = next((row for row in rows if str(row.get("id")) == str(perf_id)), None)
-    if row is None:
-        raise ValueError(
-            f"no performance row has id {perf_id!r}; pass a top_ops row's id, "
-            "not an operation_id"
-        )
-    op_code = _display_op_code(row)
-    if is_signpost_row(row):
-        raise ValueError(
-            f"row {perf_id} is the signpost {shown_op_code(op_code)}, which runs on no "
-            "core"
-        )
+    (row,) = perf_rows(rows, [perf_id])
     if not _spannable(row):
         raise ValueError(
-            f"row {perf_id} ({shown_op_code(op_code)}) has no global call count or "
-            "device, so it is a host op with no zones in the device log"
+            f"row {perf_id} ({shown_op_code(_display_op_code(row))}) has no global "
+            "call count or device, so it is a host op with no zones in the device log"
         )
     return [row]
 
@@ -2403,7 +2442,10 @@ __all__ = [
     "check_range",
     "is_ranged",
     "core_spread",
+    "costliest_rows",
     "countable_device_time",
+    "counter_table",
+    "csv_position",
     "counters_architecture",
     "device_architecture",
     "device_time_header",
@@ -2413,6 +2455,7 @@ __all__ = [
     "is_signpost_row",
     "op_breakdown",
     "partitioned_caveat",
+    "perf_rows",
     "program_cache",
     "project_row",
     "projection",

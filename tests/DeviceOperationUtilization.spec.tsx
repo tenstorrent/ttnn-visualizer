@@ -31,6 +31,12 @@ import {
     HardwareCounterUnitReading,
     OperationHardwareCounters,
 } from '../src/model/HardwareCounters';
+import {
+    INPUT_STARVED_STALLS,
+    NOT_CAPTURED_STALLS,
+    NO_COMPUTE_KERNEL_STALLS,
+    UNRECORDED_STALLS,
+} from './helpers/pipelineStallFixtures';
 import { openPopover } from './helpers/testForPortal';
 
 const { recordEvent } = vi.hoisted(() => ({ recordEvent: vi.fn() }));
@@ -196,6 +202,7 @@ const MATMUL: OperationHardwareCounters = {
         family(HardwareCounterFamily.STALLS, [reading('Thread 0 Stall Rate', measured(10, 20, 30))], hint('instrn')),
     ],
     performance_model: { fpu_util: 6.251 },
+    stalls: INPUT_STARVED_STALLS,
 };
 
 const noValue = (label: string): HardwareCounterReading => ({
@@ -219,10 +226,11 @@ const CONCAT: OperationHardwareCounters = {
         metrics: withNoValues(familyReading.metrics),
     })),
     performance_model: { fpu_util: null },
+    stalls: NO_COMPUTE_KERNEL_STALLS,
 };
 
 // A compute op whose counters were never recorded, as when the profiler's buffer filled.
-const UNRECORDED: OperationHardwareCounters = { ...CONCAT, has_compute_kernel: true };
+const UNRECORDED: OperationHardwareCounters = { ...CONCAT, has_compute_kernel: true, stalls: UNRECORDED_STALLS };
 
 // What fills each unit on Blackhole, as the route names it for a capture without the unit's group.
 const UNIT_FILL_HINTS: Record<HardwareCounterUnit, string> = {
@@ -266,6 +274,7 @@ const NO_COUNTERS: OperationHardwareCounters = {
     full_grid: [],
     families: [],
     performance_model: { fpu_util: 42.5 },
+    stalls: NOT_CAPTURED_STALLS,
 };
 
 const renderPanel = (counters: OperationHardwareCounters, isMultiDevice = false) =>
@@ -302,7 +311,7 @@ const showAllCounters = () => {
     return screen.getByRole('dialog');
 };
 
-const utilizationTrigger = () => screen.getByRole('button', { name: 'Utilization' });
+const countersTrigger = () => screen.getByRole('button', { name: 'Counters' });
 
 afterEach(cleanup);
 
@@ -579,6 +588,32 @@ describe('HardwareCounterPanel', () => {
         expect(screen.queryByTestId(TEST_IDS.HARDWARE_COUNTER_DEVICE)).toBeNull();
         expect(screen.getByText(/Each bar/)).not.toHaveTextContent('device');
     });
+
+    it('opens on utilization, with the stalls a tab beside it', () => {
+        renderPanel(MATMUL);
+
+        expect(screen.getByRole('tab', { name: 'Utilization' })).toHaveAttribute('aria-selected', 'true');
+        expect(screen.getByRole('tab', { name: 'Stalls' })).toHaveAttribute('aria-selected', 'false');
+        expect(screen.queryByTestId(TEST_IDS.PIPELINE_STALLS)).toBeNull();
+    });
+
+    it("shows the operation's stalls per thread on the Stalls tab, in place of the units", () => {
+        renderPanel(MATMUL);
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Stalls' }));
+
+        expect(screen.getByTestId(TEST_IDS.PIPELINE_STALLS)).toBeInTheDocument();
+        expect(screen.getByTestId(TEST_IDS.PIPELINE_STALL_SUMMARY)).toHaveTextContent('polling cb_wait_front');
+        expect(screen.queryByTestId(`${TEST_IDS.HARDWARE_COUNTER_UNIT}-${HardwareCounterUnit.FPU}`)).toBeNull();
+    });
+
+    it('keeps the device heading above both tabs', () => {
+        renderPanel({ ...MATMUL, device_id: 1 }, true);
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Stalls' }));
+
+        expect(screen.getByTestId(TEST_IDS.HARDWARE_COUNTER_DEVICE)).toHaveTextContent('Device 1');
+    });
 });
 
 describe('DeviceOperationUtilization', () => {
@@ -599,7 +634,7 @@ describe('DeviceOperationUtilization', () => {
 
         expect(useOperationHardwareCounters).not.toHaveBeenCalled();
 
-        await openPopover(utilizationTrigger());
+        await openPopover(countersTrigger());
 
         expect(useOperationHardwareCounters).toHaveBeenCalledWith(2);
         expect(await screen.findByTestId(TEST_IDS.HARDWARE_COUNTER_PANEL)).toBeInTheDocument();
@@ -609,7 +644,7 @@ describe('DeviceOperationUtilization', () => {
         (useOperationHardwareCounters as Mock).mockReturnValue({ data: undefined, error: null, isLoading: true });
         render(<DeviceOperationUtilization perfId={2} />);
 
-        await openPopover(utilizationTrigger());
+        await openPopover(countersTrigger());
 
         expect(document.querySelector('.hardware-counter-popover .loading-spinner')).not.toBeNull();
         expect(screen.queryByTestId(TEST_IDS.HARDWARE_COUNTER_PANEL)).toBeNull();
@@ -628,14 +663,14 @@ describe('DeviceOperationUtilization', () => {
             />,
         );
 
-        await openPopover(utilizationTrigger());
+        await openPopover(countersTrigger());
 
         expect(await screen.findByTestId(TEST_IDS.HARDWARE_COUNTER_DEVICE)).toHaveTextContent('Device 1');
     });
 
     it('records each opening of the panel as a drilldown, and a close as nothing', async () => {
         render(<DeviceOperationUtilization perfId={2} />);
-        const trigger = utilizationTrigger();
+        const trigger = countersTrigger();
 
         await openPopover(trigger);
 
@@ -658,7 +693,7 @@ describe('DeviceOperationUtilization', () => {
     it('sizes the open panel to the room beside its button', async () => {
         render(<DeviceOperationUtilization perfId={2} />);
 
-        await openPopover(utilizationTrigger());
+        await openPopover(countersTrigger());
 
         const container = screen
             .getByTestId(TEST_IDS.HARDWARE_COUNTER_PANEL)
@@ -668,7 +703,7 @@ describe('DeviceOperationUtilization', () => {
 
     it('closes the dialog of every counter back to the open panel, with focus on the button', async () => {
         render(<DeviceOperationUtilization perfId={2} />);
-        const trigger = utilizationTrigger();
+        const trigger = countersTrigger();
 
         await openPopover(trigger);
         allCountersButton().focus();
@@ -683,7 +718,7 @@ describe('DeviceOperationUtilization', () => {
     // leaves Blueprint's overlay stack before the popover's outside-click listener sees the press; this pins its cause.
     it("closes only the dialog on a press of its backdrop, which never reaches the popover's listener", async () => {
         render(<DeviceOperationUtilization perfId={2} />);
-        const trigger = utilizationTrigger();
+        const trigger = countersTrigger();
         const pressReachedDocument = vi.fn();
 
         await openPopover(trigger);
@@ -697,6 +732,18 @@ describe('DeviceOperationUtilization', () => {
         expect(trigger).toHaveAttribute('aria-expanded', 'true');
     });
 
+    it('reads both tabs from the one fetch it makes on opening', async () => {
+        render(<DeviceOperationUtilization perfId={2} />);
+
+        await openPopover(screen.getByTestId(TEST_IDS.HARDWARE_COUNTER_TRIGGER));
+        fireEvent.click(await screen.findByRole('tab', { name: 'Stalls' }));
+
+        expect(await screen.findByTestId(TEST_IDS.PIPELINE_STALLS)).toBeInTheDocument();
+        expect(new Set((useOperationHardwareCounters as Mock).mock.calls.map(([perfId]) => perfId))).toEqual(
+            new Set([2]),
+        );
+    });
+
     it('says why when the counters cannot be loaded', async () => {
         (useOperationHardwareCounters as Mock).mockReturnValue({
             data: undefined,
@@ -705,7 +752,7 @@ describe('DeviceOperationUtilization', () => {
         });
         render(<DeviceOperationUtilization perfId={2} />);
 
-        await openPopover(utilizationTrigger());
+        await openPopover(countersTrigger());
 
         expect(await screen.findByText('No performance row 2.')).toBeInTheDocument();
     });

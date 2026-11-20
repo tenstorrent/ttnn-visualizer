@@ -20,7 +20,6 @@ from ttnn_visualizer.agent.bounds import (
     require_name_fits,
 )
 from ttnn_visualizer.agent.handles import ReportRegistry
-from ttnn_visualizer.csv_queries import REPORT_ROW_ID_OFFSET
 from ttnn_visualizer.device_architecture import DeviceArchitecture
 from ttnn_visualizer.hardware_counters import (
     CounterAbsence,
@@ -68,16 +67,12 @@ class _Op:
 
 
 def _ops(rows: Iterable[Dict]) -> List[_Op]:
-    ops = []
-    for row in rows:
-        if tools.is_signpost_row(row):
-            continue
-        try:
-            position = int(row["id"]) - REPORT_ROW_ID_OFFSET
-        except (KeyError, TypeError, ValueError):
-            continue
-        ops.append(_Op(row, position, tools.countable_device_time(row)))
-    return ops
+    return [
+        _Op(row, position, tools.countable_device_time(row))
+        for row in rows
+        if not tools.is_signpost_row(row)
+        and (position := tools.csv_position(row)) is not None
+    ]
 
 
 def _rounded(value: Optional[float]) -> Optional[float]:
@@ -85,9 +80,9 @@ def _rounded(value: Optional[float]) -> Optional[float]:
 
 
 def _stats(table: CounterTable, label: str, position: int) -> Dict[str, object]:
+    read = table.reader(position)
     return {
-        stat.value: table.value(table.header.column(label, stat), position)
-        for stat, _ in hardware_counters.ROW_KEY_STATS
+        stat.value: read(label, stat) for stat, _ in hardware_counters.ROW_KEY_STATS
     }
 
 

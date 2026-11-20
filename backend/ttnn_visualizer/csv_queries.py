@@ -50,7 +50,7 @@ import orjson
 import pandas as pd
 import zstd
 from tt_perf_report import perf_report
-from ttnn_visualizer import hardware_counters
+from ttnn_visualizer import hardware_counters, pipeline_stalls
 from ttnn_visualizer.device_architecture import DeviceArchitecture, architecture_of
 from ttnn_visualizer.exceptions import (
     DataFormatError,
@@ -362,6 +362,8 @@ MAX_KEPT_ZONE_INTERVALS = 4_000_000
 # report is about 22 MB of JSON, so a worker can keep roughly 90 MB alive for its
 # lifetime. Each `group_by` value is its own entry with a full copy of the rows.
 MAX_CACHED_PERFORMANCE_REPORTS = 4
+# Whether each CSV ran with sum profiling, one bool per file the counters route reads.
+MAX_CACHED_SUM_PROFILING_FACTS = 64
 
 # Ceiling on distinct `DEVICE ID`s in a performance CSV. Two tt-perf-report passes
 # cost rows x devices: `merge_device_rows` walks every device for each op it
@@ -2151,6 +2153,9 @@ class OpsPerformanceReportQueries:
         "device_kernel_first_to_last_start": "DEVICE KERNEL FIRST TO LAST START [ns]",
         "device_compute_cb_wait_front": "DEVICE COMPUTE CB WAIT FRONT [ns]",
         "device_compute_cb_reserve_back": "DEVICE COMPUTE CB RESERVE BACK [ns]",
+        # The CSV's own: tt-perf-report's `cores` counts a DRAM-sharded matmul's
+        # DRAM-interface workers instead.
+        "core_count": "CORE COUNT",
         "dispatch_total_cq_cmd_op_time": "DISPATCH TOTAL CQ CMD OP TIME [ns]",
         "dispatch_go_send_wait_time": "DISPATCH GO SEND WAIT TIME [ns]",
         "compute_kernel_source": "COMPUTE KERNEL SOURCE",
@@ -2292,6 +2297,12 @@ class OpsPerformanceReportQueries:
             OpsPerformanceQueries.get_local_ops_perf_file_path(instance)
         ).resolve()
         return FileSource.of(str(source_path), source_path.stat())
+
+    @classmethod
+    def sum_profiled(cls, instance) -> bool:
+        """Whether any op of the CSV carries a CB wait, which only sum profiling writes:
+        read once per file, up to the first such op. #2372"""
+        return _sum_profiled(cls.report_source(instance))
 
     @classmethod
     def generate_report(cls, instance, **kwargs) -> Dict:
@@ -2907,3 +2918,9 @@ def _cached_generate_performance_report_json(
 
 def clear_performance_report_cache() -> None:
     _cached_generate_performance_report_json.cache_clear()
+
+
+@lru_cache(maxsize=MAX_CACHED_SUM_PROFILING_FACTS)
+def _sum_profiled(source: FileSource) -> bool:
+    with open(source.path, newline="") as csv_file:
+        return pipeline_stalls.capture_has_cb_waits(csv_file)

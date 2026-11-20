@@ -5,7 +5,8 @@
 @use '../definitions/colours' as *;
 @use '../definitions/variables' as variables;
 
-$panel-width: 460px;
+// Wide enough for the Stalls tab's three aligned columns.
+$panel-width: 520px;
 $panel-max-height: 70vh;
 $range-height: 2px;
 $dialog-width: 640px;

@@ -9,6 +9,7 @@ import {
     HardwareCounterMeasure,
     HardwareCounterUnit,
 } from '../definitions/HardwareCounters';
+import { OperationStalls } from './PipelineStalls';
 
 export interface HardwareCounterReading {
     label: string;
@@ -54,4 +55,5 @@ export interface OperationHardwareCounters {
     full_grid: HardwareCounterGridReading[];
     families: HardwareCounterFamilyReading[];
     performance_model: { fpu_util: number | null };
+    stalls: OperationStalls;
 }

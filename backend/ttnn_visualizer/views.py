@@ -22,7 +22,7 @@ import yaml
 import zstd
 from flask import Blueprint, Response, abort, current_app, jsonify, request, session
 from pydantic import ValidationError
-from ttnn_visualizer import hardware_counters
+from ttnn_visualizer import hardware_counters, pipeline_stalls
 from ttnn_visualizer.csv_queries import (
     REPORT_ROW_ID_OFFSET,
     DeviceLogProfilerQueries,
@@ -1429,7 +1429,8 @@ def get_performance_results_report(instance: Instance):
 @timer
 def get_performance_counters(perf_id, instance: Instance):
     """One performance row's hardware counters, every label, with the model's FPU
-    figure beside them; the table's rows carry only a headline subset (#2330)."""
+    figure beside them; the table's rows carry only a headline subset (#2330). Its
+    stalls per thread come with them, beside its CB waits (#2372)."""
     if not instance.performance_path:
         raise PerformanceReportNotLoadedException()
 
@@ -1453,13 +1454,23 @@ def get_performance_counters(perf_id, instance: Instance):
     if row is None:
         return response_not_found(f"No performance row {row_id}.")
 
+    counter_header = hardware_counters.discover(header)
     counters = hardware_counters.operation_counters(
         row,
-        hardware_counters.discover(header),
+        counter_header,
         DeviceLogProfilerQueries.architecture(instance),
     )
+    try:
+        stalls = pipeline_stalls.operation_stalls(
+            row,
+            counter_header.row_reader(row),
+            counter_header,
+            lambda: OpsPerformanceReportQueries.sum_profiled(instance),
+        )
+    except DataFormatError as error:
+        return response_unprocessable_entity(str(error))
     return Response(
-        orjson.dumps({"perf_id": row_id, **counters}),
+        orjson.dumps({"perf_id": row_id, **counters, "stalls": stalls}),
         mimetype="application/json",
     )
 

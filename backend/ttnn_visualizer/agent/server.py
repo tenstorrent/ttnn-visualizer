@@ -34,9 +34,14 @@ from ttnn_visualizer.agent import (
     perf_detail,
     report_diff,
     source_lines,
+    stall_breakdown,
     tools,
 )
-from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_LIMIT
+from ttnn_visualizer.agent.bounds import (
+    MAX_DETAILED_LIMIT,
+    MAX_LIMIT,
+    MAX_OP_CODE_CHARS,
+)
 from ttnn_visualizer.agent.handles import (
     ReportRegistry,
     UnknownHandleError,
@@ -215,7 +220,8 @@ _INCLUDE_SCHEMA = {
         "the average, minimum and maximum across the op's cores, and the full-grid "
         "FPU, SFPU and MATH averages that count idle cores), riscs (per-RISC kernel "
         "time, compute "
-        "CB waits), cores (available cores, launch skew, per-core spread), dispatch "
+        "CB waits summed over the op's cores), cores (available cores, launch skew, "
+        "per-core spread), dispatch "
         "(op-to-op gap, dispatch waits, trace ids), cache (program hash, cache hit), "
         "kernels (kernel sources and hashes), advice (tt-perf-report's advice), flags "
         "(the performance view's heuristic flags, each with its figures: dram_bound "
@@ -546,6 +552,62 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "required": ["handle"],
             },
             "handler": lambda arguments: hw_utilisation.hw_utilisation(
+                registry, **arguments
+            ),
+        },
+        McpToolName.STALL_BREAKDOWN: {
+            "title": "Pipeline stalls per thread",
+            "description": (
+                "Why an op's compute kernel was slow, per thread (t0 unpack, t1 math, "
+                "t2 pack): each thread's instruction issue rate, stall rate and named "
+                "waits ranked by average, with min and max across cores, from "
+                "tt-metal's hardware counters, beside the time the unpack and pack "
+                "cores spent polling circular buffers (cb_wait_front, cb_reserve_back), "
+                "from tt-metal's sum zones, which the counters cannot see. Every figure "
+                "sits under hardware_counters or instrumentation. Takes perf_ids or an "
+                "op_code, or else reads the costliest ops by device time; ranks them by "
+                "an average core's stalled time and names the largest wait, marking "
+                "one that waits on an earlier stage downstream. Waits overlap, so they "
+                "never add up to the stall rate, and the CSV sums a CB wait over the "
+                "op's cores, so each is divided by its core count. An op without a "
+                "compute kernel has neither. Reads the whole report, with no signpost "
+                "range. Refused for a capture without the instrn counter group, so "
+                "CB waits alone are out of scope; one without --enable-sum-profiling "
+                "answers without CB waits and says so."
+            ),
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "handle": {"type": "string"},
+                    "perf_ids": {
+                        "type": "array",
+                        "items": _PERF_ID_SCHEMA,
+                        "maxItems": stall_breakdown.MAX_PERF_IDS,
+                        "description": (
+                            "The performance rows to read. Omit them, and op_code, "
+                            "for the costliest ops by device time."
+                        ),
+                    },
+                    "op_code": {
+                        "type": "string",
+                        "maxLength": MAX_OP_CODE_CHARS,
+                        "description": (
+                            "Every call of one op code, ignoring case: its raw op "
+                            "code, such as MatmulDeviceOperation, or tt-perf-report's, "
+                            "which adds a matmul's shapes."
+                        ),
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": (
+                            f"Ops to return, capped at {MAX_DETAILED_LIMIT}. Applies "
+                            "only when perf_ids is omitted."
+                        ),
+                    },
+                },
+                "required": ["handle"],
+            },
+            "handler": lambda arguments: stall_breakdown.stall_breakdown(
                 registry, **arguments
             ),
         },
