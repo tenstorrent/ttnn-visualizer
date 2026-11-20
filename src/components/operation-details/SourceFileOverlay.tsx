@@ -157,7 +157,8 @@ function SourceFileOverlay({
         }
 
         // Wait until highlighted HTML is painted before trying to scroll. Only a scroll that found
-        // its line counts, so a frame that fires too early leaves the next render to try again.
+        // its line counts, so if this one finds nothing, a change to any dependency below (such as
+        // the highlighted HTML arriving) tries again. A render alone does not rerun it.
         const frame = requestAnimationFrame(() => {
             didAutoScrollRef.current = scrollToHighlightedLine(codeEl);
         });
