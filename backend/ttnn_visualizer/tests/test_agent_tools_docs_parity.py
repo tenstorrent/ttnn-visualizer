@@ -268,6 +268,11 @@ def test_the_source_lines_caps_the_page_states_are_the_enforced_ones():
         in page
     )
     assert f"`limit` caps the groups at {MAX_DETAILED_LIMIT}" in page
+    # The call-site wording, since the signature sentence states a 300 cut as well.
+    assert (
+        f"`function` or `code` past {failures.MAX_CALL_SITE_TEXT_CHARS} characters "
+        "is cut"
+    ) in page
     assert (
         f"{failures.STACK_TRACE_IDS_PER_READ} at a time, or in one streamed pass "
         f"past {failures.STACK_TRACE_SCAN_IDS:,} operations"

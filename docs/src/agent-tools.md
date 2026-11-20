@@ -62,8 +62,7 @@ Answers link to the same thing in the web application, for the reader to open:
 - `find_operations`, `top_ops`, `program_cache`, `memory_profile`, `tensor_flow`,
   `errors`, `dram_fallbacks`, `l1_peak`, `late_deallocations`, `critical_path`,
   `source_lines`, `subgraph_between` and `op_configurations` return one
-  `app_link_template`, in which
-  `{operation_id}` takes any operation id the answer lists.
+  `app_link_template`, in which `{operation_id}` takes any operation id the answer lists.
 
 A link names the report by its directories, and the visualizer opens them when the link is
 followed, as `ttnn-visualizer --memory-report-path` does: each followed link starts a new session
@@ -138,23 +137,24 @@ names so existing clients go on working.
 
 Call `load_report` first. It reports what is answerable rather than making you discover it
 one failed call at a time, because the report kinds are independent: a performance-only
-capture has no operation graph and no tensor data, and a performance tool asked of a handle
-loaded without a `performance_path` is refused and says so. `zone_timings` is listed only when
-`profile_log_device.csv` decodes as UTF-8, has every column the tool reads (`timer_id`,
-`zone name`, `run host ID`, `PCIe slot`, `RISC processor type`, `core_x`, `core_y` and
-`time[cycles since reset]`), and has at least one data row. `zone_intervals` is listed only
-when `zone_timings` is, the device log marks zone starts and ends in a `type` or
-`zone phase` column, and its first line names a positive `CHIP_FREQ[MHz]`. The six tools
-that read the performance CSV's rows, `top_ops`, `op_breakdown`, `program_cache`,
-`core_spread`, `critical_path` and `source_lines`, are listed only when it can be reported
-on, and when it cannot, `performance_csv_problem` says why (`empty`, `no data rows`, `missing columns: …`,
-that it cannot be read or decoded, or the parse error reading its signposts gave).
-`program_cache` also needs the `PROGRAM HASH` and `PROGRAM CACHE HIT` columns,
-`core_spread` needs `zone_intervals` as well, and `critical_path` the graph, as above.
-Each database tool is checked against the tables it actually reads, so a truncated
-capture that holds `operations` but not `buffers` is reported as answering
-`find_operations` and nothing else, rather than advertising every tool and failing most
-of them. `noc_congestion` is listed when the handle's `npe_path` starts as a trace does, a
+capture has no operation graph and no tensor data, and a performance tool asked of a
+handle loaded without a `performance_path` is refused and says so. `zone_timings` is
+listed only when `profile_log_device.csv` decodes as UTF-8, has every column the tool
+reads (`timer_id`, `zone name`, `run host ID`, `PCIe slot`, `RISC processor type`,
+`core_x`, `core_y` and `time[cycles since reset]`), and has at least one data row.
+`zone_intervals` is listed only when `zone_timings` is, the device log marks zone starts
+and ends in a `type` or `zone phase` column, and its first line names a positive
+`CHIP_FREQ[MHz]`. The six tools that read the performance CSV's rows, `top_ops`,
+`op_breakdown`, `program_cache`, `core_spread`, `critical_path` and `source_lines`, are
+listed only when it can be reported on, and when it cannot, `performance_csv_problem` says
+why (`empty`, `no data rows`, `missing columns: …`, that it cannot be read or decoded, or
+the parse error reading its signposts gave). `program_cache` also needs the `PROGRAM HASH`
+and `PROGRAM CACHE HIT` columns, `core_spread` needs `zone_intervals` as well,
+`critical_path` the graph, as above, and `source_lines` the memory report's
+`stack_traces`. Each database tool is checked against the tables it actually reads, so a
+truncated capture that holds `operations` but not `buffers` is reported as answering
+`find_operations` and nothing else, rather than advertising every tool and failing most of
+them. `noc_congestion` is listed when the handle's `npe_path` starts as a trace does, a
 zstd frame for `.zst` and a JSON object otherwise. The trace is only read whole on its
 first call, which refuses one that is not a readable tt-npe trace.
 
@@ -556,20 +556,23 @@ and rows past the end of the memory report capture. Rows whose operation recorde
 trace, or none naming a frame, form one `no_trace` group, and its count is in the caveat;
 so does a frame at line 0 or past 2³¹, which the application groups as a line of its own.
 An operation with several stack traces is filed under its first, where the application's
-operations list keeps its last. Groups with equal device time are ordered by kind, path
-and line as text, and `top_op_codes` with equal device time by op code, each by code
-point, where the application compares them by locale: two paths that differ in case or
-punctuation (`_`, `-` or `.`) can come out swapped, and of tied op codes that differ so, a
-different 3 can be listed. With no countable device time at all, every
+operations list keeps its last. The application's table also follows its range slider, so
+its shares match these only over the same rows. Groups with equal device time are ordered
+by kind, path and line as text, and `top_op_codes` with equal device time by op code, each
+by code point, where the application compares them by locale: two paths that differ in
+case or punctuation (`_`, `-` or `.`) can come out swapped, and of tied op codes that
+differ so, a different 3 can be listed. With no countable device time at all, every
 `device_time_share_percent` is `null`, where the application shows 0%. `limit` caps the
 groups at 25, ranked by device time, and those past it are summed into `rest`. Over a
 range, the rows and shares are the window's, the unlinked group's `unlinked_by_reason`
 included, while `operation_link` carries `scope: whole_report`, as `top_ops`'s does, since
 its `matched_rows` counts the whole report. The tool refuses a handle whose two reports
-did not link, and a capture that records no stack traces, where every row would read
-`no_trace`; it reads the linked rank only. The first call reads every linked operation's
-stack trace, 500 at a time, or in one streamed pass past 2,000 operations, and keeps only
-each one's call site; later calls, over any range, reuse them.
+did not link, a capture that records no stack traces, and one where no linked operation's
+trace at the linked rank names a Python frame (a C++ backtrace, say), as the application
+then disables Source line, since every row would read `no_trace`; it reads the linked rank
+only. The first call reads every linked operation's stack trace, 500 at a time, or in one
+streamed pass past 2,000 operations, and keeps only each one's call site; later calls,
+over any range, reuse them.
 
 **`diff_reports` calls a move a change only when it is bigger than run-to-run noise.** Two
 captures of the same code never time an operation identically, so a diff that ranks every
@@ -716,20 +719,21 @@ device's L1 its figures are withheld and `reason` says why, as the web applicati
 panel does. The first call on a handle reads every captured graph, which can take seconds on
 a large capture; later calls reuse it.
 
-**`late_deallocations` applies Buffer Summary's late-deallocation rule, grouped by where the
-fix goes.** Each operation's post-operation `buffers` snapshot is matched to the last tensor
-seen at each address, and a tensor is held late at every operation after its last consumer
-that is not a deallocate call, the rule the overlay hatches L1 rows by. The app applies it
-to L1 only; `buffer_type: DRAM` applies the same rule to DRAM buffers, which the app does
-not show. A hold is one tensor at one address over consecutive operations with these
-buffers. `call_sites` groups the holds by frame 0 of the last use's stack trace, the call
-site `operation_provenance` gives, which is where a `ttnn.deallocate` would free them
-sooner: 192 L1 holds come from 7 call sites on a 1,199-op llama capture, and 3,453 DRAM
-holds from 14 on a 9,940-op one. Both lists rank by `byte_operations`, bytes per bank summed
-over the operations held, which is the hatched area in Buffer Summary. `limit` caps
-`call_sites` at 25; `top_holds` lists the 20 largest holds whatever the limit, each with
-`producer_operation_ids`, the operations that output its tensor: none for a tensor from the
-host, and two for some.
+**`late_deallocations` applies Buffer Summary's late-deallocation rule, grouped by where
+the fix goes.** Each operation's post-operation `buffers` snapshot is matched to the last
+tensor seen at each address, and a tensor is held late at every operation after its last
+consumer that is not a deallocate call, the rule the overlay hatches L1 rows by. The app
+applies it to L1 only; `buffer_type: DRAM` applies the same rule to DRAM buffers, which
+the app does not show. A hold is one tensor at one address over consecutive operations
+with these buffers. `call_sites` groups the holds by frame 0 of the last use's stack
+trace, the call site `operation_provenance` gives, which is where a `ttnn.deallocate`
+would free them sooner; its `file`, `function` or `code` past 300 characters is cut, with
+its `_full_length` and a `_digest` of the whole: 192 L1 holds come from 7 call sites on a
+1,199-op llama capture, and 3,453 DRAM holds from 14 on a 9,940-op one. Both lists rank by
+`byte_operations`, bytes per bank summed over the operations held, which is the hatched
+area in Buffer Summary. `limit` caps `call_sites` at 25; `top_holds` lists the 20 largest
+holds whatever the limit, each with `producer_operation_ids`, the operations that output
+its tensor: none for a tensor from the host, and two for some.
 
 Each hold's `ending` says how it stopped, and `ended` counts them: `deallocated` by a
 deallocate call naming the tensor, `freed_otherwise` when it left the snapshot or its

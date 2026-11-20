@@ -1008,6 +1008,17 @@ def source_lines_by_call_site(
             # Every linked operation's, so a range asked later reads no trace again.
             partial(_read_call_sites, operation_ids=link.perf_rows_by_operation),
         )
+        # As the app disables Source line when no operation has a call site. After
+        # the read, which is cached, so a trace on another rank alone counts for none.
+        if not any(site is not None for site in call_site_by_operation.values()):
+            at_rank = "" if scope.rank is None else f" at rank {scope.rank}"
+            raise ValueError(
+                f"no linked operation's stack trace{at_rank} names a Python frame,"
+                " so no performance row has a source line to be grouped "
+                "by: every linked row would read no_trace, and the app disables Source "
+                "line for the same capture. op_breakdown groups the same rows by op or "
+                "op_category instead."
+            )
 
     rows = [row for row in report.get("report", []) if not tools.is_signpost_row(row)]
     groups = source_lines.source_line_groups(

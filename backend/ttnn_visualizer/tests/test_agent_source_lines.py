@@ -517,6 +517,18 @@ class TestSourceLines:
         with pytest.raises(ValueError, match="records no stack traces"):
             linking.source_lines_by_call_site(registry, handle)
 
+    @pytest.mark.parametrize(
+        "trace",
+        ["#0 0x7f00 in tt::tt_metal::Program::compile()\n", ""],
+        ids=["cpp-backtrace", "empty"],
+    )
+    def test_it_refuses_traces_that_name_no_python_frame(self, traced, trace):
+        """As the app disables Source line when no operation has a call site. #2364"""
+        registry, handle = traced(traces={2: trace, 3: trace, 4: trace})
+
+        with pytest.raises(ValueError, match="stack trace names a Python frame"):
+            linking.source_lines_by_call_site(registry, handle)
+
     def test_a_dense_read_streams_every_trace_once(self, linked, tmp_path):
         """Past the scan threshold the traces are read in one pass, with the same
         answer the batched read gives."""
@@ -578,6 +590,17 @@ class TestSourceLines:
         assert files == {"/rank0/model.py"}
         assert result["rank"] == 0
         assert "multi-host report read at rank 0" in result["caveat"]
+
+    def test_it_refuses_a_rank_whose_traces_are_all_on_another_rank(
+        self, linked, tmp_path
+    ):
+        """The capture records traces, but none at the linked rank. #2364"""
+        path = _write_ranked_profiler(tmp_path / "ranked", _LINKED_GRAPHS)
+        _add_ranked_traces(path, {1: {2: _trace("/rank1/model.py", 7)}})
+        registry, handle, _ = linked(profiler_path=path)
+
+        with pytest.raises(ValueError, match="at rank 0 names a Python frame"):
+            linking.source_lines_by_call_site(registry, handle)
 
     def test_a_multi_host_report_with_rankless_traces_is_refused(
         self, linked, tmp_path
