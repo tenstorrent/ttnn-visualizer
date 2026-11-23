@@ -5,7 +5,7 @@
 import '@testing-library/jest-dom/vitest';
 import { Classes } from '@blueprintjs/core';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Mock, afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import DeviceOperationUtilization, {
     HardwareCounterPanel,
 } from '../src/components/operation-details/DeviceOperationUtilization';
@@ -22,7 +22,7 @@ import {
     getHardwareCounterCaptureAdvice,
 } from '../src/definitions/HardwareCounters';
 import { TEST_IDS } from '../src/definitions/TestIds';
-import { POPOVER_ROOM_PROPERTY } from '../src/functions/fitPopoverToWindow';
+import { POPOVER_ROOM_PROPERTY, WINDOW_MARGIN } from '../src/functions/fitPopoverToWindow';
 import { useOperationHardwareCounters } from '../src/hooks/useAPI';
 import {
     HardwareCounterFamilyReading,
@@ -304,6 +304,33 @@ const showAllCounters = () => {
 
 const utilizationTrigger = () => screen.getByRole('button', { name: 'Utilization' });
 
+// Blueprint offsets a popover with an arrow by half its 30px arrow.
+const ARROW_GAP = 15;
+const TRIGGER_HEIGHT = 24;
+
+const panelPopover = () =>
+    screen.getByTestId(TEST_IDS.HARDWARE_COUNTER_PANEL).closest<HTMLElement>(`.${Classes.POPOVER}`)!;
+
+const panelRoom = () =>
+    panelPopover()
+        .closest<HTMLElement>(`.${Classes.POPOVER_TRANSITION_CONTAINER}`)!
+        .style.getPropertyValue(POPOVER_ROOM_PROPERTY);
+
+// jsdom lays nothing out, so place the popover's target, the element Popper measures, at a given top.
+const placeTriggerAt = (top: number) => {
+    const original = HTMLElement.prototype.getBoundingClientRect;
+    const spy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function boundingRect(
+        this: HTMLElement,
+    ) {
+        if (!this.classList.contains(Classes.POPOVER_TARGET)) {
+            return original.call(this);
+        }
+
+        return DOMRect.fromRect({ x: 0, y: top, width: 80, height: TRIGGER_HEIGHT });
+    });
+    onTestFinished(() => spy.mockRestore());
+};
+
 afterEach(cleanup);
 
 describe('HardwareCounterPanel', () => {
@@ -553,6 +580,14 @@ describe('HardwareCounterPanel', () => {
         );
     });
 
+    it("lets the keyboard reach the dialog's table to scroll it", () => {
+        renderPanel(MATMUL);
+
+        const table = within(showAllCounters()).getByRole('region', { name: 'All hardware counters' });
+
+        expect(table).toHaveAttribute('tabindex', '0');
+    });
+
     it('names the device in the dialog of every counter on a report of several devices', () => {
         renderPanel({ ...MATMUL, device_id: 1 }, true);
 
@@ -655,15 +690,28 @@ describe('DeviceOperationUtilization', () => {
         expect(recordEvent).toHaveBeenCalledTimes(2);
     });
 
-    it('sizes the open panel to the room beside its button', async () => {
+    it('opens the panel below a button high in the window, sized to the room under it', async () => {
+        const top = 100;
+        placeTriggerAt(top);
         render(<DeviceOperationUtilization perfId={2} />);
 
         await openPopover(utilizationTrigger());
 
-        const container = screen
-            .getByTestId(TEST_IDS.HARDWARE_COUNTER_PANEL)
-            .closest<HTMLElement>(`.${Classes.POPOVER_TRANSITION_CONTAINER}`)!;
-        await waitFor(() => expect(container.style.getPropertyValue(POPOVER_ROOM_PROPERTY)).toMatch(/^\d+px$/));
+        await waitFor(() =>
+            expect(panelRoom()).toBe(`${window.innerHeight - top - TRIGGER_HEIGHT - ARROW_GAP - WINDOW_MARGIN}px`),
+        );
+        expect(panelPopover()).toHaveClass(`${Classes.POPOVER_CONTENT_PLACEMENT}-bottom`);
+    });
+
+    it('opens the panel above a button low in the window, sized to the room over it', async () => {
+        const top = window.innerHeight - 60;
+        placeTriggerAt(top);
+        render(<DeviceOperationUtilization perfId={2} />);
+
+        await openPopover(utilizationTrigger());
+
+        await waitFor(() => expect(panelRoom()).toBe(`${top - ARROW_GAP - WINDOW_MARGIN}px`));
+        expect(panelPopover()).toHaveClass(`${Classes.POPOVER_CONTENT_PLACEMENT}-top`);
     });
 
     it('closes the dialog of every counter back to the open panel, with focus on the button', async () => {
@@ -677,6 +725,19 @@ describe('DeviceOperationUtilization', () => {
         await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
         expect(trigger).toHaveAttribute('aria-expanded', 'true');
         await waitFor(() => expect(document.activeElement).toBe(allCountersButton()));
+    });
+
+    it('closes the dialog of every counter from its Close button, leaving the panel open', async () => {
+        render(<DeviceOperationUtilization perfId={2} />);
+        const trigger = utilizationTrigger();
+
+        await openPopover(trigger);
+        const close = within(showAllCounters()).getByRole('button', { name: 'Close' });
+        fireEvent.mouseDown(close);
+        fireEvent.click(close);
+
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+        expect(trigger).toHaveAttribute('aria-expanded', 'true');
     });
 
     // jsdom runs no microtask between a press's listeners, so it cannot show the browser's race, where the dialog
