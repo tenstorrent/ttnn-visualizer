@@ -8,10 +8,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AxiosError } from 'axios';
 import NpeWindowedView from '../src/components/npe/NpeWindowedView';
 import { useNpeSummary, useNpeWindow } from '../src/hooks/useAPI';
-import { NoCTransfer, NpeSummary, NpeWindow } from '../src/model/NPEModel';
+import { NpeSummary, NpeWindow } from '../src/model/NPEModel';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { NPEValidationError } from '../src/definitions/NPEData';
-import { npeWindow, summary } from './helpers/npeFixtures';
+import { fabricTransfer, npeWindow, summary } from './helpers/npeFixtures';
 
 vi.mock('../src/hooks/useAPI', () => ({
     useNpeSummary: vi.fn(),
@@ -131,17 +131,6 @@ describe('NpeWindowedView', () => {
         const flag = () => screen.getByTestId(TEST_IDS.NPE_VIEW).getAttribute('data-has-fabric-events');
         expect(flag()).toBe('false');
 
-        const fabricTransfer: NoCTransfer = {
-            id: 0,
-            src: [0, 0, 0],
-            dst: [[0, 1, 1]],
-            total_bytes: 0,
-            noc_event_type: '',
-            fabric_event_type: true,
-            start_cycle: 0,
-            end_cycle: 0,
-            route: [],
-        };
         mockedWindow.mockReturnValue(settledWindow({ ...npeWindow, transfers: [fabricTransfer] }));
         rerender(windowedView());
 

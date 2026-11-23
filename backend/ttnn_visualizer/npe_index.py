@@ -863,12 +863,11 @@ def read_summary(db_path: Path) -> dict:
 
     return {
         "common_info": orjson.loads(meta["common_info"]),
-        # `.get` rather than `[...]`: an index written before this key existed is
-        # still readable, and a rebuild is only triggered by INDEX_VERSION.
-        "soc_descriptor": orjson.loads(meta.get("soc_descriptor") or b"null"),
+        "soc_descriptor": orjson.loads(meta["soc_descriptor"]),
         "chips": orjson.loads(meta["chips"]),
         "zones": orjson.loads(meta["zones"]),
-        # Indexed, not `.get`: INDEX_VERSION 6 rebuilds every index written without it.
+        # Read strictly, like every meta key here: an index written before a key
+        # existed has an older INDEX_VERSION, so it is rebuilt before it is read.
         "has_fabric_events": orjson.loads(meta["has_fabric_events"]),
         "n_timesteps": int(meta["n_timesteps"]),
         "timesteps": timesteps,

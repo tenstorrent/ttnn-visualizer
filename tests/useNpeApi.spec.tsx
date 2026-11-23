@@ -71,8 +71,8 @@ describe('useNpeSummary / useNpeWindow fetch-boundary validation', () => {
     });
 
     it('rejects a summary without the fabric-event flag as a synthetic 422 AxiosError', async () => {
-        // An index built before INDEX_VERSION 6 would serve this; the view must not fall back to deciding the
-        // event filter per window (#2356).
+        // A backend older than this page would serve this; the view must not fall back to deciding the event
+        // filter per window (#2356).
         const { has_fabric_events: _omitted, ...bad } = validSummary;
         mockedGet.mockResolvedValue({ data: bad });
         const { result } = renderHook(() => useNpeSummary('trace.json'), { wrapper: makeWrapper() });

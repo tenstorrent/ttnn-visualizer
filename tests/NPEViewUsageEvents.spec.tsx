@@ -9,6 +9,7 @@ import NPEView from '../src/components/npe/NPEViewComponent';
 import { NPEData } from '../src/model/NPEModel';
 import { EventLogEvent, NpeMode } from '../src/definitions/EventLogEvent';
 import { TestProviders } from './helpers/TestProviders';
+import { fabricTransfer } from './helpers/npeFixtures';
 
 const { recordEvent, zonesPanel } = vi.hoisted(() => ({
     recordEvent: vi.fn(),
@@ -64,17 +65,6 @@ const makeNpeData = (nocTransfers: unknown[] = []): NPEData =>
 
 const modeChanged = (mode: NpeMode) => ({ event: EventLogEvent.NPE_MODE_CHANGED, details: { npe_mode: mode } });
 const playbackStarted = { event: EventLogEvent.NPE_PLAYBACK_STARTED, details: {} };
-
-// Inactive at every timestep: it exists only so the trace counts as carrying fabric events.
-const FABRIC_TRANSFER = {
-    id: 0,
-    total_bytes: 0,
-    noc_event_type: '',
-    fabric_event_type: true,
-    start_cycle: 0,
-    end_cycle: 0,
-    route: [],
-};
 
 const viewTree = (nocTransfers: unknown[], hasFabricEvents?: boolean) => (
     <TestProviders>
@@ -260,7 +250,7 @@ describe('NPEView usage events', () => {
     });
 
     it('records the event filter state each switch leads to', () => {
-        renderView([FABRIC_TRANSFER]);
+        renderView([fabricTransfer]);
 
         // Both shown, so turning fabric events off leaves local; turning it back on shows
         // both again; turning local off leaves fabric.
@@ -276,7 +266,7 @@ describe('NPEView usage events', () => {
     });
 
     it('records each event filter state, including from one scope straight to the other', () => {
-        renderView([FABRIC_TRANSFER]);
+        renderView([fabricTransfer]);
         const checked = () => {
             const { fabric, local } = eventFilterSwitches();
             return [fabric.checked, local.checked];
@@ -301,7 +291,7 @@ describe('NPEView usage events', () => {
     });
 
     it('records nothing when a trace without fabric events resets the event filter', () => {
-        const { showTrace } = renderView([FABRIC_TRANSFER]);
+        const { showTrace } = renderView([fabricTransfer]);
 
         fireEvent.click(screen.getByLabelText('Fabric events'));
         showTrace([]);
@@ -313,7 +303,7 @@ describe('NPEView usage events', () => {
     // #2356: a windowed trace holds one window's transfers, so the whole trace's
     // answer comes in as a prop and a window without fabric events must not reset it.
     it('keeps the event filter when a windowed trace with fabric events shows a window without any', () => {
-        const { showTrace } = renderView([FABRIC_TRANSFER], true);
+        const { showTrace } = renderView([fabricTransfer], true);
 
         fireEvent.click(screen.getByLabelText('Fabric events'));
         showTrace([]);
@@ -343,7 +333,7 @@ describe('NPEView usage events', () => {
     });
 
     it('disables the event filter for a windowed trace without fabric events even when a window has one', () => {
-        renderView([FABRIC_TRANSFER], false);
+        renderView([fabricTransfer], false);
 
         expect(eventFilterSwitches()).toEqual({
             fabric: { checked: true, enabled: false },
@@ -351,12 +341,18 @@ describe('NPEView usage events', () => {
         });
     });
 
-    // Re-uploading under the same file name keeps the windowed view mounted, so the
-    // whole-trace flag can change under a filter the user already chose.
+    // Defensive: the app remounts NPEView before the whole-trace flag can change (a
+    // same-name re-upload clears the summary, so the windowed view shows its spinner).
+    // These pin what the view does if the flag ever changes under a mounted view.
     it('resets the event filter when the whole trace stops having fabric events', () => {
         const { showTrace } = renderView([], true);
 
         fireEvent.click(screen.getByLabelText('Fabric events'));
+        // The choice has to land before the flag flips, or the reset below proves nothing.
+        expect(eventFilterSwitches()).toEqual({
+            fabric: { checked: false, enabled: true },
+            local: { checked: true, enabled: true },
+        });
         showTrace([], false);
 
         expect(eventFilterSwitches()).toEqual({

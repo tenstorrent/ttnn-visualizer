@@ -10,6 +10,7 @@ Exercises ``GET /api/npe/summary`` and ``GET /api/npe/window`` through the Flask
 (non-integer ``t``).
 """
 
+import sqlite3
 from pathlib import Path
 
 import orjson
@@ -17,6 +18,7 @@ import pytest
 import zstd
 from ttnn_visualizer.extensions import db
 from ttnn_visualizer.models import InstanceTable
+from ttnn_visualizer.npe_index import get_index_path
 
 API = "/api"
 
@@ -116,6 +118,31 @@ def test_summary_reports_fabric_events_for_a_fabric_trace(client, make_npe_insta
     instance_id = make_npe_instance(orjson.dumps(obj))
 
     resp = client.get(f"{API}/npe/summary", query_string={"instanceId": instance_id})
+
+    assert resp.status_code == 200
+    assert resp.get_json()["has_fabric_events"] is True
+
+
+def test_summary_rebuilds_an_index_written_before_the_fabric_flag(
+    client, make_npe_instance
+):
+    # read_summary reads has_fabric_events strictly; that is only safe because an
+    # index from INDEX_VERSION 5 is rebuilt before it is read. #2356
+    obj = _make_npe_object(n_timesteps=4)
+    obj["noc_transfers"][-1]["fabric_event_type"] = True
+    instance_id = make_npe_instance(orjson.dumps(obj))
+    query = {"instanceId": instance_id}
+    assert client.get(f"{API}/npe/summary", query_string=query).status_code == 200
+
+    with client.application.app_context():
+        npe_path = InstanceTable.query.filter_by(instance_id=instance_id).one().npe_path
+    conn = sqlite3.connect(get_index_path(npe_path))
+    with conn:
+        conn.execute("DELETE FROM meta WHERE key = 'has_fabric_events'")
+        conn.execute("UPDATE meta SET value = '5' WHERE key = 'index_version'")
+    conn.close()
+
+    resp = client.get(f"{API}/npe/summary", query_string=query)
 
     assert resp.status_code == 200
     assert resp.get_json()["has_fabric_events"] is True
