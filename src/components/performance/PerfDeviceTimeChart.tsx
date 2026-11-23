@@ -11,14 +11,18 @@ import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCha
 import PerfChart from './PerfChart';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import getPlotLabel from '../../functions/getPlotLabel';
-import { getAxisUpperRange } from '../../functions/perfFunctions';
-import { getMaxValue } from '../../functions/numericExtent';
+import { getAxisUpperRange, getLineModeForGaps } from '../../functions/perfFunctions';
+import { getMaxFiniteValue, getMaxValue } from '../../functions/numericExtent';
+import isUnmodelledIdealTime from '../../functions/isUnmodelledIdealTime';
 import { getPrimaryDataColours, getSecondaryDataColours } from '../../definitions/PerformancePlotColours';
 
 interface PerfDeviceTimeChartProps {
     datasets?: TypedPerfTableRow[][];
     chartId: PerfChartId;
 }
+
+const getModelledIdealTime = ({ pm_ideal_ns: idealNs }: TypedPerfTableRow): number | null =>
+    isUnmodelledIdealTime(idealNs) ? null : idealNs;
 
 function PerfDeviceTimeChart({ datasets = [], chartId }: PerfDeviceTimeChartProps) {
     const perfReport = useAtomValue(activePerformanceReportAtom);
@@ -42,16 +46,21 @@ function PerfDeviceTimeChart({ datasets = [], chartId }: PerfDeviceTimeChartProp
 
     const idealTimes = useMemo(
         () =>
-            datasets.map((data, dataIndex) => ({
-                x: data?.map((_row, index) => index + 1),
-                y: data?.map((row) => row.pm_ideal_ns),
-                hovertemplate: `<b>%{data.name}</b><br />Operation: %{x}<br />Ideal time: %{y} ns<extra></extra>`,
-                name: getPlotLabel(dataIndex, perfReport?.reportName, comparisonReportList),
-                legendgroup: `group${dataIndex}`,
-                marker: {
-                    color: getSecondaryDataColours(dataIndex),
-                },
-            })) as Partial<PlotData>[],
+            datasets.map((data, dataIndex) => {
+                const idealTime = data.map(getModelledIdealTime);
+
+                return {
+                    x: data.map((_row, index) => index + 1),
+                    y: idealTime,
+                    mode: getLineModeForGaps(idealTime),
+                    hovertemplate: `<b>%{data.name}</b><br />Operation: %{x}<br />Ideal time: %{y} ns<extra></extra>`,
+                    name: getPlotLabel(dataIndex, perfReport?.reportName, comparisonReportList),
+                    legendgroup: `group${dataIndex}`,
+                    marker: {
+                        color: getSecondaryDataColours(dataIndex),
+                    },
+                };
+            }) as Partial<PlotData>[],
         [datasets, perfReport, comparisonReportList],
     );
 
@@ -63,7 +72,7 @@ function PerfDeviceTimeChart({ datasets = [], chartId }: PerfDeviceTimeChartProp
         const maxDeviceTime = getMaxValue(
             datasets.flatMap((data) => data.map((row) => (row.device_time ? row.device_time * 1000 : 0))),
         ); // Convert microseconds to nanoseconds
-        const maxIdealTime = getMaxValue(datasets.flatMap((data) => data.map((row) => row.pm_ideal_ns ?? 0)));
+        const maxIdealTime = getMaxFiniteValue(datasets.flatMap((data) => data.map(getModelledIdealTime)));
 
         return {
             margin: PERF_CHART_WIDE_LEFT_MARGIN,

@@ -17,10 +17,10 @@ import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCha
 import PerfChart from './PerfChart';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom, mergeDevicesAtom } from '../../store/app';
 import getPlotLabel from '../../functions/getPlotLabel';
-import { getAxisUpperRange } from '../../functions/perfFunctions';
+import { getAxisUpperRange, getLineModeForGaps } from '../../functions/perfFunctions';
 import { getPrimaryDataColours, getSecondaryDataColours } from '../../definitions/PerformancePlotColours';
 import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
-import { getMaxValue } from '../../functions/numericExtent';
+import { getMaxFiniteValue } from '../../functions/numericExtent';
 
 interface PerfCoreCountUtilizationChartProps {
     datasets?: TypedPerfTableRow[][];
@@ -51,20 +51,25 @@ function PerfCoreCountUtilizationChart({ datasets = [], maxCores, chartId }: Per
 
     const chartDataUtilization = useMemo(
         () =>
-            datasets.map((data, dataIndex) => ({
-                x: data?.map((_row, index) => index + 1),
-                y: data?.map((row) => getCoreUtilization(row, maxCores)).filter((value) => value !== -1),
-                yaxis: 'y2',
-                hovertemplate: `<b>%{data.name}</b><br />Operation: %{x}<br />Utilization: %{y}<extra></extra>`,
-                name: getPlotLabel(dataIndex, perfReport?.reportName, comparisonReportList),
-                legendgroup: `group${dataIndex}`,
-                marker: {
-                    color: getSecondaryDataColours(dataIndex),
-                },
-            })) as Partial<PlotData>[],
+            datasets.map((data, dataIndex) => {
+                const utilization = data.map((row) => getCoreUtilization(row, maxCores));
+
+                return {
+                    x: data.map((_row, index) => index + 1),
+                    y: utilization,
+                    mode: getLineModeForGaps(utilization),
+                    yaxis: 'y2',
+                    hovertemplate: `<b>%{data.name}</b><br />Operation: %{x}<br />Utilization: %{y}<extra></extra>`,
+                    name: getPlotLabel(dataIndex, perfReport?.reportName, comparisonReportList),
+                    legendgroup: `group${dataIndex}`,
+                    marker: {
+                        color: getSecondaryDataColours(dataIndex),
+                    },
+                };
+            }) as Partial<PlotData>[],
         [datasets, perfReport, comparisonReportList, maxCores],
     );
-    const maxY2Value = getMaxValue(chartDataUtilization.flatMap((data) => (data.y as number[]) ?? []));
+    const maxY2Value = getMaxFiniteValue(chartDataUtilization.flatMap((data) => data.y as (number | null)[]));
 
     const chartData = useMemo(
         () => [...chartDataDuration, ...chartDataUtilization],

@@ -709,6 +709,10 @@ export function getAxisUpperRange(arrays: Array<unknown[]>): number {
     return Math.max(...arrays.map((arr) => arr.length), 0) + 1;
 }
 
+// Plotly's lines mode draws nothing for a value between two gaps, so a line with gaps marks its points too.
+export const getLineModeForGaps = (values: (number | null)[]): 'lines+markers' | undefined =>
+    values.includes(null) ? 'lines+markers' : undefined;
+
 export const isHostOp = (bound: BoundType | null) => bound === BoundType.HOST;
 
 export const getStandardViewCounts = (

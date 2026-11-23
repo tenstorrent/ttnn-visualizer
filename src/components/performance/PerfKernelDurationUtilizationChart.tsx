@@ -18,7 +18,7 @@ import getPlotLabel from '../../functions/getPlotLabel';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom, mergeDevicesAtom } from '../../store/app';
 import { getPrimaryDataColours } from '../../definitions/PerformancePlotColours';
 import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
-import { getMaxValue } from '../../functions/numericExtent';
+import { getMaxFiniteValue } from '../../functions/numericExtent';
 
 interface PerfKernelDurationUtilizationChartProps {
     datasets: TypedPerfTableRow[][];
@@ -35,7 +35,7 @@ function PerfKernelDurationUtilizationChart({ datasets, maxCores, chartId }: Per
         () =>
             datasets.map((data, dataIndex) => ({
                 x: data?.map((row) => row.device_time),
-                y: data?.map((row) => getCoreUtilization(row, maxCores)).filter((value) => value !== -1),
+                y: data?.map((row) => getCoreUtilization(row, maxCores)),
                 mode: 'markers',
                 type: 'scatter',
                 name: getPlotLabel(dataIndex, perfReport?.reportName, comparisonReportList),
@@ -48,7 +48,7 @@ function PerfKernelDurationUtilizationChart({ datasets, maxCores, chartId }: Per
         [datasets, maxCores, perfReport, comparisonReportList],
     );
 
-    const maxYValue = getMaxValue(chartData.flatMap((data) => (data.y as number[]) ?? []));
+    const maxYValue = getMaxFiniteValue(chartData.flatMap((data) => data.y as (number | null)[]));
 
     const configuration: PlotConfiguration = {
         showLegend: true,
