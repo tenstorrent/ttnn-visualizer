@@ -2302,12 +2302,17 @@ class OpsPerformanceReportQueries:
         ).resolve()
         return FileSource.of(str(source_path), source_path.stat())
 
-    @classmethod
-    def sum_profiled(cls, instance) -> bool:
-        """Whether any op of the CSV carries a CB wait, which only sum profiling writes:
-        read once per file, up to the first such op; a row that can't be read before
-        one counts as none, so it can't fail an earlier row's counters. #2372"""
-        return _sum_profiled(cls.report_source(instance))
+    @staticmethod
+    def sum_profiled(path: str) -> bool:
+        """Whether any op of the CSV at `path`, the one the caller read its row from,
+        carries a CB wait, which only sum profiling writes: read once per file, up to the
+        first such op. A row that can't be read before one, or a file gone since, counts
+        as none, so neither can fail an earlier row's counters. #2372"""
+        source_path = Path(path).resolve()
+        try:
+            return _sum_profiled(FileSource.of(str(source_path), source_path.stat()))
+        except FileNotFoundError:
+            return False
 
     @classmethod
     def generate_report(cls, instance, **kwargs) -> Dict:

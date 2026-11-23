@@ -6,7 +6,7 @@ import { CoreCoord, CoreCoordList } from '../model/CoreCoord';
 
 const LOCALE = 'en-US';
 
-const NS_PER_US = 1000;
+export const NS_PER_US = 1000;
 
 /** Parse a raw nanosecond string (as it arrives in the perf CSV) into microseconds, or null when
  *  absent or non-numeric (so a bad parse never propagates a NaN into numeric row data). */
@@ -50,9 +50,9 @@ export const formatPercentage = (number: number, decimals: number = 2): string =
 
 export const MAX_PERCENT = 100;
 
-/** A percentage held to 0–100 for a bar's width, and 0 for one that isn't a finite number. */
-export const clampPercent = (value: number): number => {
-    if (!Number.isFinite(value) || value < 0) {
+/** A percentage held to 0–100 for a bar's width, and 0 for no value or one that isn't a finite number. */
+export const clampPercent = (value: number | null): number => {
+    if (value === null || !Number.isFinite(value) || value < 0) {
         return 0;
     }
 

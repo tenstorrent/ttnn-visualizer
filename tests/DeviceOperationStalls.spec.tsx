@@ -6,7 +6,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import DeviceOperationStalls from '../src/components/operation-details/DeviceOperationStalls';
-import { CbWaitZone, PipelineThread, StallSource } from '../src/definitions/PipelineStalls';
+import { CbWaitZone, PipelineThread, StallSource, StallState } from '../src/definitions/PipelineStalls';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { OperationStalls } from '../src/model/PipelineStalls';
 import {
@@ -97,6 +97,14 @@ describe('DeviceOperationStalls', () => {
             expect(zero).toHaveTextContent(`${T0_ZERO_WAITS.length} named waits read 0`);
             expect(zero).toHaveAttribute('title', T0_ZERO_WAITS.join(', '));
             expect(waits).not.toHaveTextContent('SrcA Clear Wait');
+        });
+
+        it('gives assistive technology the names the tooltip lists', () => {
+            renderStalls(INPUT_STARVED_STALLS);
+
+            expect(
+                screen.getByTestId(`${TEST_IDS.PIPELINE_STALL_ZERO_WAITS}-${PipelineThread.T0}`),
+            ).toHaveAccessibleDescription(T0_ZERO_WAITS.join(', '));
         });
 
         it('names a single wait that reads 0 in the singular', () => {
@@ -354,6 +362,24 @@ describe('DeviceOperationStalls', () => {
             expect(threadBar(PipelineThread.T0)).toBeInTheDocument();
             expect(
                 screen.getByTestId(`${TEST_IDS.PIPELINE_STALL_CB_WAIT}-${CbWaitZone.WAIT_FRONT}`),
+            ).toBeInTheDocument();
+        });
+
+        it('says the thread stalls were not captured, still drawing the CB polls a capture without counters has', () => {
+            renderStalls({
+                ...INPUT_STARVED_STALLS,
+                counters: { state: StallState.NOT_CAPTURED, fill_hint: COUNTERS_FILL_HINT },
+                threads: INPUT_STARVED_STALLS.threads.map((entry) => ({ ...entry, hardware_counters: null })),
+            });
+
+            expect(screen.getByTestId(TEST_IDS.PIPELINE_STALL_COUNTERS_EMPTY)).toHaveTextContent(
+                `Thread stalls not captured: ${COUNTERS_FILL_HINT}.`,
+            );
+            expect(
+                screen.getByTestId(`${TEST_IDS.PIPELINE_STALL_CB_WAIT}-${CbWaitZone.WAIT_FRONT}`),
+            ).toBeInTheDocument();
+            expect(
+                screen.getByTestId(`${TEST_IDS.PIPELINE_STALL_CB_WAIT}-${CbWaitZone.RESERVE_BACK}`),
             ).toBeInTheDocument();
         });
 

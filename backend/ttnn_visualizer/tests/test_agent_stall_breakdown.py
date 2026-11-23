@@ -360,21 +360,28 @@ class TestRanking:
         ours = STALL_OPS[INPUT_STARVED_POSITION]
         expected = theirs if kept == 1 else ours
 
-        op = stall_breakdown.stall_breakdown(registry, handle, perf_ids=[merged["id"]])[
-            "ops"
-        ][0]
-        front = op["threads"][0]
-
-        assert op["device"] == kept
-        assert op["core_count"] == expected.cores
-        assert front["hardware_counters"]["stall_rate"]["avg"] == (
+        stall_rate = (
             9.0
             if kept == 1
             else counter_average(INPUT_STARVED_POSITION, "Thread 0 Stall Rate")
         )
-        assert front["instrumentation"]["cb_wait_front"]["per_core_us"] == round(
-            expected.cb_wait_front_ns / expected.cores / 1000, 3
-        )
+        by_id = stall_breakdown.stall_breakdown(
+            registry, handle, perf_ids=[merged["id"]]
+        )["ops"][0]
+        # The op code's other call stalls less, so the ranking path picks this row.
+        by_op_code = stall_breakdown.stall_breakdown(
+            registry, handle, op_code="Untilize", limit=1
+        )["ops"][0]
+
+        assert by_op_code["id"] == merged["id"]
+        for op in (by_id, by_op_code):
+            front = op["threads"][0]
+            assert op["device"] == kept
+            assert op["core_count"] == expected.cores
+            assert front["hardware_counters"]["stall_rate"]["avg"] == stall_rate
+            assert front["instrumentation"]["cb_wait_front"]["per_core_us"] == round(
+                expected.cb_wait_front_ns / expected.cores / 1000, 3
+            )
 
     def test_the_report_total_is_every_ops_device_time_not_the_returned_ones(
         self, captured

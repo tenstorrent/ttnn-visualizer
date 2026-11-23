@@ -651,8 +651,20 @@ describe('HardwareCounterPanel', () => {
         fireEvent.keyDown(utilization, { key: 'ArrowRight' });
 
         expect(stalls).toHaveFocus();
+        expect(stalls).toHaveAttribute('aria-selected', 'false');
 
         fireEvent.keyPress(stalls, { key: 'Enter', code: 'Enter', charCode: 13 });
+
+        expect(stalls).toHaveAttribute('aria-selected', 'true');
+        expect(within(screen.getByRole('tabpanel')).getByTestId(TEST_IDS.PIPELINE_STALLS)).toBeInTheDocument();
+    });
+
+    it('selects the focused tab with Space, as with Enter', () => {
+        renderPanel(MATMUL);
+        const stalls = screen.getByRole('tab', { name: 'Stalls' });
+
+        stalls.focus();
+        fireEvent.keyPress(stalls, { key: ' ', code: 'Space', charCode: 32 });
 
         expect(stalls).toHaveAttribute('aria-selected', 'true');
         expect(within(screen.getByRole('tabpanel')).getByTestId(TEST_IDS.PIPELINE_STALLS)).toBeInTheDocument();

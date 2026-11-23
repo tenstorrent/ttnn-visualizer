@@ -42,7 +42,8 @@ describe('clampPercent', () => {
         expect(clampPercent(104)).toBe(MAX_PERCENT);
     });
 
-    it('reads a value that is not a finite number as 0', () => {
+    it('reads no value, or a value that is not a finite number, as 0', () => {
+        expect(clampPercent(null)).toBe(0);
         expect(clampPercent(Number.NaN)).toBe(0);
         expect(clampPercent(Number.POSITIVE_INFINITY)).toBe(0);
     });

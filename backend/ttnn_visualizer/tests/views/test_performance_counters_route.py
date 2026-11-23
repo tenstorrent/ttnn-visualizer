@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from ttnn_visualizer import pipeline_stalls
+from ttnn_visualizer import csv_queries, hardware_counters, pipeline_stalls
 from ttnn_visualizer.agent import hw_utilisation
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
 from ttnn_visualizer.csv_queries import (
@@ -39,8 +39,10 @@ from ttnn_visualizer.tests.stall_capture import (
     CB_WAIT_FRONT,
     CORE_COUNT,
     INPUT_STARVED_POSITION,
+    OUTPUT_BLOCKED_POSITION,
     STALE_CB_POSITION,
     STALL_OPS,
+    UNNAMED_STALL_POSITION,
     UNPACK_BOUND_POSITION,
     counter_average,
     kernel_share,
@@ -522,23 +524,43 @@ class TestStalls:
         assert unasked == 0
         assert read.call_count == 1
 
+    @pytest.mark.parametrize("unreadable", ["oversized-field", "invalid-utf-8"])
+    @pytest.mark.parametrize(
+        ("cb_wait_first", "state"),
+        [(False, "not_captured"), (True, "no_value")],
+        ids=["bad-row-first", "cb-wait-first"],
+    )
     def test_a_row_the_scan_cannot_read_leaves_an_earlier_ops_counters_answered(
-        self, app, client, tmp_path
+        self, app, client, tmp_path, unreadable, cb_wait_first, state
     ):
         """Asked whether the capture had sum profiling, the scan reads past the row
         asked for, which was a 200 before the stalls rode along. A row it can't read
         before any CB wait counts as none, and that answer is kept."""
+        marker = "UNREADABLE"
+        no_sums = {CB_WAIT_FRONT: "", CB_RESERVE_BACK: ""}
         rows = stall_rows()
-        rows[INPUT_STARVED_POSITION] = {
-            **rows[INPUT_STARVED_POSITION],
-            CB_WAIT_FRONT: "",
-            CB_RESERVE_BACK: "",
+        rows[INPUT_STARVED_POSITION] = {**rows[INPUT_STARVED_POSITION], **no_sums}
+        if not cb_wait_first:
+            rows[UNPACK_BOUND_POSITION] = {**rows[UNPACK_BOUND_POSITION], **no_sums}
+        # Text decodes in 8 KiB chunks: this keeps the bad row's bytes out of the
+        # chunks that hold the rows before this one.
+        rows[OUTPUT_BLOCKED_POSITION] = {
+            **rows[OUTPUT_BLOCKED_POSITION],
+            **no_sums,
+            "ATTRIBUTES": "x" * 20_000,
         }
-        rows[UNPACK_BOUND_POSITION] = {
-            **rows[UNPACK_BOUND_POSITION],
-            "ATTRIBUTES": "x" * (csv.field_size_limit() + 1),
+        rows[UNNAMED_STALL_POSITION] = {
+            **rows[UNNAMED_STALL_POSITION],
+            "ATTRIBUTES": (
+                "x" * (csv.field_size_limit() + 1)
+                if unreadable == "oversized-field"
+                else marker
+            ),
         }
-        write_ops_perf(tmp_path / "unreadable-later", rows)
+        destination = write_ops_perf(tmp_path / "unreadable-later", rows)
+        destination.write_bytes(
+            destination.read_bytes().replace(marker.encode(), b"\xff\xfe")
+        )
         instance_id = _mount(app, tmp_path / "unreadable-later")
 
         with patch.object(
@@ -555,11 +577,52 @@ class TestStalls:
         body = responses[0].get_json()
         assert body["op_has_counters"] is True
         assert body["stalls"]["counters"]["state"] == "filled"
-        assert body["stalls"]["cb_waits"] == {
-            "state": "not_captured",
-            "fill_hint": pipeline_stalls.CB_WAITS_FILL_HINT,
-        }
+        assert body["stalls"]["cb_waits"]["state"] == state
         assert read.call_count == 1
+
+    def test_a_csv_removed_after_its_row_was_read_still_answers_the_row(
+        self, app, client, tmp_path
+    ):
+        """The scan for sum profiling reads the file the row came from; gone, it
+        counts as none rather than failing the request."""
+        destination = write_ops_perf(
+            tmp_path / "removed", stall_rows(sum_profiling=False)
+        )
+        instance_id = _mount(app, tmp_path / "removed")
+        read_row = hardware_counters.read_row
+
+        def read_then_remove(source, position):
+            found = read_row(source, position)
+            destination.unlink()
+            return found
+
+        with patch.object(hardware_counters, "read_row", side_effect=read_then_remove):
+            response = _get(
+                client, instance_id, INPUT_STARVED_POSITION + REPORT_ROW_ID_OFFSET
+            )
+
+        assert response.status_code == HTTPStatus.OK
+        assert response.get_json()["stalls"]["cb_waits"]["state"] == "not_captured"
+
+    def test_a_capture_written_after_the_row_was_read_is_not_the_one_scanned(
+        self, app, client, tmp_path
+    ):
+        """The folder's newest CSV can change mid-request; the row's own is scanned."""
+        directory = tmp_path / "superseded"
+        older = write_ops_perf(directory, stall_rows(sum_profiling=False))
+        newer = write_ops_perf(tmp_path / "newer", stall_rows())
+        instance_id = _mount(app, directory)
+        newest = [older, newer]
+
+        with patch.object(
+            csv_queries, "newest_ops_perf_file", side_effect=lambda _: newest.pop(0)
+        ):
+            response = _get(
+                client, instance_id, INPUT_STARVED_POSITION + REPORT_ROW_ID_OFFSET
+            )
+
+        assert response.status_code == HTTPStatus.OK
+        assert response.get_json()["stalls"]["cb_waits"]["state"] == "not_captured"
 
     def test_the_answer_has_the_keys_the_app_reads(self, client, stalled):
         """`src/model/PipelineStalls.ts` describes this answer, keys and nesting."""

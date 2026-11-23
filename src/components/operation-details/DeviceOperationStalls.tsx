@@ -2,7 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { type ReactNode } from 'react';
+import { type ReactNode, useId } from 'react';
+import classNames from 'classnames';
 import { HARDWARE_COUNTER_ABSENCE_LABELS, HardwareCounterAbsence } from '../../definitions/HardwareCounters';
 import {
     CB_WAIT_ZONE_LABELS,
@@ -16,7 +17,7 @@ import {
 import { TEST_IDS } from '../../definitions/TestIds';
 import { formatDuration } from '../../functions/formatting';
 import { getMissingReason } from '../../functions/hardwareCounters';
-import { MAX_PERCENT, clampPercent, formatPercentage } from '../../functions/math';
+import { MAX_PERCENT, NS_PER_US, clampPercent, formatPercentage } from '../../functions/math';
 import {
     CbWait,
     NamedStallStat,
@@ -29,7 +30,6 @@ import MissingValue from './MissingValue';
 import 'styles/components/DeviceOperationStalls.scss';
 
 const PERCENT_DECIMALS = 1;
-const NS_PER_US = 1000;
 const NO_VALUE_REASON = HARDWARE_COUNTER_ABSENCE_LABELS[HardwareCounterAbsence.NO_VALUE];
 const NO_SHARE_REASON = "no share of the kernel without the operation's core count and kernel duration";
 
@@ -133,10 +133,11 @@ const ThreadCounters = ({ thread, counters }: ThreadCountersProps) => {
     const name = getThreadName(thread);
     const issuing = counters.issue_rate?.avg ?? null;
     const stalled = counters.stall_rate?.avg ?? null;
-    const issuingWidth = issuing === null ? 0 : clampPercent(issuing);
-    const stalledWidth = stalled === null ? 0 : Math.min(clampPercent(stalled), MAX_PERCENT - issuingWidth);
+    const issuingWidth = clampPercent(issuing);
+    const stalledWidth = Math.min(clampPercent(stalled), MAX_PERCENT - issuingWidth);
     const pipelineStalls = (counters.math_pipeline_stalls ?? []).filter(isAboveZero);
     const zeroWaits = counters.zero_waits;
+    const zeroWaitsId = useId();
 
     return (
         <div
@@ -185,13 +186,23 @@ const ThreadCounters = ({ thread, counters }: ThreadCountersProps) => {
                 </div>
             )}
             {zeroWaits.length > 0 && (
-                <p
-                    className='pipeline-stall-zero-waits'
-                    title={zeroWaits.join(', ')}
-                    data-testid={`${TEST_IDS.PIPELINE_STALL_ZERO_WAITS}-${thread.thread}`}
-                >
-                    {zeroWaits.length} named {zeroWaits.length === 1 ? 'wait reads' : 'waits read'} 0
-                </p>
+                <>
+                    <p
+                        className='pipeline-stall-zero-waits'
+                        title={zeroWaits.join(', ')}
+                        aria-describedby={zeroWaitsId}
+                        data-testid={`${TEST_IDS.PIPELINE_STALL_ZERO_WAITS}-${thread.thread}`}
+                    >
+                        {zeroWaits.length} named {zeroWaits.length === 1 ? 'wait reads' : 'waits read'} 0
+                    </p>
+                    {/* The tooltip's names, for assistive technology, which reads no `title`. */}
+                    <span
+                        id={zeroWaitsId}
+                        hidden
+                    >
+                        {zeroWaits.join(', ')}
+                    </span>
+                </>
             )}
         </div>
     );
@@ -240,7 +251,7 @@ const ThreadSection = ({ stalls }: ThreadSectionProps) => {
             <ul className='pipeline-stall-legend'>
                 {LEGEND.map(({ className, label }) => (
                     <li key={label}>
-                        <span className={`pipeline-stall-swatch ${className}`} />
+                        <span className={classNames('pipeline-stall-swatch', className)} />
                         {label}
                     </li>
                 ))}
@@ -301,7 +312,7 @@ const CbWaitRow = ({ zone, wait, coreCount }: CbWaitRowProps) => {
                     >
                         <div
                             className='pipeline-stall-poll'
-                            style={{ width: `${share === null ? 0 : clampPercent(share)}%` }}
+                            style={{ width: `${clampPercent(share)}%` }}
                         />
                     </div>
                     <span

@@ -11,6 +11,7 @@ from enum import Enum
 from typing import (
     Callable,
     Dict,
+    Iterable,
     List,
     Mapping,
     NamedTuple,
@@ -408,16 +409,20 @@ class _ThreadStall(NamedTuple):
     cb_wait: Optional[_CbWait]
 
 
+def _thread_stalls(
+    cells: _OpCells, stall_rates: Iterable[Optional[float]]
+) -> List[_ThreadStall]:
+    """Each thread's stall rate beside its CB poll, in `THREADS` order."""
+    return [
+        _ThreadStall(rate, labels.cb_zone, cells.cb_wait(labels.cb_zone))
+        for labels, rate in zip(THREADS, stall_rates)
+    ]
+
+
 class _ThreadRead(NamedTuple):
     labels: ThreadLabels
     counters: Optional[_ThreadCounters]
     cb_wait: Optional[_CbWait]
-
-    def stall(self) -> _ThreadStall:
-        rate = self.counters.stall_rate if self.counters else None
-        return _ThreadStall(
-            rate.avg if rate else None, self.labels.cb_zone, self.cb_wait
-        )
 
 
 class _Stall(NamedTuple):
@@ -480,23 +485,30 @@ def _largest_wait(stall: _Stall, thread: _ThreadRead) -> Optional[Dict[str, obje
     }
 
 
-def _stall_answer(
+class _StallFigures(NamedTuple):
+    """An op's largest stall as its answer gives it; all None where it has none."""
+
+    stalled_percent: Optional[float] = None
+    stalled_us: Optional[float] = None
+    stalled_thread: Optional[str] = None
+    largest_wait: Optional[Dict[str, object]] = None
+
+
+def _stall_figures(
     stall: Optional[_Stall],
     threads: List[_ThreadRead],
     stalls: Sequence[_ThreadStall],
     per_core_kernel_ns: Optional[float],
-) -> Dict[str, object]:
+) -> _StallFigures:
     if stall is None:
-        return dict.fromkeys(
-            ("stalled_percent", "stalled_us", "stalled_thread", "largest_wait")
-        )
+        return _StallFigures()
     thread = threads[stall.thread]
-    return {
-        "stalled_percent": stall.percent,
-        "stalled_us": _stalled_us(stall, stalls, per_core_kernel_ns),
-        "stalled_thread": thread.labels.thread.value,
-        "largest_wait": _largest_wait(stall, thread),
-    }
+    return _StallFigures(
+        stalled_percent=stall.percent,
+        stalled_us=_stalled_us(stall, stalls, per_core_kernel_ns),
+        stalled_thread=thread.labels.thread.value,
+        largest_wait=_largest_wait(stall, thread),
+    )
 
 
 def _thread_answer(thread: _ThreadRead) -> Dict[str, object]:
@@ -526,27 +538,29 @@ def operation_stalls(
     cb_state = _cb_state(cells, sum_profiled)
 
     counted = has_thread_counters(header)
-    threads = [
-        _ThreadRead(
-            labels,
-            _thread_counters(labels, read, header) if counted else None,
-            cells.cb_wait(labels.cb_zone),
-        )
+    counters: List[Optional[_ThreadCounters]] = [
+        _thread_counters(labels, read, header) if counted else None
         for labels in THREADS
     ]
-
     if not counted:
         counter_state = StallState.NOT_CAPTURED
-    elif all(
-        thread.counters is None or thread.counters.stall_rate is None
-        for thread in threads
-    ):
+    elif all(entry is None or entry.stall_rate is None for entry in counters):
         counter_state = StallState.NO_VALUE
-        threads = [thread._replace(counters=None) for thread in threads]
+        counters = [None] * len(THREADS)
     else:
         counter_state = StallState.FILLED
 
-    stalls = [thread.stall() for thread in threads]
+    stalls = _thread_stalls(
+        cells,
+        (
+            entry.stall_rate.avg if entry and entry.stall_rate else None
+            for entry in counters
+        ),
+    )
+    threads = [
+        _ThreadRead(labels, entry, stall.cb_wait)
+        for labels, entry, stall in zip(THREADS, counters, stalls)
+    ]
     return {
         "has_compute_kernel": cells.compute_kernel,
         "counters": _part(counter_state, COUNTERS_FILL_HINT),
@@ -555,9 +569,9 @@ def operation_stalls(
         "kernel_duration_us": (
             None if cells.kernel_ns is None else _rounded(cells.kernel_ns / _NS_PER_US)
         ),
-        **_stall_answer(
+        **_stall_figures(
             _largest_stall(stalls), threads, stalls, cells.per_core_kernel_ns
-        ),
+        )._asdict(),
         "threads": [_thread_answer(thread) for thread in threads],
     }
 
@@ -569,14 +583,13 @@ def stalled_us(
     alone, so many ops can be ranked before a few are answered in full."""
     cells = _OpCells.of(row)
     counted = has_thread_counters(header)
-    stalls = [
-        _ThreadStall(
-            read(labels.stall_rate, CounterStat.AVG) if counted else None,
-            labels.cb_zone,
-            cells.cb_wait(labels.cb_zone),
-        )
-        for labels in THREADS
-    ]
+    stalls = _thread_stalls(
+        cells,
+        (
+            read(labels.stall_rate, CounterStat.AVG) if counted else None
+            for labels in THREADS
+        ),
+    )
     stall = _largest_stall(stalls)
     return (
         None if stall is None else _stalled_us(stall, stalls, cells.per_core_kernel_ns)
