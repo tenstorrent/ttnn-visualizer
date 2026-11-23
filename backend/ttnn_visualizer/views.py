@@ -1668,6 +1668,14 @@ def create_performance_files():
 @api.route("/local/upload/npe", methods=["POST"])
 def create_npe_files():
     files = request.files.getlist("files")
+
+    # Every other guard in this handler is inside the per-file loop below, so a
+    # body with no ``files`` part skipped validation entirely and then raised
+    # IndexError on ``paths[0]`` (HTTP 500). Reject it up front, as
+    # ``upload_mlir_server`` already does.
+    if not files:
+        return response_bad_request("No files provided")
+
     data_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
 
     for file in files:

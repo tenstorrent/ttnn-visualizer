@@ -715,3 +715,50 @@ def test_profiler_upload_rejects_traversal_within_folder(app, client, make_repor
         assert (
             path.name != "escape.json"
         ), f"`../escape.json` should have been rejected, found {resolved}"
+
+
+# ---- NPE upload: a body with no ``files`` part is a 400, not a 500 ----
+
+def test_npe_upload_without_a_files_part_is_rejected(client):
+    """The only extension check lives inside the per-file loop.
+
+    With an empty ``files`` list the loop never runs, so no validation happened,
+    ``save_uploaded_files`` returned ``[]`` and ``str(paths[0])`` raised
+    IndexError -- an unhandled HTTP 500 where every sibling failure path in the
+    handler returns a clean response.
+    """
+
+    response = client.post(
+        "/api/local/upload/npe",
+        data={},
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert response.get_json()["error"] == "No files provided"
+
+
+def test_npe_upload_with_the_part_under_another_field_name_is_rejected(client):
+    """Same crash, reached without an empty body: the part is simply not ``files``."""
+
+    response = client.post(
+        "/api/local/upload/npe",
+        data={"notfiles": [(BytesIO(b"not-a-report"), "empty.txt")]},
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert response.get_json()["error"] == "No files provided"
+
+
+def test_npe_upload_with_an_invalid_extension_is_unchanged(client):
+    """No regression: a present-but-wrong-extension upload still gets the StatusMessage."""
+
+    response = client.post(
+        "/api/local/upload/npe",
+        data={"files": [(BytesIO(b"nope"), "evil.exe")]},
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == HTTPStatus.OK
+    assert response.get_json()["status"] == ConnectionTestStates.FAILED.value
