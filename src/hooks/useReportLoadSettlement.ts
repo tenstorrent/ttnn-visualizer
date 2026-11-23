@@ -102,8 +102,11 @@ const useReportLoadSettlement = () => {
             return;
         }
 
-        // Answered for a report chosen since this one, so it says nothing about this load. The
-        // active path moves to that report next, and the branch above then clears the marker.
+        // Answered for another report, so it says nothing about this load. Usually that report
+        // was chosen since, and the branch above clears the marker once the active path moves to
+        // it. When the path stays put (this report's one retry was answered for another report
+        // too, or another tab sharing the instance switched it) the marker stays pending until a
+        // report is next chosen: recording a failure would blame this report for the switch.
         if (isReportChangedError(operationsError) || isReportChangedError(reportMetadataError)) {
             return;
         }

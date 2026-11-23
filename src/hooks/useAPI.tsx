@@ -88,7 +88,7 @@ import { Signpost } from '../model/Signpost';
 import { TensorsByOperationByAddress } from '../model/BufferSummary';
 import { ActiveReportFingerprints, ActiveReportRuns } from '../model/ReportLinks';
 import { getFolderReportId, getReportId } from '../functions/reportLinks';
-import { getMemoryReportData, getMemoryReportRetry, isReportChangedError } from '../functions/memoryReportRequest';
+import { fetchMemoryReportData, getMemoryReportRetry, isReportChangedError } from '../functions/memoryReportRequest';
 import { ReportLinkRole } from '../definitions/ReportLinks';
 import { L1_DEFAULT_MEMORY_SIZE } from '../definitions/L1MemorySize';
 import {
@@ -177,7 +177,7 @@ export const fetchBufferChunks = async (
     address?: number | string,
     bufferType?: BufferType,
 ): Promise<BufferChunk[]> => {
-    const data = await getMemoryReportData<unknown[]>(Endpoints.BUFFER_PAGES, reportId, {
+    const data = await fetchMemoryReportData<unknown[]>(Endpoints.BUFFER_PAGES, reportId, {
         params: {
             operation_id: operationId,
             address,
@@ -193,7 +193,7 @@ const fetchOperationDetails = async (reportId: string | null, id: number | null)
         return defaultOperation;
     }
 
-    const operationDetails = await getMemoryReportData<OperationDetailsData>(
+    const operationDetails = await fetchMemoryReportData<OperationDetailsData>(
         `${Endpoints.OPERATIONS_LIST}/${id}`,
         reportId,
         {
@@ -221,7 +221,7 @@ const getDeviceOperationNameList = (operation: OperationDescription, nodeType: D
 
 const fetchOperations = async (reportId: string | null): Promise<OperationDescription[]> => {
     const tensorList: Map<number, Tensor> = new Map<number, Tensor>();
-    const operationList = await getMemoryReportData<OperationDescription[]>(Endpoints.OPERATIONS_LIST, reportId);
+    const operationList = await fetchMemoryReportData<OperationDescription[]>(Endpoints.OPERATIONS_LIST, reportId);
 
     return operationList.map((operation: OperationDescription) => {
         updateDeviceOperationId(operation.device_operations);
@@ -271,7 +271,7 @@ const fetchBuffersByOperation = async (
         buffer_type: bufferType,
     };
 
-    return getMemoryReportData<BuffersByOperation[]>(Endpoints.OPERATION_BUFFERS, reportId, {
+    return fetchMemoryReportData<BuffersByOperation[]>(Endpoints.OPERATION_BUFFERS, reportId, {
         params,
     });
 };
@@ -281,7 +281,7 @@ const fetchAllBuffers = async (reportId: string | null, bufferType: BufferType |
         buffer_type: bufferType,
     };
 
-    return getMemoryReportData<Buffer[]>(Endpoints.BUFFERS_LIST, reportId, {
+    return fetchMemoryReportData<Buffer[]>(Endpoints.BUFFERS_LIST, reportId, {
         params,
     });
 };
@@ -364,7 +364,7 @@ export const useGetL1Size = (): number => {
 };
 
 export const fetchOperationBuffers = async (reportId: string | null, operationId: number) =>
-    getMemoryReportData<BuffersByOperation>(`${Endpoints.OPERATION_BUFFERS}/${operationId}`, reportId);
+    fetchMemoryReportData<BuffersByOperation>(`${Endpoints.OPERATION_BUFFERS}/${operationId}`, reportId);
 
 export const useOperationBuffers = (operationId: number) => {
     // Scope the cache by the active report's path. Operation ids reset per
@@ -388,7 +388,7 @@ export const useOperationBuffers = (operationId: number) => {
 // };
 
 const fetchDevices = async (reportId: string | null, report: ReportFolder | RemoteFolder) => {
-    const meta = await getMemoryReportData<DeviceInfo[]>(Endpoints.DEVICES, reportId);
+    const meta = await fetchMemoryReportData<DeviceInfo[]>(Endpoints.DEVICES, reportId);
 
     if (meta.length === 0) {
         createToastNotification(
@@ -540,10 +540,10 @@ const fetchDeviceMeta = async (name: string | null) => {
 };
 
 const fetchClusterDescription = async (reportId: string | null): Promise<ClusterModel> => {
-    const data = await getMemoryReportData<ClusterModel>(Endpoints.CLUSTER_DESCRIPTOR, reportId);
+    const data = await fetchMemoryReportData<ClusterModel>(Endpoints.CLUSTER_DESCRIPTOR, reportId);
 
     try {
-        const meshData = await getMemoryReportData<MeshData>(Endpoints.MESH_DESCRIPTOR, reportId);
+        const meshData = await fetchMemoryReportData<MeshData>(Endpoints.MESH_DESCRIPTOR, reportId);
 
         if (meshData?.chips) {
             data.chips = meshData.chips;
@@ -582,13 +582,13 @@ export const useGetClusterDescription = () => {
 const MAX_PROBE_RANKS = 32;
 
 const fetchClusterDescriptorForRank = async (reportId: string | null, rank: number): Promise<ClusterModel> =>
-    getMemoryReportData<ClusterModel>(Endpoints.CLUSTER_DESCRIPTOR, reportId, {
+    fetchMemoryReportData<ClusterModel>(Endpoints.CLUSTER_DESCRIPTOR, reportId, {
         params: { rank },
     });
 
 const fetchMeshDescriptorForRank = async (reportId: string | null, rank: number): Promise<MeshData | null> => {
     try {
-        const data = await getMemoryReportData<MeshDescriptorResponse>(Endpoints.MESH_DESCRIPTOR, reportId, {
+        const data = await fetchMemoryReportData<MeshDescriptorResponse>(Endpoints.MESH_DESCRIPTOR, reportId, {
             params: { rank },
         });
         // Backend can return single-doc or `{ docs: [...] }` envelope.
@@ -677,7 +677,7 @@ export const useOperationsList = () => {
 };
 
 const fetchReportErrors = async (reportId: string | null): Promise<ReportError[]> =>
-    getMemoryReportData<ReportError[]>(Endpoints.ERRORS, reportId);
+    fetchMemoryReportData<ReportError[]>(Endpoints.ERRORS, reportId);
 
 export const useReportErrors = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
@@ -1024,7 +1024,7 @@ interface ReportMetadata {
 }
 
 export const fetchReportMetadata = async (reportId: string | null): Promise<ReportMetadata> => {
-    const data = await getMemoryReportData<ReportMetadataResponse>(Endpoints.REPORT_METADATA, reportId);
+    const data = await fetchMemoryReportData<ReportMetadataResponse>(Endpoints.REPORT_METADATA, reportId);
     const parsedSchemaVersion = semverParse(data?.schema_version);
     const parsedDuration = Number(data?.total_duration_ns);
     // Single-host reports omit `world_size`; an absent or unparseable value is one rank.
@@ -1059,7 +1059,7 @@ export const useReportMetadata = () => {
 };
 
 export const fetchReportSourceFiles = async (reportId: string | null): Promise<ReportSourceFiles> => {
-    const data = await getMemoryReportData<SourceFileResponse[]>(Endpoints.SOURCE_FILES, reportId);
+    const data = await fetchMemoryReportData<SourceFileResponse[]>(Endpoints.SOURCE_FILES, reportId);
 
     return {
         ids: new Set<number>(data.map(({ id }) => id)),
@@ -1159,7 +1159,7 @@ export const useBufferChunks = (operationId: number, address?: number | string, 
 };
 
 export const fetchTensors = async (reportId: string | null, bufferType?: BufferType): Promise<Tensor[]> => {
-    const tensorList = await getMemoryReportData<Tensor[]>(Endpoints.TENSOR_LIST, reportId, {
+    const tensorList = await fetchMemoryReportData<Tensor[]>(Endpoints.TENSOR_LIST, reportId, {
         maxRedirects: 1,
         params: bufferType !== undefined ? { buffer_type: bufferType } : undefined,
     });

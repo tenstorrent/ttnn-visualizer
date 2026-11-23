@@ -81,7 +81,7 @@ const getReportChangedError = (headers: ResponseHeaders, reportId: string | null
  * under this one (#2375). Error responses are checked too, so another report's 422 or
  * 404 is not taken for this one's.
  */
-export const getMemoryReportData = async <T>(
+export const fetchMemoryReportData = async <T>(
     url: string,
     reportId: string | null,
     config?: AxiosRequestConfig,

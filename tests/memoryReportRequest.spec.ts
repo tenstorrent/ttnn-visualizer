@@ -14,7 +14,7 @@ import axiosInstance from '../src/libs/axiosInstance';
 import { ACTIVE_MEMORY_REPORT_HEADER } from '../src/definitions/ReportHeaders';
 import {
     ReportChangedError,
-    getMemoryReportData,
+    fetchMemoryReportData,
     getMemoryReportRetry,
     isReportChangedError,
 } from '../src/functions/memoryReportRequest';
@@ -52,18 +52,18 @@ beforeEach(() => {
     vi.clearAllMocks();
 });
 
-describe('getMemoryReportData', () => {
+describe('fetchMemoryReportData', () => {
     it('returns an answer for the report it asked about', async () => {
         vi.mocked(axiosInstance.get).mockResolvedValue(answeredFor(REPORT_ID));
 
-        await expect(getMemoryReportData(ENDPOINT, REPORT_ID)).resolves.toBe(DATA);
+        await expect(fetchMemoryReportData(ENDPOINT, REPORT_ID)).resolves.toBe(DATA);
     });
 
     it('passes the request config through', async () => {
         vi.mocked(axiosInstance.get).mockResolvedValue(answeredFor(REPORT_ID));
         const config = { params: { buffer_type: 1 } };
 
-        await getMemoryReportData(ENDPOINT, REPORT_ID, config);
+        await fetchMemoryReportData(ENDPOINT, REPORT_ID, config);
 
         expect(axiosInstance.get).toHaveBeenCalledWith(ENDPOINT, config);
     });
@@ -71,7 +71,7 @@ describe('getMemoryReportData', () => {
     it('throws away an answer for another report', async () => {
         vi.mocked(axiosInstance.get).mockResolvedValue(answeredFor('other-run'));
 
-        const error = await getMemoryReportData(ENDPOINT, REPORT_ID).catch((e: unknown) => e);
+        const error = await fetchMemoryReportData(ENDPOINT, REPORT_ID).catch((e: unknown) => e);
 
         expect(error).toBeInstanceOf(ReportChangedError);
         expect(error).toBeInstanceOf(AxiosError);
@@ -82,39 +82,39 @@ describe('getMemoryReportData', () => {
     it('throws away an answer naming no report while one is expected', async () => {
         vi.mocked(axiosInstance.get).mockResolvedValue(answeredFor(''));
 
-        await expect(getMemoryReportData(ENDPOINT, REPORT_ID)).rejects.toBeInstanceOf(ReportChangedError);
+        await expect(fetchMemoryReportData(ENDPOINT, REPORT_ID)).rejects.toBeInstanceOf(ReportChangedError);
     });
 
     it('accepts an answer without the header, which only something in between can remove', async () => {
         vi.mocked(axiosInstance.get).mockResolvedValue(answeredFor(undefined));
 
-        await expect(getMemoryReportData(ENDPOINT, REPORT_ID)).resolves.toBe(DATA);
+        await expect(fetchMemoryReportData(ENDPOINT, REPORT_ID)).resolves.toBe(DATA);
     });
 
     it('matches a percent-encoded name against the folder basename', async () => {
         const name = 'mémoire run 报告';
         vi.mocked(axiosInstance.get).mockResolvedValue(answeredFor(encodeURIComponent(`/data/reports/${name}`)));
 
-        await expect(getMemoryReportData(ENDPOINT, name)).resolves.toBe(DATA);
+        await expect(fetchMemoryReportData(ENDPOINT, name)).resolves.toBe(DATA);
     });
 
     it('treats malformed percent-encoding as another report', async () => {
         vi.mocked(axiosInstance.get).mockResolvedValue(answeredFor('%E0%A4%A'));
 
-        await expect(getMemoryReportData(ENDPOINT, REPORT_ID)).rejects.toBeInstanceOf(ReportChangedError);
+        await expect(fetchMemoryReportData(ENDPOINT, REPORT_ID)).rejects.toBeInstanceOf(ReportChangedError);
     });
 
     it("throws away another report's error response", async () => {
         vi.mocked(axiosInstance.get).mockRejectedValue(rejectedWith(HttpStatusCode.UnprocessableEntity, 'other-run'));
 
-        await expect(getMemoryReportData(ENDPOINT, REPORT_ID)).rejects.toBeInstanceOf(ReportChangedError);
+        await expect(fetchMemoryReportData(ENDPOINT, REPORT_ID)).rejects.toBeInstanceOf(ReportChangedError);
     });
 
     it("rethrows this report's error response with its status", async () => {
         const rejection = rejectedWith(HttpStatusCode.UnprocessableEntity, REPORT_ID);
         vi.mocked(axiosInstance.get).mockRejectedValue(rejection);
 
-        const error = await getMemoryReportData(ENDPOINT, REPORT_ID).catch((e: unknown) => e);
+        const error = await fetchMemoryReportData(ENDPOINT, REPORT_ID).catch((e: unknown) => e);
 
         expect(error).toBe(rejection);
         expect((error as AxiosError).response?.status).toBe(HttpStatusCode.UnprocessableEntity);
@@ -124,7 +124,7 @@ describe('getMemoryReportData', () => {
         const rejection = new Error('network down');
         vi.mocked(axiosInstance.get).mockRejectedValue(rejection);
 
-        await expect(getMemoryReportData(ENDPOINT, REPORT_ID)).rejects.toBe(rejection);
+        await expect(fetchMemoryReportData(ENDPOINT, REPORT_ID)).rejects.toBe(rejection);
     });
 });
 

@@ -249,6 +249,25 @@ describe('a chosen memory report', () => {
         });
         expect(recordReportLoadFailed).not.toHaveBeenCalled();
     });
+
+    // The active report is still this one, so nothing clears the marker but the next choice
+    it('stays pending while it remains active with a read answered for another report', () => {
+        renderRecorder();
+        choose(ReportKind.PROFILER, REPORT_A);
+        settleMemory(REPORT_A.path, settledMetadata(TARGET_DB_VERSION_MAX), superseded);
+
+        expect(recordReportLoaded).not.toHaveBeenCalled();
+        expect(recordReportLoadFailed).not.toHaveBeenCalled();
+        expect(getProbedPendingReportLoads()).toEqual({
+            [ReportKind.PROFILER]: { path: REPORT_A.path, source: ReportSource.LOCAL_TT_METAL },
+        });
+
+        choose(ReportKind.PROFILER, REPORT_A);
+        settle(queries.operations, REPORT_A.path, settledOperations);
+
+        expect(recordReportLoaded).toHaveBeenCalledTimes(1);
+        expect(recordReportLoadFailed).not.toHaveBeenCalled();
+    });
 });
 
 describe('a chosen performance report', () => {
