@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import classNames from 'classnames';
-import { formatPercentage } from '../../functions/math';
+import { MAX_PERCENT, clampPercent, formatPercentage } from '../../functions/math';
 import 'styles/components/L1FullnessBar.scss';
 
 interface L1FullnessBarProps {
@@ -17,7 +17,6 @@ interface LegendEntry {
     value: number;
 }
 
-const MAX_PERCENT = 100;
 const MIN_VISIBLE_SEGMENT_PERCENT = 0.5;
 const PERCENT_DECIMALS = 1;
 
@@ -90,14 +89,6 @@ function L1FullnessBar({ fullnessPercent, largestFreePercent }: L1FullnessBarPro
             </ul>
         </div>
     );
-}
-
-function clampPercent(value: number): number {
-    if (!Number.isFinite(value) || value < 0) {
-        return 0;
-    }
-
-    return Math.min(value, MAX_PERCENT);
 }
 
 export default L1FullnessBar;

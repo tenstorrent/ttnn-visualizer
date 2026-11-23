@@ -2,6 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
+import { type ReactNode } from 'react';
 import { HARDWARE_COUNTER_ABSENCE_LABELS, HardwareCounterAbsence } from '../../definitions/HardwareCounters';
 import {
     CB_WAIT_ZONE_LABELS,
@@ -15,7 +16,7 @@ import {
 import { TEST_IDS } from '../../definitions/TestIds';
 import { formatDuration } from '../../functions/formatting';
 import { getMissingReason } from '../../functions/hardwareCounters';
-import { formatPercentage } from '../../functions/math';
+import { MAX_PERCENT, clampPercent, formatPercentage } from '../../functions/math';
 import {
     CbWait,
     NamedStallStat,
@@ -27,7 +28,6 @@ import {
 import MissingValue from './MissingValue';
 import 'styles/components/DeviceOperationStalls.scss';
 
-const MAX_PERCENT = 100;
 const PERCENT_DECIMALS = 1;
 const NS_PER_US = 1000;
 const NO_VALUE_REASON = HARDWARE_COUNTER_ABSENCE_LABELS[HardwareCounterAbsence.NO_VALUE];
@@ -63,8 +63,6 @@ const LEGEND = [
     { className: 'pipeline-stall-stalled', label: 'Stalled' },
     { className: 'pipeline-stall-idle', label: 'Idle' },
 ];
-
-const clampPercent = (value: number): number => Math.min(Math.max(value, 0), MAX_PERCENT);
 
 const formatShare = (value: number): string => formatPercentage(value, PERCENT_DECIMALS);
 
@@ -199,6 +197,20 @@ const ThreadCounters = ({ thread, counters }: ThreadCountersProps) => {
     );
 };
 
+interface EmptyNoteProps {
+    testId: string;
+    children: ReactNode;
+}
+
+const EmptyNote = ({ testId, children }: EmptyNoteProps) => (
+    <p
+        className='pipeline-stall-empty'
+        data-testid={testId}
+    >
+        {children}
+    </p>
+);
+
 interface ThreadSectionProps {
     stalls: OperationStalls;
 }
@@ -206,12 +218,9 @@ interface ThreadSectionProps {
 const ThreadSection = ({ stalls }: ThreadSectionProps) => {
     if (stalls.counters.state === StallState.NOT_CAPTURED) {
         return (
-            <p
-                className='pipeline-stall-empty'
-                data-testid={TEST_IDS.PIPELINE_STALL_COUNTERS_EMPTY}
-            >
+            <EmptyNote testId={TEST_IDS.PIPELINE_STALL_COUNTERS_EMPTY}>
                 {getMissingReason(THREADS_NOT_CAPTURED, stalls.counters.fill_hint)}.
-            </p>
+            </EmptyNote>
         );
     }
 
@@ -220,14 +229,7 @@ const ThreadSection = ({ stalls }: ThreadSectionProps) => {
     );
 
     if (counted.length === 0) {
-        return (
-            <p
-                className='pipeline-stall-empty'
-                data-testid={TEST_IDS.PIPELINE_STALL_COUNTERS_EMPTY}
-            >
-                {COUNTERS_NOT_RECORDED}
-            </p>
-        );
+        return <EmptyNote testId={TEST_IDS.PIPELINE_STALL_COUNTERS_EMPTY}>{COUNTERS_NOT_RECORDED}</EmptyNote>;
     }
 
     const hasWaits = counted.some(({ counters }) => counters.waits.length > 0);
@@ -324,24 +326,14 @@ interface CbSectionProps {
 const CbSection = ({ stalls }: CbSectionProps) => {
     if (stalls.cb_waits.state === StallState.NOT_CAPTURED) {
         return (
-            <p
-                className='pipeline-stall-empty'
-                data-testid={TEST_IDS.PIPELINE_STALL_CB_EMPTY}
-            >
+            <EmptyNote testId={TEST_IDS.PIPELINE_STALL_CB_EMPTY}>
                 {getMissingReason(CB_NOT_CAPTURED, stalls.cb_waits.fill_hint)}. {CB_NOT_CAPTURED_NOTE}
-            </p>
+            </EmptyNote>
         );
     }
 
     if (stalls.cb_waits.state !== StallState.FILLED) {
-        return (
-            <p
-                className='pipeline-stall-empty'
-                data-testid={TEST_IDS.PIPELINE_STALL_CB_EMPTY}
-            >
-                {CB_NOT_RECORDED}
-            </p>
-        );
+        return <EmptyNote testId={TEST_IDS.PIPELINE_STALL_CB_EMPTY}>{CB_NOT_RECORDED}</EmptyNote>;
     }
 
     const cores = stalls.core_count;

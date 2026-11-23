@@ -2130,7 +2130,7 @@ class OpsPerformanceReportQueries:
 
     PASSTHROUGH_COLUMNS = {
         "pm_ideal_ns": "PM IDEAL [ns]",
-        "device_kernel_duration": "DEVICE KERNEL DURATION [ns]",
+        "device_kernel_duration": pipeline_stalls.KERNEL_DURATION_COLUMN,
         "brisc_kernel_duration": "DEVICE BRISC KERNEL DURATION [ns]",
         "ncrisc_kernel_duration": "DEVICE NCRISC KERNEL DURATION [ns]",
         "trisc0_kernel_duration": "DEVICE TRISC0 KERNEL DURATION [ns]",
@@ -2149,16 +2149,20 @@ class OpsPerformanceReportQueries:
         "raw_math_fidelity": "MATH FIDELITY",
         "device_kernel_duration_per_core_min": "DEVICE KERNEL DURATION PER CORE MIN [ns]",
         "device_kernel_duration_per_core_max": "DEVICE KERNEL DURATION PER CORE MAX [ns]",
-        "device_kernel_duration_per_core_avg": "DEVICE KERNEL DURATION PER CORE AVG [ns]",
+        "device_kernel_duration_per_core_avg": pipeline_stalls.PER_CORE_KERNEL_COLUMN,
         "device_kernel_first_to_last_start": "DEVICE KERNEL FIRST TO LAST START [ns]",
-        "device_compute_cb_wait_front": "DEVICE COMPUTE CB WAIT FRONT [ns]",
-        "device_compute_cb_reserve_back": "DEVICE COMPUTE CB RESERVE BACK [ns]",
+        "device_compute_cb_wait_front": pipeline_stalls.CB_WAIT_COLUMNS[
+            pipeline_stalls.CbWaitZone.WAIT_FRONT
+        ],
+        "device_compute_cb_reserve_back": pipeline_stalls.CB_WAIT_COLUMNS[
+            pipeline_stalls.CbWaitZone.RESERVE_BACK
+        ],
         # The CSV's own: tt-perf-report's `cores` counts a DRAM-sharded matmul's
         # DRAM-interface workers instead.
-        "core_count": "CORE COUNT",
+        "core_count": pipeline_stalls.CORE_COUNT_COLUMN,
         "dispatch_total_cq_cmd_op_time": "DISPATCH TOTAL CQ CMD OP TIME [ns]",
         "dispatch_go_send_wait_time": "DISPATCH GO SEND WAIT TIME [ns]",
-        "compute_kernel_source": "COMPUTE KERNEL SOURCE",
+        "compute_kernel_source": hardware_counters.COMPUTE_KERNEL_SOURCE_COLUMN,
         "compute_kernel_hash": "COMPUTE KERNEL HASH",
         "data_movement_kernel_source": "DATA MOVEMENT KERNEL SOURCE",
         "data_movement_kernel_hash": "DATA MOVEMENT KERNEL HASH",
@@ -2301,7 +2305,8 @@ class OpsPerformanceReportQueries:
     @classmethod
     def sum_profiled(cls, instance) -> bool:
         """Whether any op of the CSV carries a CB wait, which only sum profiling writes:
-        read once per file, up to the first such op. #2372"""
+        read once per file, up to the first such op; a row that can't be read before
+        one counts as none, so it can't fail an earlier row's counters. #2372"""
         return _sum_profiled(cls.report_source(instance))
 
     @classmethod
@@ -2920,7 +2925,15 @@ def clear_performance_report_cache() -> None:
     _cached_generate_performance_report_json.cache_clear()
 
 
+def clear_sum_profiling_cache() -> None:
+    _sum_profiled.cache_clear()
+
+
 @lru_cache(maxsize=MAX_CACHED_SUM_PROFILING_FACTS)
 def _sum_profiled(source: FileSource) -> bool:
-    with open(source.path, newline="") as csv_file:
-        return pipeline_stalls.capture_has_cb_waits(csv_file)
+    try:
+        with open(source.path, newline="") as csv_file:
+            return pipeline_stalls.capture_has_cb_waits(csv_file)
+    except DataFormatError as error:
+        logger.warning("Read %s as without sum profiling: %s", source.path, error)
+        return False

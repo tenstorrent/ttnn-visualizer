@@ -1460,15 +1460,12 @@ def get_performance_counters(perf_id, instance: Instance):
         counter_header,
         DeviceLogProfilerQueries.architecture(instance),
     )
-    try:
-        stalls = pipeline_stalls.operation_stalls(
-            row,
-            counter_header.row_reader(row),
-            counter_header,
-            lambda: OpsPerformanceReportQueries.sum_profiled(instance),
-        )
-    except DataFormatError as error:
-        return response_unprocessable_entity(str(error))
+    stalls = pipeline_stalls.operation_stalls(
+        row,
+        counter_header.row_reader(row),
+        counter_header,
+        lambda: OpsPerformanceReportQueries.sum_profiled(instance),
+    )
     return Response(
         orjson.dumps({"perf_id": row_id, **counters, "stalls": stalls}),
         mimetype="application/json",

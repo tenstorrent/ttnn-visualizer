@@ -8,7 +8,17 @@ sum zones time, which the counters cannot see; for the counters route and
 
 import csv
 from enum import Enum
-from typing import Callable, Dict, List, Mapping, NamedTuple, Optional, TextIO, Tuple
+from typing import (
+    Callable,
+    Dict,
+    List,
+    Mapping,
+    NamedTuple,
+    Optional,
+    Sequence,
+    TextIO,
+    Tuple,
+)
 
 from ttnn_visualizer import hardware_counters
 from ttnn_visualizer.cells import whole_number
@@ -345,13 +355,36 @@ class _CbWait(NamedTuple):
         }
 
 
-def _cb_state(
-    sums: Mapping[CbWaitZone, Optional[float]],
-    compute_kernel: Optional[bool],
-    sum_profiled: Callable[[], bool],
-) -> StallState:
-    held = any(total is not None for total in sums.values())
-    if cb_waits_ignored(compute_kernel):
+class _OpCells(NamedTuple):
+    """The raw cells an op's stalls read besides its counters."""
+
+    compute_kernel: Optional[bool]
+    cores: Optional[int]
+    kernel_ns: Optional[float]
+    per_core_kernel_ns: Optional[float]
+    sums: Dict[CbWaitZone, Optional[float]]
+
+    @classmethod
+    def of(cls, row: Mapping[str, object]) -> "_OpCells":
+        return cls(
+            has_compute_kernel(row),
+            core_count(row),
+            _positive(row, KERNEL_DURATION_COLUMN),
+            _positive(row, PER_CORE_KERNEL_COLUMN),
+            {zone: _number(row, column) for zone, column in CB_WAIT_COLUMNS.items()},
+        )
+
+    def cb_wait(self, zone: Optional[CbWaitZone]) -> Optional[_CbWait]:
+        """The zone's poll, for a row whose CB waits are filled: held, and not ignored."""
+        total = self.sums[zone] if zone is not None else None
+        if total is None or cb_waits_ignored(self.compute_kernel):
+            return None
+        return _CbWait.of(total, self.cores, self.kernel_ns)
+
+
+def _cb_state(cells: _OpCells, sum_profiled: Callable[[], bool]) -> StallState:
+    held = any(total is not None for total in cells.sums.values())
+    if cb_waits_ignored(cells.compute_kernel):
         return StallState.IGNORED if held else StallState.NO_VALUE
     if held:
         return StallState.FILLED
@@ -367,47 +400,64 @@ def _part(state: StallState, fill_hint: str) -> Dict[str, object]:
     }
 
 
+class _ThreadStall(NamedTuple):
+    """The figures a thread's part in the largest stall is read from."""
+
+    stall_rate: Optional[float]
+    cb_zone: Optional[CbWaitZone]
+    cb_wait: Optional[_CbWait]
+
+
 class _ThreadRead(NamedTuple):
     labels: ThreadLabels
     counters: Optional[_ThreadCounters]
     cb_wait: Optional[_CbWait]
 
+    def stall(self) -> _ThreadStall:
+        rate = self.counters.stall_rate if self.counters else None
+        return _ThreadStall(
+            rate.avg if rate else None, self.labels.cb_zone, self.cb_wait
+        )
+
 
 class _Stall(NamedTuple):
     percent: float
-    thread: _ThreadRead
+    # The thread's index in `THREADS`.
+    thread: int
     # The CB poll that set it; None for the thread's stall rate.
     zone: Optional[CbWaitZone]
 
 
-def _largest_stall(threads: List[_ThreadRead]) -> Optional[_Stall]:
+def _largest_stall(threads: Sequence[_ThreadStall]) -> Optional[_Stall]:
     """The largest of the threads' stall rates and CB poll shares, never their sum: a
     TRISC can poll a CB while instructions it already issued stall."""
     largest: Optional[_Stall] = None
-    for thread in threads:
-        stall = thread.counters.stall_rate if thread.counters else None
+    for index, thread in enumerate(threads):
         figures: List[Tuple[Optional[float], Optional[CbWaitZone]]] = [
-            (stall.avg if stall else None, None)
+            (thread.stall_rate, None)
         ]
         if thread.cb_wait is not None:
-            figures.append((thread.cb_wait.kernel_share_percent, thread.labels.cb_zone))
+            figures.append((thread.cb_wait.kernel_share_percent, thread.cb_zone))
         for percent, zone in figures:
             if percent is not None and (largest is None or percent > largest.percent):
-                largest = _Stall(percent, thread, zone)
+                largest = _Stall(percent, index, zone)
     return largest
 
 
-def _stalled_us(stall: _Stall, per_core_kernel_ns: Optional[float]) -> Optional[float]:
+def _stalled_us(
+    stall: _Stall, threads: Sequence[_ThreadStall], per_core_kernel_ns: Optional[float]
+) -> Optional[float]:
     """The stalled share as an average core's time: a CB poll's own per-core figure, or a
     stall rate, a share of each core's counted cycles, of the per-core kernel time."""
     if stall.zone is not None:
-        return stall.thread.cb_wait.per_core_us if stall.thread.cb_wait else None
+        cb_wait = threads[stall.thread].cb_wait
+        return cb_wait.per_core_us if cb_wait else None
     if per_core_kernel_ns is None:
         return None
     return _rounded(stall.percent / 100 * per_core_kernel_ns / _NS_PER_US)
 
 
-def _largest_wait(stall: _Stall) -> Optional[Dict[str, object]]:
+def _largest_wait(stall: _Stall, thread: _ThreadRead) -> Optional[Dict[str, object]]:
     """The wait behind the largest stall: the CB poll itself, or the stalled thread's
     named wait with the highest average, which can read above its stall rate and is
     marked downstream where it waits on an earlier stage."""
@@ -418,7 +468,7 @@ def _largest_wait(stall: _Stall) -> Optional[Dict[str, object]]:
             "percent": stall.percent,
             "downstream": False,
         }
-    counters = stall.thread.counters
+    counters = thread.counters
     if counters is None or not counters.waits:
         return None
     top = counters.waits[0]
@@ -426,7 +476,26 @@ def _largest_wait(stall: _Stall) -> Optional[Dict[str, object]]:
         "label": top.label,
         "source": StallSource.HARDWARE_COUNTER.value,
         "percent": top.stat.avg,
-        "downstream": top.label in stall.thread.labels.downstream_waits,
+        "downstream": top.label in thread.labels.downstream_waits,
+    }
+
+
+def _stall_answer(
+    stall: Optional[_Stall],
+    threads: List[_ThreadRead],
+    stalls: Sequence[_ThreadStall],
+    per_core_kernel_ns: Optional[float],
+) -> Dict[str, object]:
+    if stall is None:
+        return dict.fromkeys(
+            ("stalled_percent", "stalled_us", "stalled_thread", "largest_wait")
+        )
+    thread = threads[stall.thread]
+    return {
+        "stalled_percent": stall.percent,
+        "stalled_us": _stalled_us(stall, stalls, per_core_kernel_ns),
+        "stalled_thread": thread.labels.thread.value,
+        "largest_wait": _largest_wait(stall, thread),
     }
 
 
@@ -453,27 +522,18 @@ def operation_stalls(
     """One op's stalls per thread. `row` holds its raw CSV cells for `RAW_COLUMNS`;
     `sum_profiled` says whether any op of the capture has a CB wait, asked only of a
     compute op with none, so a caller reading one row reads the others only then."""
-    compute_kernel = has_compute_kernel(row)
-    cores = core_count(row)
-    kernel_ns = _positive(row, KERNEL_DURATION_COLUMN)
-    sums = {zone: _number(row, column) for zone, column in CB_WAIT_COLUMNS.items()}
-    cb_state = _cb_state(sums, compute_kernel, sum_profiled)
+    cells = _OpCells.of(row)
+    cb_state = _cb_state(cells, sum_profiled)
 
     counted = has_thread_counters(header)
-    threads: List[_ThreadRead] = []
-    for labels in THREADS:
-        total = sums[labels.cb_zone] if labels.cb_zone is not None else None
-        threads.append(
-            _ThreadRead(
-                labels,
-                _thread_counters(labels, read, header) if counted else None,
-                (
-                    _CbWait.of(total, cores, kernel_ns)
-                    if cb_state is StallState.FILLED and total is not None
-                    else None
-                ),
-            )
+    threads = [
+        _ThreadRead(
+            labels,
+            _thread_counters(labels, read, header) if counted else None,
+            cells.cb_wait(labels.cb_zone),
         )
+        for labels in THREADS
+    ]
 
     if not counted:
         counter_state = StallState.NOT_CAPTURED
@@ -486,25 +546,41 @@ def operation_stalls(
     else:
         counter_state = StallState.FILLED
 
-    stall = _largest_stall(threads)
+    stalls = [thread.stall() for thread in threads]
     return {
-        "has_compute_kernel": compute_kernel,
+        "has_compute_kernel": cells.compute_kernel,
         "counters": _part(counter_state, COUNTERS_FILL_HINT),
         "cb_waits": _part(cb_state, CB_WAITS_FILL_HINT),
-        "core_count": cores,
+        "core_count": cells.cores,
         "kernel_duration_us": (
-            None if kernel_ns is None else _rounded(kernel_ns / _NS_PER_US)
+            None if cells.kernel_ns is None else _rounded(cells.kernel_ns / _NS_PER_US)
         ),
-        "stalled_percent": None if stall is None else stall.percent,
-        "stalled_us": (
-            None
-            if stall is None
-            else _stalled_us(stall, _positive(row, PER_CORE_KERNEL_COLUMN))
+        **_stall_answer(
+            _largest_stall(stalls), threads, stalls, cells.per_core_kernel_ns
         ),
-        "stalled_thread": None if stall is None else stall.thread.labels.thread.value,
-        "largest_wait": None if stall is None else _largest_wait(stall),
         "threads": [_thread_answer(thread) for thread in threads],
     }
+
+
+def stalled_us(
+    row: Mapping[str, object], read: CounterReader, header: CounterHeader
+) -> Optional[float]:
+    """`operation_stalls`'s `stalled_us`, read from the thread stall rates and CB sums
+    alone, so many ops can be ranked before a few are answered in full."""
+    cells = _OpCells.of(row)
+    counted = has_thread_counters(header)
+    stalls = [
+        _ThreadStall(
+            read(labels.stall_rate, CounterStat.AVG) if counted else None,
+            labels.cb_zone,
+            cells.cb_wait(labels.cb_zone),
+        )
+        for labels in THREADS
+    ]
+    stall = _largest_stall(stalls)
+    return (
+        None if stall is None else _stalled_us(stall, stalls, cells.per_core_kernel_ns)
+    )
 
 
 def has_cb_waits(row: Mapping[str, object]) -> bool:
@@ -563,5 +639,6 @@ __all__ = [
     "has_cb_waits",
     "has_thread_counters",
     "operation_stalls",
+    "stalled_us",
     "wait_labels_absent",
 ]

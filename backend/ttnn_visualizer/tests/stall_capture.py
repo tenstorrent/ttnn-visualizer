@@ -232,26 +232,40 @@ def _cell(value: Optional[int]) -> str:
     return "" if value is None else str(value)
 
 
+def _stall_row(row: Dict[str, str], op: StallOp, sum_profiling: bool) -> Dict[str, str]:
+    return {
+        **row,
+        CORE_COUNT: str(op.cores),
+        KERNEL_DURATION: str(op.kernel_ns),
+        PER_CORE_KERNEL: str(round(op.kernel_ns * PER_CORE_SHARE)),
+        COMPUTE_KERNEL_SOURCE: KERNEL_SOURCE if op.compute_kernel else "[]",
+        CB_WAIT_FRONT: _cell(op.cb_wait_front_ns if sum_profiling else None),
+        CB_RESERVE_BACK: _cell(op.cb_reserve_back_ns if sum_profiling else None),
+        **_counter_cells(op.counters),
+    }
+
+
 def stall_rows(sum_profiling: bool = True) -> List[Dict[str, str]]:
     """Device 0's smoke rows as `STALL_OPS`, the counter columns after every other."""
     template = [row for row in smoke_rows() if row["DEVICE ID"] == "0"]
     assert len(template) == len(STALL_OPS)
+    return [_stall_row(row, op, sum_profiling) for row, op in zip(template, STALL_OPS)]
+
+
+def two_device_stall_rows(device_1: Dict[int, StallOp]) -> List[Dict[str, str]]:
+    """Both devices' smoke rows, each device's nth op as `STALL_OPS[n]`, except where
+    `device_1` gives device 1's nth op its own."""
     rows = []
-    for row, op in zip(template, STALL_OPS):
-        rows.append(
-            {
-                **row,
-                CORE_COUNT: str(op.cores),
-                KERNEL_DURATION: str(op.kernel_ns),
-                PER_CORE_KERNEL: str(round(op.kernel_ns * PER_CORE_SHARE)),
-                COMPUTE_KERNEL_SOURCE: KERNEL_SOURCE if op.compute_kernel else "[]",
-                CB_WAIT_FRONT: _cell(op.cb_wait_front_ns if sum_profiling else None),
-                CB_RESERVE_BACK: _cell(
-                    op.cb_reserve_back_ns if sum_profiling else None
-                ),
-                **_counter_cells(op.counters),
-            }
-        )
+    seen = {"0": 0, "1": 0}
+    for row in smoke_rows():
+        device = row["DEVICE ID"]
+        position = seen[device]
+        seen[device] += 1
+        op = STALL_OPS[position]
+        if device == "1":
+            op = device_1.get(position, op)
+        rows.append(_stall_row(row, op, sum_profiling=True))
+    assert seen == {"0": len(STALL_OPS), "1": len(STALL_OPS)}
     return rows
 
 

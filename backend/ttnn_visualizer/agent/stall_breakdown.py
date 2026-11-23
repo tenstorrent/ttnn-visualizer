@@ -5,6 +5,7 @@
 """Where each op's compute kernel stalled and waited, per thread: tt-metal's hardware
 counters beside the circular-buffer polls its sum zones time. #2372"""
 
+import heapq
 from enum import Enum
 from typing import Dict, Iterable, List, Optional, Tuple
 
@@ -18,11 +19,12 @@ from ttnn_visualizer.agent.bounds import (
     echoed,
     shown_op_code,
 )
-from ttnn_visualizer.agent.handles import ReportRegistry
+from ttnn_visualizer.agent.handles import CacheVariant, ReportRegistry
 from ttnn_visualizer.cells import finite_number, whole_number
 from ttnn_visualizer.csv_queries import OpsPerformanceReportQueries
 from ttnn_visualizer.device_architecture import DeviceArchitecture
 from ttnn_visualizer.hardware_counters import CaptureGroup, CounterTable
+from ttnn_visualizer.models import Instance
 
 MAX_PERF_IDS = MAX_DETAILED_LIMIT
 MAX_LISTED_OP_CODES = 20
@@ -112,11 +114,9 @@ def _by_op_code(rows: List[Dict], op_code: str) -> List[Dict]:
     matched = [row for row in rows if wanted in _op_codes(row)]
     if matched:
         return matched
-    known: List[str] = []
-    for row in rows:
-        raw = str(row.get("raw_op_code") or row.get("op_code") or "").strip()
-        if raw and raw not in known:
-            known.append(raw)
+    known = list(
+        dict.fromkeys(code for row in rows if (code := tools.raw_op_code(row)))
+    )
     listed = ", ".join(shown_op_code(code) for code in known[:MAX_LISTED_OP_CODES])
     more = len(known) - MAX_LISTED_OP_CODES
     raise ValueError(
@@ -144,6 +144,17 @@ def _require_perf_ids(perf_ids: object) -> List[str]:
     return ids
 
 
+def _sum_profiling(registry: ReportRegistry, handle: str) -> bool:
+    """Whether any op of the report carries a CB wait, which only sum profiling writes;
+    read once per handle, since a capture without it is read to its end."""
+
+    def build(_instance: Instance) -> bool:
+        rows = tools.canonical_report(registry, handle).get("report", [])
+        return any(pipeline_stalls.has_cb_waits(_raw_cells(row)) for row in _ops(rows))
+
+    return registry.cached_report(handle, build, variant=CacheVariant.SUM_PROFILING)
+
+
 def _op_entry(row: Dict, table: CounterTable, sum_profiling: bool) -> Dict[str, object]:
     stalls = pipeline_stalls.operation_stalls(
         _raw_cells(row),
@@ -158,18 +169,34 @@ def _op_entry(row: Dict, table: CounterTable, sum_profiling: bool) -> Dict[str, 
     }
 
 
-def _ranked(entries: List[Dict[str, object]]) -> List[Dict[str, object]]:
+def _rank_key(stalled_us: object, device_time: object) -> Tuple[bool, float, float]:
     """Most stalled device time first; ops with none last, costliest first."""
+    stalled = finite_number(stalled_us)
+    return (
+        stalled is None,
+        -(stalled or 0.0),
+        -(finite_number(device_time) or 0.0),
+    )
 
-    def key(entry: Dict[str, object]) -> Tuple[bool, float, float]:
-        stalled = finite_number(entry["stalled_us"])
-        return (
-            stalled is None,
-            -(stalled or 0.0),
-            -(finite_number(entry.get("device_time")) or 0.0),
+
+def _ranked(entries: List[Dict[str, object]]) -> List[Dict[str, object]]:
+    return sorted(
+        entries,
+        key=lambda entry: _rank_key(entry["stalled_us"], entry.get("device_time")),
+    )
+
+
+def _most_stalled(rows: List[Dict], table: CounterTable, count: int) -> List[Dict]:
+    """The `count` rows `_ranked` puts first, each ranked on its stalled time alone: a
+    decode loop calls one op code thousands of times."""
+
+    def key(row: Dict) -> Tuple[bool, float, float]:
+        stalled = pipeline_stalls.stalled_us(
+            _raw_cells(row), table.reader(tools.csv_position(row)), table.header
         )
+        return _rank_key(stalled, tools.metric_value(row))
 
-    return sorted(entries, key=key)
+    return heapq.nsmallest(count, rows, key=key)
 
 
 def _capture(
@@ -219,7 +246,7 @@ def stall_breakdown(
         )
     rows = tools.canonical_report(registry, handle).get("report", [])
     ops = _ops(rows)
-    sum_profiling = any(pipeline_stalls.has_cb_waits(_raw_cells(row)) for row in ops)
+    sum_profiling = _sum_profiling(registry, handle)
 
     # The ops a selection names, and the ones it reads: an op code's calls are ranked
     # before the limit cuts them, the costliest ops by device time after.
@@ -228,15 +255,14 @@ def stall_breakdown(
         matched = chosen = tools.perf_rows(rows, ids)
     elif op_code is not None:
         selection = Selection.OP_CODE
-        matched = chosen = _by_op_code(ops, op_code)
+        matched = _by_op_code(ops, op_code)
+        chosen = _most_stalled(matched, table, count)
     else:
         selection = Selection.TOP_DEVICE_TIME
         matched = tools.costliest_rows(ops)
         chosen = matched[:count]
 
     entries = _ranked([_op_entry(row, table, sum_profiling) for row in chosen])
-    if selection is Selection.OP_CODE:
-        entries = entries[:count]
 
     architecture = tools.device_architecture(registry, handle)
     report_total = sum(tools.countable_device_time(row) or 0.0 for row in ops)

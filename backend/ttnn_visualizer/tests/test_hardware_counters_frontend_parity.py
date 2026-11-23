@@ -5,6 +5,7 @@
 """Pins the frontend's copies of the hardware counter vocabulary, and of the stall
 breakdown's, to this package's. #2371 #2372"""
 
+import re
 from enum import Enum
 from pathlib import Path
 from typing import Type
@@ -18,6 +19,7 @@ from ttnn_visualizer.hardware_counters import (
     CounterUnit,
 )
 from ttnn_visualizer.pipeline_stalls import (
+    THREADS,
     CbWaitZone,
     PipelineThread,
     StallSource,
@@ -25,6 +27,7 @@ from ttnn_visualizer.pipeline_stalls import (
     ThreadRole,
 )
 from ttnn_visualizer.tests.frontend_parity import (
+    typescript_enum_members,
     typescript_enum_values,
     typescript_string_constant,
 )
@@ -83,4 +86,25 @@ def test_the_capture_advice_quotes_this_packages_flag_and_groups(name: str, valu
 def test_each_stall_enum_matches_its_frontend_copy(name: str, enum: Type[Enum]):
     assert typescript_enum_values(_DEFINITIONS / "PipelineStalls.ts", name) == {
         member.value for member in enum
+    }
+
+
+def test_each_cb_zone_is_the_thread_the_backend_gives_it():
+    """The Stalls tab names each zone's row, and finds its poll, by this thread."""
+    source = (_DEFINITIONS / "PipelineStalls.ts").read_text(encoding="utf-8")
+    zones = typescript_enum_members(_DEFINITIONS / "PipelineStalls.ts", "CbWaitZone")
+    threads = typescript_enum_members(
+        _DEFINITIONS / "PipelineStalls.ts", "PipelineThread"
+    )
+    frontend = {
+        zones[zone]: threads[thread]
+        for zone, thread in re.findall(
+            r"\[CbWaitZone\.(\w+)\]:\s*\{\s*thread:\s*PipelineThread\.(\w+)", source
+        )
+    }
+
+    assert frontend == {
+        thread.cb_zone.value: thread.thread.value
+        for thread in THREADS
+        if thread.cb_zone is not None
     }

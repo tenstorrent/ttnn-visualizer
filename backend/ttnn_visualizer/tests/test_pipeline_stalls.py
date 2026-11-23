@@ -23,6 +23,7 @@ from ttnn_visualizer.pipeline_stalls import (
 from ttnn_visualizer.tests.stall_capture import (
     CB_RESERVE_BACK,
     CB_WAIT_FRONT,
+    COMPUTE_KERNEL_SOURCE,
     CORE_COUNT,
     INPUT_STARVED_POSITION,
     KERNEL_DURATION,
@@ -176,6 +177,28 @@ class TestCbWaits:
         assert stalls["stalled_percent"] is None
         assert stalls["stalled_us"] is None
         assert stalls["largest_wait"] is None
+
+    @pytest.mark.parametrize("cell", [None, ""], ids=["no-column", "blank"])
+    def test_a_row_that_doesnt_say_whether_it_has_a_compute_kernel_keeps_its_sums(
+        self, rows, cell
+    ):
+        """Only `[]` marks an op without one, whose sums are a copy."""
+        row = {
+            column: value
+            for column, value in rows[INPUT_STARVED_POSITION].items()
+            if column != COMPUTE_KERNEL_SOURCE
+        }
+        if cell is not None:
+            row[COMPUTE_KERNEL_SOURCE] = cell
+
+        stalls = _stalls(row)
+
+        assert stalls["has_compute_kernel"] is None
+        assert stalls["cb_waits"] == {
+            "state": StallState.FILLED.value,
+            "fill_hint": None,
+        }
+        assert _thread(stalls, "t0")["instrumentation"] is not None
 
     def test_an_op_without_a_compute_kernel_or_sums_has_no_value(self, rows):
         stalls = _stalls(rows[NO_CB_POSITION])
@@ -467,3 +490,40 @@ class TestStalledShare:
             UNNAMED_STALL_POSITION, "Thread 1 Stall Rate"
         )
         assert stalls["largest_wait"] is None
+
+
+def _edge_rows() -> Dict[str, Dict[str, str]]:
+    rows = stall_rows()
+    return {
+        "no-per-core-kernel": {**rows[UNPACK_BOUND_POSITION], PER_CORE_KERNEL: ""},
+        "no-core-count": {**rows[INPUT_STARVED_POSITION], CORE_COUNT: "0"},
+        "no-kernel-duration": {**rows[OUTPUT_BLOCKED_POSITION], KERNEL_DURATION: ""},
+        "no-thread-counters": _without(rows[INPUT_STARVED_POSITION], "Stall Rate"),
+        "cb-tie": {
+            **rows[UNNAMED_STALL_POSITION],
+            CB_WAIT_FRONT: str(8 * 6_200 * 40 // 100),
+        },
+    }
+
+
+class TestStalledTimeAlone:
+    """`stalled_us`, which ranks an op code's calls before the few returned are read."""
+
+    @pytest.mark.parametrize("sum_profiling", [True, False], ids=["sums", "no-sums"])
+    @pytest.mark.parametrize("position", range(len(STALL_OPS)))
+    def test_it_is_the_full_answers_for_every_op(self, position, sum_profiling):
+        row = stall_rows(sum_profiling)[position]
+        header = hardware_counters.discover(row.keys())
+
+        assert pipeline_stalls.stalled_us(row, header.row_reader(row), header) == (
+            _stalls(row, lambda: sum_profiling)["stalled_us"]
+        )
+
+    @pytest.mark.parametrize("name", list(_edge_rows()))
+    def test_it_is_the_full_answers_for_a_row_missing_a_figure(self, name):
+        row = _edge_rows()[name]
+        header = hardware_counters.discover(row.keys())
+
+        assert pipeline_stalls.stalled_us(row, header.row_reader(row), header) == (
+            _stalls(row, lambda: True)["stalled_us"]
+        )

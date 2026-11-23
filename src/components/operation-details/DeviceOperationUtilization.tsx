@@ -34,7 +34,7 @@ import { TEST_IDS } from '../../definitions/TestIds';
 import { BELOW_TRIGGER, fitPopoverToWindow } from '../../functions/fitPopoverToWindow';
 import getResponseError from '../../functions/getResponseError';
 import { formatHardwareCounterValue, getMissingReason } from '../../functions/hardwareCounters';
-import { formatPercentage } from '../../functions/math';
+import { clampPercent, formatPercentage } from '../../functions/math';
 import { recordDrilldownOpened } from '../../functions/surfaceEvents';
 import { useOperationHardwareCounters } from '../../hooks/useAPI';
 import {
@@ -48,7 +48,6 @@ import DeviceOperationStalls from './DeviceOperationStalls';
 import MissingValue from './MissingValue';
 import 'styles/components/DeviceOperationUtilization.scss';
 
-const MAX_PERCENT = 100;
 const MODEL_DECIMALS = 1;
 
 const TRIGGER_LABEL = 'Counters';
@@ -87,8 +86,6 @@ const POPOVER_MODIFIERS: PopperModifierOverrides = { flip: { enabled: false } };
 const POPOVER_CUSTOM_MODIFIERS = [fitPopoverToWindow];
 // Once the dialog has closed on this press, the popover would take it as an outside click and close too.
 const DIALOG_BACKDROP_PROPS = { onMouseDown: (event: MouseEvent) => event.stopPropagation() };
-
-const clampPercent = (value: number): number => Math.min(Math.max(value, 0), MAX_PERCENT);
 
 const formatStat = (value: number | null, reading: HardwareCounterReading): string =>
     value === null ? '' : formatHardwareCounterValue(value, reading.measure);

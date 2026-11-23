@@ -48,6 +48,17 @@ export const formatPercentage = (number: number, decimals: number = 2): string =
         maximumFractionDigits: decimals,
     }).format(number / 100);
 
+export const MAX_PERCENT = 100;
+
+/** A percentage held to 0–100 for a bar's width, and 0 for one that isn't a finite number. */
+export const clampPercent = (value: number): number => {
+    if (!Number.isFinite(value) || value < 0) {
+        return 0;
+    }
+
+    return Math.min(value, MAX_PERCENT);
+};
+
 /**
  * Convert microseconds to seconds and format it to 3 decimal places
  * returns empty string if us is less than min

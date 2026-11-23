@@ -607,6 +607,22 @@ describe('HardwareCounterPanel', () => {
         expect(screen.queryByTestId(`${TEST_IDS.HARDWARE_COUNTER_UNIT}-${HardwareCounterUnit.FPU}`)).toBeNull();
     });
 
+    it('switches to the Stalls tab from the keyboard, showing it in the tab panel', () => {
+        renderPanel(MATMUL);
+        const utilization = screen.getByRole('tab', { name: 'Utilization' });
+        const stalls = screen.getByRole('tab', { name: 'Stalls' });
+
+        utilization.focus();
+        fireEvent.keyDown(utilization, { key: 'ArrowRight' });
+
+        expect(stalls).toHaveFocus();
+
+        fireEvent.keyPress(stalls, { key: 'Enter', code: 'Enter', charCode: 13 });
+
+        expect(stalls).toHaveAttribute('aria-selected', 'true');
+        expect(within(screen.getByRole('tabpanel')).getByTestId(TEST_IDS.PIPELINE_STALLS)).toBeInTheDocument();
+    });
+
     it('keeps the device heading above both tabs', () => {
         renderPanel({ ...MATMUL, device_id: 1 }, true);
 

@@ -21,6 +21,7 @@ from ttnn_visualizer.csv_queries import (
 )
 from ttnn_visualizer.extensions import db
 from ttnn_visualizer.models import Instance, InstanceTable
+from ttnn_visualizer.tests.frontend_parity import typescript_interface_keys
 from ttnn_visualizer.tests.hardware_counter_capture import (
     PERCENT_LABELS,
     UNKNOWN_LABEL,
@@ -40,6 +41,7 @@ from ttnn_visualizer.tests.stall_capture import (
     INPUT_STARVED_POSITION,
     STALE_CB_POSITION,
     STALL_OPS,
+    UNPACK_BOUND_POSITION,
     counter_average,
     kernel_share,
     stall_rows,
@@ -47,6 +49,9 @@ from ttnn_visualizer.tests.stall_capture import (
 )
 
 ROUTE = "/api/performance/counters"
+_STALLS_MODEL = (
+    Path(__file__).resolve().parents[4] / "src" / "model" / "PipelineStalls.ts"
+)
 COUNTED_POSITION = 0
 # Both record no counters: the first names a compute kernel, the second `[]`.
 UNCOUNTED_POSITION = 4
@@ -504,6 +509,75 @@ class TestStalls:
 
         assert unasked == 0
         assert read.call_count == 1
+
+    def test_a_row_the_scan_cannot_read_leaves_an_earlier_ops_counters_answered(
+        self, app, client, tmp_path
+    ):
+        """Asked whether the capture had sum profiling, the scan reads past the row
+        asked for, which was a 200 before the stalls rode along. A row it can't read
+        before any CB wait counts as none, and that answer is kept."""
+        rows = stall_rows()
+        rows[INPUT_STARVED_POSITION] = {
+            **rows[INPUT_STARVED_POSITION],
+            CB_WAIT_FRONT: "",
+            CB_RESERVE_BACK: "",
+        }
+        rows[UNPACK_BOUND_POSITION] = {
+            **rows[UNPACK_BOUND_POSITION],
+            "ATTRIBUTES": "x" * (csv.field_size_limit() + 1),
+        }
+        write_ops_perf(tmp_path / "unreadable-later", rows)
+        instance_id = _mount(app, tmp_path / "unreadable-later")
+
+        with patch.object(
+            pipeline_stalls,
+            "capture_has_cb_waits",
+            wraps=pipeline_stalls.capture_has_cb_waits,
+        ) as read:
+            responses = [
+                _get(client, instance_id, INPUT_STARVED_POSITION + REPORT_ROW_ID_OFFSET)
+                for _ in range(2)
+            ]
+
+        assert [response.status_code for response in responses] == [HTTPStatus.OK] * 2
+        body = responses[0].get_json()
+        assert body["op_has_counters"] is True
+        assert body["stalls"]["counters"]["state"] == "filled"
+        assert body["stalls"]["cb_waits"] == {
+            "state": "not_captured",
+            "fill_hint": pipeline_stalls.CB_WAITS_FILL_HINT,
+        }
+        assert read.call_count == 1
+
+    def test_the_answer_has_the_keys_the_app_reads(self, client, stalled):
+        """`src/model/PipelineStalls.ts` describes this answer, keys and nesting."""
+        stalls = self._stalls(client, stalled, INPUT_STARVED_POSITION)
+
+        def check(answer, interface):
+            required, optional = typescript_interface_keys(_STALLS_MODEL, interface)
+            assert required <= answer.keys() <= required | optional, interface
+
+        check(stalls, "OperationStalls")
+        check(stalls["counters"], "StallPart")
+        check(stalls["cb_waits"], "StallPart")
+        check(stalls["largest_wait"], "LargestWait")
+        polls = []
+        for thread in stalls["threads"]:
+            check(thread, "ThreadStalls")
+            counters = thread["hardware_counters"]
+            check(counters, "ThreadHardwareCounters")
+            for stat in ("issue_rate", "stall_rate", "stall_overlap"):
+                check(counters[stat], "StallStat")
+            for named in counters["waits"] + counters.get("math_pipeline_stalls", []):
+                check(named, "NamedStallStat")
+            polls += (thread["instrumentation"] or {}).values()
+        for poll in polls:
+            check(poll, "CbWait")
+        assert len(polls) == 2
+        assert any(
+            "math_pipeline_stalls" in thread["hardware_counters"]
+            for thread in stalls["threads"]
+        )
 
     @pytest.mark.parametrize("cell", ["1e30", "0", "-8"])
     def test_a_core_count_that_is_no_count_leaves_the_shares_null(

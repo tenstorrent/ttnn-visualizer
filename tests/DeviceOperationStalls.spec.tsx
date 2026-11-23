@@ -6,7 +6,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import DeviceOperationStalls from '../src/components/operation-details/DeviceOperationStalls';
-import { CbWaitZone, PipelineThread } from '../src/definitions/PipelineStalls';
+import { CbWaitZone, PipelineThread, StallSource } from '../src/definitions/PipelineStalls';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { OperationStalls } from '../src/model/PipelineStalls';
 import {
@@ -97,6 +97,24 @@ describe('DeviceOperationStalls', () => {
             expect(zero).toHaveTextContent(`${T0_ZERO_WAITS.length} named waits read 0`);
             expect(zero).toHaveAttribute('title', T0_ZERO_WAITS.join(', '));
             expect(waits).not.toHaveTextContent('SrcA Clear Wait');
+        });
+
+        it('names a single wait that reads 0 in the singular', () => {
+            renderStalls({
+                ...INPUT_STARVED_STALLS,
+                threads: INPUT_STARVED_STALLS.threads.map((entry) =>
+                    entry.thread === PipelineThread.T2 && entry.hardware_counters
+                        ? {
+                              ...entry,
+                              hardware_counters: { ...entry.hardware_counters, zero_waits: ['Semaphore Full Wait T2'] },
+                          }
+                        : entry,
+                ),
+            });
+
+            expect(screen.getByTestId(`${TEST_IDS.PIPELINE_STALL_ZERO_WAITS}-${PipelineThread.T2}`)).toHaveTextContent(
+                '1 named wait reads 0',
+            );
         });
 
         it('notes that waits overlap and never add up to the stalled share', () => {
@@ -253,6 +271,27 @@ describe('DeviceOperationStalls', () => {
             );
         });
 
+        it("names the pack core's poll when cb_reserve_back is the largest stall", () => {
+            const share =
+                INPUT_STARVED_STALLS.threads[2].instrumentation?.[CbWaitZone.RESERVE_BACK]?.kernel_share_percent;
+
+            renderStalls({
+                ...INPUT_STARVED_STALLS,
+                stalled_percent: share ?? null,
+                stalled_thread: PipelineThread.T2,
+                largest_wait: {
+                    label: CbWaitZone.RESERVE_BACK,
+                    source: StallSource.INSTRUMENTATION,
+                    percent: share ?? 0,
+                    downstream: false,
+                },
+            });
+
+            expect(screen.getByTestId(TEST_IDS.PIPELINE_STALL_SUMMARY)).toHaveTextContent(
+                'Largest stall: T2 Pack, 14.4%, polling cb_reserve_back (instrumentation)',
+            );
+        });
+
         it("names a stall rate's largest named wait, with its own share", () => {
             renderStalls(UNPACK_BOUND_STALLS);
 
@@ -306,6 +345,16 @@ describe('DeviceOperationStalls', () => {
             renderStalls({ ...NO_COMPUTE_KERNEL_STALLS, cb_waits: NOT_CAPTURED_STALLS.cb_waits });
 
             expect(screen.getByTestId(TEST_IDS.PIPELINE_STALL_NOTE)).not.toHaveTextContent('ignored');
+        });
+
+        it("draws the whole panel for a row that doesn't say whether it has a compute kernel", () => {
+            renderStalls({ ...INPUT_STARVED_STALLS, has_compute_kernel: null });
+
+            expect(screen.queryByTestId(TEST_IDS.PIPELINE_STALL_NOTE)).toBeNull();
+            expect(threadBar(PipelineThread.T0)).toBeInTheDocument();
+            expect(
+                screen.getByTestId(`${TEST_IDS.PIPELINE_STALL_CB_WAIT}-${CbWaitZone.WAIT_FRONT}`),
+            ).toBeInTheDocument();
         });
 
         it('says counters were not recorded for a compute operation, still drawing its CB polls', () => {

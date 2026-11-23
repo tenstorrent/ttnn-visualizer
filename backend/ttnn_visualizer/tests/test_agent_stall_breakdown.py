@@ -6,12 +6,13 @@
 capture without the counters or the CB waits is told. #2372"""
 
 import json
+import re
 from unittest.mock import patch
 
 import pytest
 from ttnn_visualizer import hardware_counters, pipeline_stalls
 from ttnn_visualizer.agent import hw_utilisation, server, stall_breakdown, tools
-from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT
+from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_ECHOED_CHARS
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
 from ttnn_visualizer.csv_queries import REPORT_ROW_ID_OFFSET
 from ttnn_visualizer.tests.hardware_counter_capture import (
@@ -22,13 +23,17 @@ from ttnn_visualizer.tests.smoke_capture import signpost, smoke_rows, write_ops_
 from ttnn_visualizer.tests.stall_capture import (
     CB_RESERVE_BACK,
     CB_WAIT_FRONT,
+    COMPUTE,
+    INPUT_STARVED,
     INPUT_STARVED_POSITION,
     OUTPUT_BLOCKED_POSITION,
     STALE_CB_POSITION,
     STALL_OPS,
     UNPACK_BOUND_POSITION,
+    StallOp,
     counter_average,
     stall_rows,
+    two_device_stall_rows,
     write_stall_capture,
 )
 
@@ -142,6 +147,61 @@ class TestSelection:
 
         assert _ids(answer) == [_perf_id(OUTPUT_BLOCKED_POSITION)]
         assert answer["matched"] == 2
+
+    def test_only_the_calls_an_op_code_returns_are_read_in_full(self, captured):
+        """A decode loop calls one op code thousands of times."""
+        registry, handle = captured
+
+        with patch.object(
+            stall_breakdown, "_op_entry", wraps=stall_breakdown._op_entry
+        ) as read:
+            answer = stall_breakdown.stall_breakdown(
+                registry, handle, op_code="Untilize", limit=1
+            )
+
+        assert answer["matched"] == 2
+        assert read.call_count == 1
+
+    def test_a_limit_cuts_an_op_codes_ranking_without_reordering_it(self, tmp_path):
+        """Every op as one op code: stalled ops, then ties on no stall and on device
+        time, which the cut keeps in the order the full ranking gives them."""
+        rows = [{**row, "OP CODE": "Untilize"} for row in stall_rows()]
+        write_ops_perf(tmp_path / "one-op-code", rows)
+        registry, handle = _load(tmp_path / "one-op-code")
+
+        def ops(limit):
+            return stall_breakdown.stall_breakdown(
+                registry, handle, op_code="Untilize", limit=limit
+            )["ops"]
+
+        ranked = ops(len(STALL_OPS))
+        assert len(ranked) == len(STALL_OPS)
+        for limit in range(1, len(STALL_OPS)):
+            assert ops(limit) == ranked[:limit]
+
+    def test_perf_ids_are_all_answered_whatever_the_limit(self, captured):
+        registry, handle = captured
+        wanted = [_perf_id(INPUT_STARVED_POSITION), _perf_id(UNPACK_BOUND_POSITION)]
+
+        answer = stall_breakdown.stall_breakdown(
+            registry, handle, perf_ids=wanted, limit=1
+        )
+
+        assert answer["returned"] == 2
+
+    def test_a_long_perf_id_is_cut_in_its_refusal(self, captured):
+        registry, handle = captured
+        long_id = "9" * 500
+        shown = repr(long_id)
+
+        with pytest.raises(ValueError) as refusal:
+            stall_breakdown.stall_breakdown(registry, handle, perf_ids=[long_id])
+
+        assert long_id not in str(refusal.value)
+        assert re.search(
+            re.escape(f"{shown[:MAX_ECHOED_CHARS]}... ({len(shown)} characters)"),
+            str(refusal.value),
+        )
 
     def test_an_op_code_matches_a_calls_raw_op_code(self, tmp_path):
         """tt-perf-report adds a matmul's shapes to its op code; an agent passes the
@@ -271,6 +331,51 @@ class TestRanking:
         assert op["cb_waits"] == {"state": "ignored", "fill_hint": None}
         assert op["stalled_us"] is None
 
+    @pytest.mark.parametrize(
+        ("device_1_kernel_ns", "kept"), [(30_000, 1), (20_000, 0)], ids=["1", "0"]
+    )
+    def test_a_merged_ops_cells_and_counters_are_the_kept_devices(
+        self, tmp_path, device_1_kernel_ns, kept
+    ):
+        """tt-perf-report keeps the slower device's row; its CB sums, core count and
+        counters must all be that row's, not mixed with the other device's."""
+        theirs = StallOp(
+            64,
+            device_1_kernel_ns,
+            COMPUTE,
+            640_000,
+            64_000,
+            {**INPUT_STARVED, "Thread 0 Stall Rate": 9.0},
+        )
+        write_ops_perf(
+            tmp_path / "two-devices",
+            two_device_stall_rows({INPUT_STARVED_POSITION: theirs}),
+        )
+        registry, handle = _load(tmp_path / "two-devices")
+        merged = next(
+            row
+            for row in tools.canonical_report(registry, handle)["report"]
+            if not tools.is_signpost_row(row)
+        )
+        ours = STALL_OPS[INPUT_STARVED_POSITION]
+        expected = theirs if kept == 1 else ours
+
+        op = stall_breakdown.stall_breakdown(registry, handle, perf_ids=[merged["id"]])[
+            "ops"
+        ][0]
+        front = op["threads"][0]
+
+        assert op["device"] == kept
+        assert op["core_count"] == expected.cores
+        assert front["hardware_counters"]["stall_rate"]["avg"] == (
+            9.0
+            if kept == 1
+            else counter_average(INPUT_STARVED_POSITION, "Thread 0 Stall Rate")
+        )
+        assert front["instrumentation"]["cb_wait_front"]["per_core_us"] == round(
+            expected.cb_wait_front_ns / expected.cores / 1000, 3
+        )
+
     def test_the_report_total_is_every_ops_device_time_not_the_returned_ones(
         self, captured
     ):
@@ -364,6 +469,37 @@ class TestCapture:
         assert SUM_FLAG in answer["fill_hint"]
         assert SUM_FLAG in answer["caveat"]
         assert "near 0 does not mean" in answer["caveat"]
+
+    def test_a_partitioned_capture_without_sum_profiling_carries_both_caveats(
+        self, tmp_path
+    ):
+        rows = [
+            {**row, "SUB DEVICE ID": str(position % 2)}
+            for position, row in enumerate(stall_rows(sum_profiling=False))
+        ]
+        write_ops_perf(tmp_path / "partitioned", rows)
+        registry, handle = _load(tmp_path / "partitioned")
+
+        caveat = stall_breakdown.stall_breakdown(registry, handle)["caveat"]
+
+        assert "spans 2 sub-devices" in caveat
+        assert stall_breakdown.NO_SUM_PROFILING_CAVEAT in caveat
+
+    def test_a_capture_without_sum_profiling_is_read_for_it_once(
+        self, without_sum_profiling
+    ):
+        """Without a CB wait, finding none reads every op."""
+        registry, handle = without_sum_profiling
+
+        with patch.object(
+            pipeline_stalls, "has_cb_waits", wraps=pipeline_stalls.has_cb_waits
+        ) as read:
+            stall_breakdown.stall_breakdown(registry, handle)
+            first = read.call_count
+            stall_breakdown.stall_breakdown(registry, handle, op_code="Untilize")
+
+        assert first == len(STALL_OPS)
+        assert read.call_count == first
 
     @pytest.mark.parametrize(
         "rows",

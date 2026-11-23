@@ -2,6 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
+import 'styles/components/MissingValue.scss';
+
 const MISSING_VALUE = '—';
 
 interface MissingValueProps {

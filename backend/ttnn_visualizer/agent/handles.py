@@ -104,6 +104,8 @@ class CacheVariant(str, Enum):
     # Frame 0 of every linked operation's stack trace by rank, which `source_lines`
     # files each performance row under.
     CALL_SITES = "call_sites"
+    # Whether any op of the report has a CB wait, which `stall_breakdown` reads.
+    SUM_PROFILING = "sum_profiling"
 
 
 # Snapshots narrowed by a scope -- a signpost range -- kept at once, across every

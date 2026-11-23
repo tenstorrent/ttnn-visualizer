@@ -4385,6 +4385,17 @@ class TestRowSelection:
 
         assert [row["op_code"] for row in rows] == ["Gelu", "Add"]
 
+    def test_ids_are_read_no_further_than_the_last_one_found(self):
+        """`core_spread` names one row of a report that can hold 10^5."""
+
+        class _Unread(dict):
+            def get(self, key, default=None):
+                raise AssertionError("read a row past the last id asked for")
+
+        rows = tools.perf_rows([*self.ROWS, _Unread()], ["4", "2"])
+
+        assert [row["op_code"] for row in rows] == ["Matmul", "Add"]
+
     @pytest.mark.parametrize(
         ("perf_id", "refusal"),
         [("99", "not an operation_id"), ("3", "is the signpost 'PERF_START'")],

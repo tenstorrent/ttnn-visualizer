@@ -183,9 +183,16 @@ def csv_position(row: Dict) -> Optional[int]:
 
 
 def perf_rows(rows: List[Dict], perf_ids: Sequence[object]) -> List[Dict]:
-    """The rows `perf_ids` name, in their order; refused for an id no row has, as an
-    operation_id passed by mistake is, and for a signpost."""
-    by_id = {str(row.get("id")): row for row in rows}
+    """The rows `perf_ids` name, in their order, read up to the last of them; refused for
+    an id no row has, as an operation_id passed by mistake is, and for a signpost."""
+    wanted = {str(perf_id) for perf_id in perf_ids}
+    by_id: Dict[str, Dict] = {}
+    for candidate in rows:
+        row_id = str(candidate.get("id"))
+        if row_id in wanted and row_id not in by_id:
+            by_id[row_id] = candidate
+            if len(by_id) == len(wanted):
+                break
     named = []
     for perf_id in perf_ids:
         row = by_id.get(str(perf_id))
@@ -702,7 +709,7 @@ def project_row(row: Dict, metric: str = DEFAULT_METRIC) -> Dict[str, object]:
     return {
         "id": row.get("id"),
         **cut_op_code("op_code", _display_op_code(row)),
-        metric: _rounded(finite_number(row.get(SORTABLE_METRICS[metric]))),
+        metric: metric_value(row, metric),
         "cores": finite_number(row.get("cores")),
         "bound": row.get("bound") or None,
         # Without it a null bound reads as "fine" when the op was never modelled (#2064).
@@ -711,7 +718,12 @@ def project_row(row: Dict, metric: str = DEFAULT_METRIC) -> Dict[str, object]:
     }
 
 
-def _raw_op_code(row: Dict) -> str:
+def metric_value(row: Dict, metric: str = DEFAULT_METRIC) -> Optional[float]:
+    """A row's metric as `project_row` gives it."""
+    return _rounded(finite_number(row.get(SORTABLE_METRICS[metric])))
+
+
+def raw_op_code(row: Dict) -> str:
     """A row's op code before tt-perf-report adds a matmul's shapes or conv config."""
     return str(row.get("raw_op_code") or row.get("op_code") or "").strip()
 
@@ -913,7 +925,7 @@ def program_cache(
     rows = canonical_report(registry, handle).get("report", [])
     calls_by_op_code: Dict[str, _ProgramCalls] = {}
     for row, first in perf_flags.program_calls(rows):
-        op_code = _raw_op_code(row)
+        op_code = raw_op_code(row)
         entry = calls_by_op_code.setdefault(op_code, _ProgramCalls(op_code))
         entry.calls += 1
         if first:
@@ -1158,7 +1170,7 @@ def _op_code_key(row: Dict) -> Optional[str]:
 def _signature_key(
     row: Dict, signatures: List[Optional[str]]
 ) -> Optional[Tuple[str, str]]:
-    op_code = _raw_op_code(row)
+    op_code = raw_op_code(row)
     if not op_code:
         return None
     position = csv_position(row)
@@ -2453,12 +2465,14 @@ __all__ = [
     "diff_reports",
     "empty_detail_fields",
     "is_signpost_row",
+    "metric_value",
     "op_breakdown",
     "partitioned_caveat",
     "perf_rows",
     "program_cache",
     "project_row",
     "projection",
+    "raw_op_code",
     "range_ignored",
     "read_flag_inputs",
     "row_limit",
