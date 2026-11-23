@@ -27,6 +27,25 @@ export class ReportChangedError extends AxiosError {
 export const isReportChangedError = (error: unknown): error is ReportChangedError =>
     error instanceof ReportChangedError;
 
+// TanStack Query's own default: doubles from a second, up to thirty
+const defaultRetryDelay = (failureCount: number) => Math.min(1000 * 2 ** failureCount, 30_000);
+
+/**
+ * Retry options for a memory-report query. An answer for another report is retried once,
+ * at once: a report picked again while its first read is still in flight shares that read,
+ * which the server answered for the report picked in between, and by the time it fails
+ * this report is active again. A query no longer observed is not retried, so a read left
+ * behind by a switch costs nothing more. Other errors keep the hook's own policy.
+ */
+export const getMemoryReportRetry = (
+    retries = 0,
+    retryDelay: (failureCount: number) => number = defaultRetryDelay,
+) => ({
+    retry: (failureCount: number, error: unknown) =>
+        isReportChangedError(error) ? failureCount === 0 : failureCount < retries,
+    retryDelay: (failureCount: number, error: unknown) => (isReportChangedError(error) ? 0 : retryDelay(failureCount)),
+});
+
 type ResponseHeaders = AxiosResponse['headers'] | undefined;
 
 const getAnsweredReportId = (value: string): string | null => {

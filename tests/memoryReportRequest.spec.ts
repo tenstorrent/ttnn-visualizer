@@ -12,7 +12,12 @@ import { AxiosError, AxiosHeaders, AxiosResponse, HttpStatusCode, InternalAxiosR
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import axiosInstance from '../src/libs/axiosInstance';
 import { ACTIVE_MEMORY_REPORT_HEADER } from '../src/definitions/ReportHeaders';
-import { ReportChangedError, getMemoryReportData, isReportChangedError } from '../src/functions/memoryReportRequest';
+import {
+    ReportChangedError,
+    getMemoryReportData,
+    getMemoryReportRetry,
+    isReportChangedError,
+} from '../src/functions/memoryReportRequest';
 
 vi.mock('../src/libs/axiosInstance', () => ({
     default: {
@@ -120,5 +125,36 @@ describe('getMemoryReportData', () => {
         vi.mocked(axiosInstance.get).mockRejectedValue(rejection);
 
         await expect(getMemoryReportData(ENDPOINT, REPORT_ID)).rejects.toBe(rejection);
+    });
+});
+
+describe('getMemoryReportRetry', () => {
+    const reportChanged = new ReportChangedError(REPORT_ID, 'other-run');
+    const serverError = rejectedWith(HttpStatusCode.InternalServerError, REPORT_ID);
+
+    it('retries an answer for another report once, at once', () => {
+        const { retry, retryDelay } = getMemoryReportRetry();
+
+        expect(retry(0, reportChanged)).toBe(true);
+        expect(retryDelay(0, reportChanged)).toBe(0);
+        expect(retry(1, reportChanged)).toBe(false);
+    });
+
+    it('does not retry other errors by default', () => {
+        expect(getMemoryReportRetry().retry(0, serverError)).toBe(false);
+    });
+
+    it("keeps the hook's own retries and delay for other errors", () => {
+        const { retry, retryDelay } = getMemoryReportRetry(2, (failureCount) => failureCount * 100);
+
+        expect(retry(1, serverError)).toBe(true);
+        expect(retry(2, serverError)).toBe(false);
+        expect(retryDelay(1, serverError)).toBe(100);
+    });
+
+    it("defaults to TanStack Query's own delay", () => {
+        const { retryDelay } = getMemoryReportRetry(3);
+
+        expect([0, 1, 5].map((failureCount) => retryDelay(failureCount, serverError))).toEqual([1000, 2000, 30_000]);
     });
 });

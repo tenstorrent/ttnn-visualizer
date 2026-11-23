@@ -88,7 +88,7 @@ import { Signpost } from '../model/Signpost';
 import { TensorsByOperationByAddress } from '../model/BufferSummary';
 import { ActiveReportFingerprints, ActiveReportRuns } from '../model/ReportLinks';
 import { getFolderReportId, getReportId } from '../functions/reportLinks';
-import { getMemoryReportData, isReportChangedError } from '../functions/memoryReportRequest';
+import { getMemoryReportData, getMemoryReportRetry, isReportChangedError } from '../functions/memoryReportRequest';
 import { ReportLinkRole } from '../definitions/ReportLinks';
 import { L1_DEFAULT_MEMORY_SIZE } from '../definitions/L1MemorySize';
 import {
@@ -292,6 +292,7 @@ const useGetAllBuffers = (bufferType: BufferType | null) => {
     return useQuery<Buffer[], AxiosError>({
         queryFn: () => fetchAllBuffers(getFolderReportId(activeProfilerReport), bufferType),
         queryKey: ['fetch-all-buffers', bufferType, activeProfilerReport?.path],
+        ...getMemoryReportRetry(3),
         staleTime: Infinity,
     });
 };
@@ -374,7 +375,7 @@ export const useOperationBuffers = (operationId: number) => {
     return useQuery<BuffersByOperation, AxiosError>({
         queryKey: ['get-operation-buffers', operationId, activeProfilerReport?.path],
         queryFn: () => fetchOperationBuffers(getFolderReportId(activeProfilerReport), operationId),
-        retry: false,
+        ...getMemoryReportRetry(),
         staleTime: Infinity,
     });
 };
@@ -566,7 +567,7 @@ export const useGetClusterDescription = () => {
     return useQuery<ClusterModel | null, AxiosError>({
         queryFn: () => fetchClusterDescription(getFolderReportId(activeProfilerReport)),
         queryKey: ['get-cluster-description', activeProfilerReport?.path],
-        retry: false,
+        ...getMemoryReportRetry(),
         // The descriptor lives beside the memory report, so without one the request can
         // only 404. The navigation reads this to decide whether Topology is reachable and
         // is mounted before any report is chosen.
@@ -656,7 +657,7 @@ export const useGetClusterTopology = () => {
         queryFn: () => fetchClusterTopology(getFolderReportId(activeProfilerReport)),
         queryKey: ['get-cluster-topology', activeProfilerReport?.path],
         initialData: null,
-        retry: false,
+        ...getMemoryReportRetry(),
     });
 };
 
@@ -670,7 +671,7 @@ export const useOperationsList = () => {
                 ? fetchOperations(getFolderReportId(activeProfilerReport))
                 : Promise.resolve([]),
         queryKey: [OPERATIONS_QUERY_KEY, activeProfilerReport?.path],
-        retry: false,
+        ...getMemoryReportRetry(),
         staleTime: Infinity,
     });
 };
@@ -684,7 +685,7 @@ export const useReportErrors = () => {
         queryFn: () => fetchReportErrors(getFolderReportId(activeProfilerReport)),
         queryKey: ['get-report-errors', activeProfilerReport?.path],
         enabled: activeProfilerReport !== null,
-        retry: false,
+        ...getMemoryReportRetry(),
         staleTime: Infinity,
     });
 };
@@ -801,8 +802,7 @@ export const useOperationDetails = (operationId: number | null) => {
     const operationDetails = useQuery<OperationDetailsData, AxiosError>({
         queryFn: () => fetchDetails(),
         queryKey: ['get-operation-detail', operationId, activeProfilerReport?.path],
-        retry: 2,
-        retryDelay: (retryAttempt) => Math.min(retryAttempt * 100, 500),
+        ...getMemoryReportRetry(2, (retryAttempt) => Math.min(retryAttempt * 100, 500)),
         staleTime: Infinity,
     });
 
@@ -1053,7 +1053,7 @@ export const useReportMetadata = () => {
         queryKey: [REPORT_METADATA_QUERY_KEY, activeProfilerReport?.path],
         queryFn: () => fetchReportMetadata(getFolderReportId(activeProfilerReport)),
         enabled: activeProfilerReport !== null,
-        retry: false,
+        ...getMemoryReportRetry(),
         staleTime: Infinity,
     });
 };
@@ -1078,7 +1078,7 @@ export const useReportSourceFiles = () => {
         queryKey: ['get-report-source-files', activeProfilerReport?.path],
         queryFn: () => fetchReportSourceFiles(getFolderReportId(activeProfilerReport)),
         enabled: activeProfilerReport !== null,
-        retry: false,
+        ...getMemoryReportRetry(),
         staleTime: Infinity,
     });
 };
@@ -1153,6 +1153,7 @@ export const useBufferChunks = (operationId: number, address?: number | string, 
     return useQuery<BufferChunk[], AxiosError>({
         queryKey: ['get-buffer-chunks', operationId, address, bufferType, activeProfilerReport?.path],
         queryFn: () => fetchBufferChunks(getFolderReportId(activeProfilerReport), operationId, address, bufferType),
+        ...getMemoryReportRetry(3),
         staleTime: Infinity,
     });
 };
@@ -1192,7 +1193,7 @@ export const useTensors = (bufferType?: BufferType) => {
     return useQuery<Tensor[], AxiosError>({
         queryFn: () => fetchTensors(getFolderReportId(activeProfilerReport), bufferType),
         queryKey: ['get-tensors', activeProfilerReport?.path, bufferType ?? 'all'],
-        retry: false,
+        ...getMemoryReportRetry(),
         staleTime: Infinity,
     });
 };
@@ -1206,7 +1207,7 @@ export const useDevices = () => {
                 ? fetchDevices(getFolderReportId(activeProfilerReport), activeProfilerReport)
                 : Promise.resolve([]),
         queryKey: ['get-devices', activeProfilerReport?.path],
-        retry: false,
+        ...getMemoryReportRetry(),
         staleTime: Infinity,
     });
 };
@@ -1241,7 +1242,7 @@ export const useBuffers = (bufferType: BufferType | null, useRange?: boolean) =>
     const response = useQuery<BuffersByOperation[], AxiosError>({
         queryKey: ['fetch-all-buffers', bufferType, activeProfilerReport],
         enabled: activeProfilerReport !== null,
-        retry: false,
+        ...getMemoryReportRetry(),
         staleTime: Infinity,
         queryFn: async () => {
             if (activeProfilerReport === null) {

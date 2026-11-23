@@ -21,6 +21,7 @@ import { ACTIVE_MEMORY_REPORT_HEADER } from '../src/definitions/ReportHeaders';
 import { isReportChangedError } from '../src/functions/memoryReportRequest';
 import parseMemoryConfig from '../src/functions/parseMemoryConfig';
 import { OperationDescription } from '../src/model/APIData';
+import { ReportFolder } from '../src/definitions/Reports';
 import { makeMemoryConfigArgument, makeOperation, makeTensorRepr } from './helpers/operationDescription';
 
 vi.mock('../src/libs/axiosInstance', () => ({
@@ -40,9 +41,9 @@ const RAW_ARGUMENTS = [
     { name: '1', value: '1, -1, 144' },
 ] as OperationDescription['arguments'];
 
-const renderOperationsList = () => {
+const renderOperationsList = (activeReport: ReportFolder = ACTIVE_REPORT) => {
     const store = createStore();
-    store.set(activeProfilerReportAtom, ACTIVE_REPORT);
+    store.set(activeProfilerReportAtom, activeReport);
     const queryClient = new QueryClient();
 
     const rendered = renderHook(() => useOperationsList(), {
@@ -127,6 +128,31 @@ describe('useOperationsList', () => {
 
             await waitFor(() => expect(result.current.data?.[0].name).toBe(ACTIVE_REPORT.reportName));
             expect(axiosInstance.get).toHaveBeenCalledTimes(3);
+        });
+    });
+
+    describe('for a freshly picked remote report (#2375)', () => {
+        // `path` is the remote path until a reload, and the server names the report by the
+        // local folder it synced to, which need not be that path's basename
+        const REMOTE_REPORT = { path: '/remote/profiler/reports/bert ', reportName: 'bert', syncedName: 'bert' };
+        const answeredFor = (name: string) => ({
+            data: [makeOperation({ stack_trace: '' })],
+            headers: { [ACTIVE_MEMORY_REPORT_HEADER]: name },
+        });
+
+        it('accepts an answer naming its synced folder', async () => {
+            vi.mocked(axiosInstance.get).mockResolvedValue(answeredFor(REMOTE_REPORT.syncedName));
+            const { result } = renderOperationsList(REMOTE_REPORT);
+
+            await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        });
+
+        it('refuses an answer naming the basename of its remote path', async () => {
+            vi.mocked(axiosInstance.get).mockResolvedValue(answeredFor('bert '));
+            const { result } = renderOperationsList(REMOTE_REPORT);
+
+            await waitFor(() => expect(result.current.isError).toBe(true));
+            expect(isReportChangedError(result.current.error)).toBe(true);
         });
     });
 });
