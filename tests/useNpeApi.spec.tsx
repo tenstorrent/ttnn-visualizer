@@ -11,8 +11,7 @@ import { fetchNpeText, useNPETimelineFile, useNpe, useNpeSummary, useNpeWindow }
 import axiosInstance from '../src/libs/axiosInstance';
 import Endpoints from '../src/definitions/Endpoints';
 import { NPE_QUERY_KEY, NPE_TIMELINE_QUERY_KEY, NpeClientErrorKind } from '../src/definitions/NPEData';
-import { CommonInfo, NpeSummary } from '../src/model/NPEModel';
-import { minimalValidNpeData } from './helpers/npeFixtures';
+import { minimalValidNpeData, summary as validSummary } from './helpers/npeFixtures';
 
 const h = vi.hoisted(() => ({
     instanceId: 'test-instance',
@@ -32,23 +31,6 @@ const makeWrapper = (client = makeClient()) => {
     return ({ children }: { children: React.ReactNode }) => (
         <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
-};
-
-const validSummary: NpeSummary = {
-    common_info: { version: '1.0.0' } as CommonInfo,
-    chips: {},
-    zones: [],
-    has_fabric_events: false,
-    n_timesteps: 2,
-    timesteps: {
-        start_cycle: [0, 10],
-        end_cycle: [9, 19],
-        avg_link_demand: [1, 2],
-        avg_link_util: [3, 4],
-        max_link_demand: [5, 6],
-        mcast_write_link_util: [0.1, 0.2],
-        active_count: [0, 1],
-    },
 };
 
 const validWindow = {
@@ -74,7 +56,7 @@ describe('useNpeSummary / useNpeWindow fetch-boundary validation', () => {
         mockedGet.mockResolvedValue({ data: validSummary });
         const { result } = renderHook(() => useNpeSummary('trace.json'), { wrapper: makeWrapper() });
         await waitFor(() => expect(result.current.isSuccess).toBe(true));
-        expect(result.current.data?.n_timesteps).toBe(2);
+        expect(result.current.data?.n_timesteps).toBe(validSummary.n_timesteps);
     });
 
     it('rejects a length-mismatched summary as a synthetic 422 AxiosError', async () => {
@@ -86,6 +68,19 @@ describe('useNpeSummary / useNpeWindow fetch-boundary validation', () => {
         expect(result.current.error?.status).toBe(HttpStatusCode.UnprocessableEntity);
         expect(result.current.error?.response?.data).toEqual({ kind: NpeClientErrorKind.SHAPE });
         expect(result.current.error?.message).toMatch(/active_count/);
+    });
+
+    it('rejects a summary without the fabric-event flag as a synthetic 422 AxiosError', async () => {
+        // An index built before INDEX_VERSION 6 would serve this; the view must not fall back to deciding the
+        // event filter per window (#2356).
+        const { has_fabric_events: _omitted, ...bad } = validSummary;
+        mockedGet.mockResolvedValue({ data: bad });
+        const { result } = renderHook(() => useNpeSummary('trace.json'), { wrapper: makeWrapper() });
+        await waitFor(() => expect(result.current.isError).toBe(true));
+        expect(result.current.error?.code).toBe(AxiosError.ERR_BAD_RESPONSE);
+        expect(result.current.error?.status).toBe(HttpStatusCode.UnprocessableEntity);
+        expect(result.current.error?.response?.data).toEqual({ kind: NpeClientErrorKind.SHAPE });
+        expect(result.current.error?.message).toMatch(/fabric-event flag/);
     });
 
     it('resolves a well-shaped window body', async () => {

@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import validateNpeSummary from '../src/functions/validateNpeSummary';
+import { summary } from './helpers/npeFixtures';
 
 const validColumns = (n: number) => ({
     start_cycle: Array.from({ length: n }, (_, i) => i),
@@ -15,14 +16,7 @@ const validColumns = (n: number) => ({
     active_count: Array.from({ length: n }, () => 0),
 });
 
-const validSummary = (n = 3) => ({
-    common_info: { version: '1.0.0' },
-    chips: {},
-    zones: [],
-    has_fabric_events: false,
-    n_timesteps: n,
-    timesteps: validColumns(n),
-});
+const validSummary = (n = 3) => ({ ...summary, n_timesteps: n, timesteps: validColumns(n) });
 
 describe('validateNpeSummary', () => {
     it('accepts a well-formed columnar summary', () => {
