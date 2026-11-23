@@ -16,9 +16,15 @@ const WINDOW_HEIGHT = 900;
 const TRIGGER_HEIGHT = 24;
 const ARROW_GAP = 15;
 
+const ARROW_OFFSETS = { [BELOW_TRIGGER]: { x: 0, y: ARROW_GAP }, [ABOVE_TRIGGER]: { x: 0, y: -ARROW_GAP } };
+
 type ModifierArguments = Parameters<NonNullable<PopperCustomModifier['fn']>>[0];
 
-const fit = (triggerTop: number, placement: Placement = BELOW_TRIGGER) => {
+const fit = (
+    triggerTop: number,
+    placement: Placement = BELOW_TRIGGER,
+    offsets: typeof ARROW_OFFSETS | null = ARROW_OFFSETS,
+) => {
     const state = {
         elements: {
             reference: { getBoundingClientRect: () => ({ top: triggerTop, bottom: triggerTop + TRIGGER_HEIGHT }) },
@@ -26,9 +32,7 @@ const fit = (triggerTop: number, placement: Placement = BELOW_TRIGGER) => {
         },
         placement,
         reset: false,
-        modifiersData: {
-            offset: { [BELOW_TRIGGER]: { x: 0, y: ARROW_GAP }, [ABOVE_TRIGGER]: { x: 0, y: -ARROW_GAP } },
-        },
+        modifiersData: offsets ? { offset: offsets } : {},
     };
     fitPopoverToWindow.fn?.({ state, options: {}, name: 'fitPopoverToWindow' } as unknown as ModifierArguments);
 
@@ -60,5 +64,29 @@ describe('fitPopoverToWindow', () => {
 
         expect(fitted.reset).toBe(false);
         expect(fitted.room).toBe(`${triggerTop - ARROW_GAP - WINDOW_MARGIN}px`);
+    });
+
+    it('goes back below its trigger once the trigger is in the top half again, sizing nothing until then', () => {
+        const moved = fit(100, ABOVE_TRIGGER);
+
+        expect(moved.placement).toBe(BELOW_TRIGGER);
+        expect(moved.reset).toBe(true);
+        expect(moved.room).toBe('');
+    });
+
+    it('opens below a trigger with as much room under it as over it', () => {
+        const triggerTop = (WINDOW_HEIGHT - TRIGGER_HEIGHT) / 2;
+        const fitted = fit(triggerTop);
+
+        expect(fitted.placement).toBe(BELOW_TRIGGER);
+        expect(fitted.reset).toBe(false);
+        expect(fitted.room).toBe(`${triggerTop - ARROW_GAP - WINDOW_MARGIN}px`);
+    });
+
+    it('leaves no gap for an arrow when the popover has no offset', () => {
+        const triggerTop = 100;
+        const fitted = fit(triggerTop, BELOW_TRIGGER, null);
+
+        expect(fitted.room).toBe(`${WINDOW_HEIGHT - triggerTop - TRIGGER_HEIGHT - WINDOW_MARGIN}px`);
     });
 });

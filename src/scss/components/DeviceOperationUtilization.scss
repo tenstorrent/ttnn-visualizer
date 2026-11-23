@@ -20,6 +20,7 @@ $dialog-table-max-height: 60vh;
     padding: 12px;
 }
 
+// Both classes, so this outweighs Blueprint's own `.bp6-dialog` width whichever stylesheet loads last.
 .bp6-dialog.hardware-counter-dialog {
     width: $dialog-width;
 }

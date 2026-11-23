@@ -258,6 +258,17 @@ def test_a_row_past_either_end_is_not_found(client, counted, perf_id):
     assert response.get_json()["error"] == f"No performance row {perf_id}."
 
 
+@pytest.mark.parametrize("perf_id", ["+10000", "0010000"])
+def test_a_missing_row_is_named_by_the_number_rather_than_the_text_of_the_url(
+    client, counted, perf_id
+):
+    response = _get(client, counted, perf_id)
+
+    assert response.status_code == HTTPStatus.NOT_FOUND
+    assert response.get_json()["error"] == "No performance row 10000."
+    assert perf_id not in response.get_data(as_text=True)
+
+
 @pytest.mark.parametrize("perf_id", ["abc", "<b>7"])
 def test_an_id_that_is_not_a_whole_number_is_refused_without_echoing_it(
     client, counted, perf_id
@@ -265,6 +276,7 @@ def test_an_id_that_is_not_a_whole_number_is_refused_without_echoing_it(
     response = _get(client, counted, perf_id)
 
     assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert response.get_json()["error"] == "Invalid performance row id."
     assert perf_id not in response.get_data(as_text=True)
 
 

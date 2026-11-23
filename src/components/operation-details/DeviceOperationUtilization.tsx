@@ -56,7 +56,7 @@ const PANEL_TITLE = 'Hardware counters';
 const TABS_ID = 'hardware-counter-tabs';
 const UTILIZATION_TAB_TITLE = 'Utilization';
 const STALLS_TAB_TITLE = 'Stalls';
-const CAPTION_RANGE = 'with the Min–Max range across those cores, read once over the kernel.';
+const READ_OVER_KERNEL = 'read once over the kernel';
 // tt-perf-report's `merge_device_rows`, which keeps one device's row for each operation.
 const MERGED_DEVICES_CAPTION =
     "The report merges an operation's devices into one row: the device with the longest kernel duration, or the " +
@@ -80,8 +80,10 @@ const STAT_COLUMNS: { heading: string; read: (reading: HardwareCounterReading) =
     { heading: 'Max', read: (reading) => reading.max },
     { heading: 'Avg', read: (reading) => reading.avg },
 ];
+const STAT_HEADINGS = STAT_COLUMNS.map(({ heading }) => heading);
+const STAT_LIST = `${STAT_HEADINGS.slice(0, -1).join(', ')} and ${STAT_HEADINGS.at(-1)}`;
 
-// Flip would move a panel that fits on neither side back below its trigger, past the window's edge.
+// fitPopoverToWindow picks the side; flip would only pick again by its own rule, for the modifier to undo.
 const POPOVER_MODIFIERS: PopperModifierOverrides = { flip: { enabled: false } };
 const POPOVER_CUSTOM_MODIFIERS = [fitPopoverToWindow];
 // Once the dialog has closed on this press, the popover would take it as an outside click and close too.
@@ -97,16 +99,18 @@ const getAbsenceReason = (reading: HardwareCounterReading): string =>
     getMissingReason(getAbsenceLabel(reading), reading.fill_hint);
 
 const describeCores = (deviceId: number | null): string =>
-    deviceId === null ? 'the cores' : `the cores of device ${deviceId}`;
+    `${deviceId === null ? 'the cores' : `the cores of device ${deviceId}`} that ran the operation's compute kernel`;
+
+const getDeviceSuffix = (deviceId: number): string => ` · Device ${deviceId}`;
 
 const getPanelCaption = (deviceId: number | null): string => {
-    const caption = `Each bar is the unit's average utilization across ${describeCores(deviceId)} that ran the operation's compute kernel, ${CAPTION_RANGE}`;
+    const caption = `Each bar is the unit's average utilization across ${describeCores(deviceId)}, with the Min–Max range across those cores, ${READ_OVER_KERNEL}.`;
 
     return deviceId === null ? caption : `${caption} ${MERGED_DEVICES_CAPTION}`;
 };
 
 const getAllCountersCaption = (deviceId: number | null): string =>
-    `Min, Median, Max and Avg are taken across ${describeCores(deviceId)} that ran the operation's compute kernel, read once over the kernel.`;
+    `${STAT_LIST} are taken across ${describeCores(deviceId)}, ${READ_OVER_KERNEL}.`;
 
 interface AbsenceProps {
     reading: HardwareCounterReading;
@@ -228,7 +232,7 @@ interface AllCountersDialogProps {
 
 const AllCountersDialog = ({ families, deviceId, isOpen, onClose }: AllCountersDialogProps) => (
     <Dialog
-        title={deviceId === null ? ALL_COUNTERS_TITLE : `${ALL_COUNTERS_TITLE} · Device ${deviceId}`}
+        title={deviceId === null ? ALL_COUNTERS_TITLE : `${ALL_COUNTERS_TITLE}${getDeviceSuffix(deviceId)}`}
         icon={IconNames.DASHBOARD}
         isOpen={isOpen}
         onClose={onClose}
@@ -415,8 +419,7 @@ export const HardwareCounterPanel = ({ counters, isMultiDevice = false }: Hardwa
                         className='hardware-counter-device'
                         data-testid={TEST_IDS.HARDWARE_COUNTER_DEVICE}
                     >
-                        {' '}
-                        · Device {deviceId}
+                        {getDeviceSuffix(deviceId)}
                     </span>
                 )}
             </div>
