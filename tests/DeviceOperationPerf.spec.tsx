@@ -161,6 +161,15 @@ describe('DeviceOperationPerfSummary', () => {
         expect(screen.queryByText('Kernel Duration')).not.toBeInTheDocument();
     });
 
+    it('opens the whole perf row from the keyboard', async () => {
+        const target = renderDeviceSummary(accumulation).querySelector('.device-operation-perf') as HTMLElement;
+
+        // Reachable from the keyboard: the tooltip makes its target focusable, which `fireEvent.focus` alone would not show.
+        expect(target).toHaveAttribute('tabindex', '0');
+        fireEvent.focus(target);
+        expect(await screen.findByText(/Performance report row/)).toHaveTextContent('Performance report row 6');
+    });
+
     it("writes out once why an unanalysed op's roofline cells are empty", async () => {
         await openDetails(renderDeviceSummary(accumulation));
 
