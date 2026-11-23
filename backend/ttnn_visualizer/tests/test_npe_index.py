@@ -11,6 +11,7 @@ readers `noc_congestion` uses, which must never write beside the trace (#2156).
 """
 
 import json
+import logging
 import os
 import random
 import sqlite3
@@ -194,7 +195,7 @@ def test_summary_reports_fabric_events_when_any_transfer_is_fabric(tmp_path):
     assert summary["has_fabric_events"] is True
 
 
-def test_summary_reports_fabric_events_from_a_transfer_with_no_id(tmp_path):
+def test_summary_reports_fabric_events_from_a_transfer_with_no_id(tmp_path, caplog):
     # The build skips a transfer with no id, but the whole-file path still sees
     # it, so the flag must be decided before that skip.
     obj = _make_npe_object(n_transfers=3)
@@ -202,8 +203,11 @@ def test_summary_reports_fabric_events_from_a_transfer_with_no_id(tmp_path):
     del obj["noc_transfers"][-1]["id"]
     npe_path = _write_npe(tmp_path, obj)
 
-    summary = read_summary(ensure_index(npe_path))
+    with caplog.at_level(logging.WARNING, logger="ttnn_visualizer.npe_index"):
+        summary = read_summary(ensure_index(npe_path))
 
+    # Guards the premise: the test means nothing if the build kept the transfer.
+    assert "skipped 1 transfer(s) with no id" in caplog.text
     assert summary["has_fabric_events"] is True
 
 

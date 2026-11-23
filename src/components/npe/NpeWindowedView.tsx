@@ -62,13 +62,19 @@ const NpeWindowedView = ({ fileName, loadAttempt }: NpeWindowedViewProps) => {
 
     // Assemble at `selectedTimestep` (not `npeWindow.t`) so an in-flight seek keeps
     // the previous frame on the rendered step instead of flashing empty.
-    const npeData = useMemo(
+    // The fabric-event flag travels with the frame so the view never gets a frame
+    // without it and falls back to deciding from the window's transfers (#2356).
+    const frame = useMemo(
         () =>
             summary && npeWindow && baseTimestepData
-                ? assembleWindowedNpeData(summary, npeWindow, baseTimestepData, selectedTimestep)
+                ? {
+                      npeData: assembleWindowedNpeData(summary, npeWindow, baseTimestepData, selectedTimestep),
+                      hasFabricEvents: summary.has_fabric_events,
+                  }
                 : null,
         [summary, npeWindow, baseTimestepData, selectedTimestep],
     );
+    const npeData = frame?.npeData ?? null;
     useEffect(() => {
         if (loadAttempt.id === null) {
             return;
@@ -132,7 +138,7 @@ const NpeWindowedView = ({ fileName, loadAttempt }: NpeWindowedViewProps) => {
                 isLoading={false}
             />
         );
-    } else if (!npeData) {
+    } else if (!frame) {
         // No frame yet: surface a first-window failure instead of trapping the user on
         // an infinite spinner; otherwise the index/first window is still loading. While
         // the summary is still loading, always show "Processing…" — a window request
@@ -171,9 +177,9 @@ const NpeWindowedView = ({ fileName, loadAttempt }: NpeWindowedViewProps) => {
                     </Callout>
                 )}
                 <NPEView
-                    npeData={npeData}
+                    npeData={frame.npeData}
                     timelineData={baseTimestepData ?? undefined}
-                    hasFabricEvents={summary?.has_fabric_events}
+                    hasFabricEvents={frame.hasFabricEvents}
                     selectedTimestep={selectedTimestep}
                     onSelectedTimestepChange={setSelectedTimestep}
                     reportKey={fileName}

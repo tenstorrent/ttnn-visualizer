@@ -277,18 +277,20 @@ describe('NPEView usage events', () => {
 
     it('records each event filter state, including from one scope straight to the other', () => {
         renderView([FABRIC_TRANSFER]);
-        const fabric = screen.getByLabelText('Fabric events');
-        const local = screen.getByLabelText('Local events');
+        const checked = () => {
+            const { fabric, local } = eventFilterSwitches();
+            return [fabric.checked, local.checked];
+        };
 
-        fireEvent.click(local);
-        expect([fabric, local].map((input) => (input as HTMLInputElement).checked)).toEqual([true, false]);
+        fireEvent.click(screen.getByLabelText('Local events'));
+        expect(checked()).toEqual([true, false]);
         // Fabric only, so switching fabric off shows local instead of nothing.
-        fireEvent.click(fabric);
-        expect([fabric, local].map((input) => (input as HTMLInputElement).checked)).toEqual([false, true]);
-        fireEvent.click(local);
-        expect([fabric, local].map((input) => (input as HTMLInputElement).checked)).toEqual([true, false]);
-        fireEvent.click(local);
-        expect([fabric, local].map((input) => (input as HTMLInputElement).checked)).toEqual([true, true]);
+        fireEvent.click(screen.getByLabelText('Fabric events'));
+        expect(checked()).toEqual([false, true]);
+        fireEvent.click(screen.getByLabelText('Local events'));
+        expect(checked()).toEqual([true, false]);
+        fireEvent.click(screen.getByLabelText('Local events'));
+        expect(checked()).toEqual([true, true]);
 
         expect(recordEvent.mock.calls).toEqual([
             [modeChanged(NpeMode.FABRIC_EVENTS)],
