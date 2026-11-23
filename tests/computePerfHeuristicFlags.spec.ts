@@ -156,6 +156,49 @@ describe('annotatePerfHeuristicFlags', () => {
         ).not.toContain(PerfHeuristicFlag.LOW_UTILISATION);
     });
 
+    describe('perf model placeholder', () => {
+        // A 127 µs op on every core: a utilisation near zero, if 1 ns were a modelled ideal time.
+        const placeholder: Partial<TypedPerfTableRow> = { pm_ideal_ns: 1, device_time: 127, cores: 64 };
+
+        const annotate = (overrides: Partial<TypedPerfTableRow> = {}): TypedPerfTableRow =>
+            annotatePerfHeuristicFlags([makeRow({ ...placeholder, ...overrides })], MAX_CORES)[0];
+
+        it('never flags low utilisation from a 1 ns ideal time', () => {
+            expect(getFlags(placeholder)).not.toContain(PerfHeuristicFlag.LOW_UTILISATION);
+        });
+
+        it('gives the utilisation-unknown note where the low-utilisation check reads the row', () => {
+            const row = annotate();
+
+            expect(row.hasUtilisationUnknownNote).toBe(true);
+            expect(row.heuristicFlagDetails).toBeUndefined();
+        });
+
+        it.each([
+            ['below MIN_TOTAL_PERCENT', { total_percent: 0.1 }],
+            ['on a signpost', { op_type: OpType.SIGNPOST }],
+            ['on a host op', { bound: BoundType.HOST }],
+            ['on a missing row', { missing: true }],
+        ])('gives no utilisation-unknown note %s', (_, overrides: Partial<TypedPerfTableRow>) => {
+            expect(annotate(overrides).hasUtilisationUnknownNote).toBe(false);
+        });
+
+        it.each([2, 300, null])('gives no utilisation-unknown note for an ideal time of %s', (idealNs) => {
+            expect(annotate({ pm_ideal_ns: idealNs }).hasUtilisationUnknownNote).toBe(false);
+        });
+
+        it('still flags a modelled ideal time however short', () => {
+            expect(getFlags({ ...placeholder, pm_ideal_ns: 2 })).toContain(PerfHeuristicFlag.LOW_UTILISATION);
+        });
+
+        it('leaves the other flags alone', () => {
+            expect(getFlags({ ...placeholder, bound: BoundType.DRAM, cores: 8 })).toEqual([
+                PerfHeuristicFlag.DRAM_BOUND,
+                PerfHeuristicFlag.UNDERUTILISED_CORES,
+            ]);
+        });
+    });
+
     it('flags underutilised cores when core count is well below device max', () => {
         expect(getFlags({ cores: 8 })).toContain(PerfHeuristicFlag.UNDERUTILISED_CORES);
     });

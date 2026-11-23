@@ -201,6 +201,22 @@ class TestEvidence:
             ]
         )
 
+    @pytest.mark.parametrize(
+        "fields",
+        [
+            {"pm_ideal_ns": "1"},
+            {"pm_ideal_ns": ""},
+            {"device_time": ""},
+            {"device_time": "0"},
+            {"cores": "abc"},
+        ],
+    )
+    def test_a_utilisation_it_cannot_read_is_none_rather_than_zero(self, fields):
+        """`getCoreUtilization` returns null there, and the charts leave the op out."""
+        row = perf_flags.typed_row(_row(1, **{**_LOW, **fields}))
+
+        assert perf_flags.core_utilisation(row, 64) is None
+
     def test_utilisation_is_a_percent_cut_to_three_places(self):
         row = perf_flags.typed_row(_row(1, pm_ideal_ns="12.3456789", device_time="1"))
 
