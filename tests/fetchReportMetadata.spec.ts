@@ -5,12 +5,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchReportMetadata } from '../src/hooks/useAPI';
 import axiosInstance from '../src/libs/axiosInstance';
+import { ACTIVE_MEMORY_REPORT_HEADER } from '../src/definitions/ReportHeaders';
+import { ReportChangedError } from '../src/functions/memoryReportRequest';
 
 vi.mock('../src/libs/axiosInstance', () => ({
     default: {
         get: vi.fn(),
     },
 }));
+
+const REPORT_ID = 'memory-run';
 
 describe('fetchReportMetadata', () => {
     beforeEach(() => {
@@ -28,7 +32,7 @@ describe('fetchReportMetadata', () => {
             },
         });
 
-        const result = await fetchReportMetadata();
+        const result = await fetchReportMetadata(REPORT_ID);
 
         expect(result.gitUrl).toBe('https://github.com/foo/bar.git');
         expect(result.gitSha).toBe('abcdef0123456789');
@@ -43,7 +47,7 @@ describe('fetchReportMetadata', () => {
             },
         });
 
-        const result = await fetchReportMetadata();
+        const result = await fetchReportMetadata(REPORT_ID);
 
         expect(result.gitUrl).toBeNull();
         expect(result.gitSha).toBeNull();
@@ -62,7 +66,7 @@ describe('fetchReportMetadata', () => {
             },
         });
 
-        const result = await fetchReportMetadata();
+        const result = await fetchReportMetadata(REPORT_ID);
 
         expect(result.worldSize).toBe(2);
     });
@@ -81,8 +85,18 @@ describe('fetchReportMetadata', () => {
             },
         });
 
-        const result = await fetchReportMetadata();
+        const result = await fetchReportMetadata(REPORT_ID);
 
         expect(result.worldSize).toBe(1);
+    });
+
+    // The instance may already hold a later pick when it handles the request (#2375)
+    it('throws away metadata answered for another report', async () => {
+        vi.mocked(axiosInstance.get).mockResolvedValue({
+            data: { schema_version: '2.0.0' },
+            headers: { [ACTIVE_MEMORY_REPORT_HEADER]: 'other-run' },
+        });
+
+        await expect(fetchReportMetadata(REPORT_ID)).rejects.toBeInstanceOf(ReportChangedError);
     });
 });

@@ -23,6 +23,7 @@ import Range from '../src/components/RangeSlider';
 import ReportLoadRecorder from '../src/components/ReportLoadRecorder';
 import { ReportKind, ReportLoadFailureReason, ReportSource } from '../src/definitions/EventLogEvent';
 import { TARGET_DB_VERSION_MAX } from '../src/definitions/Versions';
+import { ReportChangedError } from '../src/functions/memoryReportRequest';
 import { useMarkReportLoadPending } from '../src/hooks/useReportLoadSettlement';
 import { OPERATIONS_QUERY_KEY, REPORT_METADATA_QUERY_KEY } from '../src/hooks/useAPI';
 import {
@@ -107,6 +108,7 @@ const settledMetadata = (major: number) => () => ({ data: { version: { major, mi
 const failed = (status: HttpStatusCode) => () => ({ data: undefined, error: failedWith(status) });
 const settledRows = () => ({ data: { report: [] }, error: null });
 const settledOperations = () => ({ data: [], error: null });
+const superseded = () => ({ data: undefined, error: new ReportChangedError(REPORT_A.path, REPORT_B.path) });
 
 let store: ReturnType<typeof createStore>;
 
@@ -223,6 +225,29 @@ describe('a chosen memory report', () => {
 
         expect(recordReportLoadFailed).toHaveBeenCalledWith(ReportKind.PROFILER, ReportLoadFailureReason.MISSING_FILE);
         expect(recordReportLoaded).not.toHaveBeenCalled();
+    });
+
+    // The server already held the next pick when it answered this one's reads (#2375)
+    it.each([
+        ['operations', queries.operations],
+        ['metadata', queries.metadata],
+    ])('records nothing when its %s were answered for a report chosen since', (_name, map) => {
+        renderRecorder();
+        choose(ReportKind.PROFILER, REPORT_A);
+        settle(map, REPORT_A.path, superseded);
+
+        expect(recordReportLoadFailed).not.toHaveBeenCalled();
+        expect(recordReportLoaded).not.toHaveBeenCalled();
+        expect(getProbedPendingReportLoads()).toEqual({
+            [ReportKind.PROFILER]: { path: REPORT_A.path, source: ReportSource.LOCAL_TT_METAL },
+        });
+
+        choose(ReportKind.PROFILER, REPORT_B);
+
+        expect(getProbedPendingReportLoads()).toEqual({
+            [ReportKind.PROFILER]: { path: REPORT_B.path, source: ReportSource.LOCAL_TT_METAL },
+        });
+        expect(recordReportLoadFailed).not.toHaveBeenCalled();
     });
 });
 

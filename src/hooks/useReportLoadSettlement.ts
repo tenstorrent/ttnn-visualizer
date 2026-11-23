@@ -9,6 +9,7 @@ import { useCallback, useEffect } from 'react';
 import { ReportKind, ReportLoadFailureReason, ReportSource } from '../definitions/EventLogEvent';
 import { DBVersionValidation } from '../definitions/Versions';
 import { evaluateDbVersion } from '../functions/compareDbVersion';
+import { isReportChangedError } from '../functions/memoryReportRequest';
 import { recordReportLoadFailed, recordReportLoadFailure, recordReportLoaded } from '../functions/reportLoadEvents';
 import {
     PendingReportLoad,
@@ -98,6 +99,12 @@ const useReportLoadSettlement = () => {
         // the same batch as the active report, so a mismatch is never a choice still landing.
         if (pendingProfiler.path !== activeProfilerPath) {
             clearPending(ReportKind.PROFILER, pendingProfiler);
+            return;
+        }
+
+        // Answered for a report chosen since this one, so it says nothing about this load. The
+        // active path moves to that report next, and the branch above then clears the marker.
+        if (isReportChangedError(operationsError) || isReportChangedError(reportMetadataError)) {
             return;
         }
 
