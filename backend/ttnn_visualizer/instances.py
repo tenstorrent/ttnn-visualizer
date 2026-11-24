@@ -445,10 +445,12 @@ def get_or_create_instance(
     mlir_location=None,
     remote_connection=None,
     remote_profiler_folder=None,
+    owner=None,
 ):
     """
     Retrieve an existing tab instance or create a new one if it doesn't exist.
     Uses the Instance model to manage instance data and supports conditional updates.
+    *owner* is recorded only on a new instance, never on an existing one.
     """
     try:
         # Query the database for the tab instance
@@ -461,6 +463,7 @@ def get_or_create_instance(
                 active_report={},
                 remote_connection=None,
                 remote_profiler_folder=None,
+                owner=owner,
             )
             db.session.add(instance_data)
 

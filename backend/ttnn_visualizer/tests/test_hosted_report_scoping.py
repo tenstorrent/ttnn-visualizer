@@ -339,3 +339,83 @@ def test_hosted_instance_update_keeps_the_path_of_a_report_it_leaves_out(hosted_
     assert _stored_instance(hosted_app, "mine").profiler_path == profiler_path_before
     history = client.get("/api/operation-history", query_string={"instanceId": "mine"})
     assert history.get_json() != _SECRET
+
+
+# ---- An instance is reachable only from the session that created it ---------
+
+
+def test_hosted_instance_refuses_another_session_naming_it_in_the_query(hosted_app):
+    """Naming another session's instance used to enrol it, and its reports with it."""
+    victim_folder = _upload_victim_report(hosted_app)
+    attacker = hosted_app.test_client()
+
+    update = _put_instance(attacker, "victim-instance", {"performance_name": ""})
+    history = attacker.get(
+        "/api/operation-history", query_string={"instanceId": "victim-instance"}
+    )
+    listing = attacker.get("/api/profiler", query_string={"instanceId": "attacker"})
+
+    assert update.status_code == HTTPStatus.FORBIDDEN
+    assert update.get_json()["reason"] == "instance_not_owned"
+    assert history.status_code == HTTPStatus.FORBIDDEN
+    assert victim_folder not in [folder["path"] for folder in listing.get_json()]
+    assert _stored_instance(hosted_app, "victim-instance").active_report[
+        "profiler_name"
+    ] == (victim_folder)
+
+
+def test_hosted_upload_refuses_another_sessions_instance(hosted_app):
+    victim_folder = _upload_victim_report(hosted_app)
+    attacker = hosted_app.test_client()
+
+    response = _upload_profiler(
+        attacker, "victim-instance", [("mine/db.sqlite", b"sqlite")]
+    )
+
+    assert response.status_code == HTTPStatus.FORBIDDEN
+    assert _stored_instance(hosted_app, "victim-instance").active_report[
+        "profiler_name"
+    ] == (victim_folder)
+
+
+def test_hosted_session_keeps_using_its_own_instance(hosted_app):
+    client = hosted_app.test_client()
+    folder = _upload_profiler(
+        client, "mine", [("report/db.sqlite", b"sqlite")]
+    ).get_json()["path"]
+
+    response = client.get("/api/instance", query_string={"instanceId": "mine"})
+
+    assert response.status_code == HTTPStatus.OK
+    assert response.get_json()["active_report"]["profiler_name"] == folder
+
+
+def test_hosted_instance_saved_before_owners_goes_to_the_first_session_using_it(
+    hosted_app,
+):
+    with hosted_app.app_context():
+        db.session.add(InstanceTable(instance_id="legacy", active_report={}))
+        db.session.commit()
+    first = hosted_app.test_client()
+
+    claimed = first.get("/api/instance", query_string={"instanceId": "legacy"})
+    again = first.get("/api/instance", query_string={"instanceId": "legacy"})
+    stranger = hosted_app.test_client().get(
+        "/api/instance", query_string={"instanceId": "legacy"}
+    )
+
+    assert claimed.status_code == HTTPStatus.OK
+    assert again.status_code == HTTPStatus.OK
+    assert stranger.status_code == HTTPStatus.FORBIDDEN
+
+
+def test_local_instances_are_shared_across_clients(app):
+    """Locally there is one user, so a second client reaches the same instance."""
+    app.config["SERVER_MODE"] = False
+    app.test_client().get("/api/instance", query_string={"instanceId": "mine"})
+
+    response = app.test_client().get(
+        "/api/instance", query_string={"instanceId": "mine"}
+    )
+
+    assert response.status_code == HTTPStatus.OK

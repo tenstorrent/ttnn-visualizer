@@ -4,10 +4,11 @@
 
 import logging
 import re
+import secrets
 from functools import wraps
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
-from flask import abort, request, session
+from flask import abort, jsonify, request, session
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import (
     AuthenticationException,
@@ -22,10 +23,84 @@ from ttnn_visualizer.exceptions import (
     UnreachableHostException,
     response_forbidden,
 )
+from ttnn_visualizer.extensions import db
 from ttnn_visualizer.instances import get_or_create_instance
+from ttnn_visualizer.models import InstanceTable
 from ttnn_visualizer.ssh_client import SSH_AUTH_FAILURE_MESSAGE
 
 logger = logging.getLogger(__name__)
+
+
+# The `reason` a hosted request gets when its instance belongs to another session. The
+# frontend matches it to start the tab afresh on a new instance ID.
+INSTANCE_NOT_OWNED = "instance_not_owned"
+
+
+def _session_instance_owner() -> str:
+    """This hosted session's owner token, made on first use."""
+    owner = session.get("instance_owner")
+    if not owner:
+        owner = secrets.token_urlsafe(16)
+        session["instance_owner"] = owner
+    return owner
+
+
+def _hosted_instance_for_session(instance_id: str) -> Optional[InstanceTable]:
+    """The instance *instance_id* names, or None when this hosted session doesn't own it.
+
+    A new ID becomes this session's instance. An existing one is this session's only if
+    it was created here: instance IDs travel in every query string, so holding one
+    proves nothing. A row saved before owners were recorded goes to the first session
+    that uses it, which is the tab that has been using it unless its random ID leaked.
+    """
+    owner = _session_instance_owner()
+    instance_data = get_or_create_instance(instance_id=instance_id, owner=owner)
+    if instance_data is None:
+        abort(500)
+    if instance_data.owner == owner:
+        return instance_data
+    if instance_data.owner is None:
+        instance_data.owner = owner
+        db.session.commit()
+        return instance_data
+    return None
+
+
+def _instance_not_owned_response():
+    return (
+        jsonify(
+            {
+                "error": "This instance belongs to another session.",
+                "reason": INSTANCE_NOT_OWNED,
+            }
+        ),
+        403,
+    )
+
+
+def hosted_instance_owner_required(func):
+    """Refuse a hosted request naming an instance another session owns.
+
+    For routes that read `instanceId` themselves rather than through `with_instance`.
+    Locally there is one user, so every instance is theirs.
+    """
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        from flask import current_app
+
+        instance_id = request.args.get("instanceId")
+        if (
+            current_app.config["SERVER_MODE"]
+            and instance_id
+            and _hosted_instance_for_session(instance_id) is None
+        ):
+            logger.warning("Refusing a hosted request for another session's instance")
+            return _instance_not_owned_response()
+
+        return func(*args, **kwargs)
+
+    return wrapper
 
 
 def with_instance(func):
@@ -39,7 +114,15 @@ def with_instance(func):
             current_app.logger.error("No instanceId present on request, returning 400")
             abort(400, description="Missing required query parameter: instanceId")
 
-        instance_query_data = get_or_create_instance(instance_id=instance_id)
+        if current_app.config["SERVER_MODE"]:
+            instance_query_data = _hosted_instance_for_session(instance_id)
+            if instance_query_data is None:
+                logger.warning(
+                    "Refusing a hosted request for another session's instance"
+                )
+                return _instance_not_owned_response()
+        else:
+            instance_query_data = get_or_create_instance(instance_id=instance_id)
 
         # Handle case where get_or_create_instance returns None due to database error
         if instance_query_data is None:

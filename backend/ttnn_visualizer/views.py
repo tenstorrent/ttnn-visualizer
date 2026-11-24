@@ -29,6 +29,7 @@ from ttnn_visualizer.csv_queries import (
     OpsPerformanceReportQueries,
 )
 from ttnn_visualizer.decorators import (
+    hosted_instance_owner_required,
     local_only,
     refuse_in_direct_report_mode,
     with_instance,
@@ -1559,6 +1560,7 @@ def _created_report_root(paths: List[Path], target_directory: Path) -> Path:
 
 
 @api.route("/local/upload/profiler", methods=["POST"])
+@hosted_instance_owner_required
 def create_profiler_files():
     files = request.files.getlist("files")
     folder_name = request.form.get(
@@ -1629,6 +1631,7 @@ def create_profiler_files():
 
 
 @api.route("/local/upload/performance", methods=["POST"])
+@hosted_instance_owner_required
 def create_performance_files():
     files = request.files.getlist("files")
     folder_name = request.form.get("folderName")  # Optional folder name
@@ -1705,6 +1708,7 @@ def create_performance_files():
 
 
 @api.route("/local/upload/npe", methods=["POST"])
+@hosted_instance_owner_required
 def create_npe_files():
     files = request.files.getlist("files")
     data_directory = current_app.config["LOCAL_DATA_DIRECTORY"]

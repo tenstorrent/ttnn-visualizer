@@ -823,6 +823,9 @@ class InstanceTable(db.Model):
     remote_connection = Column(JSON, nullable=True)
     remote_profiler_folder = Column(JSON, nullable=True)
     remote_performance_folder = Column(JSON, nullable=True)
+    # The hosted session that created the instance (its `session["instance_owner"]`
+    # token), so another session can't use it by sending its ID. Unused locally.
+    owner = Column(String, nullable=True)
 
     def __init__(
         self,
@@ -835,8 +838,10 @@ class InstanceTable(db.Model):
         performance_path=None,
         npe_path=None,
         mlir_path=None,
+        owner=None,
     ):
         self.instance_id = instance_id
+        self.owner = owner
         self.active_report = active_report
         self.profiler_path = profiler_path
         self.npe_path = npe_path
