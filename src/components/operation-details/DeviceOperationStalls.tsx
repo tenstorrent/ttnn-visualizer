@@ -137,6 +137,7 @@ const ThreadCounters = ({ thread, counters }: ThreadCountersProps) => {
     const stalledWidth = Math.min(clampPercent(stalled), MAX_PERCENT - issuingWidth);
     const pipelineStalls = (counters.math_pipeline_stalls ?? []).filter(isAboveZero);
     const zeroWaits = counters.zero_waits;
+    const zeroWaitNames = zeroWaits.join(', ');
     const zeroWaitsId = useId();
 
     return (
@@ -189,18 +190,18 @@ const ThreadCounters = ({ thread, counters }: ThreadCountersProps) => {
                 <>
                     <p
                         className='pipeline-stall-zero-waits'
-                        title={zeroWaits.join(', ')}
+                        title={zeroWaitNames}
                         aria-describedby={zeroWaitsId}
                         data-testid={`${TEST_IDS.PIPELINE_STALL_ZERO_WAITS}-${thread.thread}`}
                     >
                         {zeroWaits.length} named {zeroWaits.length === 1 ? 'wait reads' : 'waits read'} 0
                     </p>
-                    {/* The tooltip's names, for assistive technology, which reads no `title`. */}
+                    {/* The tooltip's names as an explicit description, not left to `title`. */}
                     <span
                         id={zeroWaitsId}
                         hidden
                     >
-                        {zeroWaits.join(', ')}
+                        {zeroWaitNames}
                     </span>
                 </>
             )}

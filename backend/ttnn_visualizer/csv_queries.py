@@ -2297,21 +2297,19 @@ class OpsPerformanceReportQueries:
         The newest `ops_perf_results` file, so a capture written later is a
         different source, and so is the same file rewritten in place.
         """
-        source_path = Path(
+        return FileSource.at(
             OpsPerformanceQueries.get_local_ops_perf_file_path(instance)
-        ).resolve()
-        return FileSource.of(str(source_path), source_path.stat())
+        )
 
     @staticmethod
     def sum_profiled(path: str) -> bool:
         """Whether any op of the CSV at `path`, the one the caller read its row from,
         carries a CB wait, which only sum profiling writes: read once per file, up to the
-        first such op. A row that can't be read before one, or a file gone since, counts
-        as none, so neither can fail an earlier row's counters. #2372"""
-        source_path = Path(path).resolve()
+        first such op. A row that can't be read before one, or a file gone or unreadable
+        since, counts as none, so neither can fail an earlier row's counters. #2372"""
         try:
-            return _sum_profiled(FileSource.of(str(source_path), source_path.stat()))
-        except FileNotFoundError:
+            return _sum_profiled(FileSource.at(path))
+        except OSError:
             return False
 
     @classmethod

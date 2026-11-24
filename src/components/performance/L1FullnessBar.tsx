@@ -31,7 +31,7 @@ const FRAGMENTED_FREE_LABEL = 'Fragmented free';
 function L1FullnessBar({ fullnessPercent, largestFreePercent }: L1FullnessBarProps) {
     const used = clampPercent(fullnessPercent);
     const freeTotal = Math.max(MAX_PERCENT - used, 0);
-    const largestFree = largestFreePercent != null ? Math.min(clampPercent(largestFreePercent), freeTotal) : 0;
+    const largestFree = Math.min(clampPercent(largestFreePercent), freeTotal);
     const fragmentedFree = Math.max(freeTotal - largestFree, 0);
 
     const ariaLabel =

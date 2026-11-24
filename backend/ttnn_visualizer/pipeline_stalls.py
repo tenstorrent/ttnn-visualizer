@@ -422,7 +422,7 @@ def _thread_stalls(
 class _ThreadRead(NamedTuple):
     labels: ThreadLabels
     counters: Optional[_ThreadCounters]
-    cb_wait: Optional[_CbWait]
+    stall: _ThreadStall
 
 
 class _Stall(NamedTuple):
@@ -450,13 +450,13 @@ def _largest_stall(threads: Sequence[_ThreadStall]) -> Optional[_Stall]:
 
 
 def _stalled_us(
-    stall: _Stall, threads: Sequence[_ThreadStall], per_core_kernel_ns: Optional[float]
+    stall: _Stall, thread: _ThreadStall, per_core_kernel_ns: Optional[float]
 ) -> Optional[float]:
     """The stalled share as an average core's time: a CB poll's own per-core figure, or a
-    stall rate, a share of each core's counted cycles, of the per-core kernel time."""
+    stall rate, a share of each core's counted cycles, of the per-core kernel time.
+    `thread` is the stalled one."""
     if stall.zone is not None:
-        cb_wait = threads[stall.thread].cb_wait
-        return cb_wait.per_core_us if cb_wait else None
+        return thread.cb_wait.per_core_us if thread.cb_wait else None
     if per_core_kernel_ns is None:
         return None
     return _rounded(stall.percent / 100 * per_core_kernel_ns / _NS_PER_US)
@@ -497,7 +497,6 @@ class _StallFigures(NamedTuple):
 def _stall_figures(
     stall: Optional[_Stall],
     threads: List[_ThreadRead],
-    stalls: Sequence[_ThreadStall],
     per_core_kernel_ns: Optional[float],
 ) -> _StallFigures:
     if stall is None:
@@ -505,7 +504,7 @@ def _stall_figures(
     thread = threads[stall.thread]
     return _StallFigures(
         stalled_percent=stall.percent,
-        stalled_us=_stalled_us(stall, stalls, per_core_kernel_ns),
+        stalled_us=_stalled_us(stall, thread.stall, per_core_kernel_ns),
         stalled_thread=thread.labels.thread.value,
         largest_wait=_largest_wait(stall, thread),
     )
@@ -513,13 +512,14 @@ def _stall_figures(
 
 def _thread_answer(thread: _ThreadRead) -> Dict[str, object]:
     zone = thread.labels.cb_zone
+    cb_wait = thread.stall.cb_wait
     return {
         "thread": thread.labels.thread.value,
         "role": thread.labels.role.value,
         "hardware_counters": thread.counters.answer() if thread.counters else None,
         "instrumentation": (
-            {zone.value: thread.cb_wait.answer()}
-            if thread.cb_wait is not None and zone is not None
+            {zone.value: cb_wait.answer()}
+            if cb_wait is not None and zone is not None
             else None
         ),
     }
@@ -558,7 +558,7 @@ def operation_stalls(
         ),
     )
     threads = [
-        _ThreadRead(labels, entry, stall.cb_wait)
+        _ThreadRead(labels, entry, stall)
         for labels, entry, stall in zip(THREADS, counters, stalls)
     ]
     return {
@@ -570,7 +570,7 @@ def operation_stalls(
             None if cells.kernel_ns is None else _rounded(cells.kernel_ns / _NS_PER_US)
         ),
         **_stall_figures(
-            _largest_stall(stalls), threads, stalls, cells.per_core_kernel_ns
+            _largest_stall(stalls), threads, cells.per_core_kernel_ns
         )._asdict(),
         "threads": [_thread_answer(thread) for thread in threads],
     }
@@ -591,9 +591,9 @@ def stalled_us(
         ),
     )
     stall = _largest_stall(stalls)
-    return (
-        None if stall is None else _stalled_us(stall, stalls, cells.per_core_kernel_ns)
-    )
+    if stall is None:
+        return None
+    return _stalled_us(stall, stalls[stall.thread], cells.per_core_kernel_ns)
 
 
 def has_cb_waits(row: Mapping[str, object]) -> bool:

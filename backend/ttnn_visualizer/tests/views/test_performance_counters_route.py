@@ -20,6 +20,7 @@ from ttnn_visualizer.csv_queries import (
     OpsPerformanceReportQueries,
 )
 from ttnn_visualizer.extensions import db
+from ttnn_visualizer.file_source import FileSource
 from ttnn_visualizer.models import Instance, InstanceTable
 from ttnn_visualizer.tests.frontend_parity import typescript_interface_keys
 from ttnn_visualizer.tests.hardware_counter_capture import (
@@ -439,6 +440,17 @@ class TestStalls:
         assert response.status_code == HTTPStatus.OK
         return response.get_json()["stalls"]
 
+    @staticmethod
+    def _one_op_without_cb_sums():
+        """A sum-profiled capture's rows, the input-starved op's CB sums blank."""
+        rows = stall_rows()
+        rows[INPUT_STARVED_POSITION] = {
+            **rows[INPUT_STARVED_POSITION],
+            CB_WAIT_FRONT: "",
+            CB_RESERVE_BACK: "",
+        }
+        return rows
+
     def test_each_thread_carries_its_counters_and_the_cb_waits_per_core(
         self, client, stalled
     ):
@@ -492,13 +504,7 @@ class TestStalls:
         self, app, client, tmp_path
     ):
         """Never told to add a flag the capture already ran with."""
-        rows = stall_rows()
-        rows[INPUT_STARVED_POSITION] = {
-            **rows[INPUT_STARVED_POSITION],
-            CB_WAIT_FRONT: "",
-            CB_RESERVE_BACK: "",
-        }
-        write_ops_perf(tmp_path / "one-blank", rows)
+        write_ops_perf(tmp_path / "one-blank", self._one_op_without_cb_sums())
         instance_id = _mount(app, tmp_path / "one-blank")
 
         stalls = self._stalls(client, instance_id, INPUT_STARVED_POSITION)
@@ -536,6 +542,14 @@ class TestStalls:
         """Asked whether the capture had sum profiling, the scan reads past the row
         asked for, which was a 200 before the stalls rode along. A row it can't read
         before any CB wait counts as none, and that answer is kept."""
+        # The rows below rely on this order: the asked op, then the one whose CB wait
+        # may come first, the padding, and the bad row.
+        assert (
+            INPUT_STARVED_POSITION
+            < UNPACK_BOUND_POSITION
+            < OUTPUT_BLOCKED_POSITION
+            < UNNAMED_STALL_POSITION
+        )
         marker = "UNREADABLE"
         no_sums = {CB_WAIT_FRONT: "", CB_RESERVE_BACK: ""}
         rows = stall_rows()
@@ -580,29 +594,51 @@ class TestStalls:
         assert body["stalls"]["cb_waits"]["state"] == state
         assert read.call_count == 1
 
-    def test_a_csv_removed_after_its_row_was_read_still_answers_the_row(
-        self, app, client, tmp_path
+    @pytest.mark.parametrize(
+        "gone", ["removed", "removed-after-its-stat", "replaced-by-a-folder"]
+    )
+    def test_a_csv_gone_after_its_row_was_read_still_answers_the_row(
+        self, app, client, tmp_path, gone
     ):
-        """The scan for sum profiling reads the file the row came from; gone, it
-        counts as none rather than failing the request."""
-        destination = write_ops_perf(
-            tmp_path / "removed", stall_rows(sum_profiling=False)
-        )
-        instance_id = _mount(app, tmp_path / "removed")
+        """The scan for sum profiling reads the file the row came from; gone or
+        unreadable, it counts as none rather than failing the request. Other ops have
+        CB sums, so a scan that read the file would answer no_value."""
+        destination = write_ops_perf(tmp_path / "gone", self._one_op_without_cb_sums())
+        instance_id = _mount(app, tmp_path / "gone")
         read_row = hardware_counters.read_row
+        source_at = FileSource.at
 
-        def read_then_remove(source, position):
-            found = read_row(source, position)
+        def take_away():
             destination.unlink()
+            if gone == "replaced-by-a-folder":
+                destination.mkdir()
+
+        def read_then_take_away(source, position):
+            found = read_row(source, position)
+            if gone != "removed-after-its-stat":
+                take_away()
             return found
 
-        with patch.object(hardware_counters, "read_row", side_effect=read_then_remove):
+        def stat_then_take_away(path):
+            found = source_at(path)
+            if gone == "removed-after-its-stat":
+                take_away()
+            return found
+
+        with (
+            patch.object(
+                hardware_counters, "read_row", side_effect=read_then_take_away
+            ),
+            patch.object(FileSource, "at", side_effect=stat_then_take_away) as stat,
+        ):
             response = _get(
                 client, instance_id, INPUT_STARVED_POSITION + REPORT_ROW_ID_OFFSET
             )
 
         assert response.status_code == HTTPStatus.OK
         assert response.get_json()["stalls"]["cb_waits"]["state"] == "not_captured"
+        assert stat.call_count == 1
+        assert csv_queries._sum_profiled.cache_info().currsize == 0
 
     def test_a_capture_written_after_the_row_was_read_is_not_the_one_scanned(
         self, app, client, tmp_path

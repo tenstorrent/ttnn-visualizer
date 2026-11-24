@@ -99,12 +99,15 @@ describe('DeviceOperationStalls', () => {
             expect(waits).not.toHaveTextContent('SrcA Clear Wait');
         });
 
-        it('gives assistive technology the names the tooltip lists', () => {
+        it('points its description at a hidden list of the names the tooltip lists', () => {
             renderStalls(INPUT_STARVED_STALLS);
 
-            expect(
-                screen.getByTestId(`${TEST_IDS.PIPELINE_STALL_ZERO_WAITS}-${PipelineThread.T0}`),
-            ).toHaveAccessibleDescription(T0_ZERO_WAITS.join(', '));
+            const zero = screen.getByTestId(`${TEST_IDS.PIPELINE_STALL_ZERO_WAITS}-${PipelineThread.T0}`);
+            const description = document.getElementById(zero.getAttribute('aria-describedby') ?? '');
+
+            expect(description).not.toBeNull();
+            expect(description).toHaveAttribute('hidden');
+            expect(description?.textContent).toBe(T0_ZERO_WAITS.join(', '));
         });
 
         it('names a single wait that reads 0 in the singular', () => {
@@ -169,6 +172,7 @@ describe('DeviceOperationStalls', () => {
                 'aria-label',
                 'T0 Unpack: no issuing value, 2% stalled',
             );
+            expect(segmentWidths(threadBar(PipelineThread.T0))).toEqual(['0%', '2%']);
             expect(within(threadBlock(PipelineThread.T0)).getByLabelText(NO_VALUE)).toHaveTextContent('—');
         });
 
@@ -263,10 +267,12 @@ describe('DeviceOperationStalls', () => {
                 "sum over the operation's cores, with no core count to average it over.",
             );
             expect(container).not.toHaveTextContent('divided by');
-            expect(screen.getByTestId(`${TEST_IDS.PIPELINE_STALL_CB_WAIT}-${CbWaitZone.WAIT_FRONT}`)).toHaveAttribute(
+            const front = screen.getByTestId(`${TEST_IDS.PIPELINE_STALL_CB_WAIT}-${CbWaitZone.WAIT_FRONT}`);
+            expect(front).toHaveAttribute(
                 'aria-label',
                 "T0 cb_wait_front: no share of the kernel without the operation's core count and kernel duration",
             );
+            expect(segmentWidths(front)).toEqual(['0%']);
         });
     });
 

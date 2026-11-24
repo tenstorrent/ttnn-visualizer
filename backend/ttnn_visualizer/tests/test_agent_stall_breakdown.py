@@ -368,12 +368,15 @@ class TestRanking:
         by_id = stall_breakdown.stall_breakdown(
             registry, handle, perf_ids=[merged["id"]]
         )["ops"][0]
-        # The op code's other call stalls less, so the ranking path picks this row.
-        by_op_code = stall_breakdown.stall_breakdown(
-            registry, handle, op_code="Untilize", limit=1
-        )["ops"][0]
+        # The op code's other call stalls less, so the ranking puts this row first.
+        ranked = stall_breakdown.stall_breakdown(
+            registry, handle, op_code="Untilize", limit=2
+        )["ops"]
+        by_op_code = ranked[0]
 
+        assert len(ranked) == 2
         assert by_op_code["id"] == merged["id"]
+        assert ranked[1]["stalled_us"] < by_op_code["stalled_us"]
         for op in (by_id, by_op_code):
             front = op["threads"][0]
             assert op["device"] == kept
