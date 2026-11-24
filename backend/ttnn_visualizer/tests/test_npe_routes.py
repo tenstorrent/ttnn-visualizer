@@ -7,17 +7,20 @@
 Exercises ``GET /api/npe/summary`` and ``GET /api/npe/window`` through the Flask
 ``client`` fixture, locking down the status-code mapping the routes narrow to:
 404 (missing file / out-of-range timestep), 422 (malformed report), and 400
-(non-integer ``t``).
+(non-integer ``t``). Also checks that an uploaded report stays readable through them,
+and through ``GET /api/npe``, after another report is selected or uploaded.
 """
 
 import sqlite3
+from io import BytesIO
 from pathlib import Path
 
 import orjson
 import pytest
 import zstd
+from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.extensions import db
-from ttnn_visualizer.models import InstanceTable
+from ttnn_visualizer.models import InstanceTable, ReportLocation
 from ttnn_visualizer.npe_index import get_index_path
 
 API = "/api"
@@ -238,3 +241,122 @@ def test_window_forbidden_under_server_mode(client, make_npe_instance, app):
         f"{API}/npe/window", query_string={"instanceId": instance_id, "t": 1}
     )
     assert resp.status_code == 403
+
+
+def _upload_npe(client, instance_id: str, payload: bytes) -> None:
+    response = client.post(
+        f"{API}/local/upload/npe",
+        query_string={"instanceId": instance_id},
+        data={"files": [(BytesIO(payload), "trace.json")]},
+        content_type="multipart/form-data",
+    )
+    assert response.get_json()["status"] == ConnectionTestStates.OK.value
+
+
+def _stored_instance(client, instance_id: str) -> InstanceTable:
+    with client.application.app_context():
+        return InstanceTable.query.filter_by(instance_id=instance_id).one()
+
+
+def _upload_memory_report(client, instance_id: str) -> str:
+    """Upload a memory report and return the name its listing shows."""
+    response = client.post(
+        f"{API}/local/upload/profiler",
+        query_string={"instanceId": instance_id},
+        data={
+            "files": [(BytesIO(b"not opened by the upload"), "memory-run/db.sqlite")]
+        },
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 200, response.get_data(as_text=True)
+    return Path(_stored_instance(client, instance_id).profiler_path).parent.name
+
+
+def _upload_performance_report(client, instance_id: str) -> str:
+    """Upload a performance report and return the name its listing shows."""
+    response = client.post(
+        f"{API}/local/upload/performance",
+        query_string={"instanceId": instance_id},
+        data={
+            "files": [
+                (BytesIO(b"csv,bytes\n"), "perf-run/profile_log_device.csv"),
+                (BytesIO(b"op,perf\n"), "perf-run/ops_perf_results_2026.csv"),
+            ]
+        },
+        content_type="multipart/form-data",
+    )
+    assert response.get_json()["status"] == ConnectionTestStates.OK.value
+    return Path(_stored_instance(client, instance_id).performance_path).name
+
+
+def _select(client, instance_id: str, kind: str, name: str) -> None:
+    """Select a report the way the report pickers do, naming no NPE report."""
+    response = client.put(
+        f"{API}/instance",
+        query_string={"instanceId": instance_id},
+        json={
+            "active_report": {
+                f"{kind}_name": name,
+                f"{kind}_location": ReportLocation.LOCAL.value,
+            }
+        },
+    )
+    assert response.status_code == 200, response.get_data(as_text=True)
+
+
+def _select_memory_report(client, instance_id, upload_npe):
+    name = _upload_memory_report(client, instance_id)
+    upload_npe()
+    _select(client, instance_id, "profiler", name)
+
+
+def _upload_a_memory_report(client, instance_id, upload_npe):
+    upload_npe()
+    _upload_memory_report(client, instance_id)
+
+
+def _select_performance_report(client, instance_id, upload_npe):
+    name = _upload_performance_report(client, instance_id)
+    upload_npe()
+    _select(client, instance_id, "performance", name)
+
+
+def _upload_a_performance_report(client, instance_id, upload_npe):
+    upload_npe()
+    _upload_performance_report(client, instance_id)
+
+
+@pytest.mark.parametrize("server_mode", [False, True], ids=["local", "server-mode"])
+@pytest.mark.parametrize(
+    "then_change_another_report",
+    [
+        pytest.param(_select_memory_report, id="select-memory-report"),
+        pytest.param(_upload_a_memory_report, id="upload-memory-report"),
+        pytest.param(_select_performance_report, id="select-performance-report"),
+        pytest.param(_upload_a_performance_report, id="upload-performance-report"),
+    ],
+)
+def test_an_uploaded_npe_report_stays_readable_when_another_report_changes(
+    app, client, server_mode, then_change_another_report
+):
+    """#2381: each of these updates repointed the NPE report at its upload folder."""
+    app.config["SERVER_MODE"] = server_mode
+    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    instance_id = "pytest-npe-and-another-report"
+    payload = orjson.dumps(_make_npe_object(n_timesteps=3))
+
+    then_change_another_report(
+        client, instance_id, lambda: _upload_npe(client, instance_id, payload)
+    )
+
+    assert Path(_stored_instance(client, instance_id).npe_path).read_bytes() == payload
+    query = {"instanceId": instance_id}
+    response = client.get(f"{API}/npe", query_string=query)
+    assert response.status_code == 200
+    assert response.get_data() == payload
+    if not server_mode:
+        summary = client.get(f"{API}/npe/summary", query_string=query)
+        assert summary.status_code == 200
+        assert summary.get_json()["n_timesteps"] == 3
+        window = client.get(f"{API}/npe/window", query_string={**query, "t": 1})
+        assert window.status_code == 200

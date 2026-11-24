@@ -2738,8 +2738,9 @@ def update_current_instance(instance: Instance):
         }
 
         # Pass explicit `*_path` values through only when the payload supplies
-        # them, so `update_instance`'s sentinel default ("recompute from name")
-        # stays in effect for callers that omit them. This lets API consumers
+        # them, so `update_instance`'s sentinel default stays in effect for
+        # callers that omit them: it rebuilds a path from its report's name, but
+        # an NPE report the update doesn't name keeps its file. API consumers can
         # pin an exact path while preserving the current frontend behaviour
         # (which sends names but not paths).
         for path_key in ("profiler_path", "performance_path", "npe_path", "mlir_path"):

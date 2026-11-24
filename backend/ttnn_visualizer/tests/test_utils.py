@@ -4,9 +4,11 @@
 
 import os
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import mock_open, patch
 
 import pytest
+from ttnn_visualizer.file_uploads import extract_uploaded_name
 from ttnn_visualizer.models import RemoteConnection
 from ttnn_visualizer.utils import (
     FALSE_VALUES,
@@ -15,6 +17,7 @@ from ttnn_visualizer.utils import (
     find_gunicorn_path,
     get_app_data_directory,
     get_mlir_path,
+    get_npe_path,
     get_report_data_directory,
     is_running_in_container,
     is_valid_profiler_ranked_entry,
@@ -658,6 +661,81 @@ def test_get_mlir_path_treats_glob_metacharacters_as_literal_name(app):
 
     assert resolved != str(matched_by_glob)
     assert resolved.endswith(f"/{app.config['MLIR_DIRECTORY_NAME']}/model*.json")
+
+
+@pytest.fixture
+def npe_directory(app):
+    """The local NPE upload folder; the shared app fixture is in SERVER_MODE."""
+    app.config["SERVER_MODE"] = False
+    directory = (
+        Path(app.config["LOCAL_DATA_DIRECTORY"]) / app.config["NPE_DIRECTORY_NAME"]
+    )
+    directory.mkdir(parents=True)
+    return directory
+
+
+@pytest.mark.parametrize(
+    "file_name",
+    [
+        "trace.json",
+        "trace.npeviz.zst",
+        "trace.zst",
+        "trace.npeviz",
+        "trace.json.zst",
+        "run.v2.json",
+    ],
+)
+def test_get_npe_path_finds_the_file_an_upload_named(app, npe_directory, file_name):
+    """#2381: it returned the upload folder, which the NPE routes then tried to read."""
+    uploaded = npe_directory / file_name
+    uploaded.write_bytes(b"{}")
+
+    name = extract_uploaded_name([SimpleNamespace(filename=file_name)])
+
+    assert get_npe_path(name, app) == str(uploaded)
+
+
+def test_get_npe_path_takes_the_newest_of_uploads_sharing_a_name(app, npe_directory):
+    json_upload = npe_directory / "trace.json"
+    zst_upload = npe_directory / "trace.npeviz.zst"
+    for path, mtime in ((json_upload, 1_000_000), (zst_upload, 2_000_000)):
+        path.write_bytes(b"{}")
+        os.utime(path, (mtime, mtime))
+
+    assert get_npe_path("trace", app) == str(zst_upload)
+
+    os.utime(json_upload, (3_000_000, 3_000_000))
+    assert get_npe_path("trace", app) == str(json_upload)
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        pytest.param("missing", id="nothing-uploaded"),
+        pytest.param("trace.json", id="trace.json-uploads-as-trace"),
+        pytest.param("trace.npeviz.zst", id="trace.npeviz.zst-uploads-as-trace"),
+        pytest.param("folder", id="a-folder"),
+        pytest.param("../npe-reports/trace", id="not-a-plain-file-name"),
+        pytest.param("x" * 300, id="too-long-for-the-filesystem"),
+        pytest.param(7, id="not-a-string"),
+    ],
+)
+def test_get_npe_path_is_none_without_an_upload_of_the_name(app, npe_directory, name):
+    (npe_directory / "trace.json").write_bytes(b"{}")
+    (npe_directory / "trace.npeviz.zst").write_bytes(b"{}")
+    (npe_directory / "folder.json").mkdir()
+
+    assert get_npe_path(name, app) is None
+
+
+def test_get_npe_path_resolves_no_name_in_server_mode(app, npe_directory):
+    """Hosted files carry a timestamp prefix the name lacks, in a folder all visitors share."""
+    app.config["SERVER_MODE"] = True
+    (npe_directory / "trace.json").write_bytes(b"{}")
+    (npe_directory / "1795540000_trace.json").write_bytes(b"{}")
+
+    assert get_npe_path("trace", app) is None
+    assert get_npe_path("1795540000_trace", app) is None
 
 
 # Mesh / cluster descriptor YAML with and without _<n>_of_<world> suffix

@@ -14,6 +14,8 @@ from ttnn_visualizer.extensions import db
 from ttnn_visualizer.instances import (
     KEY_MLIR_LOCATION,
     KEY_MLIR_NAME,
+    KEY_NPE_LOCATION,
+    KEY_NPE_NAME,
     KEY_PERFORMANCE_LOCATION,
     KEY_PERFORMANCE_NAME,
     KEY_PROFILER_LOCATION,
@@ -149,6 +151,105 @@ def test_mlir_path_remains_a_file_when_switching_unrelated_report(app):
         # The path must point at a file, not the directory (the pre-fix value).
         assert instance.mlir_path == expected_file
         assert instance.mlir_path != expected_dir
+
+
+def _update_existing(instance, **changes):
+    """`update_existing_instance` with every report left out unless named."""
+    arguments = {
+        "profiler_name": None,
+        "profiler_location": None,
+        "performance_name": None,
+        "performance_location": None,
+        "npe_name": None,
+        "npe_location": None,
+        "mlir_name": None,
+        "mlir_location": None,
+        "remote_connection": None,
+        "remote_profiler_folder": None,
+        "remote_performance_folder": None,
+        "clear_remote": False,
+    }
+    arguments.update(changes)
+    update_existing_instance(instance, **arguments)
+
+
+def _npe_uploads(app, *file_names):
+    """Upload-folder files, oldest first, so each later one is newer."""
+    directory = (
+        Path(app.config["LOCAL_DATA_DIRECTORY"]) / app.config["NPE_DIRECTORY_NAME"]
+    )
+    directory.mkdir(parents=True, exist_ok=True)
+    paths = []
+    for age, file_name in enumerate(file_names):
+        path = directory / file_name
+        path.write_bytes(b"{}")
+        os.utime(path, (1_000_000 + age, 1_000_000 + age))
+        paths.append(path)
+    return paths
+
+
+def _instance_with_npe_upload(npe_name, npe_path):
+    instance = InstanceTable(
+        instance_id="test-instance-npe-upload",
+        active_report={
+            KEY_NPE_NAME: npe_name,
+            KEY_NPE_LOCATION: ReportLocation.LOCAL.value,
+        },
+        npe_path=str(npe_path),
+    )
+    db.session.add(instance)
+    db.session.commit()
+    return instance
+
+
+@pytest.mark.parametrize(
+    ("server_mode", "uploaded_file_name"),
+    [
+        pytest.param(False, "trace.npeviz.zst", id="local"),
+        pytest.param(True, "1795540000_trace.npeviz.zst", id="server-mode"),
+    ],
+)
+def test_an_update_leaving_the_npe_report_out_keeps_its_file(
+    app, server_mode, uploaded_file_name
+):
+    """#2381: rebuilt from its name, the path became the upload folder.
+
+    The name can't stand in for the file: a newer `trace.json` answers to it too, and
+    it lacks the timestamp prefix of a hosted upload's file.
+    """
+    app.config["SERVER_MODE"] = server_mode
+    uploaded, _newer_with_the_same_name = _npe_uploads(
+        app, uploaded_file_name, "trace.json"
+    )
+
+    with app.app_context():
+        instance = _instance_with_npe_upload("trace", uploaded)
+
+        _update_existing(
+            instance,
+            profiler_name="some-profiler",
+            profiler_location=ReportLocation.LOCAL.value,
+        )
+
+        assert instance.npe_path == str(uploaded)
+        assert instance.active_report[KEY_NPE_NAME] == "trace"
+
+
+def test_an_update_naming_the_npe_report_resolves_or_clears_its_file(app):
+    app.config["SERVER_MODE"] = False
+    trace, other = _npe_uploads(app, "trace.json", "other.npeviz.zst")
+
+    with app.app_context():
+        instance = _instance_with_npe_upload("trace", trace)
+
+        _update_existing(
+            instance, npe_name="other", npe_location=ReportLocation.LOCAL.value
+        )
+        assert instance.npe_path == str(other)
+
+        _update_existing(instance, npe_name="", npe_location=ReportLocation.LOCAL.value)
+        assert instance.npe_path is None
+        assert KEY_NPE_NAME not in instance.active_report
 
 
 # Reading an instance drops a stored connection the current validators reject rather than

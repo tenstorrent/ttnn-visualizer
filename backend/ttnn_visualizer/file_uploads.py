@@ -135,9 +135,8 @@ def extract_uploaded_name(files):
 
     # Strip directory components before stripping the extension so a crafted
     # multipart filename like `"../etc/passwd.json"` becomes `"passwd"`, not
-    # `"../etc/passwd"`. The resulting name is written to the DB and later
-    # rebuilt into a read path by `get_mlir_path` / `get_npe_path`; without
-    # `.name` here, write-side hardening alone wouldn't fix the read path.
+    # `"../etc/passwd"`. The name is stored as the report's, and `get_npe_path`
+    # maps only a plain file name back to its upload.
     return re.sub(r"\.(json|npeviz\.zst)$", "", Path(files[0].filename).name)
 
 

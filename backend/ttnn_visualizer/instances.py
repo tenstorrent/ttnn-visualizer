@@ -214,7 +214,9 @@ def update_existing_instance(
 
     if npe_path is not _sentinel:
         instance_data.npe_path = npe_path
-    else:
+    elif npe_name is not None:
+        # An update that leaves the NPE report out keeps its file: the name can't tell
+        # apart uploads that share it, and a hosted file's timestamp prefix isn't in it.
         instance_data.npe_path = _resolve_report_path(
             npe_name,
             get_npe_path,

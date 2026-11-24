@@ -1090,12 +1090,32 @@ def get_available_reports(current_app):
     return reports
 
 
-def get_npe_path(npe_name, current_app, remote_connection=None):
-    local_dir = Path(current_app.config["LOCAL_DATA_DIRECTORY"])
+def get_npe_path(npe_name, current_app, **_kwargs):
+    # Hosted files carry a timestamp prefix the name lacks, in a folder all visitors
+    # share, so there a name could only miss its file or find another visitor's.
+    if current_app.config["SERVER_MODE"]:
+        return None
+    # `PUT /instance` stores names unchecked (#2391); an upload's is a plain file name.
+    if not isinstance(npe_name, str) or Path(npe_name).name != npe_name:
+        return None
 
-    npe_path = local_dir / current_app.config["NPE_DIRECTORY_NAME"]
+    # Files an upload saves under this name (`extract_uploaded_name`): it drops
+    # `.json` and `.npeviz.zst`, and a `.zst` or `.npeviz` file keeps its extension.
+    suffixes = [".json", ".npeviz.zst"]
+    if npe_name.endswith((".zst", ".npeviz")) and not npe_name.endswith(".npeviz.zst"):
+        suffixes.append("")
 
-    return str(npe_path)
+    npe_directory = (
+        Path(current_app.config["LOCAL_DATA_DIRECTORY"])
+        / current_app.config["NPE_DIRECTORY_NAME"]
+    )
+    candidates = [npe_directory / f"{npe_name}{suffix}" for suffix in suffixes]
+    # Not Path.is_file(), which raises for a name too long before 3.14.
+    uploads = [path for path in candidates if os.path.isfile(path)]
+    if not uploads:
+        return None
+    # `trace.json` and `trace.npeviz.zst` share a name; the newest was uploaded last.
+    return str(max(uploads, key=os.path.getmtime))
 
 
 def get_mlir_path(mlir_name, current_app, remote_connection=None, **_kwargs):
