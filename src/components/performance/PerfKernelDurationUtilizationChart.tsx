@@ -27,7 +27,7 @@ interface PerfKernelDurationUtilizationChartProps {
 }
 
 function PerfKernelDurationUtilizationChart({ datasets, maxCores, chartId }: PerfKernelDurationUtilizationChartProps) {
-    const perfReport = useAtomValue(activePerformanceReportAtom);
+    const reportName = useAtomValue(activePerformanceReportAtom)?.reportName ?? null;
     const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
     const mergeDevices = useAtomValue(mergeDevicesAtom);
 
@@ -38,14 +38,14 @@ function PerfKernelDurationUtilizationChart({ datasets, maxCores, chartId }: Per
                 y: data?.map((row) => getCoreUtilization(row, maxCores)),
                 mode: 'markers',
                 type: 'scatter',
-                name: getPlotLabel(dataIndex, perfReport?.reportName, comparisonReportList),
+                name: getPlotLabel(dataIndex, reportName, comparisonReportList) ?? undefined,
                 marker: {
                     size: 10,
                     color: getPrimaryDataColours(dataIndex),
                 },
                 hovertemplate: `Duration: %{x} ns<br />Utilization: %{y}`,
             })) as Partial<PlotData>[],
-        [datasets, maxCores, perfReport, comparisonReportList],
+        [datasets, maxCores, reportName, comparisonReportList],
     );
 
     const maxYValue = useMemo(

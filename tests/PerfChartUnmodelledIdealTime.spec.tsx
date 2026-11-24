@@ -131,6 +131,21 @@ describe('utilisation charts', () => {
         expect(layout().yaxis?.range).toEqual([0, 1.1]);
     });
 
+    it('size the Utilization vs Kernel Duration axis to the largest utilisation of every report', () => {
+        render(
+            <TestProviders>
+                <PerfKernelDurationUtilizationChart
+                    datasets={[[row()], [row({ pm_ideal_ns: 20_000 })]]}
+                    maxCores={MAX_CORES}
+                    chartId={PerfChartId.MatmulUtilizationVsKernelDuration}
+                />
+            </TestProviders>,
+        );
+
+        expect(traces().map((trace) => trace.y)).toEqual([[0.5], [2]]);
+        expect(layout().yaxis?.range?.[1]).toBeGreaterThanOrEqual(2);
+    });
+
     it('add no markers when every utilisation is known', () => {
         render(
             <TestProviders>
