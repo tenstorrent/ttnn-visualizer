@@ -131,9 +131,15 @@ def save_uploaded_files(
     :param parent_folder_name: The name to use for the directory.
     """
     saved_paths = []
+    # One prefix for the whole upload: computed per file, a part saved after the clock
+    # ticks over (likely while the malware scanner works through the parts) would land
+    # in a sibling folder, splitting the report.
+    prefix = upload_prefix()
 
     if current_app.config["MALWARE_SCANNER"]:
-        scanned_files = scan_uploaded_files(files, base_directory, parent_folder_name)
+        scanned_files = scan_uploaded_files(
+            files, base_directory, parent_folder_name, prefix=prefix
+        )
 
         for temp_path, dest_path in scanned_files:
             if not dest_path.parent.exists():
@@ -145,7 +151,9 @@ def save_uploaded_files(
             saved_paths.append(dest_path)
     else:
         for file in files:
-            dest_path = construct_dest_path(file, base_directory, parent_folder_name)
+            dest_path = construct_dest_path(
+                file, base_directory, parent_folder_name, prefix=prefix
+            )
             logger.info(f"Writing file to {dest_path}")
 
             # Create directory if it doesn't exist
@@ -165,7 +173,7 @@ def save_uploaded_files(
 
     # Update the modified time of the uploaded directory
     if parent_folder_name:
-        uploaded_dir = Path(base_directory) / parent_folder_name
+        uploaded_dir = Path(base_directory) / f"{prefix}{parent_folder_name}"
     else:
         uploaded_dir = Path(base_directory)
 
@@ -179,13 +187,18 @@ def scan_uploaded_files(
     files,
     target_directory,
     folder_name=None,
+    prefix=None,
 ):
     scanned_files = []
+    if prefix is None:
+        prefix = upload_prefix()
 
     for file in files:
         _, temp_path = tempfile.mkstemp()
         file.save(temp_path)
-        dest_path = construct_dest_path(file, target_directory, folder_name)
+        dest_path = construct_dest_path(
+            file, target_directory, folder_name, prefix=prefix
+        )
 
         cmd_list = shlex.split(current_app.config["MALWARE_SCANNER"])
         cmd_list.append(temp_path)
@@ -211,8 +224,14 @@ def scan_uploaded_files(
     return scanned_files
 
 
-def construct_dest_path(file, target_directory, folder_name):
-    prefix = f"{int(time.time())}_" if current_app.config["SERVER_MODE"] else ""
+def upload_prefix():
+    """The prefix keeping hosted uploads of the same name apart; empty locally."""
+    return f"{int(time.time())}_" if current_app.config["SERVER_MODE"] else ""
+
+
+def construct_dest_path(file, target_directory, folder_name, prefix=None):
+    if prefix is None:
+        prefix = upload_prefix()
 
     if folder_name:
         # Folder uploads legitimately carry sub-paths in `file.filename`

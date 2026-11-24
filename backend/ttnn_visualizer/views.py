@@ -2746,6 +2746,12 @@ def get_instance(instance: Instance):
 
 
 _INSTANCE_PATH_KEYS = ("profiler_path", "performance_path", "npe_path", "mlir_path")
+_INSTANCE_NAME_PATH_KEYS = (
+    ("profiler_name", "profiler_path"),
+    ("performance_name", "performance_path"),
+    ("npe_name", "npe_path"),
+    ("mlir_name", "mlir_path"),
+)
 
 
 def _hosted_instance_update_refusal(
@@ -2845,6 +2851,15 @@ def update_current_instance(instance: Instance):
         for path_key in _INSTANCE_PATH_KEYS:
             if path_key in active_report:
                 update_kwargs[path_key] = active_report[path_key]
+
+        if current_app.config["SERVER_MODE"]:
+            # A report the update leaves out keeps the path it has. Recomputing it from
+            # the stored name would trust a name `_hosted_instance_update_refusal` never
+            # saw: rows saved before uploads stored the created folder's name hold the
+            # client's own, which can name another session's folder.
+            for name_key, path_key in _INSTANCE_NAME_PATH_KEYS:
+                if active_report.get(name_key) is None:
+                    update_kwargs[path_key] = getattr(instance, path_key)
 
         update_instance(**update_kwargs)
 

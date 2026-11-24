@@ -15,9 +15,12 @@ import json
 from http import HTTPStatus
 from io import BytesIO
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+from ttnn_visualizer import file_uploads
 from ttnn_visualizer.enums import ConnectionTestStates
+from ttnn_visualizer.extensions import db
 from ttnn_visualizer.models import InstanceTable
 
 _SECRET = ["another session's operation history"]
@@ -164,6 +167,39 @@ def test_hosted_profiler_upload_refuses_a_database_below_the_report_folder(
     assert victim_folder not in [folder["path"] for folder in listing.get_json()]
 
 
+@pytest.mark.parametrize("malware_scanner", [None, "true"])
+def test_hosted_upload_keeps_every_part_in_one_folder_as_the_clock_ticks(
+    hosted_app, monkeypatch, malware_scanner
+):
+    """Each part used to take its own timestamp, so a second boundary split the report.
+
+    With the scanner on, parts are scanned one by one, which makes crossing a boundary
+    likely; `db.sqlite` then landed outside the first part's folder and the upload 422d.
+    """
+    hosted_app.config["MALWARE_SCANNER"] = malware_scanner
+    ticks = iter(range(1_700_000_000, 1_700_001_000))
+    monkeypatch.setattr(file_uploads, "time", SimpleNamespace(time=lambda: next(ticks)))
+    client = hosted_app.test_client()
+
+    response = _upload_profiler(
+        client,
+        "mine",
+        [
+            ("report/operation_history.json", b"[]"),
+            ("report/db.sqlite", b"sqlite"),
+        ],
+    )
+
+    assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+    folder = response.get_json()["path"]
+    assert sorted(
+        path.name for path in (_profiler_root(hosted_app) / folder).iterdir()
+    ) == [
+        "db.sqlite",
+        "operation_history.json",
+    ]
+
+
 # ---- PUT /instance is confined to the session's own reports ----------------
 
 
@@ -280,3 +316,26 @@ def test_local_instance_update_still_accepts_an_explicit_path(app, tmp_path):
 
     assert response.status_code == HTTPStatus.OK
     assert _stored_instance(app, "mine").profiler_path == str(db_path)
+
+
+def test_hosted_instance_update_keeps_the_path_of_a_report_it_leaves_out(hosted_app):
+    """A row saved before uploads stored the created folder holds the client's name.
+
+    That name is never checked, so an update that leaves the memory report out must not
+    rebuild its path from it: here the stored name is another session's folder.
+    """
+    victim_folder = _upload_victim_report(hosted_app)
+    client = hosted_app.test_client()
+    _upload_profiler(client, "mine", [("report/db.sqlite", b"sqlite")])
+    with hosted_app.app_context():
+        row = InstanceTable.query.filter_by(instance_id="mine").first()
+        row.active_report = {**row.active_report, "profiler_name": victim_folder}
+        db.session.commit()
+    profiler_path_before = _stored_instance(hosted_app, "mine").profiler_path
+
+    response = _put_instance(client, "mine", {"performance_name": ""})
+
+    assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+    assert _stored_instance(hosted_app, "mine").profiler_path == profiler_path_before
+    history = client.get("/api/operation-history", query_string={"instanceId": "mine"})
+    assert history.get_json() != _SECRET
