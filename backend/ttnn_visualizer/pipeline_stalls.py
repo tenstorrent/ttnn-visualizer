@@ -163,7 +163,11 @@ THREADS: Tuple[ThreadLabels, ...] = (
             "SrcB Valid Wait",
         ),
         math_pipeline_stalls=("Data Hazard Stall Rate", "Math Scoreboard Stall Rate"),
-        downstream_waits=("Math Waiting on Unpack (T1)",),
+        downstream_waits=(
+            "Math Waiting on Unpack (T1)",
+            "SrcA Valid Wait",
+            "SrcB Valid Wait",
+        ),
     ),
     ThreadLabels(
         PipelineThread.T2,

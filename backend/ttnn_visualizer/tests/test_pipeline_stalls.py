@@ -20,6 +20,7 @@ from ttnn_visualizer.pipeline_stalls import (
     StallState,
     operation_stalls,
 )
+from ttnn_visualizer.tests.hardware_counter_capture import STATS, stat_column
 from ttnn_visualizer.tests.stall_capture import (
     CB_RESERVE_BACK,
     CB_WAIT_FRONT,
@@ -441,6 +442,29 @@ class TestStalledShare:
             "percent": counter_average(
                 INPUT_STARVED_POSITION, "Semaphore Zero Wait T2"
             ),
+            "downstream": True,
+        }
+
+    @pytest.mark.parametrize(
+        "wait", ["SrcA Valid Wait", "SrcB Valid Wait"], ids=["srca", "srcb"]
+    )
+    def test_math_waiting_for_a_valid_source_is_named_as_a_downstream_wait(
+        self, rows, wait
+    ):
+        """A valid wait is math waiting for unpack, the stage before it, to fill srcA
+        or srcB."""
+        row = {
+            **rows[UNNAMED_STALL_POSITION],
+            **{stat_column(wait, stat): "30.0" for stat in STATS},
+        }
+
+        stalls = _stalls(row)
+
+        assert stalls["stalled_thread"] == "t1"
+        assert stalls["largest_wait"] == {
+            "label": wait,
+            "source": StallSource.HARDWARE_COUNTER.value,
+            "percent": 30.0,
             "downstream": True,
         }
 
