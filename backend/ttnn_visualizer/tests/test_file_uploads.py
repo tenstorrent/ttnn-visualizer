@@ -18,6 +18,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from ttnn_visualizer import file_uploads
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.file_uploads import (
@@ -756,6 +757,31 @@ def test_construct_dest_path_rejects_an_unsafe_folder_name(
             construct_dest_path(
                 _faux_file("db.sqlite"), tmp_path / "uploads", folder_name
             )
+
+
+@pytest.mark.parametrize("server_mode", [False, True])
+def test_construct_dest_path_rejects_a_report_folder_that_links_outside(
+    app, tmp_path, monkeypatch, server_mode
+):
+    """A safe name whose folder is a symlink out of the upload directory is refused.
+
+    Only the resolved-root check can catch this: the name passes
+    `_is_safe_folder_name`, and the file stays inside the (resolved) report folder.
+    Under `SERVER_MODE` the folder carries a `<unix seconds>_` prefix, so the clock
+    is pinned to know which name to plant the link under.
+    """
+    monkeypatch.setattr(file_uploads.time, "time", lambda: 1700000000)
+    app.config["SERVER_MODE"] = server_mode
+    uploads = tmp_path / "uploads"
+    outside = tmp_path / "outside"
+    uploads.mkdir()
+    outside.mkdir()
+    link_name = "1700000000_report" if server_mode else "report"
+    (uploads / link_name).symlink_to(outside, target_is_directory=True)
+
+    with app.app_context():
+        with pytest.raises(DataFormatError, match="escapes upload directory"):
+            construct_dest_path(_faux_file("db.sqlite"), uploads, "report")
 
 
 _TRAVERSAL_UPLOADS = {
