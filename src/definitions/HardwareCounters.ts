@@ -38,6 +38,11 @@ export enum HardwareCounterMeasure {
     RATIO = 'ratio',
 }
 
+export enum HardwareCounterTab {
+    UTILIZATION = 'utilization',
+    STALLS = 'stalls',
+}
+
 export const HARDWARE_COUNTER_CAPTURE_FLAG = '--profiler-capture-perf-counters';
 // tt-metal's one-pass example: at most one L1 group fits a pass.
 export const HARDWARE_COUNTER_EXAMPLE_GROUPS = 'fpu,pack,unpack,instrn,l1_0';

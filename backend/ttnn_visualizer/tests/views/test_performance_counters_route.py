@@ -2,7 +2,8 @@
 #
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-"""`GET /api/performance/counters/<perf_id>`: one row's every counter label. #2371"""
+"""`GET /api/performance/counters/<perf_id>`: one row's every counter label (#2371)
+and its stalls per thread (#2372)."""
 
 import csv
 from http import HTTPStatus
@@ -10,6 +11,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from ttnn_visualizer import csv_queries, hardware_counters, pipeline_stalls
 from ttnn_visualizer.agent import hw_utilisation
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
 from ttnn_visualizer.csv_queries import (
@@ -18,7 +20,9 @@ from ttnn_visualizer.csv_queries import (
     OpsPerformanceReportQueries,
 )
 from ttnn_visualizer.extensions import db
+from ttnn_visualizer.file_source import FileSource
 from ttnn_visualizer.models import Instance, InstanceTable
+from ttnn_visualizer.tests.frontend_parity import typescript_interface_keys
 from ttnn_visualizer.tests.hardware_counter_capture import (
     PERCENT_LABELS,
     UNKNOWN_LABEL,
@@ -31,8 +35,27 @@ from ttnn_visualizer.tests.hardware_counter_capture import (
     write_device_log,
 )
 from ttnn_visualizer.tests.smoke_capture import smoke_rows, write_ops_perf
+from ttnn_visualizer.tests.stall_capture import (
+    CB_RESERVE_BACK,
+    CB_WAIT_FRONT,
+    CORE_COUNT,
+    INPUT_STARVED_POSITION,
+    OUTPUT_BLOCKED_POSITION,
+    STALE_CB_POSITION,
+    STALL_OPS,
+    UNNAMED_STALL_POSITION,
+    UNPACK_BOUND_POSITION,
+    counter_average,
+    dropped_cb_sum_rows,
+    kernel_share,
+    stall_rows,
+    write_stall_capture,
+)
 
 ROUTE = "/api/performance/counters"
+_STALLS_MODEL = (
+    Path(__file__).resolve().parents[4] / "src" / "model" / "PipelineStalls.ts"
+)
 COUNTED_POSITION = 0
 # Both record no counters: the first names a compute kernel, the second `[]`.
 UNCOUNTED_POSITION = 4
@@ -403,3 +426,301 @@ def test_an_id_that_is_not_a_number_is_a_bad_request(client, counted):
 
 def test_it_needs_an_instance(client):
     assert client.get(f"{ROUTE}/2").status_code == HTTPStatus.BAD_REQUEST
+
+
+class TestStalls:
+    """The Stalls tab's figures ride the same fetch. #2372"""
+
+    @pytest.fixture
+    def stalled(self, app, tmp_path):
+        write_stall_capture(tmp_path / "stalled")
+        return _mount(app, tmp_path / "stalled")
+
+    def _stalls(self, client, instance_id, position):
+        response = _get(client, instance_id, position + REPORT_ROW_ID_OFFSET)
+        assert response.status_code == HTTPStatus.OK
+        return response.get_json()["stalls"]
+
+    @staticmethod
+    def _one_op_without_cb_sums():
+        """A sum-profiled capture's rows, the input-starved op's CB sums blank."""
+        rows = stall_rows()
+        rows[INPUT_STARVED_POSITION] = {
+            **rows[INPUT_STARVED_POSITION],
+            CB_WAIT_FRONT: "",
+            CB_RESERVE_BACK: "",
+        }
+        return rows
+
+    def test_each_thread_carries_its_counters_and_the_cb_waits_per_core(
+        self, client, stalled
+    ):
+        op = STALL_OPS[INPUT_STARVED_POSITION]
+
+        stalls = self._stalls(client, stalled, INPUT_STARVED_POSITION)
+        threads = {thread["thread"]: thread for thread in stalls["threads"]}
+
+        assert [thread["role"] for thread in stalls["threads"]] == [
+            "unpack",
+            "math",
+            "pack",
+        ]
+        assert threads["t0"]["hardware_counters"]["stall_rate"]["avg"] == (
+            counter_average(INPUT_STARVED_POSITION, "Thread 0 Stall Rate")
+        )
+        assert threads["t0"]["instrumentation"]["cb_wait_front"] == {
+            "sum_us": op.cb_wait_front_ns / 1000,
+            "per_core_us": op.cb_wait_front_ns / op.cores / 1000,
+            "kernel_share_percent": kernel_share(
+                INPUT_STARVED_POSITION, op.cb_wait_front_ns
+            ),
+        }
+        assert stalls["core_count"] == op.cores
+        assert stalls["kernel_duration_us"] == op.kernel_ns / 1000
+        assert stalls["largest_wait"]["label"] == "cb_wait_front"
+
+    def test_an_op_without_a_compute_kernel_ignores_its_copied_cb_sums(
+        self, client, stalled
+    ):
+        stalls = self._stalls(client, stalled, STALE_CB_POSITION)
+
+        assert stalls["has_compute_kernel"] is False
+        assert stalls["cb_waits"]["state"] == "ignored"
+        assert stalls["stalled_percent"] is None
+        assert all(thread["instrumentation"] is None for thread in stalls["threads"])
+
+    def test_a_counter_capture_without_sum_profiling_names_what_fills_its_cb_waits(
+        self, client, counted
+    ):
+        """The counters fixture's compute ops carry a thread stall rate and no CB sums."""
+        body = _get(client, counted, COUNTED_POSITION + REPORT_ROW_ID_OFFSET).get_json()
+
+        assert body["stalls"]["counters"] == {"state": "filled", "fill_hint": None}
+        assert body["stalls"]["cb_waits"] == {
+            "state": "not_captured",
+            "fill_hint": pipeline_stalls.CB_WAITS_FILL_HINT,
+        }
+
+    def test_a_compute_op_without_cb_sums_in_a_sum_profiled_capture_has_no_value(
+        self, app, client, tmp_path
+    ):
+        """Never told to add a flag the capture already ran with."""
+        write_ops_perf(tmp_path / "one-blank", self._one_op_without_cb_sums())
+        instance_id = _mount(app, tmp_path / "one-blank")
+
+        stalls = self._stalls(client, instance_id, INPUT_STARVED_POSITION)
+
+        assert stalls["cb_waits"] == {"state": "no_value", "fill_hint": None}
+
+    def test_a_kept_row_without_cb_sums_has_no_value_beside_a_dropped_row_with_them(
+        self, app, client, tmp_path
+    ):
+        """As `stall_breakdown` answers the row tt-perf-report keeps."""
+        rows, kept = dropped_cb_sum_rows()
+        write_ops_perf(tmp_path / "two-devices", rows)
+        instance_id = _mount(app, tmp_path / "two-devices")
+
+        stalls = self._stalls(client, instance_id, kept)
+
+        assert stalls["cb_waits"] == {"state": "no_value", "fill_hint": None}
+
+    def test_the_capture_is_read_for_sum_profiling_only_when_asked_and_once(
+        self, client, counted, stalled
+    ):
+        """Only a compute op without CB sums asks, and the answer is kept per file."""
+        with patch.object(
+            pipeline_stalls,
+            "capture_has_cb_waits",
+            wraps=pipeline_stalls.capture_has_cb_waits,
+        ) as read:
+            for position in (INPUT_STARVED_POSITION, STALE_CB_POSITION):
+                self._stalls(client, stalled, position)
+            self._stalls(client, counted, UNCOUNTED_WITHOUT_KERNEL_POSITION)
+            unasked = read.call_count
+            for _ in range(2):
+                self._stalls(client, counted, COUNTED_POSITION)
+
+        assert unasked == 0
+        assert read.call_count == 1
+
+    @pytest.mark.parametrize("unreadable", ["oversized-field", "invalid-utf-8"])
+    @pytest.mark.parametrize(
+        ("cb_wait_first", "state"),
+        [(False, "not_captured"), (True, "no_value")],
+        ids=["bad-row-first", "cb-wait-first"],
+    )
+    def test_a_row_the_scan_cannot_read_leaves_an_earlier_ops_counters_answered(
+        self, app, client, tmp_path, unreadable, cb_wait_first, state
+    ):
+        """Asked whether the capture had sum profiling, the scan reads past the row
+        asked for, which was a 200 before the stalls rode along. A row it can't read
+        before any CB wait counts as none, and that answer is kept."""
+        # The rows below rely on this order: the asked op, then the one whose CB wait
+        # may come first, the padding, and the bad row.
+        assert (
+            INPUT_STARVED_POSITION
+            < UNPACK_BOUND_POSITION
+            < OUTPUT_BLOCKED_POSITION
+            < UNNAMED_STALL_POSITION
+        )
+        marker = "UNREADABLE"
+        no_sums = {CB_WAIT_FRONT: "", CB_RESERVE_BACK: ""}
+        rows = stall_rows()
+        rows[INPUT_STARVED_POSITION] = {**rows[INPUT_STARVED_POSITION], **no_sums}
+        if not cb_wait_first:
+            rows[UNPACK_BOUND_POSITION] = {**rows[UNPACK_BOUND_POSITION], **no_sums}
+        # Text decodes in 8 KiB chunks: this keeps the bad row's bytes out of the
+        # chunks that hold the rows before this one.
+        rows[OUTPUT_BLOCKED_POSITION] = {
+            **rows[OUTPUT_BLOCKED_POSITION],
+            **no_sums,
+            "ATTRIBUTES": "x" * 20_000,
+        }
+        rows[UNNAMED_STALL_POSITION] = {
+            **rows[UNNAMED_STALL_POSITION],
+            "ATTRIBUTES": (
+                "x" * (csv.field_size_limit() + 1)
+                if unreadable == "oversized-field"
+                else marker
+            ),
+        }
+        destination = write_ops_perf(tmp_path / "unreadable-later", rows)
+        destination.write_bytes(
+            destination.read_bytes().replace(marker.encode(), b"\xff\xfe")
+        )
+        instance_id = _mount(app, tmp_path / "unreadable-later")
+
+        with patch.object(
+            pipeline_stalls,
+            "capture_has_cb_waits",
+            wraps=pipeline_stalls.capture_has_cb_waits,
+        ) as read:
+            responses = [
+                _get(client, instance_id, INPUT_STARVED_POSITION + REPORT_ROW_ID_OFFSET)
+                for _ in range(2)
+            ]
+
+        assert [response.status_code for response in responses] == [HTTPStatus.OK] * 2
+        body = responses[0].get_json()
+        assert body["op_has_counters"] is True
+        assert body["stalls"]["counters"]["state"] == "filled"
+        assert body["stalls"]["cb_waits"]["state"] == state
+        assert read.call_count == 1
+
+    @pytest.mark.parametrize(
+        "gone", ["removed", "removed-after-its-stat", "replaced-by-a-folder"]
+    )
+    def test_a_csv_gone_after_its_row_was_read_still_answers_the_row(
+        self, app, client, tmp_path, gone
+    ):
+        """The scan for sum profiling reads the file the row came from; gone or
+        unreadable, it counts as none rather than failing the request. Other ops have
+        CB sums, so a scan that read the file would answer no_value."""
+        destination = write_ops_perf(tmp_path / "gone", self._one_op_without_cb_sums())
+        instance_id = _mount(app, tmp_path / "gone")
+        read_row = hardware_counters.read_row
+        source_at = FileSource.at
+
+        def take_away():
+            destination.unlink()
+            if gone == "replaced-by-a-folder":
+                destination.mkdir()
+
+        def read_then_take_away(source, position):
+            found = read_row(source, position)
+            if gone != "removed-after-its-stat":
+                take_away()
+            return found
+
+        def stat_then_take_away(path):
+            found = source_at(path)
+            if gone == "removed-after-its-stat":
+                take_away()
+            return found
+
+        with (
+            patch.object(
+                hardware_counters, "read_row", side_effect=read_then_take_away
+            ),
+            patch.object(FileSource, "at", side_effect=stat_then_take_away) as stat,
+        ):
+            response = _get(
+                client, instance_id, INPUT_STARVED_POSITION + REPORT_ROW_ID_OFFSET
+            )
+
+        assert response.status_code == HTTPStatus.OK
+        assert response.get_json()["stalls"]["cb_waits"]["state"] == "not_captured"
+        assert stat.call_count == 1
+        assert csv_queries._sum_profiled.cache_info().currsize == 0
+
+    def test_a_capture_written_after_the_row_was_read_is_not_the_one_scanned(
+        self, app, client, tmp_path
+    ):
+        """The folder's newest CSV can change mid-request; the row's own is scanned."""
+        directory = tmp_path / "superseded"
+        older = write_ops_perf(directory, stall_rows(sum_profiling=False))
+        newer = write_ops_perf(tmp_path / "newer", stall_rows())
+        instance_id = _mount(app, directory)
+        newest = [older, newer]
+
+        with patch.object(
+            csv_queries, "newest_ops_perf_file", side_effect=lambda _: newest.pop(0)
+        ):
+            response = _get(
+                client, instance_id, INPUT_STARVED_POSITION + REPORT_ROW_ID_OFFSET
+            )
+
+        assert response.status_code == HTTPStatus.OK
+        assert response.get_json()["stalls"]["cb_waits"]["state"] == "not_captured"
+
+    def test_the_answer_has_the_keys_the_app_reads(self, client, stalled):
+        """`src/model/PipelineStalls.ts` describes this answer, keys and nesting."""
+        stalls = self._stalls(client, stalled, INPUT_STARVED_POSITION)
+
+        def check(answer, interface):
+            required, optional = typescript_interface_keys(_STALLS_MODEL, interface)
+            assert required <= answer.keys() <= required | optional, interface
+
+        check(stalls, "OperationStalls")
+        check(stalls["counters"], "StallPart")
+        check(stalls["cb_waits"], "StallPart")
+        check(stalls["largest_wait"], "LargestWait")
+        polls = []
+        for thread in stalls["threads"]:
+            check(thread, "ThreadStalls")
+            counters = thread["hardware_counters"]
+            check(counters, "ThreadHardwareCounters")
+            for stat in ("issue_rate", "stall_rate", "stall_overlap"):
+                check(counters[stat], "StallStat")
+            for wait in counters["waits"]:
+                check(wait, "NamedWait")
+            for stall in counters.get("math_pipeline_stalls", []):
+                check(stall, "NamedStallStat")
+            polls += (thread["instrumentation"] or {}).values()
+        for poll in polls:
+            check(poll, "CbWait")
+        assert len(polls) == 2
+        assert any(
+            "math_pipeline_stalls" in thread["hardware_counters"]
+            for thread in stalls["threads"]
+        )
+
+    @pytest.mark.parametrize("cell", ["1e30", "0", "-8"])
+    def test_a_core_count_that_is_no_count_leaves_the_shares_null(
+        self, app, client, tmp_path, cell
+    ):
+        """A count past 64 bits once failed the whole answer, the Utilization tab's too."""
+        rows = stall_rows()
+        rows[INPUT_STARVED_POSITION] = {
+            **rows[INPUT_STARVED_POSITION],
+            CORE_COUNT: cell,
+        }
+        write_ops_perf(tmp_path / "bad-count", rows)
+        instance_id = _mount(app, tmp_path / "bad-count")
+
+        stalls = self._stalls(client, instance_id, INPUT_STARVED_POSITION)
+        front = stalls["threads"][0]["instrumentation"]["cb_wait_front"]
+
+        assert stalls["core_count"] is None
+        assert front["per_core_us"] is None
+        assert front["kernel_share_percent"] is None

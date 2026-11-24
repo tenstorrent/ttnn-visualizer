@@ -13,6 +13,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import (
+    Callable,
     Dict,
     FrozenSet,
     Iterable,
@@ -718,6 +719,10 @@ def is_listed(label: str, architecture: DeviceArchitecture) -> bool:
     )
 
 
+# A counter's value on one op, by label and stat; None where its cell is blank.
+CounterReader = Callable[[str, CounterStat], Optional[float]]
+
+
 @dataclass(frozen=True)
 class CounterHeader:
     """The counter columns one CSV header holds."""
@@ -740,6 +745,15 @@ class CounterHeader:
             *(name for stats in self.columns.values() for name in stats.values()),
             *self.full_grid.values(),
         ]
+
+    def row_reader(self, row: Mapping[str, object]) -> CounterReader:
+        """Reads a raw CSV row's counters, as `CounterTable.reader` reads a table's."""
+
+        def read(label: str, stat: CounterStat) -> Optional[float]:
+            name = self.column(label, stat)
+            return cell_value(row.get(name)) if name else None
+
+        return read
 
     def absence(
         self, label: str, architecture: DeviceArchitecture
@@ -818,11 +832,8 @@ def report_columns(header: CounterHeader, detail: bool) -> Dict[str, str]:
 def _stats(
     row: Mapping[str, object], header: CounterHeader, label: str
 ) -> Dict[str, Optional[float]]:
-    stats: Dict[str, Optional[float]] = {}
-    for stat in CounterStat:
-        name = header.column(label, stat)
-        stats[stat.value] = cell_value(row.get(name)) if name else None
-    return stats
+    read = header.row_reader(row)
+    return {stat.value: read(label, stat) for stat in CounterStat}
 
 
 def _reading(
@@ -861,13 +872,17 @@ def performance_model(row: Mapping[str, object]) -> Dict[str, Optional[float]]:
     return {"fpu_util": cell_value(row.get(PM_FPU_UTIL_COLUMN))}
 
 
-def _has_compute_kernel(row: Mapping[str, object]) -> Optional[bool]:
-    """Whether the row names a compute kernel, which tt-metal writes as `[]` for an op
-    with none; None where the CSV has no such column or leaves the cell blank."""
-    cell = row.get(COMPUTE_KERNEL_SOURCE_COLUMN)
+def names_compute_kernel(cell: object) -> Optional[bool]:
+    """Whether a `COMPUTE KERNEL SOURCE` cell names a kernel, which tt-metal writes as
+    `[]` for an op with none; None for a blank cell or none at all."""
     if not isinstance(cell, str) or not cell.strip():
         return None
     return bool(cell.strip().strip("[]").strip())
+
+
+def has_compute_kernel(row: Mapping[str, object]) -> Optional[bool]:
+    """Whether the CSV row names a compute kernel, as `names_compute_kernel` reads it."""
+    return names_compute_kernel(row.get(COMPUTE_KERNEL_SOURCE_COLUMN))
 
 
 def _row_facts(
@@ -878,7 +893,7 @@ def _row_facts(
     return {
         "architecture": architecture.value or None,
         "device_id": whole_number(row.get(DEVICE_ID_COLUMN)),
-        "has_compute_kernel": _has_compute_kernel(row),
+        "has_compute_kernel": has_compute_kernel(row),
         "performance_model": performance_model(row),
     }
 
@@ -954,8 +969,8 @@ def _rows(source: TextIO) -> Iterator[List[str]]:
 
 
 @contextmanager
-def _readable_csv() -> Iterator[None]:
-    """A CSV the reader refuses, as the `DataFormatError` both reads raise."""
+def readable_csv() -> Iterator[None]:
+    """A CSV the reader refuses, as the `DataFormatError` every read of one raises."""
     try:
         yield
     except (csv.Error, UnicodeDecodeError) as error:
@@ -968,7 +983,7 @@ def read_row(
     source: TextIO, position: int
 ) -> Tuple[List[str], Optional[Dict[str, str]]]:
     """The header and the data row at `position`, or None past the last one."""
-    with _readable_csv():
+    with readable_csv():
         rows = _rows(source)
         header = next(rows, [])
         if position < 0:
@@ -995,6 +1010,18 @@ class CounterTable:
         number = self.values[column][position]
         return round(number, _DECIMALS) if math.isfinite(number) else None
 
+    def reader(self, position: Optional[int]) -> CounterReader:
+        """Reads the data row at `position` as `CounterHeader.row_reader` reads a CSV
+        row, but for the stats the table holds: none for a Median or no position."""
+
+        def read(label: str, stat: CounterStat) -> Optional[float]:
+            column = self.header.column(label, stat)
+            if position is None or column not in self.values:
+                return None
+            return self.value(column, position)
+
+        return read
+
 
 def _table_columns(header: CounterHeader) -> List[str]:
     return [
@@ -1010,7 +1037,7 @@ def _table_columns(header: CounterHeader) -> List[str]:
 
 def read_table(source: TextIO) -> CounterTable:
     """The columns a `CounterTable` holds, for every row, read in one pass."""
-    with _readable_csv():
+    with readable_csv():
         rows = _rows(source)
         header = next(rows, [])
         counters = discover(header)
@@ -1058,6 +1085,7 @@ __all__ = [
     "CounterFamily",
     "CounterHeader",
     "CounterMeasure",
+    "CounterReader",
     "CounterStat",
     "CounterTable",
     "CounterUnit",
@@ -1071,14 +1099,17 @@ __all__ = [
     "family_of",
     "fill_hint",
     "group_states",
+    "has_compute_kernel",
     "is_available",
     "is_listed",
     "label_fill_hint",
     "labels_of",
+    "names_compute_kernel",
     "operation_counters",
     "performance_model",
     "read_row",
     "read_table",
+    "readable_csv",
     "report_columns",
     "requirement",
 ]

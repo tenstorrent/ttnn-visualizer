@@ -6,7 +6,7 @@
 
 import re
 from pathlib import Path
-from typing import Set
+from typing import Dict, Set, Tuple
 
 
 def typescript_enum_values(path: Path, name: str) -> Set[str]:
@@ -34,10 +34,60 @@ def typescript_enum_values(path: Path, name: str) -> Set[str]:
     return values
 
 
-def typescript_string_constant(path: Path, name: str) -> str:
-    """The value of one `export const NAME = '...';` in ``path``, or a failure."""
+def typescript_enum_members(path: Path, name: str) -> Dict[str, str]:
+    """One TS enum's string values by member name, as `typescript_enum_values` reads it."""
+    body = re.search(
+        rf"export enum {name} {{(.*?)^}}",
+        path.read_text(encoding="utf-8"),
+        re.DOTALL | re.MULTILINE,
+    )
+
+    if body is None:
+        raise AssertionError(f"No `export enum {name}` in {path.name}")
+
+    members = dict(re.findall(r"(\w+)\s*=\s*'([^']+)'", body.group(1)))
+
+    if not members:
+        raise AssertionError(f"`export enum {name}` in {path.name} declares no members")
+
+    return members
+
+
+def typescript_interface_keys(path: Path, name: str) -> Tuple[Set[str], Set[str]]:
+    """One `export interface`'s required and optional keys in ``path``, with those of an
+    interface in the same file that it extends, or a failure."""
     found = re.search(
-        rf"^export const {name} = '([^']*)';$",
+        rf"^export interface {name}(?: extends (\w+))? {{(.*?)^}}",
+        path.read_text(encoding="utf-8"),
+        re.DOTALL | re.MULTILINE,
+    )
+
+    if found is None:
+        raise AssertionError(f"No `export interface {name}` in {path.name}")
+
+    required: Set[str] = set()
+    optional: Set[str] = set()
+    for key, mark in re.findall(r"^\s+(\w+)(\??):", found.group(2), re.MULTILINE):
+        (optional if mark else required).add(key)
+
+    if not required | optional:
+        raise AssertionError(
+            f"`export interface {name}` in {path.name} declares no keys"
+        )
+
+    if found.group(1):
+        base_required, base_optional = typescript_interface_keys(path, found.group(1))
+        required |= base_required
+        optional |= base_optional
+
+    return required, optional
+
+
+def typescript_string_constant(path: Path, name: str) -> str:
+    """The value of one `export const NAME = '...';` in ``path``, on its line or the
+    next, where prettier wraps a long one, or a failure."""
+    found = re.search(
+        rf"^export const {name} =[ \t]*\n?[ \t]*'([^']*)';$",
         path.read_text(encoding="utf-8"),
         re.MULTILINE,
     )

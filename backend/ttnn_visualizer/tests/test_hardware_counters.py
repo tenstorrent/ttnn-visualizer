@@ -567,6 +567,28 @@ class TestReading:
         assert table.row_count == 1
         assert table.value("FPU Util Avg (%)", 0) is None
 
+    def test_a_tables_reader_reads_a_row_as_the_rows_own_reader_does(self):
+        """The route reads a CSV row, the agent's tools a table, by one rule."""
+        header = _header(["FPU Util"], ("Min", "Median", "Max", "Avg"))
+        text = ",".join(header) + "\n1,2,3,4.25\n"
+        table = hardware_counters.read_table(io.StringIO(text))
+        _, row = hardware_counters.read_row(io.StringIO(text), 0)
+        assert row is not None
+        from_row = table.header.row_reader(row)
+
+        for stat, _ in hardware_counters.ROW_KEY_STATS:
+            assert table.reader(0)("FPU Util", stat) == from_row("FPU Util", stat)
+        assert from_row("FPU Util", CounterStat.MIN) == 1
+        assert from_row("FPU Util", CounterStat.MEDIAN) == 2
+        assert table.reader(0)("FPU Util", CounterStat.MEDIAN) is None
+
+    @pytest.mark.parametrize("position", [None, -1, 1])
+    def test_a_tables_reader_without_a_row_reads_nothing(self, position):
+        table = hardware_counters.read_table(io.StringIO("FPU Util Avg (%)\n4\n"))
+
+        assert table.reader(position)("FPU Util", CounterStat.AVG) is None
+        assert table.reader(0)("Thread 0 Stall Rate", CounterStat.AVG) is None
+
     @pytest.mark.parametrize(
         "read",
         [

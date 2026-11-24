@@ -60,3 +60,7 @@ export const formatHardwareCounterValue = (value: number, measure: HardwareCount
     measure === HardwareCounterMeasure.RATIO
         ? formatSize(value, RATIO_DECIMALS)
         : formatPercentage(value, PERCENT_DECIMALS);
+
+/** Why a value is missing, and what fills it where the server names that. */
+export const getMissingReason = (label: string, fillHint: string | null): string =>
+    fillHint ? `${label}: ${fillHint}` : label;

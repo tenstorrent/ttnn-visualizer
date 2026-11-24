@@ -26,9 +26,10 @@ import { makeRawPerfRow } from './helpers/perfRowFixtures';
 import { openPopover } from './helpers/testForPortal';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { OperationHardwareCounters } from '../src/model/HardwareCounters';
+import { NOT_CAPTURED_STALLS } from './helpers/pipelineStallFixtures';
 
 // The always-mounted `CircularBufferPressureModal` is the subtree's only API caller, besides the
-// Utilization panel a device operation opens.
+// Counters popover a device operation opens.
 const mockUseDevices = vi.fn();
 const mockUseOperationHardwareCounters = vi.fn();
 vi.mock('../src/hooks/useAPI.tsx', () => ({
@@ -804,6 +805,7 @@ describe('DeviceOperationsFullRender - device operation perf (#1512)', () => {
             full_grid: [],
             families: [],
             performance_model: { fpu_util: null },
+            stalls: NOT_CAPTURED_STALLS,
         };
 
         const openCounters = async (isMultiDeviceReport: boolean) => {
