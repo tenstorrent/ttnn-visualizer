@@ -129,6 +129,7 @@ export enum PerfTableOption {
     MATMUL_ADVICE = 'matmul_advice',
     HIGHLIGHT_HIGH_DISPATCH = 'highlight_high_dispatch',
     NORMALISE_DATA = 'normalise_data',
+    HARDWARE_COUNTERS = 'hardware_counters',
 }
 
 export enum ComparisonReportCountBucket {
@@ -158,6 +159,7 @@ export enum DrilldownTarget {
     BUFFER_DETAILS = 'buffer_details',
     STACK_TRACE = 'stack_trace',
     SOURCE_FILE = 'source_file',
+    HARDWARE_COUNTERS = 'hardware_counters',
 }
 
 export enum FilterSurface {

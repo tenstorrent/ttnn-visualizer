@@ -17,8 +17,10 @@ from pathlib import Path
 from typing import Dict, Set
 
 import pytest
+from ttnn_visualizer import hardware_counters
 from ttnn_visualizer.agent import (
     failures,
+    hw_utilisation,
     op_configurations,
     report_diff,
     server,
@@ -452,7 +454,7 @@ def test_the_page_names_every_tool_a_csv_that_cannot_be_read_costs():
     named = re.findall(r"`([a-z_]+)`", sentence.group(2))
     assert set(named) == PERF_CSV_TOOLS
     assert len(named) == len(PERF_CSV_TOOLS)
-    assert sentence.group(1) == "six"
+    assert sentence.group(1) == "seven"
 
 
 def test_the_signpost_listing_cap_the_page_states_is_the_enforced_one():
@@ -483,3 +485,26 @@ def test_agents_md_points_at_the_agent_tools_page():
         "AGENTS.md must point at the agent-tools page from the Agent-facing tools "
         "section, so adding a tool without documenting it is visible in review."
     )
+
+
+def test_the_page_carries_the_hw_utilisation_caveats():
+    """Counters are per op and per core, a merged row is one device's, and an op
+    without a compute kernel is left out rather than read as idle."""
+    page = " ".join(_read(_AGENT_DOCS).split())
+
+    assert f"lists the {hw_utilisation.TOP_OPS_PER_UNIT} operations" in page
+    assert "the slowest device's" in page
+    assert "left out of every figure rather than read as 0" in page
+    assert "not a time series" in page
+    assert (
+        "`--profiler-capture-perf-counters=<group>` for each `counters` field" in page
+    )
+    assert f"`{hardware_counters.EXAMPLE_GROUPS}`" in page
+
+
+def test_the_page_names_each_hardware_counter_sort_key():
+    """A renamed key the page still spells the old way is one an agent cannot pass."""
+    page = _read(_AGENT_DOCS)
+
+    for metric in tools.COUNTER_METRICS:
+        assert f"`{metric}`" in page, metric

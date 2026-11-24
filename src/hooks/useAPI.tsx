@@ -43,9 +43,11 @@ import {
     PerformanceReportParams,
     getLinkedPerformanceReportParams,
     getPerformanceComparisonReportQueryKey,
+    getPerformanceCountersQueryKey,
     getPerformanceReportQueryKey,
     toBackendStackedGroupBy,
 } from '../functions/performanceReportQueryKey';
+import { OperationHardwareCounters } from '../model/HardwareCounters';
 import { L1PressureResult } from '../model/L1Pressure';
 import { buildL1PressureResult } from '../functions/l1Pressure';
 import { StackedPerfRow } from '../definitions/StackedPerfTable';
@@ -409,6 +411,10 @@ export interface PerformanceReportResponse {
     // True when a signpost range was asked of a report holding no signposts: the
     // report is then whole rather than the window the range names.
     signpost_range_ignored?: boolean;
+    // Any hardware counter column, which the rows' headline keys miss for a capture of other groups only.
+    has_hardware_counters?: boolean;
+    // The devices the CSV names; a merged row on a report of several is one device's.
+    device_count?: number | null;
 }
 
 // Takes the params as one object rather than positionally: `hideHostOps`,
@@ -1366,6 +1372,28 @@ const usePerformanceReportQuery = (name: string | null, params: PerformanceRepor
     });
 
     return response;
+};
+
+const fetchOperationHardwareCounters = async (name: string | null, perfId: number) => {
+    const { data } = await axiosInstance.get<OperationHardwareCounters>(`${Endpoints.PERFORMANCE_COUNTERS}/${perfId}`, {
+        params: { name },
+    });
+
+    return data;
+};
+
+/** @description One row of the active performance report's hardware counters, every label. */
+export const useOperationHardwareCounters = (perfId: number | null) => {
+    const name = useAtomValue(activePerformanceReportFolderNameAtom);
+    const location = useAtomValue(performanceReportLocationAtom);
+
+    return useQuery<OperationHardwareCounters, AxiosError>({
+        queryFn: () => fetchOperationHardwareCounters(name, perfId!),
+        queryKey: getPerformanceCountersQueryKey({ name, instanceId: getOrCreateInstanceId(), location, perfId }),
+        enabled: name !== null && perfId !== null,
+        retry: false,
+        staleTime: Infinity,
+    });
 };
 
 /**

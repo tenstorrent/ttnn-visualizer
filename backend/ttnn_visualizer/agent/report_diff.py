@@ -15,7 +15,7 @@ from statistics import median
 from typing import Callable, Dict, FrozenSet, Hashable, List, Optional, Tuple, cast
 
 from ttnn_visualizer.agent.bounds import cut_op_code, cut_text, echoed
-from ttnn_visualizer.agent.cells import finite_number
+from ttnn_visualizer.cells import finite_number
 
 
 class DiffMatch(str, Enum):

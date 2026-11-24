@@ -33,6 +33,7 @@ from typing import (
     cast,
 )
 
+from ttnn_visualizer import hardware_counters
 from ttnn_visualizer.agent import op_signatures, perf_detail, perf_flags, report_diff
 from ttnn_visualizer.agent.bounds import (
     MAX_DETAILED_LIMIT,
@@ -44,7 +45,6 @@ from ttnn_visualizer.agent.bounds import (
     require_name_fits,
     shown_op_code,
 )
-from ttnn_visualizer.agent.cells import finite_number, whole_number
 from ttnn_visualizer.agent.handles import (
     CacheVariant,
     ReportRegistry,
@@ -54,6 +54,7 @@ from ttnn_visualizer.agent.handles import (
     read_once,
     without_performance_csv,
 )
+from ttnn_visualizer.cells import finite_number, whole_number
 from ttnn_visualizer.csv_queries import (
     L1_ZONE_MARKER_CAPACITY,
     MAX_COUNTED_ZONE_NAMES,
@@ -81,6 +82,7 @@ from ttnn_visualizer.csv_queries import (
     read_signposts,
     signpost_range_ignored,
 )
+from ttnn_visualizer.device_architecture import DeviceArchitecture
 from ttnn_visualizer.exceptions import (
     DataFormatError,
     InvalidSignpostRange,
@@ -122,6 +124,19 @@ CANONICAL_PROJECTION: Dict[str, object] = {
     "print_signposts": True,
 }
 
+# The hardware counters a row carries as sort keys: each unit's per-core average, named
+# as the row names it so none reads as the perf model's `fpu_util_percent`.
+COUNTER_METRICS: Dict[str, hardware_counters.HeadlineUnit] = {
+    unit.row_key: unit
+    for unit in hardware_counters.HEADLINE_UNITS
+    if unit.unit
+    in (
+        hardware_counters.CounterUnit.FPU,
+        hardware_counters.CounterUnit.SFPU,
+        hardware_counters.CounterUnit.MATH,
+    )
+}
+
 # Sort keys an agent may ask for, mapped to the report's own field names.
 SORTABLE_METRICS: Dict[str, str] = {
     "device_time": "device_time",
@@ -130,6 +145,7 @@ SORTABLE_METRICS: Dict[str, str] = {
     "flops": "flops",
     "dram": "dram",
     "cores": "cores",
+    **{metric: unit.row_key for metric, unit in COUNTER_METRICS.items()},
 }
 DEFAULT_METRIC = "device_time"
 
@@ -692,6 +708,20 @@ def _device_meta(instance: Instance) -> Optional[DeviceLogMeta]:
         return None
 
 
+def device_architecture(registry: ReportRegistry, handle: str) -> DeviceArchitecture:
+    """The architecture the handle's device log names, as the counters route reads it."""
+    return DeviceLogProfilerQueries.architecture(registry.get(handle))
+
+
+def counters_architecture(
+    registry: ReportRegistry, handle: str, groups: Sequence[perf_detail.DetailGroup]
+) -> DeviceArchitecture:
+    """The architecture the `counters` fields' fill hints name groups for, when asked."""
+    if perf_detail.DetailGroup.COUNTERS not in groups:
+        return DeviceArchitecture.UNKNOWN
+    return device_architecture(registry, handle)
+
+
 def _log_architecture(instance: Instance) -> Optional[str]:
     """The architecture the device log's first line names, or None."""
     meta = DeviceLogProfilerQueries.read_device_meta(instance)
@@ -771,15 +801,29 @@ def top_ops(
         "returned": len(ops),
         "ops": ops,
         "projection": projection(signposts, ignored),
-        **perf_detail.summary(groups, empty),
+        **perf_detail.summary(
+            groups, empty, counters_architecture(registry, handle, groups)
+        ),
         **perf_flags.summary(flag_inputs, flagged),
     }
     if by in ADDITIVE_METRICS:
         result[f"{by}_total"] = round(total, 3)
-    caveat = partitioned_caveat(rows)
-    if caveat:
-        result["caveat"] = caveat
+    caveats = [partitioned_caveat(rows), _uncounted_caveat(by, ops)]
+    if any(caveats):
+        result["caveat"] = " ".join(caveat for caveat in caveats if caveat)
     return result
+
+
+def _uncounted_caveat(metric: str, ops: List[Dict]) -> Optional[str]:
+    """Why ranking by a hardware counter came back empty."""
+    unit = COUNTER_METRICS.get(metric)
+    if unit is None or ops:
+        return None
+    return (
+        f"No row carries {metric}, a hardware counter: it is "
+        f"{hardware_counters.label_fill_hint(unit.label)}, and an operation without a "
+        "compute kernel never has one."
+    )
 
 
 PROGRAM_CACHE_NOTE = (
@@ -1026,6 +1070,36 @@ def _op_signatures(registry: ReportRegistry, handle: str) -> op_signatures.Signa
             "op_code"
         )
     return signatures
+
+
+def _read_hardware_counters(instance: Instance) -> hardware_counters.CounterTable:
+    path = OpsPerformanceQueries.get_local_ops_perf_file_path(instance)
+    with open(path, newline="") as csv_file:
+        return hardware_counters.read_table(csv_file)
+
+
+def hardware_counter_table(
+    registry: ReportRegistry, handle: str
+) -> hardware_counters.CounterTable:
+    """Every counter column of the handle's capture by CSV position, read once per
+    capture; refused, naming the flag, for a capture without them."""
+    try:
+        table = _per_capture(
+            registry,
+            handle,
+            CacheVariant.HARDWARE_COUNTERS,
+            _read_hardware_counters,
+        )
+    except DataFormatError as error:
+        raise ValueError(f"{handle!r}: {error}") from error
+    if not table.header.has_counters:
+        raise ValueError(
+            f"the performance CSV behind {handle!r} has no hardware counter columns. "
+            f"Capture with {hardware_counters.CAPTURE_FLAG}=<groups>, such as "
+            f"{hardware_counters.EXAMPLE_GROUPS} in one pass, or all with "
+            f"{hardware_counters.MULTIPASS_FLAG}."
+        )
+    return table
 
 
 def _op_code_key(row: Dict) -> Optional[str]:
@@ -2312,6 +2386,7 @@ __all__ = [
     "BREAKDOWN_GROUPINGS",
     "BreakdownGrouping",
     "CANONICAL_PROJECTION",
+    "COUNTER_METRICS",
     "CORE_SPREAD_NOTE",
     "DEFAULT_METRIC",
     "DEVICE_TIME_UNIT",
@@ -2329,7 +2404,10 @@ __all__ = [
     "is_ranged",
     "core_spread",
     "countable_device_time",
+    "counters_architecture",
+    "device_architecture",
     "device_time_header",
+    "hardware_counter_table",
     "diff_reports",
     "empty_detail_fields",
     "is_signpost_row",
