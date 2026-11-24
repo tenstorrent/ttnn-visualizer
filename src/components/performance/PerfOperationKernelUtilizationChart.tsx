@@ -14,6 +14,7 @@ import {
 } from '../../definitions/PlotConfigurations';
 import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
 import { getAxisUpperRange } from '../../functions/perfFunctions';
+import getDeviceTimeNs from '../../functions/getDeviceTimeNs';
 import {
     buildUtilisationTraces,
     getOperationHoverTemplate,
@@ -43,7 +44,7 @@ function PerfOperationKernelUtilizationChart({
         () =>
             datasets.map((data, dataIndex) => ({
                 ...getReportTraceFields(data, dataIndex, { reportName, comparisonReportList }),
-                y: data.map((row) => row.device_time),
+                y: data.map(getDeviceTimeNs),
                 type: 'bar',
                 hovertemplate: getOperationHoverTemplate('Duration: %{y} ns'),
                 marker: {

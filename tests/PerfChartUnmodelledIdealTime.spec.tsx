@@ -126,7 +126,7 @@ describe('utilisation charts', () => {
         );
 
         const [scatter] = traces();
-        expect(scatter.x).toEqual([10, 10, 10, 10]);
+        expect(scatter.x).toEqual([10_000, 10_000, 10_000, 10_000]);
         expect(scatter.y).toEqual([null, 0.5, null, null]);
         expect(layout().yaxis?.range).toEqual([0, 1.1]);
     });

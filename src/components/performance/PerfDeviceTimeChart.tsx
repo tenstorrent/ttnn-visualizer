@@ -17,11 +17,11 @@ import {
     getReportTraceFields,
 } from '../../functions/perfChartTraces';
 import { getMaxValue } from '../../functions/numericExtent';
+import getDeviceTimeNs from '../../functions/getDeviceTimeNs';
 import isUnmodelledIdealTime from '../../functions/isUnmodelledIdealTime';
 import { getPrimaryDataColours } from '../../definitions/PerformancePlotColours';
 
-const getDeviceTimeNs = ({ device_time: deviceTimeUs }: TypedPerfTableRow): number =>
-    deviceTimeUs ? deviceTimeUs * 1000 : 0;
+const getDeviceTimeNsOrZero = (row: TypedPerfTableRow): number => getDeviceTimeNs(row) ?? 0;
 
 const getModelledIdealTime = ({ pm_ideal_ns: idealNs }: TypedPerfTableRow): number | null =>
     isUnmodelledIdealTime(idealNs) ? null : idealNs;
@@ -39,7 +39,7 @@ function PerfDeviceTimeChart({ datasets = [], chartId }: PerfDeviceTimeChartProp
         () =>
             datasets.map((data, dataIndex) => ({
                 ...getReportTraceFields(data, dataIndex, { reportName, comparisonReportList }),
-                y: data.map(getDeviceTimeNs),
+                y: data.map(getDeviceTimeNsOrZero),
                 type: 'bar',
                 hovertemplate: getOperationHoverTemplate('Device time: %{y} ns'),
                 marker: {
@@ -64,7 +64,7 @@ function PerfDeviceTimeChart({ datasets = [], chartId }: PerfDeviceTimeChartProp
     // Memoized because PerfChart derives the Plotly layout from it, and a fresh object redraws
     // the chart — and re-reads the chart chrome from the stylesheet — on every render.
     const configuration = useMemo<PlotConfiguration>(() => {
-        const maxDeviceTime = getMaxValue(datasets.flatMap((data) => data.map(getDeviceTimeNs)));
+        const maxDeviceTime = getMaxValue(datasets.flatMap((data) => data.map(getDeviceTimeNsOrZero)));
 
         return {
             margin: PERF_CHART_WIDE_LEFT_MARGIN,

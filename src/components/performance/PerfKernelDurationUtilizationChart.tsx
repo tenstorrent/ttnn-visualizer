@@ -7,6 +7,7 @@ import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { TypedPerfTableRow } from '../../model/PerfTable';
 import getCoreUtilization from '../../functions/getCoreUtilization';
+import getDeviceTimeNs from '../../functions/getDeviceTimeNs';
 import {
     PlotConfiguration,
     getDeviceUtilizationAxisConfig,
@@ -34,7 +35,7 @@ function PerfKernelDurationUtilizationChart({ datasets, maxCores, chartId }: Per
     const chartData = useMemo(
         () =>
             datasets.map((data, dataIndex) => ({
-                x: data?.map((row) => row.device_time),
+                x: data?.map(getDeviceTimeNs),
                 y: data?.map((row) => getCoreUtilization(row, maxCores)),
                 mode: 'markers',
                 type: 'scatter',

@@ -14,7 +14,7 @@ import { PERF_BINS } from '../definitions/GraphColors';
  * legend labels work in the same unit downstream. Keep the wire-format
  * semantics on this interface so future modifications can't silently mix
  * units between the projection and the rest of the perf-table pipeline
- * (see `PerfDeviceTimeChart` for the same µs → ns conversion).
+ * (see `getDeviceTimeNs` for the same µs → ns conversion).
  *
  * `op_to_op_gap`, `dram_percent`, and `flops_percent` are optional richer
  * fields consumed by the top-N annotation feature on the Buffer Summary
