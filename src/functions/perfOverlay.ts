@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { PERF_BINS } from '../definitions/GraphColors';
+import { NS_PER_US } from './math';
 
 /**
  * Minimal projection of a perf row the overlay needs. Decoupled from the
@@ -28,9 +29,6 @@ export interface PerfOverlaySource {
     dram_percent?: number | null;
     flops_percent?: number | null;
 }
-
-/** Conversion factor for the wire µs value to the internal ns representation. */
-const US_TO_NS = 1_000;
 
 export interface OpPerfAggregate {
     opId: number;
@@ -79,10 +77,10 @@ export const aggregatePerfByOp = (rows: PerfOverlaySource[]): Map<number, OpPerf
             // eslint-disable-next-line no-continue -- early-skip keeps the aggregation
             continue;
         }
-        const deviceTimeNs = dt * US_TO_NS;
+        const deviceTimeNs = dt * NS_PER_US;
         const opToOpGapNs =
             row.op_to_op_gap !== undefined && row.op_to_op_gap !== null && Number.isFinite(row.op_to_op_gap)
-                ? row.op_to_op_gap * US_TO_NS
+                ? row.op_to_op_gap * NS_PER_US
                 : null;
         const existing = aggregatesByOpId.get(id);
         if (existing === undefined) {

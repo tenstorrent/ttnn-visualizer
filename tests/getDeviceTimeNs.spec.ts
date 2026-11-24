@@ -13,9 +13,14 @@ describe('getDeviceTimeNs', () => {
         expect(getDeviceTimeNs({ device_time: 0.5 })).toBe(500);
     });
 
+    it('keeps a zero device time as 0 ns, so the charts plot it rather than leave a gap', () => {
+        expect(getDeviceTimeNs({ device_time: 0 })).toBe(0);
+    });
+
     it.each([
         ['no device time', null],
         ['an unparsed device time', Number.NaN],
+        ['an infinite device time', Number.POSITIVE_INFINITY],
     ])('has no duration for %s', (_, deviceTime) => {
         expect(getDeviceTimeNs({ device_time: deviceTime })).toBeNull();
     });

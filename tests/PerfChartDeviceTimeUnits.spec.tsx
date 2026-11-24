@@ -176,6 +176,15 @@ describe('device-time charts', () => {
         expect(layout().yaxis?.range).toEqual([0, 370_000]);
     });
 
+    it.each<[string, (number | null)[], number]>([
+        ['a missing device time', [370, Number.NaN, null], 370_000],
+        ['no device time at all', [Number.NaN, null], 0],
+    ])('size the Device Kernel Duration + Utilization duration axis with %s', (_, deviceTimesUs, maxNs) => {
+        renderChart(KERNEL_DURATION_UTILIZATION_CHART, [deviceTimesUs.map((deviceTimeUs) => row(deviceTimeUs))]);
+
+        expect(layout().yaxis?.range).toEqual([0, maxNs]);
+    });
+
     it('read one op as the same duration, in ns, on every chart that plots device time', () => {
         const readings = readEachChart([[row(370)]], (chart, trace) => ({
             duration: (trace[chart.coordinate] as number[])[0],

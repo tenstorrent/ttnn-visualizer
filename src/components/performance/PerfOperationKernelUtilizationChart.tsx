@@ -59,7 +59,7 @@ function PerfOperationKernelUtilizationChart({
         [datasets, maxCores, reportName, comparisonReportList],
     );
 
-    const maxYValue = getMaxFiniteValue(chartDataDuration.flatMap((data) => (data.y as (number | null)[]) ?? []));
+    const maxYValue = Math.max(0, getMaxFiniteValue(datasets.flatMap((data) => data.map(getDeviceTimeNs))));
 
     const configuration: PlotConfiguration = {
         margin: {
