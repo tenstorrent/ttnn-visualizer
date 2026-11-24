@@ -46,12 +46,13 @@ STALL_GROUPS = (
     CaptureGroup.FPU,
 )
 STALL_COUNTER_GROUPS = ",".join(group.value for group in STALL_GROUPS)
+_FPU_NOTE = "fpu for utilization"
 STALL_CAPTURE_FLAGS = (
-    f"{CAPTURE_FLAG}={STALL_COUNTER_GROUPS} for the thread figures and "
-    f"{SUM_PROFILING_FLAG} for the CB waits"
+    f"{CAPTURE_FLAG}={STALL_COUNTER_GROUPS} for the thread figures ({_FPU_NOTE}) "
+    f"and {SUM_PROFILING_FLAG} for the CB waits"
 )
 # What fills each part of an op's stalls, worded as a counter's fill hint is.
-COUNTERS_FILL_HINT = hardware_counters.fill_hint(STALL_GROUPS)
+COUNTERS_FILL_HINT = f"{hardware_counters.fill_hint(STALL_GROUPS)} ({_FPU_NOTE})"
 CB_WAITS_FILL_HINT = f"filled when the capture ran with {SUM_PROFILING_FLAG}"
 
 CORE_COUNT_COLUMN = "CORE COUNT"

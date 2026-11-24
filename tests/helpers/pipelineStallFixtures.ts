@@ -27,7 +27,7 @@ export const stat = (avg: number): StallStat => ({ avg, min: avg * 0.9, max: avg
 
 // What the server says fills each part, as `pipeline_stalls` words it.
 export const COUNTERS_FILL_HINT =
-    'filled when the capture ran with --profiler-capture-perf-counters=instrn,unpack,pack,fpu';
+    'filled when the capture ran with --profiler-capture-perf-counters=instrn,unpack,pack,fpu (fpu for utilization)';
 export const CB_WAITS_FILL_HINT = 'filled when the capture ran with --enable-sum-profiling';
 
 const part = (state: StallState, fillHint: string | null = null): StallPart => ({ state, fill_hint: fillHint });

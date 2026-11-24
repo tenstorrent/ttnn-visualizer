@@ -12,7 +12,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from ttnn_visualizer import hardware_counters, pipeline_stalls
+from ttnn_visualizer import csv_queries, hardware_counters, pipeline_stalls
 from ttnn_visualizer.agent import hw_utilisation, server, stall_breakdown, tools
 from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_ECHOED_CHARS
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
@@ -561,9 +561,12 @@ class TestCapture:
         with patch("ttnn_visualizer.csv_queries.open", side_effect=opener, create=True):
             with pytest.raises(PermissionError):
                 stall_breakdown.stall_breakdown(registry, handle)
+            scan = csv_queries._sum_profiled.cache_info()
             answer = stall_breakdown.stall_breakdown(registry, handle)
 
         assert len(denied) == 1
+        # The scan ran once and kept nothing: the refused open was its own.
+        assert (scan.misses, scan.currsize) == (1, 0)
         assert answer["sum_profiling"] is True
 
     def test_cb_waits_on_a_dropped_devices_rows_alone_still_mean_sum_profiling(
@@ -747,10 +750,12 @@ class TestTransport:
                 server._tool_table(registry),
             )
         text = response["result"]["content"][0]["text"]
+        scan = csv_queries._sum_profiled.cache_info()
 
         assert response["result"]["isError"] is True
         assert text.startswith("stall_breakdown failed:")
         assert "Permission denied" in text
+        assert (scan.misses, scan.currsize) == (1, 0)
 
     def test_the_schema_caps_perf_ids_at_the_enforced_limit(self):
         schema = server._tool_table(ReportRegistry())["stall_breakdown"]["schema"]

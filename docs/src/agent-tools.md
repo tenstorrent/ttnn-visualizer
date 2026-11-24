@@ -653,8 +653,8 @@ so such a wait is marked wherever it is listed, not only as the largest.
   are ignored (`cb_waits` reads `ignored`) rather than read.
 - `capture_groups` says which of the `instrn`, `unpack` and `pack` groups the capture
   filled, as `hw_utilisation`'s does, and `sum_profiling` whether it had sum profiling,
-  with a `fill_hint` naming
-  `--profiler-capture-perf-counters=instrn,unpack,pack,fpu` and `--enable-sum-profiling`
+  with a `fill_hint` naming `--profiler-capture-perf-counters=instrn,unpack,pack,fpu`,
+  whose `fpu` is for utilization rather than the stalls, and `--enable-sum-profiling`
   when it lacks any. A capture without sum profiling is still answered: each compute
   operation's `cb_waits` reads `not_captured`, and a caveat says a stall rate near 0 does
   not mean it did not wait. A capture without the `instrn` group is refused, naming both
