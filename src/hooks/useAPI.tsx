@@ -115,6 +115,7 @@ import validateNpeSummary from '../functions/validateNpeSummary';
 import validateNpeWindow from '../functions/validateNpeWindow';
 import { comparisonReportAxiosError } from '../functions/comparisonReportAxiosError';
 import { getPerformanceIdRange } from '../functions/numericExtent';
+import { getOperationFileIdentifier } from '../functions/stackTraceSource';
 
 const EMPTY_PERF_RETURN = { report: [], stacked_report: [], signposts: [] };
 
@@ -144,20 +145,6 @@ const updateDeviceOperationId = (nodes: unknown): void => {
             delete typedNode.counter;
         }
     }
-};
-
-const parseFileOperationIdentifier = (stackTrace: string): string => {
-    if (!stackTrace) {
-        return '';
-    }
-    const regex = /File\s+"(?:.+\/)?([^/]+)",\s+line\s+(\d+)/;
-    const match = stackTrace.match(regex);
-
-    if (match) {
-        return `${match[1]}:${match[2]}`;
-    }
-
-    return '';
 };
 
 export const fetchInstance = async (): Promise<Instance | null> => {
@@ -202,7 +189,7 @@ const fetchOperationDetails = async (id: number | null): Promise<OperationDetail
 
     return {
         ...operationDetails,
-        operationFileIdentifier: parseFileOperationIdentifier(operationDetails.stack_trace),
+        operationFileIdentifier: getOperationFileIdentifier(operationDetails.stack_trace),
     };
 };
 
@@ -223,7 +210,7 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
 
     return operationList.map((operation: OperationDescription) => {
         updateDeviceOperationId(operation.device_operations);
-        operation.operationFileIdentifier = parseFileOperationIdentifier(operation.stack_trace);
+        operation.operationFileIdentifier = getOperationFileIdentifier(operation.stack_trace);
 
         const outputs = operation.outputs.map((tensor) => {
             const tensorWithMetadata = {
@@ -251,7 +238,6 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
 
         return {
             ...operation,
-            operationFileIdentifier: parseFileOperationIdentifier(operation.stack_trace),
             outputs,
             inputs,
             arguments: argumentsWithParsedValues,
