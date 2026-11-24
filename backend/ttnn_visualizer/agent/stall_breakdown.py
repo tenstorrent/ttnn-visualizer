@@ -19,12 +19,11 @@ from ttnn_visualizer.agent.bounds import (
     echoed,
     shown_op_code,
 )
-from ttnn_visualizer.agent.handles import CacheVariant, ReportRegistry
+from ttnn_visualizer.agent.handles import ReportRegistry
 from ttnn_visualizer.cells import finite_number, whole_number
 from ttnn_visualizer.csv_queries import OpsPerformanceReportQueries
 from ttnn_visualizer.device_architecture import DeviceArchitecture
 from ttnn_visualizer.hardware_counters import CaptureGroup, CounterTable
-from ttnn_visualizer.models import Instance
 
 MAX_PERF_IDS = MAX_DETAILED_LIMIT
 MAX_LISTED_OP_CODES = 20
@@ -81,7 +80,8 @@ STALL_BREAKDOWN_NOTE = (
     "symptom, so read the threads before it. "
     "Rows are merged across devices, so a multi-device op's figures are the row "
     "tt-perf-report keeps: the slowest device's, or the first device's for an "
-    "all-gather, reduce-scatter or all-reduce."
+    "all-gather, reduce-scatter or all-reduce; sum_profiling alone is read from every "
+    "device's rows."
 )
 
 NO_SUM_PROFILING_CAVEAT = (
@@ -143,17 +143,6 @@ def _require_perf_ids(perf_ids: object) -> List[str]:
         if str(perf_id) not in ids:
             ids.append(str(perf_id))
     return ids
-
-
-def _sum_profiling(registry: ReportRegistry, handle: str) -> bool:
-    """Whether any op of the report carries a CB wait, which only sum profiling writes;
-    read once per handle, since a capture without it is read to its end."""
-
-    def build(_instance: Instance) -> bool:
-        rows = tools.canonical_report(registry, handle).get("report", [])
-        return any(pipeline_stalls.has_cb_waits(_raw_cells(row)) for row in _ops(rows))
-
-    return registry.cached_report(handle, build, variant=CacheVariant.SUM_PROFILING)
 
 
 def _op_entry(row: Dict, table: CounterTable, sum_profiling: bool) -> Dict[str, object]:
@@ -247,7 +236,7 @@ def stall_breakdown(
         )
     rows = tools.canonical_report(registry, handle).get("report", [])
     ops = _ops(rows)
-    sum_profiling = _sum_profiling(registry, handle)
+    sum_profiling = tools.sum_profiled(registry, handle)
 
     # The ops a selection names, and the ones it reads: an op code's calls are ranked
     # before the limit cuts them, the costliest ops by device time after.

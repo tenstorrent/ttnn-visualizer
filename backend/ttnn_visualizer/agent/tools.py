@@ -1148,6 +1148,20 @@ def counter_table(
         raise ValueError(f"{handle!r}: {error}") from error
 
 
+def _read_sum_profiled(instance: Instance) -> bool:
+    return OpsPerformanceReportQueries.sum_profiled(
+        OpsPerformanceQueries.get_local_ops_perf_file_path(instance)
+    )
+
+
+def sum_profiled(registry: ReportRegistry, handle: str) -> bool:
+    """Whether the handle's capture had sum profiling, read from its CSV, every device's
+    rows, as the counters route reads it; once per capture."""
+    return _per_capture(
+        registry, handle, CacheVariant.SUM_PROFILING, _read_sum_profiled
+    )
+
+
 def hardware_counter_table(
     registry: ReportRegistry, handle: str
 ) -> hardware_counters.CounterTable:
@@ -2477,6 +2491,7 @@ __all__ = [
     "read_flag_inputs",
     "row_limit",
     "share_percent",
+    "sum_profiled",
     "top_ops",
     "with_signposts",
     "zone_intervals",

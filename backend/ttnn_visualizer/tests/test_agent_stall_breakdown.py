@@ -14,7 +14,10 @@ from ttnn_visualizer import hardware_counters, pipeline_stalls
 from ttnn_visualizer.agent import hw_utilisation, server, stall_breakdown, tools
 from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_ECHOED_CHARS
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
-from ttnn_visualizer.csv_queries import REPORT_ROW_ID_OFFSET
+from ttnn_visualizer.csv_queries import (
+    REPORT_ROW_ID_OFFSET,
+    OpsPerformanceReportQueries,
+)
 from ttnn_visualizer.tests.hardware_counter_capture import (
     stat_column,
     write_device_log,
@@ -498,18 +501,62 @@ class TestCapture:
     def test_a_capture_without_sum_profiling_is_read_for_it_once(
         self, without_sum_profiling
     ):
-        """Without a CB wait, finding none reads every op."""
+        """From its CSV, as the counters route reads it; without a CB wait, finding none
+        reads every op."""
         registry, handle = without_sum_profiling
 
         with patch.object(
-            pipeline_stalls, "has_cb_waits", wraps=pipeline_stalls.has_cb_waits
+            OpsPerformanceReportQueries,
+            "sum_profiled",
+            wraps=OpsPerformanceReportQueries.sum_profiled,
         ) as read:
             stall_breakdown.stall_breakdown(registry, handle)
-            first = read.call_count
             stall_breakdown.stall_breakdown(registry, handle, op_code="Untilize")
 
-        assert first == len(STALL_OPS)
-        assert read.call_count == first
+        read.assert_called_once()
+
+    def test_cb_waits_on_a_dropped_devices_rows_alone_still_mean_sum_profiling(
+        self, tmp_path
+    ):
+        """Whether a capture was sum-profiled is a fact about its CSV, not about the rows
+        tt-perf-report keeps: here the slower device's row, without CB sums, is kept."""
+        ours = STALL_OPS[INPUT_STARVED_POSITION]
+        rows = two_device_stall_rows(
+            {INPUT_STARVED_POSITION: ours._replace(kernel_ns=ours.kernel_ns // 2)}
+        )
+        dropped = [row for row in rows if row["DEVICE ID"] == "1"][
+            INPUT_STARVED_POSITION
+        ]
+        directory = tmp_path / "two-devices"
+        write_ops_perf(
+            directory,
+            [
+                (
+                    row
+                    if row is dropped
+                    else {**row, CB_WAIT_FRONT: "", CB_RESERVE_BACK: ""}
+                )
+                for row in rows
+            ],
+        )
+        write_device_log(directory)
+        registry, handle = _load(directory)
+        merged = next(
+            row
+            for row in tools.canonical_report(registry, handle)["report"]
+            if not tools.is_signpost_row(row)
+        )
+
+        answer = stall_breakdown.stall_breakdown(
+            registry, handle, perf_ids=[merged["id"]]
+        )
+        op = answer["ops"][0]
+
+        assert op["device"] == 0
+        assert op["cb_waits"] == {"state": "no_value", "fill_hint": None}
+        assert answer["sum_profiling"] is True
+        assert "fill_hint" not in answer
+        assert "caveat" not in answer
 
     @pytest.mark.parametrize(
         "rows",

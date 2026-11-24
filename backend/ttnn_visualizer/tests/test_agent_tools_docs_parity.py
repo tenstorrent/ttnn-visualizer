@@ -521,6 +521,7 @@ def test_the_page_carries_the_stall_breakdown_caveats():
     assert "Semaphore Zero Wait T2" in page
     assert "a symptom of what held the pipeline up" in page
     assert "Each `waits` entry carries the same flag" in page
+    assert "`sum_profiling` alone is read from the CSV itself, every device's" in page
     assert "rather than tt-perf-report's `cores`" in page
     assert "sum profiling but no hardware counters is out of scope" in page
     assert f"up to {stall_breakdown.MAX_PERF_IDS} performance row ids" in page

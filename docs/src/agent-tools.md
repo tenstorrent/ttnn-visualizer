@@ -666,7 +666,9 @@ so such a wait is marked wherever it is listed, not only as the largest.
 
 As in `hw_utilisation`, rows are merged across devices, so a multi-device operation's
 figures are those of the row tt-perf-report keeps, and the tool reads the whole report,
-with no signpost range.
+with no signpost range. `sum_profiling` alone is read from the CSV itself, every device's
+rows, as the operation's Stalls tab reads it, so a CB wait on a row the merge drops still
+counts.
 
 **`op_breakdown` says where the time went, grouped as the performance view's stacked table
 groups it**, which is tt-perf-report's stacked report. `group_by: op`, the default, takes the
