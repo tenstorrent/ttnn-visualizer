@@ -745,6 +745,21 @@ def test_validate_files_rejects_an_unsafe_inferred_folder_name():
     assert validate_files(files, {"db.sqlite"}, folder_name=None) is False
 
 
+def test_validate_files_rejects_a_dotdot_leading_segment_and_logs_it(caplog):
+    """The Chromium / Firefox shape: no `folderName`, every part named `../<file>`.
+
+    Each part sits one level below `..`, so the depth and consistency checks pass
+    and `..` would become the report folder. The warning must name what was
+    refused, which is inferred here, not the absent form field.
+    """
+    files = [_faux_file("../db.sqlite"), _faux_file("../config.json")]
+
+    with caplog.at_level("WARNING", logger="ttnn_visualizer.file_uploads"):
+        assert validate_files(files, {"db.sqlite"}, folder_name=None) is False
+
+    assert "unsafe report folder name: '..'" in caplog.text
+
+
 @pytest.mark.parametrize("server_mode", [False, True])
 @pytest.mark.parametrize("folder_name", ["..", "../..", "x/../..", "a/b"])
 def test_construct_dest_path_rejects_an_unsafe_folder_name(
@@ -834,3 +849,36 @@ def test_folder_upload_cannot_overwrite_the_app_database(
     assert app_db.read_bytes() == original_db
     for name in required_files:
         assert not (app_db.parent / name).exists()
+
+
+@pytest.mark.parametrize("server_mode", [False, True])
+@pytest.mark.parametrize("endpoint", sorted(_TRAVERSAL_UPLOADS))
+def test_folder_upload_cannot_climb_through_an_inferred_folder_name(
+    app, client, make_report, endpoint, server_mode
+):
+    """Without `folderName` the report folder comes from the parts' leading segment.
+
+    Parts named `../<file>` made that segment `..`; the duplicate-segment strip in
+    `construct_dest_path` then wrote each file one level above the upload directory.
+    """
+    instance_id = make_report()
+    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    app.config["SERVER_MODE"] = server_mode
+    directory_setting, required_files = _TRAVERSAL_UPLOADS[endpoint]
+    upload_root = (
+        app.config["LOCAL_DATA_DIRECTORY"] / app.config[directory_setting]
+    ).resolve()
+
+    response = client.post(
+        endpoint,
+        query_string={"instanceId": instance_id},
+        data={
+            "files": [(BytesIO(b"payload"), f"../{name}") for name in required_files]
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+    assert response.get_json()["status"] == ConnectionTestStates.FAILED.value
+    for name in required_files:
+        assert not (upload_root.parent / name).exists()

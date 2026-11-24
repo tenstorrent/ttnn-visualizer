@@ -35,9 +35,11 @@ def _is_safe_folder_name(name):
 
 def validate_files(files, required_files, pattern=None, folder_name=None):
     """Validate uploaded files against required file names and an optional pattern."""
-    if not _is_safe_folder_name(resolve_parent_folder_name(files, folder_name)):
+    report_folder_name = resolve_parent_folder_name(files, folder_name)
+    if not _is_safe_folder_name(report_folder_name):
         logger.warning(
-            "Refusing upload with an unsafe report folder name: %r", folder_name
+            "Refusing upload with an unsafe report folder name: %r",
+            report_folder_name,
         )
         return False
 
