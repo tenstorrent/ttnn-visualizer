@@ -78,8 +78,9 @@ const FRESH_INSTANCE_COOLDOWN_MS = 60_000;
 /**
  * Starts the tab afresh when a hosted server refuses its instance as another session's, as it does
  * once the session cookie that created it is lost. Every request would fail the same way, so the ID
- * is dropped and the tab reloads onto a new one. At most once a minute, so a browser that never keeps
- * the cookie can't reload forever.
+ * is dropped and the tab reloads onto a new one. It reloads at most once a minute, so a browser that
+ * never keeps the cookie can't reload forever; within that minute the ID is still dropped, so a
+ * manual reload starts on a fresh one.
  * @returns whether the tab is reloading.
  */
 export const startOnFreshInstance = (
@@ -91,17 +92,20 @@ export const startOnFreshInstance = (
         return false;
     }
 
-    const lastFreshInstanceAt = Number(sessionStorage.getItem(FRESH_INSTANCE_AT_KEY));
-
-    if (lastFreshInstanceAt && now - lastFreshInstanceAt < FRESH_INSTANCE_COOLDOWN_MS) {
-        return false;
-    }
-
-    sessionStorage.setItem(FRESH_INSTANCE_AT_KEY, String(now));
     sessionStorage.removeItem('instanceId');
 
     const url = new URL(window.location.href);
     url.searchParams.delete('instanceId');
+
+    const lastFreshInstanceAt = Number(sessionStorage.getItem(FRESH_INSTANCE_AT_KEY));
+
+    if (lastFreshInstanceAt && now - lastFreshInstanceAt < FRESH_INSTANCE_COOLDOWN_MS) {
+        window.history.replaceState(window.history.state, '', url);
+
+        return false;
+    }
+
+    sessionStorage.setItem(FRESH_INSTANCE_AT_KEY, String(now));
     reload(url);
 
     return true;

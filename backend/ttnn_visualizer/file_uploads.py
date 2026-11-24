@@ -134,7 +134,7 @@ def save_uploaded_files(
     # One prefix for the whole upload: computed per file, a part saved after the clock
     # ticks over (likely while the malware scanner works through the parts) would land
     # in a sibling folder, splitting the report.
-    prefix = upload_prefix()
+    prefix = _upload_prefix()
 
     if current_app.config["MALWARE_SCANNER"]:
         scanned_files = scan_uploaded_files(
@@ -191,7 +191,7 @@ def scan_uploaded_files(
 ):
     scanned_files = []
     if prefix is None:
-        prefix = upload_prefix()
+        prefix = _upload_prefix()
 
     for file in files:
         _, temp_path = tempfile.mkstemp()
@@ -224,14 +224,17 @@ def scan_uploaded_files(
     return scanned_files
 
 
-def upload_prefix():
-    """The prefix keeping hosted uploads of the same name apart; empty locally."""
+def _upload_prefix():
+    """The hosted upload folder prefix, the upload's second; empty locally.
+
+    It keeps same-name uploads apart only when they land in different seconds.
+    """
     return f"{int(time.time())}_" if current_app.config["SERVER_MODE"] else ""
 
 
 def construct_dest_path(file, target_directory, folder_name, prefix=None):
     if prefix is None:
-        prefix = upload_prefix()
+        prefix = _upload_prefix()
 
     if folder_name:
         # Folder uploads legitimately carry sub-paths in `file.filename`

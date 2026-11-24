@@ -19,9 +19,11 @@ from types import SimpleNamespace
 
 import pytest
 from ttnn_visualizer import file_uploads
+from ttnn_visualizer.app import create_app
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.extensions import db
 from ttnn_visualizer.models import InstanceTable
+from ttnn_visualizer.tests.fixture_settings import base_test_settings
 
 _SECRET = ["another session's operation history"]
 
@@ -247,6 +249,93 @@ def test_hosted_instance_update_refuses_another_sessions_report(hosted_app):
     assert history.get_json() != _SECRET
 
 
+def test_hosted_instance_update_refuses_another_sessions_performance_report(
+    hosted_app,
+):
+    victim = hosted_app.test_client()
+    _upload_performance(victim, "victim-instance", "perf_run")
+    victim_folder = _stored_instance(hosted_app, "victim-instance").active_report[
+        "performance_name"
+    ]
+    attacker = hosted_app.test_client()
+
+    response = _put_instance(
+        attacker,
+        "attacker",
+        {"performance_name": victim_folder, "performance_location": "local"},
+    )
+
+    assert response.status_code == HTTPStatus.FORBIDDEN
+    assert not _stored_instance(hosted_app, "attacker").performance_path
+
+
+def test_hosted_instance_update_refuses_a_name_that_extends_an_own_one(
+    hosted_app, monkeypatch
+):
+    """Selection is exact membership: an own `<ts>_rep` grants nothing on `<ts>_report`."""
+    monkeypatch.setattr(
+        file_uploads, "time", SimpleNamespace(time=lambda: 1_700_000_000)
+    )
+    victim_folder = _upload_victim_report(hosted_app)
+    attacker = hosted_app.test_client()
+    own_folder = _upload_profiler(
+        attacker, "attacker", [("vic/db.sqlite", b"sqlite")]
+    ).get_json()["path"]
+    assert victim_folder.startswith(own_folder)
+
+    response = _put_instance(
+        attacker,
+        "attacker",
+        {"profiler_name": victim_folder, "profiler_location": "local"},
+    )
+
+    assert response.status_code == HTTPStatus.FORBIDDEN
+
+
+def test_hosted_instance_update_selects_a_demo(hosted_app):
+    demo = "WH_DEMO_n300-llama"
+    (_profiler_root(hosted_app) / demo).mkdir(parents=True)
+    client = hosted_app.test_client()
+
+    response = _put_instance(
+        client, "mine", {"profiler_name": demo, "profiler_location": "local"}
+    )
+
+    assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+
+
+def test_hosted_instance_update_reselects_its_report_once_the_upload_entry_is_gone(
+    hosted_app,
+):
+    """The instance's current report stays selectable after the session's FIFO drops it."""
+    client = hosted_app.test_client()
+    folder = _upload_profiler(
+        client, "mine", [("report/db.sqlite", b"sqlite")]
+    ).get_json()["path"]
+    with client.session_transaction() as flask_session:
+        flask_session["profiler_paths"] = []
+
+    response = _put_instance(
+        client, "mine", {"profiler_name": folder, "profiler_location": "local"}
+    )
+
+    assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+
+
+@pytest.mark.parametrize("name", [0, False, [], {}, 7])
+def test_hosted_instance_update_refuses_a_name_that_is_not_a_string(hosted_app, name):
+    client = hosted_app.test_client()
+
+    response = _put_instance(
+        client, "mine", {"profiler_name": name, "profiler_location": "local"}
+    )
+
+    assert response.status_code == HTTPStatus.FORBIDDEN
+    assert client.get(
+        "/api/instance", query_string={"instanceId": "mine"}
+    ).status_code == (HTTPStatus.OK)
+
+
 @pytest.mark.parametrize(
     "active_report",
     [
@@ -364,13 +453,27 @@ def test_hosted_instance_refuses_another_session_naming_it_in_the_query(hosted_a
     ] == (victim_folder)
 
 
-def test_hosted_upload_refuses_another_sessions_instance(hosted_app):
+@pytest.mark.parametrize(
+    "upload",
+    [
+        lambda client, instance_id: _upload_profiler(
+            client, instance_id, [("mine/db.sqlite", b"sqlite")]
+        ),
+        lambda client, instance_id: _upload_performance(client, instance_id, "mine"),
+        lambda client, instance_id: client.post(
+            "/api/local/upload/npe",
+            query_string={"instanceId": instance_id},
+            data={"files": [(BytesIO(b"{}"), "trace.json")]},
+            content_type="multipart/form-data",
+        ),
+    ],
+    ids=["profiler", "performance", "npe"],
+)
+def test_hosted_upload_refuses_another_sessions_instance(hosted_app, upload):
     victim_folder = _upload_victim_report(hosted_app)
     attacker = hosted_app.test_client()
 
-    response = _upload_profiler(
-        attacker, "victim-instance", [("mine/db.sqlite", b"sqlite")]
-    )
+    response = upload(attacker, "victim-instance")
 
     assert response.status_code == HTTPStatus.FORBIDDEN
     assert _stored_instance(hosted_app, "victim-instance").active_report[
@@ -419,3 +522,101 @@ def test_local_instances_are_shared_across_clients(app):
     )
 
     assert response.status_code == HTTPStatus.OK
+
+
+def test_hosted_upload_keeps_the_path_of_a_report_it_leaves_out(hosted_app):
+    """Uploads rebuilt every other report's path from its stored name, as updates did."""
+    victim_folder = _upload_victim_report(hosted_app)
+    client = hosted_app.test_client()
+    _upload_profiler(client, "mine", [("report/db.sqlite", b"sqlite")])
+    with hosted_app.app_context():
+        row = InstanceTable.query.filter_by(instance_id="mine").first()
+        row.active_report = {**row.active_report, "profiler_name": victim_folder}
+        db.session.commit()
+    profiler_path_before = _stored_instance(hosted_app, "mine").profiler_path
+
+    response = _upload_performance(client, "mine", "perf_run")
+
+    assert response.get_json()["status"] == ConnectionTestStates.OK.value
+    assert _stored_instance(hosted_app, "mine").profiler_path == profiler_path_before
+    history = client.get("/api/operation-history", query_string={"instanceId": "mine"})
+    assert history.get_json() != _SECRET
+
+
+# ---- Session entries from before the checks are ignored ---------------------
+
+
+def test_hosted_listing_ignores_an_enrolled_instance_another_session_owns(hosted_app):
+    """Naming an instance used to enrol it in the session; the cookie keeps that entry."""
+    victim_folder = _upload_victim_report(hosted_app)
+    attacker = hosted_app.test_client()
+    attacker.get("/api/instance", query_string={"instanceId": "attacker"})
+    with attacker.session_transaction() as flask_session:
+        flask_session["instances"] = ["victim-instance", "attacker"]
+
+    listing = attacker.get("/api/profiler", query_string={"instanceId": "attacker"})
+    update = _put_instance(
+        attacker,
+        "attacker",
+        {"profiler_name": victim_folder, "profiler_location": "local"},
+    )
+
+    assert victim_folder not in [folder["path"] for folder in listing.get_json()]
+    assert update.status_code == HTTPStatus.FORBIDDEN
+
+
+def test_hosted_listing_ignores_a_stored_path_below_a_report_folder(hosted_app):
+    """An upload with a nested `db.sqlite` used to store `<ts>_mine/<other>/db.sqlite`."""
+    victim_folder = _upload_victim_report(hosted_app)
+    attacker = hosted_app.test_client()
+    nested = (
+        _profiler_root(hosted_app) / "1700000000_mine" / victim_folder / "db.sqlite"
+    )
+    with attacker.session_transaction() as flask_session:
+        flask_session["profiler_paths"] = [str(nested)]
+
+    listing = attacker.get("/api/profiler", query_string={"instanceId": "attacker"})
+    update = _put_instance(
+        attacker,
+        "attacker",
+        {"profiler_name": victim_folder, "profiler_location": "local"},
+    )
+
+    assert victim_folder not in [folder["path"] for folder in listing.get_json()]
+    assert update.status_code == HTTPStatus.FORBIDDEN
+
+
+# ---- The page hands every request on it one owner token ----------------------
+
+
+def test_requests_leaving_a_page_together_share_its_owner_token(monkeypatch, tmp_path):
+    """A page's first requests leave before any of them returns a cookie.
+
+    Each used to mint its own owner token, so all but the first were refused as
+    another session's and the page reloaded. The page response now carries the token.
+    """
+    monkeypatch.setenv("FLASK_ENV", "production")
+    page_app = create_app(settings_override=base_test_settings(str(tmp_path)))
+    page_app.config["LOCAL_DATA_DIRECTORY"] = Path(
+        page_app.config["LOCAL_DATA_DIRECTORY"]
+    )
+    (tmp_path / "index.html").write_text("<script>/* SERVER_CONFIG */</script>")
+    page_app.static_folder = str(tmp_path)
+    page_cookie = (
+        page_app.test_client().get(page_app.config["BASE_PATH"]).headers["Set-Cookie"]
+    )
+    session_cookie = page_cookie.split(";", 1)[0].split("=", 1)[1]
+
+    # Two requests sent before either response: each holds only the page's cookie.
+    responses = []
+    for path in ("/api/instance", "/api/profiler"):
+        request_client = page_app.test_client()
+        request_client.set_cookie("session", session_cookie)
+        responses.append(
+            request_client.get(path, query_string={"instanceId": "new-tab"})
+        )
+
+    assert [response.status_code for response in responses] == [
+        HTTPStatus.OK,
+        HTTPStatus.OK,
+    ]

@@ -28,8 +28,9 @@ def upgrade() -> None:
     existing_columns = {
         column["name"] for column in inspect(op.get_bind()).get_columns("instances")
     }
-    # Nullable: rows saved before this revision have no owner until the first session
-    # that uses one claims it (`decorators._hosted_instance_for_session`).
+    # Nullable: local instances never get an owner. `DB_VERSION` moved with this
+    # revision, so a hosted database never holds rows from before it, and a release
+    # from before it keeps opening its own database file.
     if "owner" not in existing_columns:
         op.add_column("instances", sa.Column("owner", sa.String(), nullable=True))
 

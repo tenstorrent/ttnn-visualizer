@@ -4,7 +4,7 @@
 
 import { AxiosError, AxiosResponse } from 'axios';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { startOnFreshInstance } from '../src/libs/axiosInstance';
+import axiosInstance, { startOnFreshInstance } from '../src/libs/axiosInstance';
 
 vi.mock('../src/functions/getServerConfig', () => ({
     default: () => ({ SERVER_MODE: true, BASE_PATH: '/' }),
@@ -60,5 +60,27 @@ describe('startOnFreshInstance', () => {
         expect(startOnFreshInstance(notOwned(), reload, 1_061_000)).toBe(true);
 
         expect(reload).toHaveBeenCalledTimes(2);
+    });
+
+    it('still drops the refused ID within the minute, so a manual reload starts afresh', () => {
+        const reload = vi.fn();
+        sessionStorage.setItem('freshInstanceAt', '1000000');
+
+        expect(startOnFreshInstance(notOwned(), reload, 1_030_000)).toBe(false);
+
+        expect(reload).not.toHaveBeenCalled();
+        expect(sessionStorage.getItem('instanceId')).toBeNull();
+        expect(new URL(window.location.href).searchParams.has('instanceId')).toBe(false);
+    });
+
+    it('runs on a refused request sent through the app client', async () => {
+        // Within the minute, so the refusal drops the ID without navigating the test page.
+        sessionStorage.setItem('freshInstanceAt', String(Date.now()));
+
+        await expect(
+            axiosInstance.get('/api/instance', { adapter: () => Promise.reject(notOwned()) }),
+        ).rejects.toBeInstanceOf(AxiosError);
+
+        expect(sessionStorage.getItem('instanceId')).toBeNull();
     });
 });

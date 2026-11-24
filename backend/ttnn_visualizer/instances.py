@@ -188,53 +188,55 @@ def update_existing_instance(
             instance_data.remote_connection
         )
 
-    if profiler_path is not _sentinel:
-        instance_data.profiler_path = profiler_path
-    else:
-        instance_data.profiler_path = _resolve_report_path(
-            profiler_name,
-            get_profiler_path,
-            KEY_PROFILER_NAME,
-            KEY_PROFILER_LOCATION,
+    def next_path(current, explicit, name, path_getter, name_key, location_key):
+        if explicit is not _sentinel:
+            return explicit
+        if name is None and current_app.config["SERVER_MODE"]:
+            # Hosted, a report the update leaves out keeps the path it has: the stored
+            # name it would be rebuilt from may never have been checked against the
+            # session, and the path is what the session was given.
+            return current
+        return _resolve_report_path(
+            name,
+            path_getter,
+            name_key,
+            location_key,
             active_report,
             effective_remote_connection,
         )
 
-    if performance_path is not _sentinel:
-        instance_data.performance_path = performance_path
-    else:
-        instance_data.performance_path = _resolve_report_path(
-            performance_name,
-            get_performance_path,
-            KEY_PERFORMANCE_NAME,
-            KEY_PERFORMANCE_LOCATION,
-            active_report,
-            effective_remote_connection,
-        )
-
-    if npe_path is not _sentinel:
-        instance_data.npe_path = npe_path
-    else:
-        instance_data.npe_path = _resolve_report_path(
-            npe_name,
-            get_npe_path,
-            KEY_NPE_NAME,
-            KEY_NPE_LOCATION,
-            active_report,
-            effective_remote_connection,
-        )
-
-    if mlir_path is not _sentinel:
-        instance_data.mlir_path = mlir_path
-    else:
-        instance_data.mlir_path = _resolve_report_path(
-            mlir_name,
-            get_mlir_path,
-            KEY_MLIR_NAME,
-            KEY_MLIR_LOCATION,
-            active_report,
-            effective_remote_connection,
-        )
+    instance_data.profiler_path = next_path(
+        instance_data.profiler_path,
+        profiler_path,
+        profiler_name,
+        get_profiler_path,
+        KEY_PROFILER_NAME,
+        KEY_PROFILER_LOCATION,
+    )
+    instance_data.performance_path = next_path(
+        instance_data.performance_path,
+        performance_path,
+        performance_name,
+        get_performance_path,
+        KEY_PERFORMANCE_NAME,
+        KEY_PERFORMANCE_LOCATION,
+    )
+    instance_data.npe_path = next_path(
+        instance_data.npe_path,
+        npe_path,
+        npe_name,
+        get_npe_path,
+        KEY_NPE_NAME,
+        KEY_NPE_LOCATION,
+    )
+    instance_data.mlir_path = next_path(
+        instance_data.mlir_path,
+        mlir_path,
+        mlir_name,
+        get_mlir_path,
+        KEY_MLIR_NAME,
+        KEY_MLIR_LOCATION,
+    )
 
 
 def clear_remote_data(instance_data):

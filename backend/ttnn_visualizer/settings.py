@@ -598,7 +598,7 @@ class DefaultConfig(object):
     MAX_CONTENT_LENGTH = _parse_max_content_length(os.getenv("MAX_CONTENT_LENGTH", ""))
 
     # Path Settings
-    DB_VERSION = "0.29.0"  # App version when DB schema last changed
+    DB_VERSION = "0.113.0"  # App version when DB schema last changed
     APPLICATION_DIR = os.path.abspath(os.path.join(__file__, "..", os.pardir))
     TT_METAL_HOME = os.getenv("TT_METAL_HOME", None)
     APP_DATA_DIRECTORY = os.getenv(

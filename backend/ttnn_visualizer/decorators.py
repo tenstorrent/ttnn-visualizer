@@ -8,7 +8,7 @@ import secrets
 from functools import wraps
 from typing import Any, Callable, Optional
 
-from flask import abort, jsonify, request, session
+from flask import abort, request, session
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import (
     AuthenticationException,
@@ -36,8 +36,13 @@ logger = logging.getLogger(__name__)
 INSTANCE_NOT_OWNED = "instance_not_owned"
 
 
-def _session_instance_owner() -> str:
-    """This hosted session's owner token, made on first use."""
+def ensure_instance_owner() -> str:
+    """This hosted session's owner token, made on first use.
+
+    The page itself mints it (`app.catch_all`): a page load's first API requests leave
+    together, and if each minted its own, all but one would be refused as another
+    session's. Minting here as well covers clients that never load the page.
+    """
     owner = session.get("instance_owner")
     if not owner:
         owner = secrets.token_urlsafe(16)
@@ -50,10 +55,11 @@ def _hosted_instance_for_session(instance_id: str) -> Optional[InstanceTable]:
 
     A new ID becomes this session's instance. An existing one is this session's only if
     it was created here: instance IDs travel in every query string, so holding one
-    proves nothing. A row saved before owners were recorded goes to the first session
-    that uses it, which is the tab that has been using it unless its random ID leaked.
+    proves nothing. A row with no owner goes to the first session that uses it; hosted
+    rows always have one, since `DB_VERSION` moved with migration 002 and rows from
+    before it stay in the old database file.
     """
-    owner = _session_instance_owner()
+    owner = ensure_instance_owner()
     instance_data = get_or_create_instance(instance_id=instance_id, owner=owner)
     if instance_data is None:
         abort(500)
@@ -67,14 +73,8 @@ def _hosted_instance_for_session(instance_id: str) -> Optional[InstanceTable]:
 
 
 def _instance_not_owned_response():
-    return (
-        jsonify(
-            {
-                "error": "This instance belongs to another session.",
-                "reason": INSTANCE_NOT_OWNED,
-            }
-        ),
-        403,
+    return response_forbidden(
+        "This instance belongs to another session.", reason=INSTANCE_NOT_OWNED
     )
 
 
