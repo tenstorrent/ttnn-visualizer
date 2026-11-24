@@ -16,13 +16,13 @@ import { getMaxFiniteValue, getMaxValue } from '../../functions/numericExtent';
 import isUnmodelledIdealTime from '../../functions/isUnmodelledIdealTime';
 import { getPrimaryDataColours, getSecondaryDataColours } from '../../definitions/PerformancePlotColours';
 
+const getModelledIdealTime = ({ pm_ideal_ns: idealNs }: TypedPerfTableRow): number | null =>
+    isUnmodelledIdealTime(idealNs) ? null : idealNs;
+
 interface PerfDeviceTimeChartProps {
     datasets?: TypedPerfTableRow[][];
     chartId: PerfChartId;
 }
-
-const getModelledIdealTime = ({ pm_ideal_ns: idealNs }: TypedPerfTableRow): number | null =>
-    isUnmodelledIdealTime(idealNs) ? null : idealNs;
 
 function PerfDeviceTimeChart({ datasets = [], chartId }: PerfDeviceTimeChartProps) {
     const perfReport = useAtomValue(activePerformanceReportAtom);
