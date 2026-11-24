@@ -86,6 +86,9 @@ interface NPEViewProps {
     // across scrubs (its O(n_timesteps) memo runs once per report); whole-file
     // mode omits it and the timeline falls back to `npeData.timestep_data`.
     timelineData?: TimestepData[];
+    // #2356 windowed loading: the summary's whole-trace `has_fabric_events`, which
+    // decides the event filter instead of the window's transfers. Whole-file mode omits it.
+    hasFabricEvents?: boolean;
 }
 
 const LABEL_STEP_THRESHOLD = 25;
@@ -157,6 +160,7 @@ const NPEView = ({
     onSelectedTimestepChange,
     reportKey,
     timelineData,
+    hasFabricEvents,
 }: NPEViewProps) => {
     const [highlightedTransfer, setHighlightedTransfer] = useState<NoCTransfer | null>(null);
     const [highlightedRoute, setHighlightedRoute] = useState<number | null>(null);
@@ -195,9 +199,12 @@ const NPEView = ({
         return npeData.zones || NO_ZONES;
     }, [npeData]);
 
-    const isFabricTransfersFilteringEnabled = useMemo(() => {
-        return npeData.noc_transfers.some((tr) => tr.fabric_event_type);
-    }, [npeData]);
+    // A truthy `fabric_event_type`: the backend applies the same rule when it records
+    // the windowed summary's has_fabric_events.
+    const isFabricTransfersFilteringEnabled = useMemo(
+        () => hasFabricEvents ?? npeData.noc_transfers.some((tr) => tr.fabric_event_type),
+        [hasFabricEvents, npeData],
+    );
 
     useEffect(() => {
         if (!isFabricTransfersFilteringEnabled && fabricEventsFilter !== EVENT_TYPE_FILTER.ALL_EVENTS) {
