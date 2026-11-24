@@ -12,6 +12,7 @@ import {
 import {
     CbWait,
     NamedStallStat,
+    NamedWait,
     OperationStalls,
     StallPart,
     StallStat,
@@ -33,10 +34,18 @@ const part = (state: StallState, fillHint: string | null = null): StallPart => (
 
 export const named = (label: string, avg: number): NamedStallStat => ({ label, ...stat(avg) });
 
+// A wait on an earlier stage, as `pipeline_stalls` marks one.
+export const DOWNSTREAM = true;
+
+export const namedWait = (label: string, avg: number, downstream = false): NamedWait => ({
+    ...named(label, avg),
+    downstream,
+});
+
 const counters = (
     issue: number,
     stall: number,
-    waits: NamedStallStat[],
+    waits: NamedWait[],
     zeroWaits: string[],
     mathPipelineStalls?: NamedStallStat[],
 ): ThreadHardwareCounters => ({
@@ -103,7 +112,11 @@ export const INPUT_STARVED_STALLS: OperationStalls = {
             counters(
                 3.1,
                 2,
-                [named('THCON Idle Wait T0', 1.5), named('Unpack Idle Wait T0', 0.5), named('CFG Idle Wait T0', 0.1)],
+                [
+                    namedWait('THCON Idle Wait T0', 1.5),
+                    namedWait('Unpack Idle Wait T0', 0.5),
+                    namedWait('CFG Idle Wait T0', 0.1),
+                ],
                 T0_ZERO_WAITS,
             ),
             { [CbWaitZone.WAIT_FRONT]: INPUT_WAIT },
@@ -115,9 +128,9 @@ export const INPUT_STARVED_STALLS: OperationStalls = {
                 10.8,
                 0.6,
                 [
-                    named('Math Idle Wait T1', 0.6),
-                    named('SFPU Idle Wait T1', 0.6),
-                    named('Semaphore Full Wait T1', 0.1),
+                    namedWait('Math Idle Wait T1', 0.6),
+                    namedWait('SFPU Idle Wait T1', 0.6),
+                    namedWait('Semaphore Full Wait T1', 0.1),
                 ],
                 ['Math Waiting on Unpack (T1)', 'Semaphore Zero Wait T1', 'SrcA Valid Wait', 'SrcB Valid Wait'],
                 [
@@ -132,7 +145,7 @@ export const INPUT_STARVED_STALLS: OperationStalls = {
             counters(
                 8.1,
                 11.2,
-                [named('Semaphore Zero Wait T2', 76.4), named('Pack Idle Wait T2', 1.9)],
+                [namedWait('Semaphore Zero Wait T2', 76.4, DOWNSTREAM), namedWait('Pack Idle Wait T2', 1.9)],
                 ['Pack Waiting on Math (T2)', 'Semaphore Full Wait T2'],
             ),
             { [CbWaitZone.RESERVE_BACK]: OUTPUT_WAIT },
@@ -145,12 +158,12 @@ const withThread = (stalls: OperationStalls, threadId: PipelineThread, update: P
     threads: stalls.threads.map((entry) => (entry.thread === threadId ? { ...entry, ...update } : entry)),
 });
 
-// Its math pipeline stalls on the scoreboard, which the math thread's rows show beside its waits.
+// Its math pipeline stalls on the scoreboard, which the math thread shows in a group of its own under its waits.
 export const SCOREBOARD_STALLS: OperationStalls = withThread(INPUT_STARVED_STALLS, PipelineThread.T1, {
     hardware_counters: counters(
         33.7,
         3.9,
-        [named('Semaphore Full Wait T1', 3.4)],
+        [namedWait('Semaphore Full Wait T1', 3.4)],
         [],
         [named('Math Scoreboard Stall Rate', 33.2), { label: 'Data Hazard Stall Rate', avg: 0, min: 0, max: 0 }],
     ),

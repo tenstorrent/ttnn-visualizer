@@ -679,8 +679,10 @@ class TestStalls:
             check(counters, "ThreadHardwareCounters")
             for stat in ("issue_rate", "stall_rate", "stall_overlap"):
                 check(counters[stat], "StallStat")
-            for named in counters["waits"] + counters.get("math_pipeline_stalls", []):
-                check(named, "NamedStallStat")
+            for wait in counters["waits"]:
+                check(wait, "NamedWait")
+            for stall in counters.get("math_pipeline_stalls", []):
+                check(stall, "NamedStallStat")
             polls += (thread["instrumentation"] or {}).values()
         for poll in polls:
             check(poll, "CbWait")

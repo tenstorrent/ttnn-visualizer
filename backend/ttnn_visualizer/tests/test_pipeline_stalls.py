@@ -468,6 +468,21 @@ class TestStalledShare:
             "downstream": True,
         }
 
+    def test_each_listed_wait_says_whether_it_waits_on_an_earlier_stage(self, rows):
+        """Beside a CB poll that is the largest stall, the packer's wait on math is still
+        a symptom; the math pipeline's stall rates are no waits and carry no mark."""
+        stalls = _stalls(rows[INPUT_STARVED_POSITION])
+
+        assert stalls["largest_wait"]["label"] == CbWaitZone.WAIT_FRONT.value
+        assert {
+            wait["label"]: wait["downstream"]
+            for wait in _counters(stalls, "t2")["waits"]
+        } == {"Semaphore Zero Wait T2": True, "Pack Idle Wait T2": False}
+        assert not any(wait["downstream"] for wait in _counters(stalls, "t0")["waits"])
+        assert [
+            set(stall) for stall in _counters(stalls, "t1")["math_pipeline_stalls"]
+        ] == [{"label", "avg", "min", "max"}] * 2
+
     @pytest.mark.parametrize("thread", pipeline_stalls.THREADS)
     def test_a_downstream_wait_is_one_of_its_threads_waits(self, thread):
         assert set(thread.downstream_waits) <= set(thread.waits)

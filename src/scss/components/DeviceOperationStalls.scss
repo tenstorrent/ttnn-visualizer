@@ -28,13 +28,15 @@ $swatch-size: 10px;
     .pipeline-stall-caption,
     .pipeline-stall-note,
     .pipeline-stall-empty,
-    .pipeline-stall-zero-waits {
+    .pipeline-stall-zero-waits,
+    .pipeline-stall-math-caption {
         @include counter-text.caption;
     }
 
     .pipeline-stall-caption,
     .pipeline-stall-muted,
     .pipeline-stall-zero-waits,
+    .pipeline-stall-math-caption,
     .pipeline-stall-absent {
         color: $tt-grey-5;
     }
@@ -52,6 +54,10 @@ $swatch-size: 10px;
     .pipeline-stall-zero-waits {
         margin-left: $wait-indent;
         cursor: help;
+    }
+
+    .pipeline-stall-math-caption {
+        margin: 0 0 2px $wait-indent;
     }
 
     .pipeline-stall-legend {

@@ -506,7 +506,8 @@ def test_the_page_carries_the_hw_utilisation_caveats():
 def test_the_page_carries_the_stall_breakdown_caveats():
     """The counters cannot see a CB poll, the CSV sums CB waits over cores, waits
     overlap, a CB copy on an op without a compute kernel is ignored, the stalled time
-    is an estimate, a downstream wait is a symptom, and CB waits alone are refused."""
+    is an estimate, a downstream wait is a symptom wherever it is listed, and CB waits
+    alone are refused."""
     page = " ".join(_read(_AGENT_DOCS).split())
 
     assert "issue no Tensix instruction" in page
@@ -519,6 +520,7 @@ def test_the_page_carries_the_stall_breakdown_caveats():
     assert "a ratio rather than a percentage" in page
     assert "Semaphore Zero Wait T2" in page
     assert "a symptom of what held the pipeline up" in page
+    assert "Each `waits` entry carries the same flag" in page
     assert "rather than tt-perf-report's `cores`" in page
     assert "sum profiling but no hardware counters is out of scope" in page
     assert f"up to {stall_breakdown.MAX_PERF_IDS} performance row ids" in page

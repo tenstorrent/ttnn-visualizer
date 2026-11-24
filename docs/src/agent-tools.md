@@ -596,11 +596,12 @@ threads: `t0` unpacks, `t1` does the math and `t2` packs. Each thread's figures 
   minimum and maximum across the cores that ran the kernel, as a share of the cycles the
   counters ran on each core: `issue_rate` is the cycles the thread issued an instruction,
   `stall_rate` the cycles its next instruction was blocked, and `waits` the named wait
-  conditions above 0, ranked by average. A wait that reads 0 on every core is named in
-  `zero_waits` instead: tt-metal drives many of them on no operation, such as the srcA and
-  srcB valid and clear waits. `math_pipeline_stalls`, on `t1`, are tt-llk's data-hazard and
-  scoreboard stall rates, which the `unpack` and `pack` groups fill, as shares of the
-  cycles a math instruction was ready rather than of the kernel.
+  conditions above 0, ranked by average, each with the `downstream` flag described below. A
+  wait that reads 0 on every core is named in `zero_waits` instead: tt-metal drives many of
+  them on no operation, such as the srcA and srcB valid and clear waits.
+  `math_pipeline_stalls`, on `t1`, are tt-llk's data-hazard and scoreboard stall rates,
+  which the `unpack` and `pack` groups fill, as shares of the cycles a math instruction was
+  ready rather than of the kernel.
 - `instrumentation` is tt-metal's sum zones around the two polls the counters cannot see,
   written only with `--enable-sum-profiling`: `cb_wait_front` on the unpack core, waiting
   for input tiles, and `cb_reserve_back` on the pack core, waiting for output space. Both
@@ -636,7 +637,8 @@ no figure come last. `stalled_thread` is the thread it came from, and `largest_w
 the wait behind it, with its `source`: the CB poll itself, or that thread's named wait
 with the highest average, which is null when none reads above 0. Its `downstream` is true
 for a wait on an earlier stage, such as Semaphore Zero Wait T2: a symptom of what held the
-pipeline up before the thread, not its own cause.
+pipeline up before the thread, not its own cause. Each `waits` entry carries the same flag,
+so such a wait is marked wherever it is listed, not only as the largest.
 
 - With `perf_ids`, up to 25 performance row ids, it reads those operations; with
   `op_code`, every call whose raw op code or tt-perf-report's op code matches, ignoring

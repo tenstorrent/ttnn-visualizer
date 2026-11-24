@@ -567,7 +567,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "sits under hardware_counters or instrumentation. Takes perf_ids or an "
                 "op_code, or else reads the costliest ops by device time; ranks them by "
                 "an average core's stalled time and names the largest wait, marking "
-                "one that waits on an earlier stage downstream. Waits overlap, so they "
+                "each wait on an earlier stage downstream. Waits overlap, so they "
                 "never add up to the stall rate, and the CSV sums a CB wait over the "
                 "op's cores, so each is divided by its core count. An op without a "
                 "compute kernel has neither. Reads the whole report, with no signpost "

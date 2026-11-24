@@ -86,6 +86,7 @@ export const TEST_IDS = Object.freeze({
     PIPELINE_STALL_NOTE: 'pipeline-stall-note',
     PIPELINE_STALL_THREAD: 'pipeline-stall-thread',
     PIPELINE_STALL_WAITS: 'pipeline-stall-waits',
+    PIPELINE_STALL_MATH_PIPELINE: 'pipeline-stall-math-pipeline',
     PIPELINE_STALL_ZERO_WAITS: 'pipeline-stall-zero-waits',
     PIPELINE_STALL_OVERLAP_NOTE: 'pipeline-stall-overlap-note',
     PIPELINE_STALL_COUNTERS_EMPTY: 'pipeline-stall-counters-empty',

@@ -40,7 +40,8 @@ const COUNTERS_CAPTION =
 const OVERLAP_NOTE =
     'Named waits are counted apart from the stalled share, not as a split of it: they overlap one another and it, so ' +
     'they never add up to it, and one can read above it.';
-const MATH_PIPELINE_SUFFIX = 'of cycles a math instruction was ready';
+const MATH_PIPELINE_CAPTION =
+    'Math pipeline stalls: shares of the cycles a math instruction was ready, not of the cycles the counters ran.';
 const CB_HEADING = 'RISC-V poll time · instrumentation (sum zones)';
 const CB_CAPTION_LEAD =
     "Time the unpack and pack cores spent polling circular buffers, which the stall counters can't see: tt-metal's " +
@@ -57,7 +58,8 @@ const COUNTERS_NOT_RECORDED = 'No counters were recorded for this operation.';
 const CB_NOT_RECORDED = 'No CB waits were recorded for this operation.';
 const SUMMARY_TITLE = "The largest of the threads' stalled shares and CB poll shares, never their sum.";
 const NO_NAMED_WAIT = 'no named wait reads above 0';
-const DOWNSTREAM_WAIT = 'a wait on an earlier stage: read the threads before it';
+const EARLIER_STAGE_WAIT = 'a wait on an earlier stage';
+const DOWNSTREAM_WAIT = `${EARLIER_STAGE_WAIT}: read the threads before it`;
 const LEGEND = [
     { className: 'pipeline-stall-issuing', label: 'Issuing' },
     { className: 'pipeline-stall-stalled', label: 'Stalled' },
@@ -91,10 +93,10 @@ const getCbCaption = (cores: number | null, kernelUs: number | null): string => 
 
 interface WaitRowProps {
     wait: NamedStallStat;
-    suffix?: string;
+    mark?: string;
 }
 
-const WaitRow = ({ wait, suffix }: WaitRowProps) => {
+const WaitRow = ({ wait, mark }: WaitRowProps) => {
     const range = getRange(wait);
     const value = formatShare(wait.avg);
 
@@ -102,12 +104,12 @@ const WaitRow = ({ wait, suffix }: WaitRowProps) => {
         <>
             <span className='pipeline-stall-wait-name'>
                 {wait.label}
-                {suffix && <span className='pipeline-stall-muted pipeline-stall-subline'>{suffix}</span>}
+                {mark && <span className='pipeline-stall-muted pipeline-stall-subline'>{mark}</span>}
             </span>
             <div
                 className='pipeline-stall-wait-bar'
                 role='img'
-                aria-label={`${wait.label}: ${value}${suffix ? ` ${suffix}` : ''}`}
+                aria-label={`${wait.label}: ${value}${mark ? `, ${mark}` : ''}`}
             >
                 <div
                     className='pipeline-stall-wait-fill'
@@ -139,6 +141,7 @@ const ThreadCounters = ({ thread, counters }: ThreadCountersProps) => {
     const zeroWaits = counters.zero_waits;
     const zeroWaitNames = zeroWaits.join(', ');
     const zeroWaitsId = useId();
+    const mathCaptionId = useId();
 
     return (
         <div
@@ -166,7 +169,7 @@ const ThreadCounters = ({ thread, counters }: ThreadCountersProps) => {
                     {stalled === null ? <MissingValue reason={NO_VALUE_REASON} /> : formatShare(stalled)} stalled
                 </span>
             </div>
-            {(counters.waits.length > 0 || pipelineStalls.length > 0) && (
+            {counters.waits.length > 0 && (
                 <div
                     className='pipeline-stall-waits'
                     data-testid={`${TEST_IDS.PIPELINE_STALL_WAITS}-${thread.thread}`}
@@ -175,13 +178,7 @@ const ThreadCounters = ({ thread, counters }: ThreadCountersProps) => {
                         <WaitRow
                             key={wait.label}
                             wait={wait}
-                        />
-                    ))}
-                    {pipelineStalls.map((wait) => (
-                        <WaitRow
-                            key={wait.label}
-                            wait={wait}
-                            suffix={MATH_PIPELINE_SUFFIX}
+                            mark={wait.downstream ? EARLIER_STAGE_WAIT : undefined}
                         />
                     ))}
                 </div>
@@ -204,6 +201,28 @@ const ThreadCounters = ({ thread, counters }: ThreadCountersProps) => {
                         {zeroWaitNames}
                     </span>
                 </>
+            )}
+            {pipelineStalls.length > 0 && (
+                <div
+                    role='group'
+                    aria-labelledby={mathCaptionId}
+                    data-testid={`${TEST_IDS.PIPELINE_STALL_MATH_PIPELINE}-${thread.thread}`}
+                >
+                    <p
+                        id={mathCaptionId}
+                        className='pipeline-stall-math-caption'
+                    >
+                        {MATH_PIPELINE_CAPTION}
+                    </p>
+                    <div className='pipeline-stall-waits'>
+                        {pipelineStalls.map((stall) => (
+                            <WaitRow
+                                key={stall.label}
+                                wait={stall}
+                            />
+                        ))}
+                    </div>
+                </div>
             )}
         </div>
     );

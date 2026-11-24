@@ -15,13 +15,18 @@ export interface NamedStallStat extends StallStat {
     label: string;
 }
 
+export interface NamedWait extends NamedStallStat {
+    // As `LargestWait`'s: a wait on an earlier stage.
+    downstream: boolean;
+}
+
 export interface ThreadHardwareCounters {
     issue_rate: StallStat | null;
     stall_rate: StallStat | null;
     // tt-llk's ratio, not a share: the thread's waits summed over its cycles, which can pass 1.
     stall_overlap: StallStat | null;
     // Above 0 on some core, by average.
-    waits: NamedStallStat[];
+    waits: NamedWait[];
     zero_waits: string[];
     // Math's alone: shares of the cycles a math instruction was ready.
     math_pipeline_stalls?: NamedStallStat[];

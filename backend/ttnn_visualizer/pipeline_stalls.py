@@ -19,6 +19,7 @@ from typing import (
     Sequence,
     TextIO,
     Tuple,
+    TypeVar,
 )
 
 from ttnn_visualizer import hardware_counters
@@ -256,6 +257,22 @@ class _Named(NamedTuple):
         return {"label": self.label, **self.stat.answer()}
 
 
+class _Wait(NamedTuple):
+    label: str
+    stat: _Stat
+    downstream: bool
+
+    def answer(self) -> Dict[str, object]:
+        return {
+            "label": self.label,
+            **self.stat.answer(),
+            "downstream": self.downstream,
+        }
+
+
+_Reading = TypeVar("_Reading", _Named, _Wait)
+
+
 def _stat(read: CounterReader, label: str) -> Optional[_Stat]:
     stats = {stat: read(label, stat) for stat, _ in ROW_KEY_STATS}
     average = stats[CounterStat.AVG]
@@ -264,7 +281,7 @@ def _stat(read: CounterReader, label: str) -> Optional[_Stat]:
     return _Stat(average, stats[CounterStat.MIN], stats[CounterStat.MAX])
 
 
-def _by_average(readings: List[_Named]) -> List[_Named]:
+def _by_average(readings: List[_Reading]) -> List[_Reading]:
     return sorted(readings, key=lambda reading: reading.stat.avg, reverse=True)
 
 
@@ -277,7 +294,7 @@ class _ThreadCounters(NamedTuple):
     stall_rate: Optional[_Stat]
     stall_overlap: Optional[_Stat]
     # Above 0 on some core, by average.
-    waits: List[_Named]
+    waits: List[_Wait]
     zero_waits: List[str]
     # None for a thread with no math pipeline.
     math_pipeline_stalls: Optional[List[_Named]]
@@ -300,7 +317,7 @@ class _ThreadCounters(NamedTuple):
 def _thread_counters(
     thread: ThreadLabels, read: CounterReader, header: CounterHeader
 ) -> _ThreadCounters:
-    waits: List[_Named] = []
+    waits: List[_Wait] = []
     zero_waits: List[str] = []
     for label in thread.waits:
         stat = _stat(read, label) if label in header.columns else None
@@ -309,7 +326,7 @@ def _thread_counters(
         if stat.reads_zero:
             zero_waits.append(label)
         else:
-            waits.append(_Named(label, stat))
+            waits.append(_Wait(label, stat, label in thread.downstream_waits))
     pipeline_stalls: Optional[List[_Named]] = None
     if thread.math_pipeline_stalls:
         pipeline_stalls = _by_average(
@@ -485,7 +502,7 @@ def _largest_wait(stall: _Stall, thread: _ThreadRead) -> Optional[Dict[str, obje
         "label": top.label,
         "source": StallSource.HARDWARE_COUNTER.value,
         "percent": top.stat.avg,
-        "downstream": top.label in thread.labels.downstream_waits,
+        "downstream": top.downstream,
     }
 
 

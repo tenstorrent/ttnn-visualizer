@@ -8,10 +8,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 import DeviceOperationStalls from '../src/components/operation-details/DeviceOperationStalls';
 import { CbWaitZone, PipelineThread, StallSource, StallState } from '../src/definitions/PipelineStalls';
 import { TEST_IDS } from '../src/definitions/TestIds';
-import { OperationStalls } from '../src/model/PipelineStalls';
+import { NamedWait, OperationStalls } from '../src/model/PipelineStalls';
 import {
     CB_WAITS_FILL_HINT,
     COUNTERS_FILL_HINT,
+    DOWNSTREAM,
     INPUT_STARVED_STALLS,
     NOT_CAPTURED_STALLS,
     NO_CB_VALUE_STALLS,
@@ -23,7 +24,7 @@ import {
     UNNAMED_STALL_STALLS,
     UNPACK_BOUND_STALLS,
     UNRECORDED_STALLS,
-    named,
+    namedWait,
     stat,
 } from './helpers/pipelineStallFixtures';
 
@@ -36,6 +37,17 @@ const threadBar = (thread: PipelineThread) => within(threadBlock(thread)).getAll
 const segmentWidths = (bar: HTMLElement) => [...bar.children].map((segment) => (segment as HTMLElement).style.width);
 
 const NO_VALUE = 'no value for this operation';
+const EARLIER_STAGE = 'a wait on an earlier stage';
+const MATH_PIPELINE_GROUP = /^Math pipeline stalls: shares of the cycles a math instruction was ready/;
+
+const withT1Waits = (stalls: OperationStalls, waits: NamedWait[]): OperationStalls => ({
+    ...stalls,
+    threads: stalls.threads.map((entry) =>
+        entry.thread === PipelineThread.T1 && entry.hardware_counters
+            ? { ...entry, hardware_counters: { ...entry.hardware_counters, waits } }
+            : entry,
+    ),
+});
 
 const withT0Counters = (issue: number, stall: number): OperationStalls => ({
     ...INPUT_STARVED_STALLS,
@@ -82,10 +94,21 @@ describe('DeviceOperationStalls', () => {
             const bars = within(waits).getAllByRole('img');
 
             expect(bars.map((bar) => bar.getAttribute('aria-label'))).toEqual([
-                'Semaphore Zero Wait T2: 76.4%',
+                `Semaphore Zero Wait T2: 76.4%, ${EARLIER_STAGE}`,
                 'Pack Idle Wait T2: 1.9%',
             ]);
             expect((bars[0].firstElementChild as HTMLElement).style.width).toBe('76.4%');
+        });
+
+        it('marks each wait on an earlier stage as the summary marks the largest, whichever stall is the largest', () => {
+            renderStalls(INPUT_STARVED_STALLS);
+
+            const marks = screen.getAllByText(EARLIER_STAGE);
+
+            expect(INPUT_STARVED_STALLS.largest_wait?.source).toBe(StallSource.INSTRUMENTATION);
+            expect(marks).toHaveLength(1);
+            expect(marks[0].parentElement).toHaveTextContent(/^Semaphore Zero Wait T2/);
+            expect(screen.getByTestId(TEST_IDS.PIPELINE_STALL_SUMMARY)).not.toHaveTextContent(EARLIER_STAGE);
         });
 
         it('names the waits that read 0 by count, listing them on hover, rather than as rows', () => {
@@ -148,14 +171,36 @@ describe('DeviceOperationStalls', () => {
             expect(screen.queryByTestId(TEST_IDS.PIPELINE_STALL_OVERLAP_NOTE)).toBeNull();
         });
 
-        it("shows the math pipeline's stalls above 0 on the math thread, saying what they are a share of", () => {
+        it("groups the math pipeline's stalls above 0 apart from the math thread's waits, under their own caption", () => {
             renderStalls(SCOREBOARD_STALLS);
 
-            const waits = screen.getByTestId(`${TEST_IDS.PIPELINE_STALL_WAITS}-${PipelineThread.T1}`);
+            const group = screen.getByRole('group', { name: MATH_PIPELINE_GROUP });
 
-            expect(waits).toHaveTextContent('Math Scoreboard Stall Rate');
-            expect(waits).toHaveTextContent('of cycles a math instruction was ready');
-            expect(waits).not.toHaveTextContent('Data Hazard Stall Rate');
+            expect(group).toBe(screen.getByTestId(`${TEST_IDS.PIPELINE_STALL_MATH_PIPELINE}-${PipelineThread.T1}`));
+            expect(
+                within(group)
+                    .getAllByRole('img')
+                    .map((bar) => bar.getAttribute('aria-label')),
+            ).toEqual(['Math Scoreboard Stall Rate: 33.2%']);
+            expect(screen.getByTestId(`${TEST_IDS.PIPELINE_STALL_WAITS}-${PipelineThread.T1}`)).not.toHaveTextContent(
+                'Math Scoreboard Stall Rate',
+            );
+            expect(threadBlock(PipelineThread.T1)).not.toHaveTextContent('Data Hazard Stall Rate');
+        });
+
+        it("draws the math pipeline's group for a math thread with no wait to list", () => {
+            renderStalls(withT1Waits(SCOREBOARD_STALLS, []));
+
+            expect(screen.queryByTestId(`${TEST_IDS.PIPELINE_STALL_WAITS}-${PipelineThread.T1}`)).toBeNull();
+            expect(screen.getByRole('group', { name: MATH_PIPELINE_GROUP })).toHaveTextContent(
+                'Math Scoreboard Stall Rate',
+            );
+        });
+
+        it("leaves the math pipeline's group out when each of its stalls reads 0", () => {
+            renderStalls(INPUT_STARVED_STALLS);
+
+            expect(screen.queryByRole('group', { name: MATH_PIPELINE_GROUP })).toBeNull();
         });
 
         it('marks a missing issue rate with a dash named for the reason, and says so in the bar', () => {
@@ -185,7 +230,13 @@ describe('DeviceOperationStalls', () => {
                               ...entry,
                               hardware_counters: {
                                   ...entry.hardware_counters,
-                                  waits: [{ ...named('Semaphore Zero Wait T2', 76.4), min: 72.5, max: 78.1 }],
+                                  waits: [
+                                      {
+                                          ...namedWait('Semaphore Zero Wait T2', 76.4, DOWNSTREAM),
+                                          min: 72.5,
+                                          max: 78.1,
+                                      },
+                                  ],
                               },
                           }
                         : entry,
