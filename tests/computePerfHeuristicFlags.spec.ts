@@ -191,11 +191,11 @@ describe('annotatePerfHeuristicFlags', () => {
             expect(getFlags({ ...placeholder, pm_ideal_ns: 2 })).toContain(PerfHeuristicFlag.LOW_UTILISATION);
         });
 
-        it('leaves the other flags alone', () => {
-            expect(getFlags({ ...placeholder, bound: BoundType.DRAM, cores: 8 })).toEqual([
-                PerfHeuristicFlag.DRAM_BOUND,
-                PerfHeuristicFlag.UNDERUTILISED_CORES,
-            ]);
+        it('leaves the other flags alone, and still gives the note', () => {
+            const row = annotate({ bound: BoundType.DRAM, cores: 8 });
+
+            expect(row.heuristicFlags).toEqual([PerfHeuristicFlag.DRAM_BOUND, PerfHeuristicFlag.UNDERUTILISED_CORES]);
+            expect(row.hasUtilisationUnknownNote).toBe(true);
         });
     });
 

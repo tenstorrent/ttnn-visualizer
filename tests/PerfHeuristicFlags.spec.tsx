@@ -16,7 +16,10 @@ import {
     UTILISATION_UNKNOWN_NOTE,
 } from '../src/definitions/PerfHeuristics';
 import { OpType } from '../src/definitions/Performance';
+import { ColumnKeys, Columns } from '../src/definitions/PerfTable';
 import { TEST_IDS } from '../src/definitions/TestIds';
+import { annotatePerfHeuristicFlags } from '../src/functions/computePerfHeuristicFlags';
+import { formatCell } from '../src/functions/perfFunctions';
 
 vi.mock('@blueprintjs/core', async () => {
     const original = await vi.importActual<typeof import('@blueprintjs/core')>('@blueprintjs/core');
@@ -45,6 +48,14 @@ afterEach(cleanup);
 describe('PerfHeuristicFlags', () => {
     it('renders nothing when heuristicFlags are empty', () => {
         const { container } = render(<PerfHeuristicFlags row={makeRow({ heuristicFlags: [] })} />);
+
+        expect(container).toBeEmptyDOMElement();
+    });
+
+    it('renders nothing when the note is off as well', () => {
+        const { container } = render(
+            <PerfHeuristicFlags row={makeRow({ heuristicFlags: [], hasUtilisationUnknownNote: false })} />,
+        );
 
         expect(container).toBeEmptyDOMElement();
     });
@@ -126,6 +137,17 @@ describe('PerfHeuristicFlags', () => {
             TEST_IDS.PERF_HEURISTIC_FLAG,
             TEST_IDS.PERF_UTILISATION_UNKNOWN,
         ]);
+    });
+
+    it("reaches the Flags column's cell for a placeholder row", () => {
+        const [row] = annotatePerfHeuristicFlags(
+            [makeRow({ total_percent: 5, bound: null, pm_ideal_ns: 1, device_time: 127, cores: 64 })],
+            64,
+        );
+
+        render(<>{formatCell(row, Columns.find((column) => column.key === ColumnKeys.Flags)!)}</>);
+
+        expect(screen.getByTestId(TEST_IDS.PERF_UTILISATION_UNKNOWN)).toBeInTheDocument();
     });
 
     it.each(Object.values(PerfHeuristicFlag))('renders the source of the %s flag', (flag) => {

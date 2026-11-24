@@ -4,7 +4,7 @@
 
 import '@testing-library/jest-dom/vitest';
 import type { Layout, PlotData } from 'plotly.js';
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { getPlotInstances, resetPlotPropsCapture } from './mocks/plotComponent';
 import PerfCoreCountUtilizationChart from '../src/components/performance/PerfCoreCountUtilizationChart';
@@ -14,6 +14,7 @@ import PerfOperationKernelUtilizationChart from '../src/components/performance/P
 import { PerfChartId } from '../src/definitions/PerformanceCharts';
 import { OpType } from '../src/definitions/Performance';
 import { TypedPerfTableRow } from '../src/model/PerfTable';
+import { mergeDevicesAtom } from '../src/store/app';
 import { TestProviders } from './helpers/TestProviders';
 
 const MAX_CORES = 64;
@@ -49,6 +50,18 @@ const markersOnY2 = () => traces().filter((trace) => trace.yaxis === 'y2' && isM
 
 // Only the second op has a value with no neighbour, so it alone needs a marker.
 const ISOLATED_MARKERS = { x: [2], mode: 'markers', showlegend: false, hoverinfo: 'skip' };
+const MERGED_DEVICES_NOTICE = /Multi device operations are merged/;
+
+const renderWithDevicesMerged = (rows: TypedPerfTableRow[]) =>
+    render(
+        <TestProviders initialAtomValues={[[mergeDevicesAtom, true]]}>
+            <PerfCoreCountUtilizationChart
+                datasets={[rows]}
+                maxCores={MAX_CORES}
+                chartId={PerfChartId.MatmulCoreCountUtilization}
+            />
+        </TestProviders>,
+    );
 
 afterEach(() => {
     cleanup();
@@ -122,6 +135,50 @@ describe('utilisation charts', () => {
         expect(lineOnY2()?.y).toEqual([0.5, 0.5]);
         expect(lineOnY2()?.mode).toBeUndefined();
         expect(markersOnY2()).toEqual([]);
+    });
+
+    it('mark only the gapped report’s value in comparison mode', () => {
+        render(
+            <TestProviders>
+                <PerfCoreCountUtilizationChart
+                    datasets={[ROWS, [row(), row()]]}
+                    maxCores={MAX_CORES}
+                    chartId={PerfChartId.MatmulCoreCountUtilization}
+                />
+            </TestProviders>,
+        );
+
+        const lines = traces().filter((trace) => trace.yaxis === 'y2' && !isMarkersOnly(trace));
+        expect(lines.map((trace) => trace.mode)).toEqual([undefined, undefined]);
+        expect(markersOnY2()).toMatchObject([{ ...ISOLATED_MARKERS, legendgroup: 'group0' }]);
+    });
+
+    it('hide the merged-devices notice when no utilisation is known', () => {
+        renderWithDevicesMerged([row({ pm_ideal_ns: 1 }), row({ pm_ideal_ns: 1 })]);
+
+        expect(screen.queryByText(MERGED_DEVICES_NOTICE)).not.toBeInTheDocument();
+    });
+
+    it('show the merged-devices notice once a utilisation is known', () => {
+        renderWithDevicesMerged([row(), row()]);
+
+        expect(screen.getByText(MERGED_DEVICES_NOTICE)).toBeInTheDocument();
+    });
+
+    it('leave every value out when no utilisation is known, with no markers', () => {
+        render(
+            <TestProviders>
+                <PerfCoreCountUtilizationChart
+                    datasets={[[row({ pm_ideal_ns: 1 }), row({ pm_ideal_ns: 1 })]]}
+                    maxCores={MAX_CORES}
+                    chartId={PerfChartId.MatmulCoreCountUtilization}
+                />
+            </TestProviders>,
+        );
+
+        expect(lineOnY2()?.y).toEqual([null, null]);
+        expect(markersOnY2()).toEqual([]);
+        expect(layout().yaxis2?.range).toEqual([0, 1.1]);
     });
 });
 
