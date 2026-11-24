@@ -51,7 +51,8 @@ STALL_CAPTURE_FLAGS = (
     f"{CAPTURE_FLAG}={STALL_COUNTER_GROUPS} for the thread figures ({_FPU_NOTE}) "
     f"and {SUM_PROFILING_FLAG} for the CB waits"
 )
-# What fills each part of an op's stalls, worded as a counter's fill hint is.
+# What fills each part of an op's stalls, worded as a counter's fill hint is, plus
+# what fpu is for.
 COUNTERS_FILL_HINT = f"{hardware_counters.fill_hint(STALL_GROUPS)} ({_FPU_NOTE})"
 CB_WAITS_FILL_HINT = f"filled when the capture ran with {SUM_PROFILING_FLAG}"
 

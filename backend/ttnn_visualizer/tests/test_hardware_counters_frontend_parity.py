@@ -19,6 +19,8 @@ from ttnn_visualizer.hardware_counters import (
     CounterUnit,
 )
 from ttnn_visualizer.pipeline_stalls import (
+    CB_WAITS_FILL_HINT,
+    COUNTERS_FILL_HINT,
     THREADS,
     CbWaitZone,
     PipelineThread,
@@ -33,6 +35,9 @@ from ttnn_visualizer.tests.frontend_parity import (
 )
 
 _DEFINITIONS = Path(__file__).resolve().parents[3] / "src" / "definitions"
+_STALL_FIXTURES = (
+    Path(__file__).resolve().parents[3] / "tests/helpers/pipelineStallFixtures.ts"
+)
 
 
 @pytest.mark.parametrize(
@@ -108,3 +113,17 @@ def test_each_cb_zone_is_the_thread_the_backend_gives_it():
         for thread in THREADS
         if thread.cb_zone is not None
     }
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("COUNTERS_FILL_HINT", COUNTERS_FILL_HINT),
+        ("CB_WAITS_FILL_HINT", CB_WAITS_FILL_HINT),
+    ],
+)
+def test_the_stall_fixtures_fill_hints_are_the_ones_the_server_sends(
+    name: str, value: str
+):
+    """The Stalls tab's tests render each part's fill hint from a hand-made copy."""
+    assert typescript_string_constant(_STALL_FIXTURES, name) == value

@@ -464,6 +464,7 @@ class TestCapture:
         }
         assert answer["sum_profiling"] is True
         assert COUNTERS_FLAG in answer["fill_hint"]
+        assert "(fpu for utilization)" in answer["fill_hint"]
 
     def test_the_note_carries_the_blind_spot_and_the_sum_over_cores(self, captured):
         registry, handle = captured
