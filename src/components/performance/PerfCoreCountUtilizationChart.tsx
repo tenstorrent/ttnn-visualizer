@@ -16,7 +16,8 @@ import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCha
 import PerfChart from './PerfChart';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom, mergeDevicesAtom } from '../../store/app';
 import getPlotLabel from '../../functions/getPlotLabel';
-import { buildUtilisationTraces, getAxisUpperRange } from '../../functions/perfFunctions';
+import { getAxisUpperRange } from '../../functions/perfFunctions';
+import { buildUtilisationTraces } from '../../functions/perfChartTraces';
 import { getPrimaryDataColours } from '../../definitions/PerformancePlotColours';
 import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
 
@@ -47,8 +48,8 @@ function PerfCoreCountUtilizationChart({ datasets = [], maxCores, chartId }: Per
         [datasets, perfReport, comparisonReportList],
     );
 
-    const { traces: chartDataUtilization, maxUtilisation: maxY2Value } = useMemo(
-        () => buildUtilisationTraces(datasets, maxCores, perfReport?.reportName, comparisonReportList),
+    const { traces: chartDataUtilization, maxValue: maxY2Value } = useMemo(
+        () => buildUtilisationTraces(datasets, maxCores, perfReport?.reportName ?? null, comparisonReportList),
         [datasets, perfReport, comparisonReportList, maxCores],
     );
 

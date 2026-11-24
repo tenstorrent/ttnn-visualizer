@@ -11,10 +11,11 @@ import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCha
 import PerfChart from './PerfChart';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import getPlotLabel from '../../functions/getPlotLabel';
-import { getAxisUpperRange, withIsolatedPointMarkers } from '../../functions/perfFunctions';
-import { getMaxFiniteValue, getMaxValue } from '../../functions/numericExtent';
+import { getAxisUpperRange } from '../../functions/perfFunctions';
+import { buildSecondaryLineTraces } from '../../functions/perfChartTraces';
+import { getMaxValue } from '../../functions/numericExtent';
 import isUnmodelledIdealTime from '../../functions/isUnmodelledIdealTime';
-import { getPrimaryDataColours, getSecondaryDataColours } from '../../definitions/PerformancePlotColours';
+import { getPrimaryDataColours } from '../../definitions/PerformancePlotColours';
 
 const getModelledIdealTime = ({ pm_ideal_ns: idealNs }: TypedPerfTableRow): number | null =>
     isUnmodelledIdealTime(idealNs) ? null : idealNs;
@@ -44,19 +45,14 @@ function PerfDeviceTimeChart({ datasets = [], chartId }: PerfDeviceTimeChartProp
         [datasets, perfReport, comparisonReportList],
     );
 
-    const idealTimes = useMemo(
+    const { traces: idealTimes, maxValue: maxIdealTime } = useMemo(
         () =>
-            datasets.flatMap((data, dataIndex) =>
-                withIsolatedPointMarkers({
-                    x: data.map((_row, index) => index + 1),
-                    y: data.map(getModelledIdealTime),
-                    hovertemplate: `<b>%{data.name}</b><br />Operation: %{x}<br />Ideal time: %{y} ns<extra></extra>`,
-                    name: getPlotLabel(dataIndex, perfReport?.reportName, comparisonReportList) ?? undefined,
-                    legendgroup: `group${dataIndex}`,
-                    marker: {
-                        color: getSecondaryDataColours(dataIndex),
-                    },
-                }),
+            buildSecondaryLineTraces(
+                datasets,
+                getModelledIdealTime,
+                { valueHoverTemplate: 'Ideal time: %{y} ns' },
+                perfReport?.reportName ?? null,
+                comparisonReportList,
             ),
         [datasets, perfReport, comparisonReportList],
     );
@@ -69,7 +65,6 @@ function PerfDeviceTimeChart({ datasets = [], chartId }: PerfDeviceTimeChartProp
         const maxDeviceTime = getMaxValue(
             datasets.flatMap((data) => data.map((row) => (row.device_time ? row.device_time * 1000 : 0))),
         ); // Convert microseconds to nanoseconds
-        const maxIdealTime = getMaxFiniteValue(datasets.flatMap((data) => data.map(getModelledIdealTime)));
 
         return {
             margin: PERF_CHART_WIDE_LEFT_MARGIN,
@@ -82,7 +77,7 @@ function PerfDeviceTimeChart({ datasets = [], chartId }: PerfDeviceTimeChartProp
                 range: [0, Math.max(maxDeviceTime, maxIdealTime)],
             }),
         };
-    }, [datasets]);
+    }, [datasets, maxIdealTime]);
 
     return (
         <PerfChart

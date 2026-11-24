@@ -5,12 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { BoundAnalysis, BoundType, ColumnKeys, Columns } from '../src/definitions/PerfTable';
 import { OpType } from '../src/definitions/Performance';
-import {
-    describePlainCell,
-    formatCellText,
-    formatColumnNumber,
-    withIsolatedPointMarkers,
-} from '../src/functions/perfFunctions';
+import { describePlainCell, formatCellText, formatColumnNumber } from '../src/functions/perfFunctions';
 import { NOT_MODELLED_REASON, SLOW_BOUND_REASON } from '../src/functions/perfBoundAnalysis';
 import { TypedPerfTableRow } from '../src/model/PerfTable';
 
@@ -113,52 +108,5 @@ describe('describePlainCell', () => {
         });
 
         expect(describePlainCell(slow, getColumn(ColumnKeys.Bound)).slowExplanation).toBe(SLOW_BOUND_REASON);
-    });
-});
-
-describe('withIsolatedPointMarkers', () => {
-    const line = (y: (number | null)[]) => ({
-        x: y.map((_value, index) => index + 1),
-        y,
-        yaxis: 'y2',
-        legendgroup: 'group0',
-        marker: { color: 'red' },
-    });
-
-    it.each<[string, (number | null)[]]>([
-        ['no gaps', [1, 2, 3]],
-        ['runs of two or more values between the gaps', [1, 2, null, 3, 4]],
-        ['no values at all', [null, null]],
-    ])('returns the line alone with %s', (_, y) => {
-        const trace = line(y);
-
-        expect(withIsolatedPointMarkers(trace)).toEqual([trace]);
-    });
-
-    it('marks each value with no neighbour, at either end too', () => {
-        const [, markers] = withIsolatedPointMarkers(line([5, null, 6, null, null, 7]));
-
-        expect(markers).toMatchObject({ x: [1, 3, 6], y: [5, 6, 7], mode: 'markers' });
-    });
-
-    it('reads NaN as a gap, as Plotly does', () => {
-        const [, markers] = withIsolatedPointMarkers(line([NaN, 4, NaN]));
-
-        expect(markers).toMatchObject({ x: [2], y: [4] });
-    });
-
-    it("keeps the markers in the line's axis, legend group and colour, with no legend entry or hover", () => {
-        const [, markers] = withIsolatedPointMarkers(line([null, 4, null]));
-
-        expect(markers).toEqual({
-            x: [2],
-            y: [4],
-            mode: 'markers',
-            yaxis: 'y2',
-            legendgroup: 'group0',
-            showlegend: false,
-            hoverinfo: 'skip',
-            marker: { color: 'red' },
-        });
     });
 });

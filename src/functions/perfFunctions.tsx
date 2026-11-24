@@ -3,7 +3,6 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { JSX } from 'react';
-import type { PlotData } from 'plotly.js';
 import classNames from 'classnames';
 import { Classes, Icon, Intent, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
@@ -28,11 +27,6 @@ import { CellColour, DEFAULT_CELL_COLOUR, FALLBACK_CELL_COLOUR, WARNING_CELL_COL
 import { isHighDispatchGap, isSlowDramDominant } from './perfBoundPredicates';
 import { NOT_ANALYSED_LABEL, getNotAnalysedReason, getSlowBoundExplanation } from './perfBoundAnalysis';
 import { getRepeatCacheOutcome } from './enrichPerfRowData';
-import getCoreUtilization from './getCoreUtilization';
-import getPlotLabel from './getPlotLabel';
-import isValidNumber from './isValidNumber';
-import { getMaxFiniteValue } from './numericExtent';
-import { getSecondaryDataColours } from '../definitions/PerformancePlotColours';
 
 const OPERATION_COLOURS: { [key: string]: CellColour } = {
     '(torch)': CellColour.Red,
@@ -714,63 +708,6 @@ export function getAxisUpperRange(arrays: Array<unknown[]>): number {
     // Adds + 1 to avoid cutting off the last plotted element in some cases and to create some space on the right side of the chart data
     return Math.max(...arrays.map((arr) => arr.length), 0) + 1;
 }
-
-const hasValueAt = (values: (number | null)[], index: number) => isValidNumber(values[index]);
-
-// Plotly's lines mode draws nothing for a value with no neighbour on either side, so those values get a
-// markers-only trace; it skips hover, since the line trace already hovers on them.
-export const withIsolatedPointMarkers = (
-    line: Partial<PlotData> & { x: number[]; y: (number | null)[] },
-): Partial<PlotData>[] => {
-    const { x, y } = line;
-    const isolated = y.flatMap((_value, index) =>
-        hasValueAt(y, index) && !hasValueAt(y, index - 1) && !hasValueAt(y, index + 1) ? [index] : [],
-    );
-
-    if (isolated.length === 0) {
-        return [line];
-    }
-
-    return [
-        line,
-        {
-            x: isolated.map((index) => x[index]),
-            y: isolated.map((index) => y[index]),
-            mode: 'markers',
-            yaxis: line.yaxis,
-            legendgroup: line.legendgroup,
-            showlegend: false,
-            hoverinfo: 'skip',
-            marker: { ...line.marker },
-        },
-    ];
-};
-
-export const buildUtilisationTraces = (
-    datasets: TypedPerfTableRow[][],
-    maxCores: number,
-    reportName?: string | null,
-    comparisonReportList?: string[] | null,
-): { traces: Partial<PlotData>[]; maxUtilisation: number } => {
-    const utilisation = datasets.map((data) => data.map((row) => getCoreUtilization(row, maxCores)));
-
-    return {
-        traces: datasets.flatMap((data, dataIndex) =>
-            withIsolatedPointMarkers({
-                x: data.map((_row, index) => index + 1),
-                y: utilisation[dataIndex],
-                yaxis: 'y2',
-                hovertemplate: `<b>%{data.name}</b><br />Operation: %{x}<br />Utilization: %{y}<extra></extra>`,
-                name: getPlotLabel(dataIndex, reportName, comparisonReportList) ?? undefined,
-                legendgroup: `group${dataIndex}`,
-                marker: {
-                    color: getSecondaryDataColours(dataIndex),
-                },
-            }),
-        ),
-        maxUtilisation: getMaxFiniteValue(utilisation.flat()),
-    };
-};
 
 export const isHostOp = (bound: BoundType | null) => bound === BoundType.HOST;
 

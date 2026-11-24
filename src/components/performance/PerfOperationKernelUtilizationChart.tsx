@@ -13,7 +13,8 @@ import {
     getNsAxisConfig,
 } from '../../definitions/PlotConfigurations';
 import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
-import { buildUtilisationTraces, getAxisUpperRange } from '../../functions/perfFunctions';
+import { getAxisUpperRange } from '../../functions/perfFunctions';
+import { buildUtilisationTraces } from '../../functions/perfChartTraces';
 import getPlotLabel from '../../functions/getPlotLabel';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom, mergeDevicesAtom } from '../../store/app';
 import { getPrimaryDataColours } from '../../definitions/PerformancePlotColours';
@@ -51,8 +52,8 @@ function PerfOperationKernelUtilizationChart({
         [datasets, perfReport, comparisonReportList],
     );
 
-    const { traces: chartDataUtilization, maxUtilisation: maxY2Value } = useMemo(
-        () => buildUtilisationTraces(datasets, maxCores, perfReport?.reportName, comparisonReportList),
+    const { traces: chartDataUtilization, maxValue: maxY2Value } = useMemo(
+        () => buildUtilisationTraces(datasets, maxCores, perfReport?.reportName ?? null, comparisonReportList),
         [datasets, maxCores, perfReport, comparisonReportList],
     );
 
