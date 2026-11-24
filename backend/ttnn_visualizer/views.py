@@ -1103,6 +1103,58 @@ def get_operation_buffers(operation_id, instance: Instance):
         )
 
 
+def _hosted_profiler_directory_names(base_path: Path) -> Tuple[List[str], List[str]]:
+    """Memory report folders this hosted session may list and select, and the demo ones.
+
+    The session's own uploads and its instances' current reports, plus the demos. Both
+    the listing and `PUT /instance` read this, so a session can select exactly what it
+    is shown.
+    """
+    instances = get_instances(session.get("instances", []))
+    db_directory_names = [
+        Path(instance.profiler_path).parent.name
+        for instance in instances
+        if instance.profiler_path
+    ]
+    session_directory_names = [
+        Path(session_path).parent.name
+        for session_path in session.get("profiler_paths", [])
+    ]
+    demo_directory_names = _list_demo_directory_names(
+        base_path, DEMO_PROFILER_DIRECTORY_NAMES
+    )
+    directory_names = list(
+        set(db_directory_names + session_directory_names + demo_directory_names)
+    )
+    return directory_names, demo_directory_names
+
+
+def _hosted_performance_directory_names(
+    base_path: Path,
+) -> Tuple[List[str], List[str]]:
+    """Performance report folders this hosted session may list and select, and the demo ones.
+
+    The performance counterpart of `_hosted_profiler_directory_names`: performance paths
+    name the report folder itself rather than a file inside it.
+    """
+    instances = get_instances(session.get("instances", []))
+    db_directory_names = [
+        Path(instance.performance_path).name
+        for instance in instances
+        if instance.performance_path
+    ]
+    session_directory_names = [
+        Path(session_path).name for session_path in session.get("performance_paths", [])
+    ]
+    demo_directory_names = _list_demo_directory_names(
+        base_path, DEMO_PERFORMANCE_DIRECTORY_NAMES
+    )
+    directory_names = list(
+        set(db_directory_names + session_directory_names + demo_directory_names)
+    )
+    return directory_names, demo_directory_names
+
+
 @api.route("/profiler", methods=["GET"])
 @with_instance
 def get_profiler_data_list(instance: Instance):
@@ -1124,22 +1176,7 @@ def get_profiler_data_list(instance: Instance):
     demo_directory_names: List[str] = []
 
     if current_app.config["SERVER_MODE"]:
-        session_instances = session.get("instances", [])
-        instances = get_instances(session_instances)
-        db_paths = [
-            instance.profiler_path for instance in instances if instance.profiler_path
-        ]
-        db_directory_names = [str(Path(db_path).parent.name) for db_path in db_paths]
-        session_paths = session.get("profiler_paths", [])
-        session_directory_names = [
-            str(Path(session_path).parent.name) for session_path in session_paths
-        ]
-        demo_directory_names = _list_demo_directory_names(
-            path, DEMO_PROFILER_DIRECTORY_NAMES
-        )
-        directory_names = list(
-            set(db_directory_names + session_directory_names + demo_directory_names)
-        )
+        directory_names, demo_directory_names = _hosted_profiler_directory_names(path)
     else:
         directory_names = [
             directory.name for directory in path.iterdir() if directory.is_dir()
@@ -1235,23 +1272,8 @@ def get_performance_data_list(instance: Instance):
     demo_directory_names: List[str] = []
 
     if current_app.config["SERVER_MODE"]:
-        session_instances = session.get("instances", [])
-        instances = get_instances(session_instances)
-        db_paths = [
-            instance.performance_path
-            for instance in instances
-            if instance.performance_path
-        ]
-        db_directory_names = [str(Path(db_path).name) for db_path in db_paths]
-        session_paths = session.get("performance_paths", [])
-        session_directory_names = [
-            str(Path(session_path).name) for session_path in session_paths
-        ]
-        demo_directory_names = _list_demo_directory_names(
-            path, DEMO_PERFORMANCE_DIRECTORY_NAMES
-        )
-        directory_names = list(
-            set(db_directory_names + session_directory_names + demo_directory_names)
+        directory_names, demo_directory_names = _hosted_performance_directory_names(
+            path
         )
     else:
         # PathResolver already handles remote vs local logic
@@ -1527,6 +1549,15 @@ def get_devices(instance: Instance):
         )
 
 
+def _created_report_root(paths: List[Path], target_directory: Path) -> Path:
+    """The report folder a folder upload created under *target_directory*.
+
+    Taken from the destination `construct_dest_path` chose, never from the payload:
+    under `SERVER_MODE` it carries the timestamp prefix the client's name lacks.
+    """
+    return target_directory / paths[0].relative_to(target_directory).parts[0]
+
+
 @api.route("/local/upload/profiler", methods=["POST"])
 def create_profiler_files():
     files = request.files.getlist("files")
@@ -1556,24 +1587,32 @@ def create_profiler_files():
     except DataFormatError:
         return response_unprocessable_entity()
 
-    profiler_path = next((p for p in paths if Path(p).name == "db.sqlite"), None)
+    report_dir = _created_report_root(paths, profiler_directory)
+    # Only the database at the top of the report folder counts. With an explicit
+    # `folderName` the depth check in `validate_files` is skipped, so a part named
+    # `<anything>/db.sqlite` would otherwise make that sub-folder's name, which the
+    # client chose, the one the hosted listing derives from `profiler_paths`.
+    profiler_path = report_dir / "db.sqlite"
+    if profiler_path not in paths:
+        return response_unprocessable_entity()
 
     instance_id = request.args.get("instanceId")
 
+    # The stored name must be the folder actually created, timestamp prefix and
+    # all: every later instance update rebuilds `profiler_path` from it, so the
+    # client's own name would point at whichever folder happens to carry it.
     update_instance(
         instance_id=instance_id,
-        profiler_name=parent_folder_name,
+        profiler_name=report_dir.name,
         profiler_location=ReportLocation.LOCAL.value,
         clear_remote=True,
-        profiler_path=str(profiler_path) if profiler_path else None,
+        profiler_path=str(profiler_path),
     )
 
-    report_dir = profiler_directory / parent_folder_name
-    report_name = None
     if pick_profiler_config_paths(report_dir):
         report_name = read_profiler_report_name(report_dir)
     else:
-        report_name = parent_folder_name
+        report_name = report_dir.name
 
     if current_app.config["SERVER_MODE"]:
         # Set session data (FIFO cap to avoid cookie size limits)
@@ -1584,7 +1623,7 @@ def create_profiler_files():
         session.permanent = True
 
     return {
-        "path": parent_folder_name,
+        "path": report_dir.name,
         "reportName": report_name,
     }
 
@@ -1638,16 +1677,16 @@ def create_performance_files():
     #   session scoping key in `get_performance_data_list`, so it must stay
     #   server-derived.
     #
-    # `parts[0]` is the folder `construct_dest_path` actually created,
-    # timestamp prefix and all, which keeps `performance_path` consistent with
-    # the `performance_name` written alongside it.
-    report_root = target_directory / paths[0].relative_to(target_directory).parts[0]
+    # The stored name is that folder's, timestamp prefix and all, so it agrees
+    # with `performance_path`: every later instance update rebuilds the path
+    # from the name.
+    report_root = _created_report_root(paths, target_directory)
     performance_path = str(report_root)
 
     instance_id = request.args.get("instanceId")
     update_instance(
         instance_id=instance_id,
-        performance_name=parent_folder_name,
+        performance_name=report_root.name,
         performance_location=ReportLocation.LOCAL.value,
         clear_remote=True,
         performance_path=performance_path,
@@ -2706,6 +2745,61 @@ def get_instance(instance: Instance):
     )
 
 
+_INSTANCE_PATH_KEYS = ("profiler_path", "performance_path", "npe_path", "mlir_path")
+
+
+def _hosted_instance_update_refusal(
+    update_data: dict, instance: Instance
+) -> Optional[str]:
+    """Why a hosted `PUT /instance` must be refused, or None when it may go ahead.
+
+    The hosted UI only ever selects or clears one of the session's own local memory or
+    performance reports by folder name. Anything wider lets a caller point an instance
+    at another visitor's report, or at any file the server can read, and the read
+    endpoints then serve it: paths are recomputed from names on every update and never
+    re-checked against the session.
+    """
+    if update_data.get("instance_id") not in (None, instance.instance_id):
+        return "Another instance can't be updated."
+
+    active_report = update_data.get("active_report")
+    if not isinstance(active_report, dict):
+        return None  # Left to the handler's own error path.
+
+    if any(key in active_report for key in _INSTANCE_PATH_KEYS):
+        return "Report paths can't be set directly."
+
+    for name_key in ("npe_name", "mlir_name"):
+        if active_report.get(name_key):
+            return f"{name_key} can't be set directly."
+
+    base_paths = create_path_resolver(current_app)
+    for name_key, location_key, kind, allowed_names in (
+        (
+            "profiler_name",
+            "profiler_location",
+            "profiler",
+            _hosted_profiler_directory_names,
+        ),
+        (
+            "performance_name",
+            "performance_location",
+            "performance",
+            _hosted_performance_directory_names,
+        ),
+    ):
+        name = active_report.get(name_key)
+        if not name:
+            continue
+        if active_report.get(location_key) != ReportLocation.LOCAL.value:
+            return f"{location_key} must be local."
+        directory_names, _ = allowed_names(base_paths.get_base_report_path(kind))
+        if name not in directory_names:
+            return f"Report {name!r} isn't available to this session."
+
+    return None
+
+
 @api.route("/instance", methods=["PUT"])
 @with_instance
 def update_current_instance(instance: Instance):
@@ -2714,6 +2808,12 @@ def update_current_instance(instance: Instance):
 
         if not update_data:
             return response_bad_request("No data provided.")
+
+        if current_app.config["SERVER_MODE"]:
+            refusal = _hosted_instance_update_refusal(update_data, instance)
+            if refusal is not None:
+                logger.warning("Refusing hosted instance update: %s", refusal)
+                return response_forbidden(refusal)
 
         # Use current instance unless a different one is specified
         instance_id = update_data.get("instance_id") or instance.instance_id
@@ -2742,7 +2842,7 @@ def update_current_instance(instance: Instance):
         # stays in effect for callers that omit them. This lets API consumers
         # pin an exact path while preserving the current frontend behaviour
         # (which sends names but not paths).
-        for path_key in ("profiler_path", "performance_path", "npe_path", "mlir_path"):
+        for path_key in _INSTANCE_PATH_KEYS:
             if path_key in active_report:
                 update_kwargs[path_key] = active_report[path_key]
 
