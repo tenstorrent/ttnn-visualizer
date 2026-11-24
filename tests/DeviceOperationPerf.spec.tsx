@@ -13,6 +13,7 @@ import { ReportLinkMatchResult } from '../src/definitions/ReportLinks';
 import { enrichRowData } from '../src/functions/enrichPerfRowData';
 import { NOT_MODELLED_REASON, SLOW_BOUND_REASON } from '../src/functions/perfBoundAnalysis';
 import { PerfTableRow, TypedPerfTableRow } from '../src/model/PerfTable';
+import { focusTooltipTarget } from './helpers/focusTooltipTarget';
 import { makeRawPerfRow } from './helpers/perfRowFixtures';
 
 // What the report would show for ttnn.cumsum in bge_m3: three device operations, none of them
@@ -133,8 +134,14 @@ const renderDeviceSummary = (row: TypedPerfTableRow) =>
         />,
     ).container;
 
-const openDetails = async (container: HTMLElement) => {
-    fireEvent.mouseEnter(container.querySelector('.device-operation-perf')!);
+const openDetails = async (container: HTMLElement, interaction: 'hover' | 'focus' = 'hover') => {
+    const target = container.querySelector('.device-operation-perf') as HTMLElement;
+
+    if (interaction === 'focus') {
+        focusTooltipTarget(target);
+    } else {
+        fireEvent.mouseEnter(target);
+    }
 
     return screen.findByText(/Performance report row/);
 };
@@ -159,6 +166,12 @@ describe('DeviceOperationPerfSummary', () => {
         expect(screen.getByText('Op-to-Op Gap')).toBeInTheDocument();
         expect(screen.getByText('Math Fidelity')).toBeInTheDocument();
         expect(screen.queryByText('Kernel Duration')).not.toBeInTheDocument();
+    });
+
+    it('opens the whole perf row from the keyboard', async () => {
+        const heading = await openDetails(renderDeviceSummary(accumulation), 'focus');
+
+        expect(heading).toHaveTextContent('Performance report row 6');
     });
 
     it("writes out once why an unanalysed op's roofline cells are empty", async () => {
