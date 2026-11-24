@@ -10,12 +10,18 @@ import { PERF_CHART_WIDE_LEFT_MARGIN, PlotConfiguration, getNsAxisConfig } from 
 import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
 import PerfChart from './PerfChart';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
-import getPlotLabel from '../../functions/getPlotLabel';
 import { getAxisUpperRange } from '../../functions/perfFunctions';
-import { buildSecondaryLineTraces } from '../../functions/perfChartTraces';
+import {
+    buildSecondaryLineTraces,
+    getOperationHoverTemplate,
+    getReportTraceFields,
+} from '../../functions/perfChartTraces';
 import { getMaxValue } from '../../functions/numericExtent';
 import isUnmodelledIdealTime from '../../functions/isUnmodelledIdealTime';
 import { getPrimaryDataColours } from '../../definitions/PerformancePlotColours';
+
+const getDeviceTimeNs = ({ device_time: deviceTimeUs }: TypedPerfTableRow): number =>
+    deviceTimeUs ? deviceTimeUs * 1000 : 0;
 
 const getModelledIdealTime = ({ pm_ideal_ns: idealNs }: TypedPerfTableRow): number | null =>
     isUnmodelledIdealTime(idealNs) ? null : idealNs;
@@ -26,35 +32,31 @@ interface PerfDeviceTimeChartProps {
 }
 
 function PerfDeviceTimeChart({ datasets = [], chartId }: PerfDeviceTimeChartProps) {
-    const perfReport = useAtomValue(activePerformanceReportAtom);
+    const reportName = useAtomValue(activePerformanceReportAtom)?.reportName ?? null;
     const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
 
     const deviceTimes = useMemo(
         () =>
             datasets.map((data, dataIndex) => ({
-                x: data?.map((_row, index) => index + 1),
-                y: data?.map((row) => (row.device_time ? row.device_time * 1000 : 0)), // Convert microseconds to nanoseconds
+                ...getReportTraceFields(data, dataIndex, { reportName, comparisonReportList }),
+                y: data.map(getDeviceTimeNs),
                 type: 'bar',
-                hovertemplate: `<b>%{data.name}</b><br />Operation: %{x}<br />Device time: %{y} ns<extra></extra>`,
-                name: getPlotLabel(dataIndex, perfReport?.reportName, comparisonReportList),
-                legendgroup: `group${dataIndex}`,
+                hovertemplate: getOperationHoverTemplate('Device time: %{y} ns'),
                 marker: {
                     color: getPrimaryDataColours(dataIndex),
                 },
             })) as Partial<PlotData>[],
-        [datasets, perfReport, comparisonReportList],
+        [datasets, reportName, comparisonReportList],
     );
 
     const { traces: idealTimes, maxValue: maxIdealTime } = useMemo(
         () =>
-            buildSecondaryLineTraces(
-                datasets,
-                getModelledIdealTime,
-                { valueHoverTemplate: 'Ideal time: %{y} ns' },
-                perfReport?.reportName ?? null,
+            buildSecondaryLineTraces(datasets, getModelledIdealTime, {
+                valueHoverTemplate: 'Ideal time: %{y} ns',
+                reportName,
                 comparisonReportList,
-            ),
-        [datasets, perfReport, comparisonReportList],
+            }),
+        [datasets, reportName, comparisonReportList],
     );
 
     const chartData = useMemo(() => [...deviceTimes, ...idealTimes], [deviceTimes, idealTimes]);
@@ -62,9 +64,7 @@ function PerfDeviceTimeChart({ datasets = [], chartId }: PerfDeviceTimeChartProp
     // Memoized because PerfChart derives the Plotly layout from it, and a fresh object redraws
     // the chart — and re-reads the chart chrome from the stylesheet — on every render.
     const configuration = useMemo<PlotConfiguration>(() => {
-        const maxDeviceTime = getMaxValue(
-            datasets.flatMap((data) => data.map((row) => (row.device_time ? row.device_time * 1000 : 0))),
-        ); // Convert microseconds to nanoseconds
+        const maxDeviceTime = getMaxValue(datasets.flatMap((data) => data.map(getDeviceTimeNs)));
 
         return {
             margin: PERF_CHART_WIDE_LEFT_MARGIN,

@@ -15,9 +15,12 @@ import {
 import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
 import PerfChart from './PerfChart';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom, mergeDevicesAtom } from '../../store/app';
-import getPlotLabel from '../../functions/getPlotLabel';
 import { getAxisUpperRange } from '../../functions/perfFunctions';
-import { buildUtilisationTraces } from '../../functions/perfChartTraces';
+import {
+    buildUtilisationTraces,
+    getOperationHoverTemplate,
+    getReportTraceFields,
+} from '../../functions/perfChartTraces';
 import { getPrimaryDataColours } from '../../definitions/PerformancePlotColours';
 import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
 
@@ -28,29 +31,27 @@ interface PerfCoreCountUtilizationChartProps {
 }
 
 function PerfCoreCountUtilizationChart({ datasets = [], maxCores, chartId }: PerfCoreCountUtilizationChartProps) {
-    const perfReport = useAtomValue(activePerformanceReportAtom);
+    const reportName = useAtomValue(activePerformanceReportAtom)?.reportName ?? null;
     const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
     const mergeDevices = useAtomValue(mergeDevicesAtom);
 
     const chartDataDuration = useMemo(
         () =>
             datasets.map((data, dataIndex) => ({
-                x: data?.map((_row, index) => index + 1),
-                y: data?.map((row) => row.cores),
+                ...getReportTraceFields(data, dataIndex, { reportName, comparisonReportList }),
+                y: data.map((row) => row.cores),
                 type: 'bar',
-                hovertemplate: `<b>%{data.name}</b><br />Operation: %{x}<br />Cores: %{y}<extra></extra>`,
-                name: getPlotLabel(dataIndex, perfReport?.reportName, comparisonReportList),
-                legendgroup: `group${dataIndex}`,
+                hovertemplate: getOperationHoverTemplate('Cores: %{y}'),
                 marker: {
                     color: getPrimaryDataColours(dataIndex),
                 },
             })) as Partial<PlotData>[],
-        [datasets, perfReport, comparisonReportList],
+        [datasets, reportName, comparisonReportList],
     );
 
     const { traces: chartDataUtilization, maxValue: maxY2Value } = useMemo(
-        () => buildUtilisationTraces(datasets, maxCores, perfReport?.reportName ?? null, comparisonReportList),
-        [datasets, perfReport, comparisonReportList, maxCores],
+        () => buildUtilisationTraces(datasets, maxCores, { reportName, comparisonReportList }),
+        [datasets, reportName, comparisonReportList, maxCores],
     );
 
     const chartData = useMemo(

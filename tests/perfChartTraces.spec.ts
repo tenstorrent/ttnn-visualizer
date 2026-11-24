@@ -11,6 +11,8 @@ import {
 } from '../src/functions/perfChartTraces';
 import { TypedPerfTableRow } from '../src/model/PerfTable';
 
+const BASE_ONLY = { reportName: 'Base', comparisonReportList: null };
+
 describe('buildLineTracesWithIsolatedMarkers', () => {
     const line = (y: (number | null)[]) => ({
         x: y.map((_value, index) => index + 1),
@@ -69,12 +71,13 @@ describe('buildSecondaryLineTraces', () => {
     const rows = (values: (number | null)[]) =>
         values.map((value) => ({ pm_ideal_ns: value }) as unknown as TypedPerfTableRow);
     const getIdealTime = (row: TypedPerfTableRow) => row.pm_ideal_ns;
-    const OPTIONS = { valueHoverTemplate: 'Ideal time: %{y} ns', yaxis: 'y2' };
+    const OPTIONS = { valueHoverTemplate: 'Ideal time: %{y} ns', yaxis: 'y2', ...BASE_ONLY };
 
     it('builds a line per report, named, grouped and coloured after its report', () => {
-        const { traces } = buildSecondaryLineTraces([rows([1, 2]), rows([3, 4, 5])], getIdealTime, OPTIONS, 'Base', [
-            'Other',
-        ]);
+        const { traces } = buildSecondaryLineTraces([rows([1, 2]), rows([3, 4, 5])], getIdealTime, {
+            ...OPTIONS,
+            comparisonReportList: ['Other'],
+        });
 
         expect(traces).toEqual(
             [
@@ -91,13 +94,7 @@ describe('buildSecondaryLineTraces', () => {
     });
 
     it('gives the largest known value across every report', () => {
-        const { maxValue } = buildSecondaryLineTraces(
-            [rows([2, null]), rows([null, 7, 3])],
-            getIdealTime,
-            OPTIONS,
-            'Base',
-            null,
-        );
+        const { maxValue } = buildSecondaryLineTraces([rows([2, null]), rows([null, 7, 3])], getIdealTime, OPTIONS);
 
         expect(maxValue).toBe(7);
     });
@@ -106,7 +103,7 @@ describe('buildSecondaryLineTraces', () => {
         ['no value is known', [rows([null, null])]],
         ['there are no reports', []],
     ])('gives -Infinity when %s', (_, datasets) => {
-        expect(buildSecondaryLineTraces(datasets, getIdealTime, OPTIONS, 'Base', null).maxValue).toBe(-Infinity);
+        expect(buildSecondaryLineTraces(datasets, getIdealTime, OPTIONS).maxValue).toBe(-Infinity);
     });
 });
 
@@ -115,7 +112,7 @@ describe('buildUtilisationTraces', () => {
         // 5 µs of a 10 µs op on every core.
         const row = { pm_ideal_ns: 5_000, device_time: 10, cores: 64, available_cores: null } as TypedPerfTableRow;
 
-        expect(buildUtilisationTraces([[row, row]], 64, 'Base', null)).toMatchObject({
+        expect(buildUtilisationTraces([[row, row]], 64, BASE_ONLY)).toMatchObject({
             traces: [
                 {
                     y: [0.5, 0.5],
