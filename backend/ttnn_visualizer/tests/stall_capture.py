@@ -269,6 +269,27 @@ def two_device_stall_rows(device_1: Dict[int, StallOp]) -> List[Dict[str, str]]:
     return rows
 
 
+def dropped_cb_sum_rows() -> Tuple[List[Dict[str, str]], int]:
+    """Both devices' rows with CB sums on one row alone, device 1's input-starved op,
+    which runs faster than device 0's, so tt-perf-report keeps device 0's row without
+    them; and that kept row's CSV position."""
+    ours = STALL_OPS[INPUT_STARVED_POSITION]
+    rows = two_device_stall_rows(
+        {INPUT_STARVED_POSITION: ours._replace(kernel_ns=ours.kernel_ns // 2)}
+    )
+    by_device = {
+        device: [row for row in rows if row["DEVICE ID"] == device][
+            INPUT_STARVED_POSITION
+        ]
+        for device in ("0", "1")
+    }
+    blanked = {CB_WAIT_FRONT: "", CB_RESERVE_BACK: ""}
+    return (
+        [row if row is by_device["1"] else {**row, **blanked} for row in rows],
+        rows.index(by_device["0"]),
+    )
+
+
 def write_stall_capture(directory: Path, sum_profiling: bool = True) -> Path:
     destination = write_ops_perf(directory, stall_rows(sum_profiling))
     write_device_log(directory, BLACKHOLE_PREAMBLE)

@@ -1149,14 +1149,15 @@ def counter_table(
 
 
 def _read_sum_profiled(instance: Instance) -> bool:
-    return OpsPerformanceReportQueries.sum_profiled(
+    return OpsPerformanceReportQueries.read_sum_profiled(
         OpsPerformanceQueries.get_local_ops_perf_file_path(instance)
     )
 
 
 def sum_profiled(registry: ReportRegistry, handle: str) -> bool:
     """Whether the handle's capture had sum profiling, read from its CSV, every device's
-    rows, as the counters route reads it; once per capture."""
+    rows, by the counters route's reader. Kept here once per capture, above that
+    reader's own per-file cache; a failed read fails the call and is not kept."""
     return _per_capture(
         registry, handle, CacheVariant.SUM_PROFILING, _read_sum_profiled
     )

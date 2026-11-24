@@ -46,6 +46,7 @@ from ttnn_visualizer.tests.stall_capture import (
     UNNAMED_STALL_POSITION,
     UNPACK_BOUND_POSITION,
     counter_average,
+    dropped_cb_sum_rows,
     kernel_share,
     stall_rows,
     write_stall_capture,
@@ -508,6 +509,18 @@ class TestStalls:
         instance_id = _mount(app, tmp_path / "one-blank")
 
         stalls = self._stalls(client, instance_id, INPUT_STARVED_POSITION)
+
+        assert stalls["cb_waits"] == {"state": "no_value", "fill_hint": None}
+
+    def test_a_kept_row_without_cb_sums_has_no_value_beside_a_dropped_row_with_them(
+        self, app, client, tmp_path
+    ):
+        """As `stall_breakdown` answers the row tt-perf-report keeps."""
+        rows, kept = dropped_cb_sum_rows()
+        write_ops_perf(tmp_path / "two-devices", rows)
+        instance_id = _mount(app, tmp_path / "two-devices")
+
+        stalls = self._stalls(client, instance_id, kept)
 
         assert stalls["cb_waits"] == {"state": "no_value", "fill_hint": None}
 

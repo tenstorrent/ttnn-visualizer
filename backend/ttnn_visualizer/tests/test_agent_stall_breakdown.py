@@ -35,6 +35,7 @@ from ttnn_visualizer.tests.stall_capture import (
     UNPACK_BOUND_POSITION,
     StallOp,
     counter_average,
+    dropped_cb_sum_rows,
     stall_rows,
     two_device_stall_rows,
     write_stall_capture,
@@ -501,44 +502,73 @@ class TestCapture:
     def test_a_capture_without_sum_profiling_is_read_for_it_once(
         self, without_sum_profiling
     ):
-        """From its CSV, as the counters route reads it; without a CB wait, finding none
-        reads every op."""
+        """Through the counters route's reader, once for the handle."""
         registry, handle = without_sum_profiling
 
         with patch.object(
             OpsPerformanceReportQueries,
-            "sum_profiled",
-            wraps=OpsPerformanceReportQueries.sum_profiled,
+            "read_sum_profiled",
+            wraps=OpsPerformanceReportQueries.read_sum_profiled,
         ) as read:
             stall_breakdown.stall_breakdown(registry, handle)
             stall_breakdown.stall_breakdown(registry, handle, op_code="Untilize")
 
         read.assert_called_once()
 
+    def test_two_handles_on_one_capture_read_it_once(self, tmp_path):
+        write_stall_capture(tmp_path / "no-sum", sum_profiling=False)
+        registry = ReportRegistry()
+        handles = [
+            load_report(registry, performance_path=str(tmp_path / "no-sum"))["handle"]
+            for _ in range(2)
+        ]
+
+        with patch.object(
+            OpsPerformanceReportQueries,
+            "read_sum_profiled",
+            wraps=OpsPerformanceReportQueries.read_sum_profiled,
+        ) as read:
+            answers = [
+                stall_breakdown.stall_breakdown(registry, handle) for handle in handles
+            ]
+
+        assert handles[0] != handles[1]
+        assert [answer["sum_profiling"] for answer in answers] == [False, False]
+        read.assert_called_once()
+
+    def test_a_failed_sum_profiling_read_fails_the_call_and_is_not_kept(self, captured):
+        """Kept, a passing read error would read as "no sum profiling", naming the flag,
+        for the capture's lifetime."""
+        registry, handle = captured
+        read = OpsPerformanceReportQueries.read_sum_profiled
+        calls = []
+
+        def once_unreadable(path):
+            calls.append(path)
+            if len(calls) == 1:
+                raise PermissionError(13, "Permission denied", path)
+            return read(path)
+
+        with patch.object(
+            OpsPerformanceReportQueries,
+            "read_sum_profiled",
+            side_effect=once_unreadable,
+        ):
+            with pytest.raises(PermissionError):
+                stall_breakdown.stall_breakdown(registry, handle)
+            answer = stall_breakdown.stall_breakdown(registry, handle)
+
+        assert len(calls) == 2
+        assert answer["sum_profiling"] is True
+
     def test_cb_waits_on_a_dropped_devices_rows_alone_still_mean_sum_profiling(
         self, tmp_path
     ):
         """Whether a capture was sum-profiled is a fact about its CSV, not about the rows
         tt-perf-report keeps: here the slower device's row, without CB sums, is kept."""
-        ours = STALL_OPS[INPUT_STARVED_POSITION]
-        rows = two_device_stall_rows(
-            {INPUT_STARVED_POSITION: ours._replace(kernel_ns=ours.kernel_ns // 2)}
-        )
-        dropped = [row for row in rows if row["DEVICE ID"] == "1"][
-            INPUT_STARVED_POSITION
-        ]
+        rows, _ = dropped_cb_sum_rows()
         directory = tmp_path / "two-devices"
-        write_ops_perf(
-            directory,
-            [
-                (
-                    row
-                    if row is dropped
-                    else {**row, CB_WAIT_FRONT: "", CB_RESERVE_BACK: ""}
-                )
-                for row in rows
-            ],
-        )
+        write_ops_perf(directory, rows)
         write_device_log(directory)
         registry, handle = _load(directory)
         merged = next(

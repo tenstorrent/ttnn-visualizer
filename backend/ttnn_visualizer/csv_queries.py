@@ -2302,13 +2302,20 @@ class OpsPerformanceReportQueries:
         )
 
     @staticmethod
+    def read_sum_profiled(path: str) -> bool:
+        """Whether any op of the CSV at `path` carries a CB wait, which only sum
+        profiling writes: read once per file, up to the first such op. A row that can't
+        be read before one counts as none; a file that can't be read raises OSError,
+        which is not cached. #2372"""
+        return _sum_profiled(FileSource.at(path))
+
+    @staticmethod
     def sum_profiled(path: str) -> bool:
-        """Whether any op of the CSV at `path`, the one the caller read its row from,
-        carries a CB wait, which only sum profiling writes: read once per file, up to the
-        first such op. A row that can't be read before one, or a file gone or unreadable
-        since, counts as none, so neither can fail an earlier row's counters. #2372"""
+        """`read_sum_profiled` of the CSV the caller read its row from, a file gone or
+        unreadable since counting as none, so it can't fail an earlier row's counters.
+        """
         try:
-            return _sum_profiled(FileSource.at(path))
+            return OpsPerformanceReportQueries.read_sum_profiled(path)
         except OSError:
             return False
 
