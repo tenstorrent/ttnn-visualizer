@@ -31,6 +31,7 @@ const teardown = vi.hoisted(() => vi.fn());
 const initEventLogging = vi.hoisted(() => vi.fn(() => teardown));
 const recordEvent = vi.hoisted(() => vi.fn());
 const persistReportLinks = vi.hoisted(() => vi.fn());
+const settleReportLoads = vi.hoisted(() => vi.fn());
 const axiosPost = vi.hoisted(() => vi.fn());
 // Lets the footer-containment case make the footer stub throw
 const footerStub = vi.hoisted(() => ({ shouldThrow: false }));
@@ -58,6 +59,8 @@ vi.mock('../src/libs/ModalAwareOutlet', () => ({ ModalAwareOutlet: () => null })
 // The real hook reads the query client and the report atoms; this spec only pins that
 // `Layout` mounts it (through `ReportLinkRecorder`), which is all that keeps report links recorded.
 vi.mock('../src/hooks/usePersistReportLinks', () => ({ default: persistReportLinks }));
+// Likewise `ReportLoadRecorder` is the only host of the settle that records a chosen report's load.
+vi.mock('../src/hooks/useReportLoadSettlement', () => ({ default: settleReportLoads }));
 // Only the linked-report case posts; it fails the request to leave a reason for `Layout` to show.
 vi.mock('../src/libs/axiosInstance', () => ({ default: { post: axiosPost } }));
 
@@ -292,6 +295,14 @@ describe('Layout report-link wiring', () => {
         renderLayout(Layout);
 
         expect(persistReportLinks).toHaveBeenCalled();
+    });
+
+    it('mounts the report-load recorder', async () => {
+        const { default: Layout } = await import('../src/components/Layout');
+
+        renderLayout(Layout);
+
+        expect(settleReportLoads).toHaveBeenCalled();
     });
 });
 

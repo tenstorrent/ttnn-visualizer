@@ -2,10 +2,9 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import axios, { HttpStatusCode } from 'axios';
 import { NPEValidationError, NPE_LOAD_FAILURE_REASON_BY_VALIDATION_ERROR } from '../definitions/NPEData';
 import { ReportLoadFailureReason } from '../definitions/EventLogEvent';
-import { getReportLoadFailureReason } from './reportLoadEvents';
+import { getParsedReportLoadFailureReason } from './reportLoadEvents';
 
 export default function getNpeReportLoadFailureReason(
     validationError: NPEValidationError,
@@ -16,9 +15,5 @@ export default function getNpeReportLoadFailureReason(
         return validationReason;
     }
 
-    if (axios.isAxiosError(error) && (error.status ?? error.response?.status) === HttpStatusCode.UnprocessableEntity) {
-        return ReportLoadFailureReason.PARSE_ERROR;
-    }
-
-    return getReportLoadFailureReason(error);
+    return getParsedReportLoadFailureReason(error);
 }

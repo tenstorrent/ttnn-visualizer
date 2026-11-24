@@ -8,10 +8,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AxiosError } from 'axios';
 import NpeWindowedView from '../src/components/npe/NpeWindowedView';
 import { useNpeSummary, useNpeWindow } from '../src/hooks/useAPI';
-import { NpeSummary } from '../src/model/NPEModel';
+import { NpeSummary, NpeWindow } from '../src/model/NPEModel';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { NPEValidationError } from '../src/definitions/NPEData';
-import { npeWindow, summary } from './helpers/npeFixtures';
+import { fabricTransfer, npeWindow, summary } from './helpers/npeFixtures';
 
 vi.mock('../src/hooks/useAPI', () => ({
     useNpeSummary: vi.fn(),
@@ -19,8 +19,13 @@ vi.mock('../src/hooks/useAPI', () => ({
 }));
 
 vi.mock('../src/components/npe/NPEViewComponent', () => ({
-    default: ({ selectedTimestep }: { selectedTimestep?: number }) => (
-        <div data-testid={TEST_IDS.NPE_VIEW}>step:{selectedTimestep}</div>
+    default: ({ selectedTimestep, hasFabricEvents }: { selectedTimestep?: number; hasFabricEvents?: boolean }) => (
+        <div
+            data-testid={TEST_IDS.NPE_VIEW}
+            data-has-fabric-events={String(hasFabricEvents)}
+        >
+            step:{selectedTimestep}
+        </div>
     ),
 }));
 
@@ -43,6 +48,9 @@ const windowedView = (loadAttemptId: number | null = null) => (
 type SummaryHook = ReturnType<typeof useNpeSummary>;
 type WindowHook = ReturnType<typeof useNpeWindow>;
 
+const settledSummary = (data: NpeSummary) => ({ data, isLoading: false, isError: false, error: null }) as SummaryHook;
+const settledWindow = (data?: NpeWindow) => ({ data, isError: false, error: null }) as WindowHook;
+
 afterEach(() => {
     cleanup();
     vi.clearAllMocks();
@@ -56,7 +64,7 @@ describe('NpeWindowedView', () => {
             isError: true,
             error: new Error('index build failed') as AxiosError,
         } as SummaryHook);
-        mockedWindow.mockReturnValue({ data: undefined, isError: false, error: null } as WindowHook);
+        mockedWindow.mockReturnValue(settledWindow());
 
         render(windowedView(10));
 
@@ -80,7 +88,7 @@ describe('NpeWindowedView', () => {
             isError: false,
             error: null,
         } as SummaryHook);
-        mockedWindow.mockReturnValue({ data: undefined, isError: false, error: null } as WindowHook);
+        mockedWindow.mockReturnValue(settledWindow());
 
         render(windowedView());
 
@@ -89,13 +97,8 @@ describe('NpeWindowedView', () => {
     });
 
     it('renders the view and auto-jumps to the first active step', () => {
-        mockedSummary.mockReturnValue({
-            data: summary,
-            isLoading: false,
-            isError: false,
-            error: null,
-        } as SummaryHook);
-        mockedWindow.mockReturnValue({ data: npeWindow, isError: false, error: null } as WindowHook);
+        mockedSummary.mockReturnValue(settledSummary(summary));
+        mockedWindow.mockReturnValue(settledWindow(npeWindow));
 
         render(windowedView());
 
@@ -103,14 +106,40 @@ describe('NpeWindowedView', () => {
         expect(screen.getByTestId(TEST_IDS.NPE_VIEW).textContent).toBe('step:1');
     });
 
+    // #2356: the window holds no fabric transfers, but the whole trace does, so the
+    // view must be told so rather than decide from the window.
+    it.each([true, false])(
+        "passes the whole trace's fabric-event flag (%s) to the view, not the window's",
+        (hasFabricEvents) => {
+            mockedSummary.mockReturnValue(settledSummary({ ...summary, has_fabric_events: hasFabricEvents }));
+            mockedWindow.mockReturnValue(settledWindow(npeWindow));
+
+            render(windowedView());
+
+            // Guards the fixture: the test means nothing if the window had fabric transfers.
+            expect(npeWindow.transfers).toEqual([]);
+            expect(screen.getByTestId(TEST_IDS.NPE_VIEW).getAttribute('data-has-fabric-events')).toBe(
+                String(hasFabricEvents),
+            );
+        },
+    );
+
+    it("keeps the whole trace's fabric-event flag when a scrub loads a window with fabric transfers", () => {
+        mockedSummary.mockReturnValue(settledSummary({ ...summary, has_fabric_events: false }));
+        mockedWindow.mockReturnValue(settledWindow(npeWindow));
+        const { rerender } = render(windowedView());
+        const flag = () => screen.getByTestId(TEST_IDS.NPE_VIEW).getAttribute('data-has-fabric-events');
+        expect(flag()).toBe('false');
+
+        mockedWindow.mockReturnValue(settledWindow({ ...npeWindow, transfers: [fabricTransfer] }));
+        rerender(windowedView());
+
+        expect(flag()).toBe('false');
+    });
+
     it('reports one successful initial load for the active attempt', async () => {
-        mockedSummary.mockReturnValue({
-            data: summary,
-            isLoading: false,
-            isError: false,
-            error: null,
-        } as SummaryHook);
-        mockedWindow.mockReturnValue({ data: npeWindow, isError: false, error: null } as WindowHook);
+        mockedSummary.mockReturnValue(settledSummary(summary));
+        mockedWindow.mockReturnValue(settledWindow(npeWindow));
 
         render(windowedView(7));
 
@@ -119,13 +148,10 @@ describe('NpeWindowedView', () => {
     });
 
     it('rejects an unsupported summary version before counting the load', async () => {
-        mockedSummary.mockReturnValue({
-            data: { ...summary, common_info: { ...summary.common_info, version: '2.0.0' } },
-            isLoading: false,
-            isError: false,
-            error: null,
-        } as SummaryHook);
-        mockedWindow.mockReturnValue({ data: npeWindow, isError: false, error: null } as WindowHook);
+        mockedSummary.mockReturnValue(
+            settledSummary({ ...summary, common_info: { ...summary.common_info, version: '2.0.0' } }),
+        );
+        mockedWindow.mockReturnValue(settledWindow(npeWindow));
 
         render(windowedView(8));
 
@@ -139,12 +165,7 @@ describe('NpeWindowedView', () => {
     it('degrades in place on a window error when a previous frame is available', () => {
         // keepPreviousData keeps the last good window, so the view stays up and a
         // non-blocking notice appears instead of replacing everything with an error.
-        mockedSummary.mockReturnValue({
-            data: summary,
-            isLoading: false,
-            isError: false,
-            error: null,
-        } as SummaryHook);
+        mockedSummary.mockReturnValue(settledSummary(summary));
         mockedWindow.mockReturnValue({
             data: npeWindow,
             isError: true,
@@ -174,13 +195,8 @@ describe('NpeWindowedView', () => {
                 active_count: [],
             },
         };
-        mockedSummary.mockReturnValue({
-            data: emptySummary,
-            isLoading: false,
-            isError: false,
-            error: null,
-        } as SummaryHook);
-        mockedWindow.mockReturnValue({ data: undefined, isError: false, error: null } as WindowHook);
+        mockedSummary.mockReturnValue(settledSummary(emptySummary));
+        mockedWindow.mockReturnValue(settledWindow());
 
         render(windowedView(11));
 
@@ -192,8 +208,8 @@ describe('NpeWindowedView', () => {
 
     it('re-clamps the selected timestep when a new (shorter) summary arrives', () => {
         // Report A: 3 steps, auto-jumps to the active step 1.
-        mockedSummary.mockReturnValue({ data: summary, isLoading: false, isError: false, error: null } as SummaryHook);
-        mockedWindow.mockReturnValue({ data: npeWindow, isError: false, error: null } as WindowHook);
+        mockedSummary.mockReturnValue(settledSummary(summary));
+        mockedWindow.mockReturnValue(settledWindow(npeWindow));
         const { rerender } = render(windowedView());
         expect(screen.getByTestId(TEST_IDS.NPE_VIEW).textContent).toBe('step:1');
 
@@ -212,7 +228,7 @@ describe('NpeWindowedView', () => {
                 active_count: [0],
             },
         };
-        mockedSummary.mockReturnValue({ data: shorter, isLoading: false, isError: false, error: null } as SummaryHook);
+        mockedSummary.mockReturnValue(settledSummary(shorter));
         act(() => {
             rerender(windowedView());
         });
@@ -221,12 +237,7 @@ describe('NpeWindowedView', () => {
     });
 
     it('surfaces and records a first-window error when no frame has loaded yet', async () => {
-        mockedSummary.mockReturnValue({
-            data: summary,
-            isLoading: false,
-            isError: false,
-            error: null,
-        } as SummaryHook);
+        mockedSummary.mockReturnValue(settledSummary(summary));
         mockedWindow.mockReturnValue({
             data: undefined,
             isError: true,

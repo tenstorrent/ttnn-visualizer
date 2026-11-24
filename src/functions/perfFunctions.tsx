@@ -247,7 +247,8 @@ export const formatCellText = (row: TypedPerfTableRow, column: ColumnDefinition)
     const { unit, decimals } = column;
     const value = row[column.key];
 
-    if (value === null || value === '' || Number.isNaN(value)) {
+    // `== null`: a hardware counter key is absent from a row whose report lacks its column.
+    if (value == null || value === '' || Number.isNaN(value)) {
         return '';
     }
 

@@ -5,6 +5,7 @@
 import axios, { HttpStatusCode } from 'axios';
 import { EventLogEvent, ReportKind, ReportLoadFailureReason, ReportSource } from '../definitions/EventLogEvent';
 import { ReportFolder } from '../definitions/Reports';
+import getErrorStatus from './getErrorStatus';
 import getServerConfig from './getServerConfig';
 import recordEvent from './recordEvent';
 
@@ -27,22 +28,20 @@ export function recordReportLoadFailed(kind: ReportKind, reason: ReportLoadFailu
 }
 
 /** Classify and record a failure, skipping axios cancels so abort is not a load failure. */
-export function recordReportLoadFailure(kind: ReportKind, error: unknown): void {
+export function recordReportLoadFailure(
+    kind: ReportKind,
+    error: unknown,
+    classify: (error: unknown) => ReportLoadFailureReason = getReportLoadFailureReason,
+): void {
     if (axios.isCancel(error)) {
         return;
     }
 
-    recordReportLoadFailed(kind, getReportLoadFailureReason(error));
+    recordReportLoadFailed(kind, classify(error));
 }
 
 export function getReportLoadFailureReason(error: unknown): ReportLoadFailureReason {
-    if (!axios.isAxiosError(error)) {
-        return ReportLoadFailureReason.OTHER;
-    }
-
-    const status = error.status ?? error.response?.status;
-
-    switch (status) {
+    switch (getErrorStatus(error)) {
         case HttpStatusCode.Unauthorized:
         case HttpStatusCode.Forbidden:
             return ReportLoadFailureReason.PERMISSION;
@@ -53,4 +52,11 @@ export function getReportLoadFailureReason(error: unknown): ReportLoadFailureRea
         default:
             return ReportLoadFailureReason.OTHER;
     }
+}
+
+/** As `getReportLoadFailureReason`, for a read whose 422 means the server could not parse the report. */
+export function getParsedReportLoadFailureReason(error: unknown): ReportLoadFailureReason {
+    return getErrorStatus(error) === HttpStatusCode.UnprocessableEntity
+        ? ReportLoadFailureReason.PARSE_ERROR
+        : getReportLoadFailureReason(error);
 }

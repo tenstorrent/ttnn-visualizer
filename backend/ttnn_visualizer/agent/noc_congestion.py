@@ -27,10 +27,10 @@ from typing import Callable, Dict, List, Optional, Tuple, Union
 import zstd
 from ttnn_visualizer import npe_index
 from ttnn_visualizer.agent.bounds import MAX_LIMIT, bounded, name_fits
-from ttnn_visualizer.agent.cells import finite_number, whole_number
 from ttnn_visualizer.agent.handles import CacheVariant, ReportRegistry, read_once
 from ttnn_visualizer.agent.report_diff import as_answered
 from ttnn_visualizer.agent.tools import share_percent
+from ttnn_visualizer.cells import finite_number, whole_number
 from ttnn_visualizer.file_source import FileSource
 
 # Demand past a link's whole bandwidth: asked of it, but more than it could carry.

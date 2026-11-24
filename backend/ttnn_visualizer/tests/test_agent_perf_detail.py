@@ -13,6 +13,7 @@ import json
 from unittest.mock import patch
 
 import pytest
+from ttnn_visualizer import hardware_counters
 from ttnn_visualizer.agent import perf_detail, server, tools
 from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_LIMIT, bounded
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
@@ -24,6 +25,7 @@ from ttnn_visualizer.csv_queries import (
     OpsPerformanceReportQueries,
     ResolvedSignposts,
 )
+from ttnn_visualizer.device_architecture import DeviceArchitecture
 from ttnn_visualizer.tests.captured_graphs import CapturedGraph
 from ttnn_visualizer.tests.smoke_capture import smoke_rows, write_ops_perf
 from ttnn_visualizer.tests.test_agent_linking import _graph, _write_profiler
@@ -62,6 +64,38 @@ FIELD_NAMES = {
         "dram_bw_util_per_controller",
         "eth_bw_util_per_core",
         "npe_congestion_impact_percent",
+    ],
+    DetailGroup.COUNTERS: [
+        "hw_fpu_util_percent",
+        "hw_fpu_util_min_percent",
+        "hw_fpu_util_max_percent",
+        "hw_sfpu_util_percent",
+        "hw_sfpu_util_min_percent",
+        "hw_sfpu_util_max_percent",
+        "hw_math_util_percent",
+        "hw_math_util_min_percent",
+        "hw_math_util_max_percent",
+        "hw_packer_util_percent",
+        "hw_packer_util_min_percent",
+        "hw_packer_util_max_percent",
+        "hw_unpacker0_busy_percent",
+        "hw_unpacker0_busy_min_percent",
+        "hw_unpacker0_busy_max_percent",
+        "hw_unpacker1_busy_percent",
+        "hw_unpacker1_busy_min_percent",
+        "hw_unpacker1_busy_max_percent",
+        "hw_l1_bandwidth_util_percent",
+        "hw_l1_bandwidth_util_min_percent",
+        "hw_l1_bandwidth_util_max_percent",
+        "hw_noc_ring0_util_percent",
+        "hw_noc_ring0_util_min_percent",
+        "hw_noc_ring0_util_max_percent",
+        "hw_noc_ring1_util_percent",
+        "hw_noc_ring1_util_min_percent",
+        "hw_noc_ring1_util_max_percent",
+        "hw_grid_fpu_util_percent",
+        "hw_grid_sfpu_util_percent",
+        "hw_grid_math_util_percent",
     ],
     DetailGroup.RISCS: [
         "kernel_us",
@@ -111,6 +145,7 @@ FILLED_BY = {
         "ideal_bandwidth_us",
         "fpu_util_percent",
     ],
+    "--profiler-capture-perf-counters": FIELD_NAMES[DetailGroup.COUNTERS],
 }
 
 
@@ -341,6 +376,7 @@ class TestFieldContract:
             *queries.REPORT_COLUMN_HEADERS,
             *queries.PASSTHROUGH_COLUMNS,
             *queries.DETAIL_COLUMNS,
+            *hardware_counters.REPORT_ROW_KEYS,
             # `set_hash_from_results` names these itself.
             "hash",
             "cache_hit",
@@ -464,6 +500,26 @@ class TestEmptyInReport:
         )
 
         assert set(named) == set(FIELD_NAMES[DetailGroup.NOC])
+
+    @pytest.mark.parametrize(
+        ("architecture", "groups"),
+        [
+            (DeviceArchitecture.BLACKHOLE, "=l1_1 or =l1_3"),
+            (DeviceArchitecture.WORMHOLE, "=l1_1"),
+            (DeviceArchitecture.UNKNOWN, "=l1_1"),
+        ],
+    )
+    def test_a_counter_names_the_groups_its_architecture_has(
+        self, architecture, groups
+    ):
+        """Wormhole has no l1_2 to l1_5, so a hint must never send it there."""
+        named = perf_detail.empty_in_report(
+            {"hw_noc_ring1_util_percent": True}, [DetailGroup.COUNTERS], architecture
+        )
+
+        assert named["hw_noc_ring1_util_percent"].endswith(
+            f"--profiler-capture-perf-counters{groups}"
+        )
 
 
 class TestBounded:

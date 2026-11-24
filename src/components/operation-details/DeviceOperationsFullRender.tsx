@@ -47,6 +47,7 @@ import { ScopeOutcome } from '../../definitions/ScopeOutcome';
 import { TypedPerfTableRow } from '../../model/PerfTable';
 import { useDeviceOperationPerf } from '../../hooks/useDeviceOperationPerf';
 import { DeviceOperationPerfSummary, OperationDevicePerfSummary } from './DeviceOperationPerf';
+import DeviceOperationUtilization from './DeviceOperationUtilization';
 
 type BufferDetails = {
     bufferOrTensorNode?: BufferNode | TensorNode;
@@ -244,6 +245,8 @@ function useDeviceOperationsFullRenderModel(args: {
     hasRecordedError: boolean;
     perfRowByStartNodeId: ReadonlyMap<number, TypedPerfTableRow>;
     totalDeviceTimeUs: number;
+    hasHardwareCounters: boolean;
+    isMultiDeviceReport: boolean;
     colorVariance?: number;
 }) {
     const {
@@ -256,6 +259,8 @@ function useDeviceOperationsFullRenderModel(args: {
         hasRecordedError,
         perfRowByStartNodeId,
         totalDeviceTimeUs,
+        hasHardwareCounters,
+        isMultiDeviceReport,
     } = args;
 
     const selectedAddress = useAtomValue(selectedAddressAtom);
@@ -351,10 +356,18 @@ function useDeviceOperationsFullRenderModel(args: {
                         perfRow || hasArgs ? (
                             <>
                                 {perfRow && (
-                                    <DeviceOperationPerfSummary
-                                        row={perfRow}
-                                        totalDeviceTimeUs={totalDeviceTimeUs}
-                                    />
+                                    <>
+                                        <DeviceOperationPerfSummary
+                                            row={perfRow}
+                                            totalDeviceTimeUs={totalDeviceTimeUs}
+                                        />
+                                        {hasHardwareCounters && (
+                                            <DeviceOperationUtilization
+                                                perfId={perfRow.id}
+                                                isMultiDevice={isMultiDeviceReport}
+                                            />
+                                        )}
+                                    </>
                                 )}
                                 {hasArgs && (
                                     <Button
@@ -398,6 +411,8 @@ function useDeviceOperationsFullRenderModel(args: {
             setDeviceOperationsArgsNode,
             setDeviceOperationsArgsOpen,
             totalDeviceTimeUs,
+            hasHardwareCounters,
+            isMultiDeviceReport,
         ],
     );
 
@@ -690,6 +705,8 @@ const DeviceOperationsFullRender = ({
         hasRecordedError,
         perfRowByStartNodeId: devicePerf.rowByStartNodeId,
         totalDeviceTimeUs: devicePerf.totalDeviceTimeUs,
+        hasHardwareCounters: devicePerf.hasHardwareCounters,
+        isMultiDeviceReport: devicePerf.isMultiDeviceReport,
     });
     const { perfRows, hasDeviceOperations } = useMemo(() => {
         const scopes = deviceOperations.filter(

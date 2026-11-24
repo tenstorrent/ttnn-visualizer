@@ -3,9 +3,8 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 @use '../definitions/colours' as colours;
+@use '../definitions/variables' as variables;
 
-$bar-height: 10px;
-$bar-radius: 2px;
 $bar-used: colours.$tt-red-shade;
 $bar-largest-free: rgb(0 169 70);
 
@@ -43,8 +42,8 @@ $swatch-radius: 2px;
         display: flex;
         flex-direction: row;
         width: 100%;
-        height: $bar-height;
-        border-radius: $bar-radius;
+        height: variables.$meter-bar-height;
+        border-radius: variables.$meter-bar-radius;
         overflow: hidden;
         background-color: colours.$tt-grey-3;
 

@@ -157,12 +157,9 @@ export const DeviceOperationPerfSummary = ({ row, totalDeviceTimeUs }: DeviceOpe
             className='device-operation-perf-target'
             popoverClassName='device-operation-perf-popover'
         >
-            <span
-                className={classNames('device-operation-perf', Classes.TOOLTIP_INDICATOR)}
-                // Focusable so the card, the only place these details show, opens from the keyboard too.
-                // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
-                tabIndex={0}
-            >
+            {/* The tooltip makes its target focusable, so the card, the only place these details show,
+                opens from the keyboard too. */}
+            <span className={classNames('device-operation-perf', Classes.TOOLTIP_INDICATOR)}>
                 {parts.map(({ key, node }, index) => (
                     <Fragment key={key}>
                         {index > 0 && <span className='separator'>·</span>}
