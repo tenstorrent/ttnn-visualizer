@@ -337,11 +337,12 @@ def _dram_bound(row: FlagRow, max_cores: float) -> Dict[str, object]:
 
 def _low_utilisation(row: FlagRow, max_cores: float) -> Dict[str, object]:
     utilisation = core_utilisation(row, max_cores)
-    assert utilisation is not None, "flag_names flags only a utilisation it read"
     return {
         "flag": PerfHeuristicFlag.LOW_UTILISATION.value,
         # Cut, not rounded, so a figure under the threshold never reads as at it.
-        "core_utilisation_percent": math.floor(utilisation * 100_000) / 1000,
+        "core_utilisation_percent": (
+            None if utilisation is None else math.floor(utilisation * 100_000) / 1000
+        ),
         "roofline_modelled": (
             None
             if row.bound_analysis is None

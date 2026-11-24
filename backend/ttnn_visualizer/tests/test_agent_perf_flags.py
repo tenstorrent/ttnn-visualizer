@@ -239,6 +239,16 @@ class TestEvidence:
 
         assert 29.99 <= low["core_utilisation_percent"] < 30
 
+    def test_a_low_utilisation_flag_without_a_utilisation_gives_no_figure(self):
+        """Should `flag_names` ever flag a row whose utilisation can't be read."""
+        row = perf_flags.typed_row(_row(1, **{**_LOW, "pm_ideal_ns": "1"}))
+        flagged = [perf_flags.PerfHeuristicFlag.LOW_UTILISATION]
+
+        with patch.object(perf_flags, "flag_names", return_value=flagged):
+            (low,) = perf_flags.heuristic_flags(row, 64)
+
+        assert low["core_utilisation_percent"] is None
+
     def test_a_recompute_candidate_carries_no_figure(self):
         """Its program's hash is the `cache` group's `program_hash`."""
         row = perf_flags.typed_row(

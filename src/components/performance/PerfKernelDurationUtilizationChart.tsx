@@ -39,7 +39,7 @@ function PerfKernelDurationUtilizationChart({ datasets, maxCores, chartId }: Per
                 y: data?.map((row) => getCoreUtilization(row, maxCores)),
                 mode: 'markers',
                 type: 'scatter',
-                name: getPlotLabel(dataIndex, reportName, comparisonReportList) ?? undefined,
+                name: getPlotLabel(dataIndex, reportName, comparisonReportList),
                 marker: {
                     size: 10,
                     color: getPrimaryDataColours(dataIndex),
