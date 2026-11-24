@@ -43,7 +43,12 @@ const OPERATIONS = [1, 2, 3, 4];
 const latestPlot = () => getPlotInstances().at(-1);
 const traces = () => (latestPlot()?.data ?? []) as Partial<PlotData>[];
 const layout = () => latestPlot()?.layout as Partial<Layout>;
-const traceOnY2 = () => traces().find((trace) => trace.yaxis === 'y2');
+const isMarkersOnly = (trace: Partial<PlotData>) => trace.mode === 'markers';
+const lineOnY2 = () => traces().find((trace) => trace.yaxis === 'y2' && !isMarkersOnly(trace));
+const markersOnY2 = () => traces().filter((trace) => trace.yaxis === 'y2' && isMarkersOnly(trace));
+
+// Only the second op has a value with no neighbour, so it alone needs a marker.
+const ISOLATED_MARKERS = { x: [2], mode: 'markers', showlegend: false, hoverinfo: 'skip' };
 
 afterEach(() => {
     cleanup();
@@ -62,9 +67,10 @@ describe('utilisation charts', () => {
             </TestProviders>,
         );
 
-        expect(traceOnY2()?.x).toEqual(OPERATIONS);
-        expect(traceOnY2()?.y).toEqual([null, 0.5, null, null]);
-        expect(traceOnY2()?.mode).toBe('lines+markers');
+        expect(lineOnY2()?.x).toEqual(OPERATIONS);
+        expect(lineOnY2()?.y).toEqual([null, 0.5, null, null]);
+        expect(lineOnY2()?.mode).toBeUndefined();
+        expect(markersOnY2()).toMatchObject([{ ...ISOLATED_MARKERS, y: [0.5], yaxis: 'y2' }]);
         expect(layout().yaxis2?.range).toEqual([0, 1.1]);
     });
 
@@ -79,9 +85,10 @@ describe('utilisation charts', () => {
             </TestProviders>,
         );
 
-        expect(traceOnY2()?.x).toEqual(OPERATIONS);
-        expect(traceOnY2()?.y).toEqual([null, 0.5, null, null]);
-        expect(traceOnY2()?.mode).toBe('lines+markers');
+        expect(lineOnY2()?.x).toEqual(OPERATIONS);
+        expect(lineOnY2()?.y).toEqual([null, 0.5, null, null]);
+        expect(lineOnY2()?.mode).toBeUndefined();
+        expect(markersOnY2()).toMatchObject([{ ...ISOLATED_MARKERS, y: [0.5], yaxis: 'y2' }]);
     });
 
     it('leave an unknown utilisation out of Utilization vs Kernel Duration', () => {
@@ -101,7 +108,7 @@ describe('utilisation charts', () => {
         expect(layout().yaxis?.range).toEqual([0, 1.1]);
     });
 
-    it('keep Plotly’s default line mode when every utilisation is known', () => {
+    it('add no markers when every utilisation is known', () => {
         render(
             <TestProviders>
                 <PerfCoreCountUtilizationChart
@@ -112,8 +119,9 @@ describe('utilisation charts', () => {
             </TestProviders>,
         );
 
-        expect(traceOnY2()?.y).toEqual([0.5, 0.5]);
-        expect(traceOnY2()?.mode).toBeUndefined();
+        expect(lineOnY2()?.y).toEqual([0.5, 0.5]);
+        expect(lineOnY2()?.mode).toBeUndefined();
+        expect(markersOnY2()).toEqual([]);
     });
 });
 
@@ -128,10 +136,11 @@ describe('Device Time + Ideal Time', () => {
             </TestProviders>,
         );
 
-        const [, idealTimes] = traces();
+        const [, idealTimes, isolatedIdealTimes] = traces();
         expect(idealTimes.x).toEqual(OPERATIONS);
         expect(idealTimes.y).toEqual([null, IDEAL_NS, null, null]);
-        expect(idealTimes.mode).toBe('lines+markers');
+        expect(idealTimes.mode).toBeUndefined();
+        expect(isolatedIdealTimes).toMatchObject({ ...ISOLATED_MARKERS, y: [IDEAL_NS] });
     });
 
     it('sizes the time axis without the placeholder', () => {
@@ -157,6 +166,7 @@ describe('Device Time + Ideal Time', () => {
             </TestProviders>,
         );
 
+        expect(traces()).toHaveLength(2);
         const [, idealTimes] = traces();
         expect(idealTimes.y).toEqual([2, IDEAL_NS]);
         expect(idealTimes.mode).toBeUndefined();

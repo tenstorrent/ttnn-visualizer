@@ -11,7 +11,7 @@ import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCha
 import PerfChart from './PerfChart';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import getPlotLabel from '../../functions/getPlotLabel';
-import { getAxisUpperRange, getLineModeForGaps } from '../../functions/perfFunctions';
+import { getAxisUpperRange, withIsolatedPointMarkers } from '../../functions/perfFunctions';
 import { getMaxFiniteValue, getMaxValue } from '../../functions/numericExtent';
 import isUnmodelledIdealTime from '../../functions/isUnmodelledIdealTime';
 import { getPrimaryDataColours, getSecondaryDataColours } from '../../definitions/PerformancePlotColours';
@@ -46,21 +46,18 @@ function PerfDeviceTimeChart({ datasets = [], chartId }: PerfDeviceTimeChartProp
 
     const idealTimes = useMemo(
         () =>
-            datasets.map((data, dataIndex) => {
-                const idealTime = data.map(getModelledIdealTime);
-
-                return {
+            datasets.flatMap((data, dataIndex) =>
+                withIsolatedPointMarkers({
                     x: data.map((_row, index) => index + 1),
-                    y: idealTime,
-                    mode: getLineModeForGaps(idealTime),
+                    y: data.map(getModelledIdealTime),
                     hovertemplate: `<b>%{data.name}</b><br />Operation: %{x}<br />Ideal time: %{y} ns<extra></extra>`,
-                    name: getPlotLabel(dataIndex, perfReport?.reportName, comparisonReportList),
+                    name: getPlotLabel(dataIndex, perfReport?.reportName, comparisonReportList) ?? undefined,
                     legendgroup: `group${dataIndex}`,
                     marker: {
                         color: getSecondaryDataColours(dataIndex),
                     },
-                };
-            }) as Partial<PlotData>[],
+                }),
+            ),
         [datasets, perfReport, comparisonReportList],
     );
 

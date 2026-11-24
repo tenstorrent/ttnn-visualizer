@@ -6,7 +6,6 @@ import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { TypedPerfTableRow } from '../../model/PerfTable';
-import getCoreUtilization from '../../functions/getCoreUtilization';
 import PerfChart from './PerfChart';
 import {
     PlotConfiguration,
@@ -14,12 +13,12 @@ import {
     getNsAxisConfig,
 } from '../../definitions/PlotConfigurations';
 import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
-import { getAxisUpperRange, getLineModeForGaps } from '../../functions/perfFunctions';
+import { buildUtilisationTraces, getAxisUpperRange } from '../../functions/perfFunctions';
 import getPlotLabel from '../../functions/getPlotLabel';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom, mergeDevicesAtom } from '../../store/app';
-import { getPrimaryDataColours, getSecondaryDataColours } from '../../definitions/PerformancePlotColours';
+import { getPrimaryDataColours } from '../../definitions/PerformancePlotColours';
 import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
-import { getMaxFiniteValue, getMaxValue } from '../../functions/numericExtent';
+import { getMaxValue } from '../../functions/numericExtent';
 
 interface PerfOperationKernelUtilizationChartProps {
     datasets?: TypedPerfTableRow[][];
@@ -52,29 +51,12 @@ function PerfOperationKernelUtilizationChart({
         [datasets, perfReport, comparisonReportList],
     );
 
-    const chartDataUtilization = useMemo(
-        () =>
-            datasets.map((data, dataIndex) => {
-                const utilization = data.map((row) => getCoreUtilization(row, maxCores));
-
-                return {
-                    x: data.map((_row, index) => index + 1),
-                    y: utilization,
-                    mode: getLineModeForGaps(utilization),
-                    yaxis: 'y2',
-                    hovertemplate: `<b>%{data.name}</b><br />Operation: %{x}<br />Utilization: %{y}<extra></extra>`,
-                    name: getPlotLabel(dataIndex, perfReport?.reportName, comparisonReportList),
-                    legendgroup: `group${dataIndex}`,
-                    marker: {
-                        color: getSecondaryDataColours(dataIndex),
-                    },
-                };
-            }) as Partial<PlotData>[],
+    const { traces: chartDataUtilization, maxUtilisation: maxY2Value } = useMemo(
+        () => buildUtilisationTraces(datasets, maxCores, perfReport?.reportName, comparisonReportList),
         [datasets, maxCores, perfReport, comparisonReportList],
     );
 
     const maxYValue = getMaxValue(chartDataDuration.flatMap((data) => (data.y as number[]) ?? []));
-    const maxY2Value = getMaxFiniteValue(chartDataUtilization.flatMap((data) => data.y as (number | null)[]));
 
     const configuration: PlotConfiguration = {
         margin: {
