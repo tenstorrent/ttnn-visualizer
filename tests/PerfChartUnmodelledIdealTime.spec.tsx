@@ -12,6 +12,7 @@ import PerfDeviceTimeChart from '../src/components/performance/PerfDeviceTimeCha
 import PerfKernelDurationUtilizationChart from '../src/components/performance/PerfKernelDurationUtilizationChart';
 import PerfOperationKernelUtilizationChart from '../src/components/performance/PerfOperationKernelUtilizationChart';
 import { PerfChartId } from '../src/definitions/PerformanceCharts';
+import { getSecondaryDataColours } from '../src/definitions/PerformancePlotColours';
 import { OpType } from '../src/definitions/Performance';
 import { TypedPerfTableRow } from '../src/model/PerfTable';
 import { mergeDevicesAtom } from '../src/store/app';
@@ -52,13 +53,21 @@ const markersOnY2 = () => traces().filter((trace) => trace.yaxis === 'y2' && isM
 const ISOLATED_MARKERS = { x: [2], mode: 'markers', showlegend: false, hoverinfo: 'skip' };
 const MERGED_DEVICES_NOTICE = /Multi device operations are merged/;
 
-const renderWithDevicesMerged = (rows: TypedPerfTableRow[]) =>
+type OpUtilisationChart = typeof PerfCoreCountUtilizationChart;
+
+// Both charts that plot utilisation per op gate the merged-devices notice on a known utilisation.
+const OP_UTILISATION_CHARTS: [string, OpUtilisationChart, PerfChartId][] = [
+    ['Core Count + Utilization', PerfCoreCountUtilizationChart, PerfChartId.MatmulCoreCountUtilization],
+    ['Kernel Duration + Utilization', PerfOperationKernelUtilizationChart, PerfChartId.MatmulKernelDurationUtilization],
+];
+
+const renderWithDevicesMerged = (Chart: OpUtilisationChart, chartId: PerfChartId, rows: TypedPerfTableRow[]) =>
     render(
         <TestProviders initialAtomValues={[[mergeDevicesAtom, true]]}>
-            <PerfCoreCountUtilizationChart
+            <Chart
                 datasets={[rows]}
                 maxCores={MAX_CORES}
-                chartId={PerfChartId.MatmulCoreCountUtilization}
+                chartId={chartId}
             />
         </TestProviders>,
     );
@@ -153,17 +162,23 @@ describe('utilisation charts', () => {
         expect(markersOnY2()).toMatchObject([{ ...ISOLATED_MARKERS, legendgroup: 'group0' }]);
     });
 
-    it('hide the merged-devices notice when no utilisation is known', () => {
-        renderWithDevicesMerged([row({ pm_ideal_ns: 1 }), row({ pm_ideal_ns: 1 })]);
+    it.each(OP_UTILISATION_CHARTS)(
+        'hide the merged-devices notice on %s when no utilisation is known',
+        (_, Chart, chartId) => {
+            renderWithDevicesMerged(Chart, chartId, [row({ pm_ideal_ns: 1 }), row({ pm_ideal_ns: 1 })]);
 
-        expect(screen.queryByText(MERGED_DEVICES_NOTICE)).not.toBeInTheDocument();
-    });
+            expect(screen.queryByText(MERGED_DEVICES_NOTICE)).not.toBeInTheDocument();
+        },
+    );
 
-    it('show the merged-devices notice once a utilisation is known', () => {
-        renderWithDevicesMerged([row(), row()]);
+    it.each(OP_UTILISATION_CHARTS)(
+        'show the merged-devices notice on %s once a utilisation is known',
+        (_, Chart, chartId) => {
+            renderWithDevicesMerged(Chart, chartId, [row(), row()]);
 
-        expect(screen.getByText(MERGED_DEVICES_NOTICE)).toBeInTheDocument();
-    });
+            expect(screen.getByText(MERGED_DEVICES_NOTICE)).toBeInTheDocument();
+        },
+    );
 
     it('leave every value out when no utilisation is known, with no markers', () => {
         render(
@@ -198,6 +213,26 @@ describe('Device Time + Ideal Time', () => {
         expect(idealTimes.y).toEqual([null, IDEAL_NS, null, null]);
         expect(idealTimes.mode).toBeUndefined();
         expect(isolatedIdealTimes).toMatchObject({ ...ISOLATED_MARKERS, y: [IDEAL_NS] });
+    });
+
+    it("groups and colours each report's markers with its own line in comparison mode", () => {
+        render(
+            <TestProviders>
+                <PerfDeviceTimeChart
+                    datasets={[ROWS, ROWS]}
+                    chartId={PerfChartId.MatmulDeviceTime}
+                />
+            </TestProviders>,
+        );
+
+        expect(traces().filter(isMarkersOnly)).toMatchObject(
+            [0, 1].map((dataIndex) => ({
+                ...ISOLATED_MARKERS,
+                y: [IDEAL_NS],
+                legendgroup: `group${dataIndex}`,
+                marker: { color: getSecondaryDataColours(dataIndex) },
+            })),
+        );
     });
 
     it('sizes the time axis without the placeholder', () => {
