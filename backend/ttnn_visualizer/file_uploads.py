@@ -18,8 +18,31 @@ from ttnn_visualizer.exceptions import DataFormatError
 logger = logging.getLogger(__name__)
 
 
+def _is_safe_folder_name(name):
+    """Whether *name* can only ever be a single directory directly under its parent.
+
+    The report folder name is client-controlled: either the ``folderName`` form field
+    or the leading segment of the first file's multipart filename. Anything that is
+    not one plain path segment lets an unauthenticated upload climb out of the upload
+    directory and overwrite arbitrary files, the app database included (ITSEC-561).
+    Backslashes are refused although POSIX treats them as ordinary characters, so the
+    rule does not depend on which platform the server runs on.
+    """
+    if not name or name in (".", ".."):
+        return False
+    return not any(char in name for char in ("/", "\\", "\0"))
+
+
 def validate_files(files, required_files, pattern=None, folder_name=None):
     """Validate uploaded files against required file names and an optional pattern."""
+    report_folder_name = resolve_parent_folder_name(files, folder_name)
+    if not _is_safe_folder_name(report_folder_name):
+        logger.warning(
+            "Refusing upload with an unsafe report folder name: %r",
+            report_folder_name,
+        )
+        return False
+
     found_files = set()
     leading_segments = set()
 
@@ -237,6 +260,8 @@ def construct_dest_path(file, target_directory, folder_name, prefix=None):
         prefix = _upload_prefix()
 
     if folder_name:
+        if not _is_safe_folder_name(folder_name):
+            raise DataFormatError(f"Unsafe report folder name {folder_name!r}")
         # Folder uploads legitimately carry sub-paths in `file.filename`
         # (e.g. `subdir/file.csv`) and `validate_files` / `os.utime` accounting
         # depend on that, so we can't just collapse to the basename the way
@@ -263,8 +288,21 @@ def construct_dest_path(file, target_directory, folder_name, prefix=None):
         # directory. `resolve(strict=False)` normalises `..` segments and (on
         # macOS) walks shared symlinks like `/tmp` -> `/private/tmp`, so the
         # comparison is symlink-stable.
+        #
+        # `report_root` is itself built from client input, so containment within
+        # it proves nothing on its own: the root must also sit directly under the
+        # server-chosen `target_directory`.
         resolved_dest = dest_path.resolve(strict=False)
         resolved_root = report_root.resolve(strict=False)
+        if resolved_root.parent != Path(target_directory).resolve(strict=False):
+            logger.warning(
+                "Report folder %r escapes upload directory %s",
+                folder_name,
+                target_directory,
+            )
+            raise DataFormatError(
+                f"Report folder {folder_name!r} escapes upload directory"
+            )
         if not (
             resolved_dest == resolved_root
             or resolved_dest.is_relative_to(resolved_root)
