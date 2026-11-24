@@ -56,7 +56,7 @@ export enum ReportSource {
 }
 
 export enum ReportLoadFailureReason {
-    // NPE-only today: profiler/performance incompatible DB versions still load.
+    // An out-of-range NPE format version, or memory report DB major version (which still opens, with a warning)
     UNSUPPORTED_VERSION = 'unsupported_version',
     MISSING_FILE = 'missing_file',
     PARSE_ERROR = 'parse_error',

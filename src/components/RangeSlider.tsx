@@ -7,7 +7,6 @@ import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { IconNames } from '@blueprintjs/icons';
 import { useLocation } from 'react-router';
 import { startTransition, useCallback, useEffect, useMemo, useRef } from 'react';
-import { HttpStatusCode } from 'axios';
 import {
     activePerformanceReportAtom,
     activePerformanceReportFolderNameAtom,
@@ -37,6 +36,7 @@ import LoadingSpinner from './LoadingSpinner';
 import createToastNotification from '../functions/createToastNotification';
 import { ToastType } from '../definitions/ToastType';
 import getResponseError from '../functions/getResponseError';
+import { isRefusedSignpostRange } from '../functions/getErrorStatus';
 import { clampSelectionToRange } from '../functions/perfRangeSelection';
 import { PERFORMANCE_LOAD_FAILED } from '../definitions/Performance';
 import useTransitionalRange from '../hooks/useTransitionalRange';
@@ -280,7 +280,7 @@ function Range() {
         // The API refuses a signpost range the report cannot honour. That is a fault in
         // the view, not the report: unloading the report would leave the range keyed to
         // it, so opening it again would be refused again. Drop the range and keep it.
-        if (perfDataError.status === HttpStatusCode.BadRequest && hasSignpostRange) {
+        if (isRefusedSignpostRange(perfDataError, hasSignpostRange)) {
             const message = `Signpost range removed: ${getResponseError(perfDataError, PERFORMANCE_LOAD_FAILED)}`;
 
             createToastNotification(message, activePerformanceReport.reportName, ToastType.WARNING);

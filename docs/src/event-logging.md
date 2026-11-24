@@ -92,7 +92,7 @@ Recorded by the server once during a successful local launch.
 
 ### `report_loaded`
 
-Recorded after a report is loaded successfully. Restoring the active report when the page is reloaded records no `report_loaded`. Neither does opening a report by path: the first page load after launching with `--memory-report-path` or `--performance-path`, or following a link from the agent tools. So counts are reports chosen inside the visualizer, not report sessions.
+Recorded once a report chosen inside the visualizer has had its data read: for a memory report, its operations, and its metadata at a supported version, or no metadata at all for a legacy report without the metadata table; for a performance report, its rows. Choosing a report records nothing on its own, so a choice abandoned or replaced before its data arrives records no event. Restoring the active report when the page is reloaded records no `report_loaded`. Neither does opening a report by path: the first page load after launching with `--memory-report-path` or `--performance-path`, or following a link from the agent tools. So counts are reports chosen inside the visualizer, not report sessions.
 
 - `kind`: `profiler` (the memory report), `performance`, `npe`, `mlir`, `cluster_descriptor`.
 - `source`: `upload`, `remote_sync`, `local_tt_metal`, `demo`.
@@ -103,11 +103,13 @@ Recorded after a report is loaded successfully. Restoring the active report when
 
 Because reselected uploads count as `upload` when hosted but as `local_tt_metal` locally, do not compare upload share between hosted and local logs.
 
+Before 0.113.0, `report_loaded` was recorded as soon as a report was chosen, before its data was read. Earlier counts include choices that then failed to load, which recorded no `report_load_failed`: memory reports with an unsupported version, memory reports whose operations or metadata could not be read, and performance reports that failed for any reason, including those the server could not parse. They also include choices abandoned before their data arrived: the page reloaded, the tab closed, or another report chosen.
+
 Before 0.107.0, hosted event logs tagged every report picked from the hosted report list as `local_tt_metal`. Hosted logs carry no version, since `app_start` is not written under `SERVER_MODE`, so find the cut-over from the 0.107.0 deploy date. Read hosted `local_tt_metal` counts from before it as demo loads or reselected uploads, not as a tt-metal checkout.
 
 ### `report_load_failed`
 
-Recorded after a report cannot be loaded. A report restored when the page is reloaded, or opened by path with `--memory-report-path`, `--performance-path` or a link from the agent tools, records no failure even if it fails to load. So counts are failures among reports chosen inside the visualizer, not failed report sessions. Not every such failure is recorded either: a memory report chosen inside the visualizer whose version is unsupported records `report_loaded` and no failure.
+Recorded after a report cannot be loaded. A report restored when the page is reloaded, or opened by path with `--memory-report-path`, `--performance-path` or a link from the agent tools, records no failure even if it fails to load. So counts are failures among reports chosen inside the visualizer, not failed report sessions. A failure includes any error reading a report's data after it was chosen, recorded with its class. For example, a memory report whose version is unsupported, which the visualizer still opens with a warning, records `unsupported_version`; a performance report the server cannot parse records `parse_error`; and a report whose files have gone records `missing_file`.
 
 - `kind`: `profiler` (the memory report), `performance`, `npe`, `mlir`, `cluster_descriptor`.
 - `reason_class`: `unsupported_version`, `missing_file`, `parse_error`, `too_large`, `permission`, `other`.

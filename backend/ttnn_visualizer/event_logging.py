@@ -289,10 +289,10 @@ class ReportSource(str, Enum):
 class ReportLoadFailureReason(str, Enum):
     """Why a report failed to load, coarsely enough to never carry a message body.
 
-    ``unsupported_version`` is NPE-only today. NPE refuses an out-of-range format
-    version and never shows the report. Memory and performance reports still
-    activate on an incompatible DB major version: they toast a warning and count
-    as ``report_loaded``, because the UI continues to show them.
+    ``unsupported_version`` covers an NPE trace whose format version is out of
+    range, which is never shown, and a memory report whose DB major version is out
+    of range. The UI still opens such a memory report with a warning, but it counts
+    as a failure rather than ``report_loaded``, because it may not display correctly.
     """
 
     UNSUPPORTED_VERSION = "unsupported_version"

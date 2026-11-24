@@ -8,6 +8,7 @@ import MLIRFileSelector from '../components/report-selection/MLIRFileSelector';
 import RemoteSyncConfigurator from '../components/report-selection/RemoteSyncConfigurator';
 import 'styles/routes/Home.scss';
 import useClearSelectedBuffer from '../hooks/useClearSelectedBuffer';
+import useDbVersionWarning from '../hooks/useDbVersionWarning';
 import getServerConfig from '../functions/getServerConfig';
 import isDirectReportMode from '../functions/isDirectReportMode';
 import InitialMessage from '../components/InitialMessage';
@@ -15,6 +16,7 @@ import FolderFieldset from '../components/report-selection/FolderFieldset';
 
 function Home() {
     useClearSelectedBuffer();
+    useDbVersionWarning();
 
     const isServerMode = !!getServerConfig()?.SERVER_MODE;
 

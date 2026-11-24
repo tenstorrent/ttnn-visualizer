@@ -4,7 +4,7 @@
 
 import { FileInput, FormGroup, Icon, IconName, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { ChangeEvent, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, useMemo, useState } from 'react';
 
 import { useQueryClient } from '@tanstack/react-query';
 import { useAtom, useSetAtom } from 'jotai';
@@ -41,7 +41,6 @@ import {
     updateInstance,
     usePerfFolderList,
     useReportFolderList,
-    useReportMetadata,
 } from '../../hooks/useAPI';
 import { useActivatingReport } from '../../hooks/useActivatingReport';
 import { useReportLinkBadgeRuns } from '../../hooks/useReportLinkBadgeRuns';
@@ -55,15 +54,13 @@ import {
     normaliseReportFolder,
 } from '../../functions/validateReportFolder';
 import { TEST_IDS } from '../../definitions/TestIds';
-import { DBVersionValidation } from '../../definitions/Versions';
-import { evaluateDbVersion } from '../../functions/compareDbVersion';
 import { ReportKind, ReportLoadFailureReason, ReportSource } from '../../definitions/EventLogEvent';
 import {
     getLocalFolderReportSource,
     getReportLoadFailureReason,
     recordReportLoadFailed,
-    recordReportLoaded,
 } from '../../functions/reportLoadEvents';
+import { useMarkReportLoadPending } from '../../hooks/useReportLoadSettlement';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,
@@ -133,19 +130,7 @@ const LocalFolderOptions = () => {
     const { data: perfFolderList } = usePerfFolderList();
     const { data: reportFolderList } = useReportFolderList();
 
-    const { data: reportMetadata, error: reportMetadataError } = useReportMetadata();
-    useEffect(() => {
-        if (reportMetadataError) {
-            return;
-        }
-        if (reportMetadata) {
-            const dbValidationResult = evaluateDbVersion(reportMetadata.version);
-            if (dbValidationResult.statusCode !== DBVersionValidation.OK) {
-                // @ts-expect-error this is good
-                createToastNotification('Incompatible report version', dbValidationResult.message, ToastType.WARNING);
-            }
-        }
-    }, [reportMetadata, reportMetadataError]);
+    const markReportLoadPending = useMarkReportLoadPending();
 
     const [profilerFolder, setProfilerFolder] = useState<ConnectionStatus | undefined>();
     const [isUploadingReport, setIsUploadingReport] = useState(false);
@@ -188,7 +173,6 @@ const LocalFolderOptions = () => {
     ) => {
         try {
             await withActivatingReport(action);
-            recordReportLoaded(kind, getLocalFolderReportSource(folder));
         } catch (err: unknown) {
             createToastNotification(failedTitle, getResponseError(err), ToastType.ERROR);
             recordReportLoadFailed(kind, getReportLoadFailureReason(err));
@@ -218,6 +202,7 @@ const LocalFolderOptions = () => {
 
         setIsUploadingReport(true);
         setProfilerUploadLabel(`${files.length} files selected.`);
+        let isActivated = false;
 
         try {
             const response = await uploadLocalFolder(files);
@@ -240,17 +225,24 @@ const LocalFolderOptions = () => {
                 reportName: response.data.reportName,
             };
 
+            // Cleared before activating, as a remote choice does: clearing after would throw away
+            // the reads the pending marker starts, and ask the server for both a second time
+            clearReportCaches(queryClient);
             setActiveProfilerReport(updatedReport);
+            markReportLoadPending(ReportKind.PROFILER, updatedReport.path, ReportSource.UPLOAD);
+            isActivated = true;
             createToastNotification(ACTIVE_MEMORY_REPORT_TOAST_TITLE, updatedReport.reportName, ToastType.SUCCESS);
             setProfilerReportLocation(ReportLocation.LOCAL);
             setProfilerFolder(connectionOkStatus);
-            recordReportLoaded(ReportKind.PROFILER, ReportSource.UPLOAD);
         } catch (err: unknown) {
             const message = getResponseError(err, 'Unable to upload selected directory');
             setProfilerFolder({ status: ConnectionTestStates.FAILED, message });
             recordReportLoadFailed(ReportKind.PROFILER, getReportLoadFailureReason(err));
         } finally {
-            clearReportCaches(queryClient);
+            if (!isActivated) {
+                clearReportCaches(queryClient);
+            }
+
             setIsUploadingReport(false);
         }
     };
@@ -290,9 +282,9 @@ const LocalFolderOptions = () => {
                 setPerformanceDataUploadLabel(`${files.length} files uploaded`);
                 setPerformanceReportLocation(ReportLocation.LOCAL);
                 setActivePerformanceReport({ path: fileName, reportName: fileName });
+                markReportLoadPending(ReportKind.PERFORMANCE, fileName, ReportSource.UPLOAD);
                 createToastNotification(ACTIVE_PERFORMANCE_REPORT_TOAST_TITLE, fileName, ToastType.SUCCESS);
                 setPerformanceFolder(connectionOkStatus);
-                recordReportLoaded(ReportKind.PERFORMANCE, ReportSource.UPLOAD);
             }
         } catch (err: unknown) {
             const message = getResponseError(err, 'Unable to upload selected directory');
@@ -317,6 +309,7 @@ const LocalFolderOptions = () => {
 
             createToastNotification(ACTIVE_MEMORY_REPORT_TOAST_TITLE, folder.reportName ?? '', ToastType.SUCCESS);
             setActiveProfilerReport(folder);
+            markReportLoadPending(ReportKind.PROFILER, folder.path, getLocalFolderReportSource(folder));
             setProfilerReportLocation(ReportLocation.LOCAL);
         });
     };
@@ -370,6 +363,7 @@ const LocalFolderOptions = () => {
 
                 createToastNotification(ACTIVE_PERFORMANCE_REPORT_TOAST_TITLE, folder.reportName, ToastType.SUCCESS);
                 setActivePerformanceReport(folder);
+                markReportLoadPending(ReportKind.PERFORMANCE, folder.path, getLocalFolderReportSource(folder));
                 setPerformanceReportLocation(ReportLocation.LOCAL);
             },
         );
