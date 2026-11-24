@@ -202,6 +202,7 @@ const LocalFolderOptions = () => {
 
         setIsUploadingReport(true);
         setProfilerUploadLabel(`${files.length} files selected.`);
+        let isActivated = false;
 
         try {
             const response = await uploadLocalFolder(files);
@@ -224,8 +225,12 @@ const LocalFolderOptions = () => {
                 reportName: response.data.reportName,
             };
 
+            // Cleared before activating, as a remote choice does: clearing after would throw away
+            // the reads the pending marker starts, and ask the server for both a second time
+            clearReportCaches(queryClient);
             setActiveProfilerReport(updatedReport);
             markReportLoadPending(ReportKind.PROFILER, updatedReport.path, ReportSource.UPLOAD);
+            isActivated = true;
             createToastNotification(ACTIVE_MEMORY_REPORT_TOAST_TITLE, updatedReport.reportName, ToastType.SUCCESS);
             setProfilerReportLocation(ReportLocation.LOCAL);
             setProfilerFolder(connectionOkStatus);
@@ -234,7 +239,10 @@ const LocalFolderOptions = () => {
             setProfilerFolder({ status: ConnectionTestStates.FAILED, message });
             recordReportLoadFailed(ReportKind.PROFILER, getReportLoadFailureReason(err));
         } finally {
-            clearReportCaches(queryClient);
+            if (!isActivated) {
+                clearReportCaches(queryClient);
+            }
+
             setIsUploadingReport(false);
         }
     };

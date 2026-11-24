@@ -87,21 +87,14 @@ const IsActivatingReportProbe = () => {
     return <span data-testid={IS_ACTIVATING_REPORT_PROBE_TEST_ID}>{isActivatingReport ? 'true' : 'false'}</span>;
 };
 
-const {
-    mockUseReportFolderList,
-    mockUsePerfFolderList,
-    mockUseInstance,
-    mockUseReportMetadata,
-    recordReportLoaded,
-    recordReportLoadFailed,
-} = vi.hoisted(() => ({
-    mockUseReportFolderList: vi.fn(),
-    mockUsePerfFolderList: vi.fn(),
-    mockUseInstance: vi.fn(),
-    mockUseReportMetadata: vi.fn(),
-    recordReportLoaded: vi.fn(),
-    recordReportLoadFailed: vi.fn(),
-}));
+const { mockUseReportFolderList, mockUsePerfFolderList, mockUseInstance, recordReportLoaded, recordReportLoadFailed } =
+    vi.hoisted(() => ({
+        mockUseReportFolderList: vi.fn(),
+        mockUsePerfFolderList: vi.fn(),
+        mockUseInstance: vi.fn(),
+        recordReportLoaded: vi.fn(),
+        recordReportLoadFailed: vi.fn(),
+    }));
 
 const useSshConfigHostsMock = vi.hoisted(() => vi.fn<(enabled?: boolean) => SshConfigHostsQueryResult>());
 
@@ -113,7 +106,6 @@ vi.mock('../src/hooks/useAPI.tsx', async () => {
         useReportFolderList: () => mockUseReportFolderList(),
         usePerfFolderList: () => mockUsePerfFolderList(),
         useInstance: () => mockUseInstance(),
-        useReportMetadata: () => mockUseReportMetadata(),
         updateInstance: vi.fn().mockResolvedValue({}),
         deleteProfiler: vi.fn().mockResolvedValue({ success: true }),
         deletePerformance: vi.fn().mockResolvedValue({ success: true }),
@@ -160,8 +152,6 @@ beforeEach(() => {
     mockUseReportFolderList.mockReturnValue({ data: mockProfilerFolderList });
     mockUsePerfFolderList.mockReturnValue({ data: mockPerformanceReportFolders });
     mockUseInstance.mockReturnValue({ data: mockInstance });
-    // No active report metadata by default; effect short-circuits.
-    mockUseReportMetadata.mockReturnValue({ data: undefined, error: undefined });
     useSshConfigHostsMock.mockReturnValue(noSshConfigResult());
     // Clean up localStorage between tests
     window.localStorage.clear();

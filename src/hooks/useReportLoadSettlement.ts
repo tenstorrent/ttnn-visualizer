@@ -2,15 +2,21 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { AxiosError, HttpStatusCode } from 'axios';
+import { HttpStatusCode } from 'axios';
 import { useQueryClient } from '@tanstack/react-query';
-import { useAtomValue, useSetAtom } from 'jotai';
+import { useAtomValue, useSetAtom, useStore } from 'jotai';
 import { useCallback, useEffect } from 'react';
 import { ReportKind, ReportLoadFailureReason, ReportSource } from '../definitions/EventLogEvent';
 import { DBVersionValidation } from '../definitions/Versions';
 import { evaluateDbVersion } from '../functions/compareDbVersion';
+import getErrorStatus, { isRefusedSignpostRange } from '../functions/getErrorStatus';
 import { isReportChangedError } from '../functions/memoryReportRequest';
-import { recordReportLoadFailed, recordReportLoadFailure, recordReportLoaded } from '../functions/reportLoadEvents';
+import {
+    getParsedReportLoadFailureReason,
+    recordReportLoadFailed,
+    recordReportLoadFailure,
+    recordReportLoaded,
+} from '../functions/reportLoadEvents';
 import {
     PendingReportLoad,
     SettledReportKind,
@@ -47,8 +53,6 @@ export const useMarkReportLoadPending = () => {
     );
 };
 
-const getErrorStatus = (error: AxiosError) => error.status ?? error.response?.status;
-
 /**
  * Records `report_loaded` or `report_load_failed` for a report chosen inside the visualizer
  * once its data settles: the memory report's operations and metadata, or the performance
@@ -60,6 +64,7 @@ const getErrorStatus = (error: AxiosError) => error.status ?? error.response?.st
  * in the same commit, and the failure must still be recorded against it.
  */
 const useReportLoadSettlement = () => {
+    const store = useStore();
     const pendingReportLoads = useAtomValue(pendingReportLoadsAtom);
     const setPendingReportLoads = useSetAtom(pendingReportLoadsAtom);
     const activeProfilerPath = useAtomValue(activeProfilerReportAtom)?.path ?? null;
@@ -90,6 +95,23 @@ const useReportLoadSettlement = () => {
         [setPendingReportLoads],
     );
 
+    /**
+     * Records a marker's outcome once. The live store is checked rather than the render's
+     * value: an effect re-run before that render catches up, as a remount under StrictMode
+     * does, would otherwise record the same outcome again.
+     */
+    const settle = useCallback(
+        (kind: SettledReportKind, marker: PendingReportLoad, record: () => void) => {
+            if (store.get(pendingReportLoadsAtom)[kind] !== marker) {
+                return;
+            }
+
+            record();
+            clearPending(kind, marker);
+        },
+        [store, clearPending],
+    );
+
     useEffect(() => {
         if (!pendingProfiler) {
             return;
@@ -111,27 +133,34 @@ const useReportLoadSettlement = () => {
             return;
         }
 
+        // The version decides first: a report the server cannot query is the likeliest to be
+        // unsupported, and its operations can fail before its metadata arrives
+        if (reportMetadata === undefined && reportMetadataError === null) {
+            return;
+        }
+
         // Legacy reports lack the metadata table, and still open
-        const isLegacyMetadata =
-            reportMetadataError !== null && getErrorStatus(reportMetadataError) === HttpStatusCode.UnprocessableEntity;
+        const isLegacyMetadata = getErrorStatus(reportMetadataError) === HttpStatusCode.UnprocessableEntity;
         const isSupportedVersion =
             reportMetadata !== undefined &&
             evaluateDbVersion(reportMetadata.version).statusCode === DBVersionValidation.OK;
 
+        let record: () => void;
+
         if (reportMetadata && !isSupportedVersion) {
             // The report still opens, with a warning, but cannot be read reliably
-            recordReportLoadFailed(ReportKind.PROFILER, ReportLoadFailureReason.UNSUPPORTED_VERSION);
+            record = () => recordReportLoadFailed(ReportKind.PROFILER, ReportLoadFailureReason.UNSUPPORTED_VERSION);
         } else if (operationsError) {
-            recordReportLoadFailure(ReportKind.PROFILER, operationsError);
+            record = () => recordReportLoadFailure(ReportKind.PROFILER, operationsError);
         } else if (reportMetadataError && !isLegacyMetadata) {
-            recordReportLoadFailure(ReportKind.PROFILER, reportMetadataError);
-        } else if (operations && (isSupportedVersion || isLegacyMetadata)) {
-            recordReportLoaded(ReportKind.PROFILER, pendingProfiler.source);
+            record = () => recordReportLoadFailure(ReportKind.PROFILER, reportMetadataError);
+        } else if (operations) {
+            record = () => recordReportLoaded(ReportKind.PROFILER, pendingProfiler.source);
         } else {
             return;
         }
 
-        clearPending(ReportKind.PROFILER, pendingProfiler);
+        settle(ReportKind.PROFILER, pendingProfiler, record);
     }, [
         pendingProfiler,
         activeProfilerPath,
@@ -140,6 +169,7 @@ const useReportLoadSettlement = () => {
         operations,
         operationsError,
         clearPending,
+        settle,
     ]);
 
     useEffect(() => {
@@ -152,26 +182,27 @@ const useReportLoadSettlement = () => {
             return;
         }
 
-        if (performanceReportError) {
-            const status = getErrorStatus(performanceReportError);
+        let record: () => void;
 
+        if (performanceReportError) {
             // `Range` drops a refused signpost range and keeps the report; the refetch settles it
-            if (status === HttpStatusCode.BadRequest && hasSignpostRange) {
+            if (isRefusedSignpostRange(performanceReportError, hasSignpostRange)) {
                 return;
             }
 
-            if (status === HttpStatusCode.UnprocessableEntity) {
-                recordReportLoadFailed(ReportKind.PERFORMANCE, ReportLoadFailureReason.PARSE_ERROR);
-            } else {
-                recordReportLoadFailure(ReportKind.PERFORMANCE, performanceReportError);
-            }
+            record = () =>
+                recordReportLoadFailure(
+                    ReportKind.PERFORMANCE,
+                    performanceReportError,
+                    getParsedReportLoadFailureReason,
+                );
         } else if (performanceReport) {
-            recordReportLoaded(ReportKind.PERFORMANCE, pendingPerformance.source);
+            record = () => recordReportLoaded(ReportKind.PERFORMANCE, pendingPerformance.source);
         } else {
             return;
         }
 
-        clearPending(ReportKind.PERFORMANCE, pendingPerformance);
+        settle(ReportKind.PERFORMANCE, pendingPerformance, record);
     }, [
         pendingPerformance,
         activePerformancePath,
@@ -179,6 +210,7 @@ const useReportLoadSettlement = () => {
         performanceReportError,
         hasSignpostRange,
         clearPending,
+        settle,
     ]);
 };
 

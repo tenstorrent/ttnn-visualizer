@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import validateNpeSummary from '../src/functions/validateNpeSummary';
+import { summary } from './helpers/npeFixtures';
 
 const validColumns = (n: number) => ({
     start_cycle: Array.from({ length: n }, (_, i) => i),
@@ -15,13 +16,7 @@ const validColumns = (n: number) => ({
     active_count: Array.from({ length: n }, () => 0),
 });
 
-const validSummary = (n = 3) => ({
-    common_info: { version: '1.0.0' },
-    chips: {},
-    zones: [],
-    n_timesteps: n,
-    timesteps: validColumns(n),
-});
+const validSummary = (n = 3) => ({ ...summary, n_timesteps: n, timesteps: validColumns(n) });
 
 describe('validateNpeSummary', () => {
     it('accepts a well-formed columnar summary', () => {
@@ -42,6 +37,13 @@ describe('validateNpeSummary', () => {
         expect(validateNpeSummary({ ...s, n_timesteps: -1 })).toMatch(/timestep count/);
         expect(validateNpeSummary({ ...s, n_timesteps: undefined })).toMatch(/timestep count/);
         expect(validateNpeSummary({ ...s, n_timesteps: 1.5 })).toMatch(/timestep count/);
+    });
+
+    it('rejects a missing or non-boolean fabric-event flag', () => {
+        const s = validSummary();
+        expect(validateNpeSummary({ ...s, has_fabric_events: undefined })).toMatch(/fabric-event flag/);
+        expect(validateNpeSummary({ ...s, has_fabric_events: 'true' })).toMatch(/fabric-event flag/);
+        expect(validateNpeSummary({ ...s, has_fabric_events: true })).toBeNull();
     });
 
     it('rejects missing timestep columns', () => {

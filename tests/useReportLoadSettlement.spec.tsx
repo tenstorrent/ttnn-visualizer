@@ -15,7 +15,7 @@
 import '@testing-library/jest-dom/vitest';
 import { act, cleanup, render, renderHook } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ReactNode } from 'react';
+import { ReactNode, StrictMode } from 'react';
 import { AxiosError, AxiosHeaders, HttpStatusCode } from 'axios';
 import { Provider, atom, createStore, useAtomValue } from 'jotai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -115,17 +115,18 @@ let store: ReturnType<typeof createStore>;
 const markPending = (kind: SettledReportKind, path: string, source: ReportSource) =>
     store.set(pendingReportLoadsAtom, (pending) => ({ ...pending, [kind]: { path, source } }));
 
-const renderRecorder = () =>
-    render(
-        <TestProviders>
-            <Provider store={store}>
-                {/* Ahead of the recorder, as the footer is in Layout */}
-                <Range />
-                <ReportLoadRecorder />
-                <PendingReportLoadsProbe />
-            </Provider>
-        </TestProviders>,
-    );
+const recorderTree = () => (
+    <TestProviders>
+        <Provider store={store}>
+            {/* Ahead of the recorder, as the footer is in Layout */}
+            <Range />
+            <ReportLoadRecorder />
+            <PendingReportLoadsProbe />
+        </Provider>
+    </TestProviders>
+);
+
+const renderRecorder = () => render(recorderTree());
 
 /** Activates a report and marks it pending in one batch, as the selectors do. */
 const choose = (kind: SettledReportKind, report: typeof REPORT_A, source = ReportSource.LOCAL_TT_METAL) =>
@@ -218,6 +219,27 @@ describe('a chosen memory report', () => {
         expect(recordReportLoaded).not.toHaveBeenCalled();
     });
 
+    it('records an unsupported version although its operations failed before the metadata arrived', () => {
+        renderRecorder();
+        choose(ReportKind.PROFILER, REPORT_A);
+        settle(queries.operations, REPORT_A.path, failed(HttpStatusCode.InternalServerError));
+
+        // The version decides, so nothing is recorded until it arrives
+        expect(recordReportLoadFailed).not.toHaveBeenCalled();
+        expect(getProbedPendingReportLoads()).toEqual({
+            [ReportKind.PROFILER]: { path: REPORT_A.path, source: ReportSource.LOCAL_TT_METAL },
+        });
+
+        settle(queries.metadata, REPORT_A.path, settledMetadata(TARGET_DB_VERSION_MAX + 1));
+
+        expect(recordReportLoadFailed).toHaveBeenCalledTimes(1);
+        expect(recordReportLoadFailed).toHaveBeenCalledWith(
+            ReportKind.PROFILER,
+            ReportLoadFailureReason.UNSUPPORTED_VERSION,
+        );
+        expect(getProbedPendingReportLoads()).toEqual({});
+    });
+
     it('classifies any other metadata failure', () => {
         renderRecorder();
         choose(ReportKind.PROFILER, REPORT_A);
@@ -295,6 +317,20 @@ describe('a chosen performance report', () => {
         expect(getProbedPendingReportLoads()).toEqual({});
     });
 
+    it('classifies any other failure', () => {
+        renderRecorder();
+        choose(ReportKind.PERFORMANCE, REPORT_A);
+        settle(queries.performance, REPORT_A.path, failed(HttpStatusCode.NotFound));
+
+        expect(recordReportLoadFailed).toHaveBeenCalledTimes(1);
+        expect(recordReportLoadFailed).toHaveBeenCalledWith(
+            ReportKind.PERFORMANCE,
+            ReportLoadFailureReason.MISSING_FILE,
+        );
+        expect(recordReportLoaded).not.toHaveBeenCalled();
+        expect(getProbedPendingReportLoads()).toEqual({});
+    });
+
     it('waits out a refused signpost range and records the refetch', () => {
         renderRecorder();
         act(() => store.set(activePerformanceReportAtom, REPORT_A));
@@ -321,10 +357,32 @@ describe('what records nothing', () => {
     it('a choice replaced before its data arrives, for either report', () => {
         renderRecorder();
         choose(ReportKind.PROFILER, REPORT_A);
-        act(() => store.set(activeProfilerReportAtom, REPORT_B));
+        choose(ReportKind.PERFORMANCE, REPORT_A);
+        act(() => {
+            store.set(activeProfilerReportAtom, REPORT_B);
+            store.set(activePerformanceReportAtom, REPORT_B);
+        });
         queries.metadata.set(REPORT_A.path, settledMetadata(TARGET_DB_VERSION_MAX));
         queries.operations.set(REPORT_A.path, settledOperations);
+        queries.performance.set(REPORT_A.path, settledRows);
         settleMemory(REPORT_B.path, settledMetadata(TARGET_DB_VERSION_MAX));
+        settle(queries.performance, REPORT_B.path, settledRows);
+
+        expect(recordReportLoaded).not.toHaveBeenCalled();
+        expect(recordReportLoadFailed).not.toHaveBeenCalled();
+        expect(getProbedPendingReportLoads()).toEqual({});
+    });
+
+    it('a choice cleared before its data arrives, as deleting it or changing connection does', () => {
+        renderRecorder();
+        choose(ReportKind.PROFILER, REPORT_A);
+        choose(ReportKind.PERFORMANCE, REPORT_A);
+        act(() => {
+            store.set(activeProfilerReportAtom, null);
+            store.set(activePerformanceReportAtom, null);
+        });
+        settleMemory(REPORT_A.path, settledMetadata(TARGET_DB_VERSION_MAX));
+        settle(queries.performance, REPORT_A.path, settledRows);
 
         expect(recordReportLoaded).not.toHaveBeenCalled();
         expect(recordReportLoadFailed).not.toHaveBeenCalled();
@@ -351,6 +409,23 @@ describe('what records nothing', () => {
         settleMemory(REPORT_A.path, settledMetadata(TARGET_DB_VERSION_MAX));
 
         expect(recordReportLoaded).toHaveBeenCalledTimes(1);
+    });
+
+    it('a second time when the recorder mounts under StrictMode with the outcome already settled', () => {
+        // Settled before mounting, as when `Layout` remounts while a marker is still pending
+        queries.metadata.set(REPORT_A.path, settledMetadata(TARGET_DB_VERSION_MAX));
+        queries.operations.set(REPORT_A.path, settledOperations);
+        queries.performance.set(REPORT_B.path, settledRows);
+        store.set(activeProfilerReportAtom, REPORT_A);
+        store.set(activePerformanceReportAtom, REPORT_B);
+        markPending(ReportKind.PROFILER, REPORT_A.path, ReportSource.LOCAL_TT_METAL);
+        markPending(ReportKind.PERFORMANCE, REPORT_B.path, ReportSource.LOCAL_TT_METAL);
+
+        render(<StrictMode>{recorderTree()}</StrictMode>);
+
+        expect(recordReportLoaded).toHaveBeenCalledTimes(2);
+        expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.PROFILER, ReportSource.LOCAL_TT_METAL);
+        expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.PERFORMANCE, ReportSource.LOCAL_TT_METAL);
     });
 });
 

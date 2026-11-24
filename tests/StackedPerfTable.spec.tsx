@@ -4,13 +4,14 @@
 
 import '@testing-library/jest-dom/vitest';
 import { Classes } from '@blueprintjs/core';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import StackedPerformanceTable from '../src/components/performance/StackedPerfTable';
 import { StackedColumnKeys, TypedStackedPerfRow } from '../src/definitions/StackedPerfTable';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { useGetNPEManifest, usePerfMeta } from '../src/hooks/useAPI';
 import { TestProviders } from './helpers/TestProviders';
+import { focusTooltipTarget } from './helpers/focusTooltipTarget';
 import { DEFAULT_MAX_CORES } from '../src/functions/getCoreCount';
 import { PERF_FOOTER_ALL_DEVICES_NOTE } from '../src/components/performance/PerfFooterPercent';
 import { mergeDevicesAtom } from '../src/store/app';
@@ -150,7 +151,7 @@ describe('StackedPerformanceTable footer', () => {
         const percent = document.querySelector(`tfoot .${Classes.TOOLTIP_INDICATOR}`) as HTMLElement;
 
         expect(percent).toHaveTextContent('100%');
-        fireEvent.focus(percent);
+        focusTooltipTarget(percent);
         expect(await screen.findByText(PERF_FOOTER_ALL_DEVICES_NOTE)).toBeInTheDocument();
     });
 
