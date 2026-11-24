@@ -37,7 +37,7 @@ export const getReportTraceFields = (
     { reportName, comparisonReportList }: ReportLabels,
 ): { x: number[]; name: string | undefined; legendgroup: string } => ({
     x: data.map((_row, index) => index + 1),
-    name: getPlotLabel(dataIndex, reportName, comparisonReportList) ?? undefined,
+    name: getPlotLabel(dataIndex, reportName, comparisonReportList),
     legendgroup: `group${dataIndex}`,
 });
 

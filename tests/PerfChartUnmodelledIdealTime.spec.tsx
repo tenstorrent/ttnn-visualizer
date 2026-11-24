@@ -17,6 +17,7 @@ import { getSecondaryDataColours } from '../src/definitions/PerformancePlotColou
 import { OpType } from '../src/definitions/Performance';
 import { TypedPerfTableRow } from '../src/model/PerfTable';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom, mergeDevicesAtom } from '../src/store/app';
+import { AtomProviderInitialValues } from './helpers/atomProvider';
 import { TestProviders } from './helpers/TestProviders';
 
 const MAX_CORES = 64;
@@ -53,6 +54,10 @@ const markersOnY2 = () => traces().filter((trace) => trace.yaxis === 'y2' && isM
 // Only the second op has a value with no neighbour, so it alone needs a marker.
 const ISOLATED_MARKERS = { x: [2], mode: 'markers', showlegend: false, hoverinfo: 'skip' };
 const MERGED_DEVICES_NOTICE = /Multi device operations are merged/;
+const NAMED_REPORTS: AtomProviderInitialValues = [
+    [activePerformanceReportAtom, { reportName: 'Base', path: '/base' }],
+    [comparisonPerformanceReportListAtom, ['Other']],
+];
 
 type OpUtilisationChart = typeof PerfCoreCountUtilizationChart;
 
@@ -143,7 +148,21 @@ describe('utilisation charts', () => {
         );
 
         expect(traces().map((trace) => trace.y)).toEqual([[0.5], [2]]);
-        expect(layout().yaxis?.range?.[1]).toBeGreaterThanOrEqual(2);
+        expect(layout().yaxis?.range?.[1]).toBeCloseTo(2.2);
+    });
+
+    it('name each Utilization vs Kernel Duration trace after its report', () => {
+        render(
+            <TestProviders initialAtomValues={NAMED_REPORTS}>
+                <PerfKernelDurationUtilizationChart
+                    datasets={[[row()], [row()]]}
+                    maxCores={MAX_CORES}
+                    chartId={PerfChartId.MatmulUtilizationVsKernelDuration}
+                />
+            </TestProviders>,
+        );
+
+        expect(traces().map((trace) => trace.name)).toEqual(['Base', 'Other']);
     });
 
     it('add no markers when every utilisation is known', () => {
@@ -335,12 +354,7 @@ describe('bar and line charts', () => {
         ],
     ])("pair each report's bars and line in %s", (_, renderChart) => {
         render(
-            <TestProviders
-                initialAtomValues={[
-                    [activePerformanceReportAtom, { reportName: 'Base', path: '/base' }],
-                    [comparisonPerformanceReportListAtom, ['Other']],
-                ]}
-            >
+            <TestProviders initialAtomValues={NAMED_REPORTS}>
                 {renderChart([
                     [row(), row()],
                     [row(), row()],
