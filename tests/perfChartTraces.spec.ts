@@ -8,10 +8,26 @@ import {
     buildLineTracesWithIsolatedMarkers,
     buildSecondaryLineTraces,
     buildUtilisationTraces,
+    getReportTraceFields,
 } from '../src/functions/perfChartTraces';
 import { TypedPerfTableRow } from '../src/model/PerfTable';
 
 const BASE_ONLY = { reportName: 'Base', comparisonReportList: null };
+
+describe('getReportTraceFields', () => {
+    const rows = [{}, {}, {}] as TypedPerfTableRow[];
+
+    it.each<[number, string]>([
+        [0, 'Base'],
+        [1, 'Other'],
+    ])("numbers the ops from 1, and names and groups report %i's traces after it", (dataIndex, name) => {
+        expect(getReportTraceFields(rows, dataIndex, { reportName: 'Base', comparisonReportList: ['Other'] })).toEqual({
+            x: [1, 2, 3],
+            name,
+            legendgroup: `group${dataIndex}`,
+        });
+    });
+});
 
 describe('buildLineTracesWithIsolatedMarkers', () => {
     const line = (y: (number | null)[]) => ({
@@ -105,22 +121,32 @@ describe('buildSecondaryLineTraces', () => {
     ])('gives -Infinity when %s', (_, datasets) => {
         expect(buildSecondaryLineTraces(datasets, getIdealTime, OPTIONS).maxValue).toBe(-Infinity);
     });
+
+    it('leaves the line and its markers on the default axis when none is given', () => {
+        const { traces } = buildSecondaryLineTraces([rows([null, 4, null])], getIdealTime, {
+            valueHoverTemplate: 'Ideal time: %{y} ns',
+            ...BASE_ONLY,
+        });
+
+        expect(traces).toHaveLength(2);
+        expect(traces.map((trace) => trace.yaxis)).toEqual([undefined, undefined]);
+    });
 });
 
 describe('buildUtilisationTraces', () => {
-    it("plots each row's core utilisation on the second axis", () => {
-        // 5 µs of a 10 µs op on every core.
+    it("plots each row's core utilisation against maxCores, on the second axis", () => {
+        // 5 µs of a 10 µs op on 64 cores, with 128 available.
         const row = { pm_ideal_ns: 5_000, device_time: 10, cores: 64, available_cores: null } as TypedPerfTableRow;
 
-        expect(buildUtilisationTraces([[row, row]], 64, BASE_ONLY)).toMatchObject({
+        expect(buildUtilisationTraces([[row, row]], 128, BASE_ONLY)).toMatchObject({
             traces: [
                 {
-                    y: [0.5, 0.5],
+                    y: [1, 1],
                     yaxis: 'y2',
                     hovertemplate: '<b>%{data.name}</b><br />Operation: %{x}<br />Utilization: %{y}<extra></extra>',
                 },
             ],
-            maxValue: 0.5,
+            maxValue: 1,
         });
     });
 });

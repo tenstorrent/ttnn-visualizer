@@ -4,6 +4,7 @@
 
 import '@testing-library/jest-dom/vitest';
 import type { Layout, PlotData } from 'plotly.js';
+import type { ReactElement } from 'react';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { getPlotInstances, resetPlotPropsCapture } from './mocks/plotComponent';
@@ -15,7 +16,7 @@ import { PerfChartId } from '../src/definitions/PerformanceCharts';
 import { getSecondaryDataColours } from '../src/definitions/PerformancePlotColours';
 import { OpType } from '../src/definitions/Performance';
 import { TypedPerfTableRow } from '../src/model/PerfTable';
-import { mergeDevicesAtom } from '../src/store/app';
+import { activePerformanceReportAtom, comparisonPerformanceReportListAtom, mergeDevicesAtom } from '../src/store/app';
 import { TestProviders } from './helpers/TestProviders';
 
 const MAX_CORES = 64;
@@ -212,7 +213,9 @@ describe('Device Time + Ideal Time', () => {
         expect(idealTimes.x).toEqual(OPERATIONS);
         expect(idealTimes.y).toEqual([null, IDEAL_NS, null, null]);
         expect(idealTimes.mode).toBeUndefined();
+        expect(idealTimes.hovertemplate).toContain('Ideal time: %{y} ns');
         expect(isolatedIdealTimes).toMatchObject({ ...ISOLATED_MARKERS, y: [IDEAL_NS] });
+        expect([idealTimes.yaxis, isolatedIdealTimes.yaxis]).toEqual([undefined, undefined]);
     });
 
     it("groups and colours each report's markers with its own line in comparison mode", () => {
@@ -248,6 +251,22 @@ describe('Device Time + Ideal Time', () => {
         expect(layout().yaxis?.range).toEqual([0, 0.5]);
     });
 
+    it.each<[string, TypedPerfTableRow[][], number]>([
+        ['one report', [[row({ pm_ideal_ns: 20_000, device_time: 10 })]], 20_000],
+        ['the second report in comparison mode', [[row()], [row({ pm_ideal_ns: 30_000 })]], 30_000],
+    ])('sizes the time axis to an ideal time above every device time, from %s', (_, datasets, maxIdealTime) => {
+        render(
+            <TestProviders>
+                <PerfDeviceTimeChart
+                    datasets={datasets}
+                    chartId={PerfChartId.MatmulDeviceTime}
+                />
+            </TestProviders>,
+        );
+
+        expect(layout().yaxis?.range).toEqual([0, maxIdealTime]);
+    });
+
     it('keeps every modelled ideal time', () => {
         render(
             <TestProviders>
@@ -262,5 +281,68 @@ describe('Device Time + Ideal Time', () => {
         const [, idealTimes] = traces();
         expect(idealTimes.y).toEqual([2, IDEAL_NS]);
         expect(idealTimes.mode).toBeUndefined();
+    });
+});
+
+describe('bar and line charts', () => {
+    const HOVER_TITLE = /^<b>%\{data\.name\}<\/b><br \/>Operation: %\{x\}<br \/>/;
+    const pairing = ({ x, name, legendgroup }: Partial<PlotData>) => ({ x, name, legendgroup });
+
+    it.each<[string, (datasets: TypedPerfTableRow[][]) => ReactElement]>([
+        [
+            'Core Count + Utilization',
+            (datasets) => (
+                <PerfCoreCountUtilizationChart
+                    datasets={datasets}
+                    maxCores={MAX_CORES}
+                    chartId={PerfChartId.MatmulCoreCountUtilization}
+                />
+            ),
+        ],
+        [
+            'Kernel Duration + Utilization',
+            (datasets) => (
+                <PerfOperationKernelUtilizationChart
+                    datasets={datasets}
+                    maxCores={MAX_CORES}
+                    chartId={PerfChartId.MatmulKernelDurationUtilization}
+                />
+            ),
+        ],
+        [
+            'Device Time + Ideal Time',
+            (datasets) => (
+                <PerfDeviceTimeChart
+                    datasets={datasets}
+                    chartId={PerfChartId.MatmulDeviceTime}
+                />
+            ),
+        ],
+    ])("pair each report's bars and line in %s", (_, renderChart) => {
+        render(
+            <TestProviders
+                initialAtomValues={[
+                    [activePerformanceReportAtom, { reportName: 'Base', path: '/base' }],
+                    [comparisonPerformanceReportListAtom, ['Other']],
+                ]}
+            >
+                {renderChart([
+                    [row(), row()],
+                    [row(), row()],
+                ])}
+            </TestProviders>,
+        );
+
+        const bars = traces().filter((trace) => trace.type === 'bar');
+        const lines = traces().filter((trace) => trace.type !== 'bar' && !isMarkersOnly(trace));
+
+        expect(bars.map(pairing)).toEqual([
+            { x: [1, 2], name: 'Base', legendgroup: 'group0' },
+            { x: [1, 2], name: 'Other', legendgroup: 'group1' },
+        ]);
+        expect(lines.map(pairing)).toEqual(bars.map(pairing));
+        for (const trace of [...bars, ...lines]) {
+            expect(trace.hovertemplate).toMatch(HOVER_TITLE);
+        }
     });
 });
