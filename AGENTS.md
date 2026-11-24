@@ -168,7 +168,7 @@ Applies on touch to views that draw data-proportional visuals (NPE chip cluster 
 
 ### Upload security
 
-- All **single-file** upload handlers must apply `Path(filename).name` to the user-supplied filename before composing a destination path, and carry a regression test that submits a crafted traversal filename and asserts where the file lands. `.name` is not a full cross-platform sanitiser — backslash and drive-letter forms survive it — and the **folder-upload** branch uses a resolved-path containment check instead, not this collapse. Both caveats: [CONVENTIONS.md](./CONVENTIONS.md#upload-security).
+- All **single-file** upload handlers must apply `Path(filename).name` to the user-supplied filename before composing a destination path, and carry a regression test that submits a crafted traversal filename and asserts where the file lands. `.name` is not a full cross-platform sanitiser — backslash and drive-letter forms survive it — and the **folder-upload** branch uses a resolved-path containment check instead, not this collapse. The report folder name is client input too: it must be one plain path segment, enforced in `validate_files` and `construct_dest_path` (ITSEC-561). Both caveats: [CONVENTIONS.md](./CONVENTIONS.md#upload-security).
 
 ### Toolchain and package management
 
