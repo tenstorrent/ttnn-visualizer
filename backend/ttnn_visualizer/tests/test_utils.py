@@ -714,6 +714,7 @@ def test_get_npe_path_takes_the_newest_of_uploads_sharing_a_name(app, npe_direct
         pytest.param("missing", id="nothing-uploaded"),
         pytest.param("trace.json", id="trace.json-uploads-as-trace"),
         pytest.param("trace.npeviz.zst", id="trace.npeviz.zst-uploads-as-trace"),
+        pytest.param("trace.json.npeidx.sqlite", id="an-index-sidecar"),
         pytest.param("folder", id="a-folder"),
         pytest.param("../npe-reports/trace", id="not-a-plain-file-name"),
         pytest.param("x" * 300, id="too-long-for-the-filesystem"),
@@ -723,6 +724,7 @@ def test_get_npe_path_takes_the_newest_of_uploads_sharing_a_name(app, npe_direct
 def test_get_npe_path_is_none_without_an_upload_of_the_name(app, npe_directory, name):
     (npe_directory / "trace.json").write_bytes(b"{}")
     (npe_directory / "trace.npeviz.zst").write_bytes(b"{}")
+    (npe_directory / "trace.json.npeidx.sqlite").write_bytes(b"")
     (npe_directory / "folder.json").mkdir()
 
     assert get_npe_path(name, app) is None

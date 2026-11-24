@@ -14,8 +14,13 @@ from pathlib import Path
 
 from flask import current_app
 from ttnn_visualizer.exceptions import DataFormatError
+from ttnn_visualizer.utils import UPLOAD_NAME_SUFFIXES
 
 logger = logging.getLogger(__name__)
+
+_UPLOAD_NAME_SUFFIX = re.compile(
+    "(" + "|".join(re.escape(suffix) for suffix in UPLOAD_NAME_SUFFIXES) + ")$"
+)
 
 
 def _is_safe_folder_name(name):
@@ -137,7 +142,7 @@ def extract_uploaded_name(files):
     # multipart filename like `"../etc/passwd.json"` becomes `"passwd"`, not
     # `"../etc/passwd"`. The name is stored as the report's, and `get_npe_path`
     # maps only a plain file name back to its upload.
-    return re.sub(r"\.(json|npeviz\.zst)$", "", Path(files[0].filename).name)
+    return _UPLOAD_NAME_SUFFIX.sub("", Path(files[0].filename).name)
 
 
 def save_uploaded_files(

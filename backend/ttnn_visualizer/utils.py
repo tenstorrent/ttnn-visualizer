@@ -1090,6 +1090,10 @@ def get_available_reports(current_app):
     return reports
 
 
+# What `extract_uploaded_name` drops from an NPE upload's file name to name the report.
+UPLOAD_NAME_SUFFIXES = (".json", ".npeviz.zst")
+
+
 def get_npe_path(npe_name, current_app, **_kwargs):
     # Hosted files carry a timestamp prefix the name lacks, in a folder all visitors
     # share, so there a name could only miss its file or find another visitor's.
@@ -1099,10 +1103,12 @@ def get_npe_path(npe_name, current_app, **_kwargs):
     if not isinstance(npe_name, str) or Path(npe_name).name != npe_name:
         return None
 
-    # Files an upload saves under this name (`extract_uploaded_name`): it drops
-    # `.json` and `.npeviz.zst`, and a `.zst` or `.npeviz` file keeps its extension.
-    suffixes = [".json", ".npeviz.zst"]
-    if npe_name.endswith((".zst", ".npeviz")) and not npe_name.endswith(".npeviz.zst"):
+    # Files an upload saves under this name. A `.zst` or `.npeviz` file whose name the
+    # upload doesn't strip keeps it whole; nothing else in the folder, such as an
+    # index sidecar, is an upload.
+    suffixes = list(UPLOAD_NAME_SUFFIXES)
+    stripped_on_upload = npe_name.endswith(UPLOAD_NAME_SUFFIXES)
+    if npe_name.endswith((".zst", ".npeviz")) and not stripped_on_upload:
         suffixes.append("")
 
     npe_directory = (

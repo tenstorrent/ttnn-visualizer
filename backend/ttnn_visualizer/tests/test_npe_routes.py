@@ -269,6 +269,8 @@ def _upload_memory_report(client, instance_id: str) -> str:
         content_type="multipart/form-data",
     )
     assert response.status_code == 200, response.get_data(as_text=True)
+    # Success carries the folder's `path`; a refused upload is a 200 with a status.
+    assert "path" in response.get_json(), response.get_data(as_text=True)
     return Path(_stored_instance(client, instance_id).profiler_path).parent.name
 
 
@@ -360,3 +362,46 @@ def test_an_uploaded_npe_report_stays_readable_when_another_report_changes(
         assert summary.get_json()["n_timesteps"] == 3
         window = client.get(f"{API}/npe/window", query_string={**query, "t": 1})
         assert window.status_code == 200
+
+
+def _put_npe_report(client, instance_id: str, active_report: dict):
+    return client.put(
+        f"{API}/instance",
+        query_string={"instanceId": instance_id},
+        json={"active_report": active_report},
+    )
+
+
+def test_an_explicit_npe_path_wins_over_the_npe_name(app, client):
+    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    instance_id = "pytest-npe-explicit-path"
+    payload = orjson.dumps(_make_npe_object(n_timesteps=2))
+    _upload_npe(client, instance_id, payload)
+    uploaded = _stored_instance(client, instance_id).npe_path
+
+    response = _put_npe_report(
+        client, instance_id, {"npe_name": "no-such-upload", "npe_path": uploaded}
+    )
+
+    assert response.status_code == 200
+    assert _stored_instance(client, instance_id).npe_path == uploaded
+    npe = client.get(f"{API}/npe", query_string={"instanceId": instance_id})
+    assert npe.status_code == 200
+    assert npe.get_data() == payload
+
+
+@pytest.mark.parametrize("server_mode", [False, True], ids=["local", "server-mode"])
+def test_an_empty_npe_name_clears_the_npe_report(app, client, server_mode):
+    app.config["SERVER_MODE"] = server_mode
+    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    instance_id = "pytest-npe-cleared"
+    _upload_npe(client, instance_id, orjson.dumps(_make_npe_object(n_timesteps=2)))
+
+    response = _put_npe_report(client, instance_id, {"npe_name": ""})
+
+    assert response.status_code == 200
+    instance = _stored_instance(client, instance_id)
+    assert instance.npe_path is None
+    assert "npe_name" not in instance.active_report
+    npe = client.get(f"{API}/npe", query_string={"instanceId": instance_id})
+    assert npe.status_code == 404
