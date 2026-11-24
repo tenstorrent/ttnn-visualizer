@@ -107,7 +107,9 @@ describe('DeviceOperationStalls', () => {
 
             expect(INPUT_STARVED_STALLS.largest_wait?.source).toBe(StallSource.INSTRUMENTATION);
             expect(marks).toHaveLength(1);
-            expect(marks[0].parentElement).toHaveTextContent(/^Semaphore Zero Wait T2/);
+            expect(
+                screen.getByRole('img', { name: `Semaphore Zero Wait T2: 76.4%, ${EARLIER_STAGE}` }),
+            ).toBeInTheDocument();
             expect(screen.getByTestId(TEST_IDS.PIPELINE_STALL_SUMMARY)).not.toHaveTextContent(EARLIER_STAGE);
         });
 

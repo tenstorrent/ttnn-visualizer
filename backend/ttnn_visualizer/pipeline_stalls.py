@@ -617,7 +617,7 @@ def stalled_us(
     return _stalled_us(stall, stalls[stall.thread], cells.per_core_kernel_ns)
 
 
-def has_cb_waits(row: Mapping[str, object]) -> bool:
+def _has_cb_waits(row: Mapping[str, object]) -> bool:
     """Whether a row carries a CB wait a compute kernel recorded."""
     return not cb_waits_ignored(has_compute_kernel(row)) and any(
         _number(row, column) is not None for column in CB_WAIT_COLUMNS.values()
@@ -643,7 +643,7 @@ def capture_has_cb_waits(source: TextIO) -> bool:
             cells = {
                 name: row[index] for name, index in indexes.items() if index < width
             }
-            if has_cb_waits(cells):
+            if _has_cb_waits(cells):
                 return True
     return False
 
@@ -670,7 +670,6 @@ __all__ = [
     "capture_has_cb_waits",
     "cb_waits_ignored",
     "core_count",
-    "has_cb_waits",
     "has_thread_counters",
     "operation_stalls",
     "stalled_us",

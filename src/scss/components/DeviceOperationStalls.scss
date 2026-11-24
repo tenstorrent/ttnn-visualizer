@@ -12,12 +12,15 @@ $value-width: 170px;
 $wait-indent: 12px;
 $wait-bar-height: 6px;
 $swatch-size: 10px;
+$heading-gap-above: 10px;
+$heading-gap-below: 4px;
+$subline-font-size: 11px;
 
 // Rendered only inside `.hardware-counter-panel`, whose sheet sets the font size.
 .pipeline-stalls {
     .pipeline-stall-heading {
         font-weight: bold;
-        margin: 10px 0 4px;
+        margin: $heading-gap-above 0 $heading-gap-below;
     }
 
     .pipeline-stall-summary {
@@ -48,7 +51,7 @@ $swatch-size: 10px;
 
     .pipeline-stall-subline {
         display: block;
-        font-size: 11px;
+        font-size: $subline-font-size;
     }
 
     .pipeline-stall-zero-waits {
