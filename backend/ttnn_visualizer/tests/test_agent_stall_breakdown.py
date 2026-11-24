@@ -5,8 +5,10 @@
 """`stall_breakdown`: the ops an agent picks, ranked by stalled device time, and what a
 capture without the counters or the CB waits is told. #2372"""
 
+import errno
 import json
 import re
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -68,6 +70,20 @@ def without_sum_profiling(tmp_path):
 
 def _perf_id(position):
     return str(position + REPORT_ROW_ID_OFFSET)
+
+
+def _ops_csv_unreadable_once():
+    """An `open` for `csv_queries` that refuses its first open of the ops CSV, which
+    only the sum-profiling scan makes, as a passing permission error would."""
+    denied = []
+
+    def opener(path, *args, **kwargs):
+        if not denied and Path(path).name.startswith("ops_perf_results"):
+            denied.append(path)
+            raise PermissionError(errno.EACCES, "Permission denied", str(path))
+        return open(path, *args, **kwargs)
+
+    return opener, denied
 
 
 def _ids(answer):
@@ -540,25 +556,14 @@ class TestCapture:
         """Kept, a passing read error would read as "no sum profiling", naming the flag,
         for the capture's lifetime."""
         registry, handle = captured
-        read = OpsPerformanceReportQueries.read_sum_profiled
-        calls = []
+        opener, denied = _ops_csv_unreadable_once()
 
-        def once_unreadable(path):
-            calls.append(path)
-            if len(calls) == 1:
-                raise PermissionError(13, "Permission denied", path)
-            return read(path)
-
-        with patch.object(
-            OpsPerformanceReportQueries,
-            "read_sum_profiled",
-            side_effect=once_unreadable,
-        ):
+        with patch("ttnn_visualizer.csv_queries.open", side_effect=opener, create=True):
             with pytest.raises(PermissionError):
                 stall_breakdown.stall_breakdown(registry, handle)
             answer = stall_breakdown.stall_breakdown(registry, handle)
 
-        assert len(calls) == 2
+        assert len(denied) == 1
         assert answer["sum_profiling"] is True
 
     def test_cb_waits_on_a_dropped_devices_rows_alone_still_mean_sum_profiling(
@@ -722,6 +727,30 @@ class TestTransport:
 
         assert response["result"]["isError"] is True
         assert SUM_FLAG in response["result"]["content"][0]["text"]
+
+    def test_a_failed_sum_profiling_read_comes_back_as_a_tool_error(self, captured):
+        """Not as an answer without sum profiling."""
+        registry, handle = captured
+        opener, _ = _ops_csv_unreadable_once()
+
+        with patch("ttnn_visualizer.csv_queries.open", side_effect=opener, create=True):
+            response = server.handle_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 9,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "stall_breakdown",
+                        "arguments": {"handle": handle},
+                    },
+                },
+                server._tool_table(registry),
+            )
+        text = response["result"]["content"][0]["text"]
+
+        assert response["result"]["isError"] is True
+        assert text.startswith("stall_breakdown failed:")
+        assert "Permission denied" in text
 
     def test_the_schema_caps_perf_ids_at_the_enforced_limit(self):
         schema = server._tool_table(ReportRegistry())["stall_breakdown"]["schema"]

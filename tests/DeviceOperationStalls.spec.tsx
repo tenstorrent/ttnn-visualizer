@@ -104,9 +104,11 @@ describe('DeviceOperationStalls', () => {
             renderStalls(INPUT_STARVED_STALLS);
 
             const marks = screen.getAllByText(EARLIER_STAGE);
+            const row = screen.getByText('Semaphore Zero Wait T2');
 
             expect(INPUT_STARVED_STALLS.largest_wait?.source).toBe(StallSource.INSTRUMENTATION);
             expect(marks).toHaveLength(1);
+            expect(within(row).getByText(EARLIER_STAGE)).toBe(marks[0]);
             expect(
                 screen.getByRole('img', { name: `Semaphore Zero Wait T2: 76.4%, ${EARLIER_STAGE}` }),
             ).toBeInTheDocument();

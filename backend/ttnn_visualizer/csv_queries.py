@@ -2310,10 +2310,9 @@ class OpsPerformanceReportQueries:
         return _sum_profiled(FileSource.at(path))
 
     @staticmethod
-    def sum_profiled(path: str) -> bool:
-        """`read_sum_profiled` of the CSV the caller read its row from, a file gone or
-        unreadable since counting as none, so it can't fail an earlier row's counters.
-        """
+    def sum_profiled_or_false_if_unreadable(path: str) -> bool:
+        """`read_sum_profiled` for the counters route, of the CSV it read its row from:
+        a file gone or unreadable since can't fail that row's counters."""
         try:
             return OpsPerformanceReportQueries.read_sum_profiled(path)
         except OSError:

@@ -1464,7 +1464,7 @@ def get_performance_counters(perf_id, instance: Instance):
         row,
         counter_header.row_reader(row),
         counter_header,
-        lambda: OpsPerformanceReportQueries.sum_profiled(path),
+        lambda: OpsPerformanceReportQueries.sum_profiled_or_false_if_unreadable(path),
     )
     return Response(
         orjson.dumps({"perf_id": row_id, **counters, "stalls": stalls}),

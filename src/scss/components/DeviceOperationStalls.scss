@@ -12,9 +12,15 @@ $value-width: 170px;
 $wait-indent: 12px;
 $wait-bar-height: 6px;
 $swatch-size: 10px;
+$column-gap: 10px;
+$row-gap: 6px;
+$wait-row-gap: 2px;
+$grid-gap-below: 4px;
+$legend-gap: 12px;
+$swatch-gap: 4px;
 $heading-gap-above: 10px;
 $heading-gap-below: 4px;
-$subline-font-size: 11px;
+$subline-font-size: counter-text.$caption-font-size - 1px;
 
 // Rendered only inside `.hardware-counter-panel`, whose sheet sets the font size.
 .pipeline-stalls {
@@ -60,21 +66,21 @@ $subline-font-size: 11px;
     }
 
     .pipeline-stall-math-caption {
-        margin: 0 0 2px $wait-indent;
+        margin: 0 0 $wait-row-gap $wait-indent;
     }
 
     .pipeline-stall-legend {
         @include counter-text.caption;
 
         display: flex;
-        gap: 12px;
+        gap: $legend-gap;
         padding: 0;
         list-style: none;
 
         li {
             display: flex;
             align-items: center;
-            gap: 4px;
+            gap: $swatch-gap;
         }
     }
 
@@ -86,24 +92,24 @@ $subline-font-size: 11px;
     }
 
     .pipeline-stall-thread {
-        margin-bottom: 6px;
+        margin-bottom: $row-gap;
     }
 
     .pipeline-stall-thread-row,
     .pipeline-stall-grid {
         display: grid;
         grid-template-columns: $name-width 1fr $value-width;
-        gap: 6px 10px;
+        gap: $row-gap $column-gap;
         align-items: center;
-        margin-bottom: 4px;
+        margin-bottom: $grid-gap-below;
     }
 
     .pipeline-stall-waits {
         display: grid;
         grid-template-columns: ($name-width - $wait-indent) 1fr $value-width;
-        gap: 2px 10px;
+        gap: $wait-row-gap $column-gap;
         align-items: center;
-        margin: 0 0 4px $wait-indent;
+        margin: 0 0 $grid-gap-below $wait-indent;
         font-size: counter-text.$caption-font-size;
     }
 
