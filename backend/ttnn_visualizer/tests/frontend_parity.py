@@ -87,7 +87,7 @@ def typescript_string_constant(path: Path, name: str) -> str:
     """The value of one `export const NAME = '...';` in ``path``, on its line or the
     next, where prettier wraps a long one, or a failure."""
     found = re.search(
-        rf"^export const {name} =\s+'([^']*)';$",
+        rf"^export const {name} =[ \t]*\n?[ \t]*'([^']*)';$",
         path.read_text(encoding="utf-8"),
         re.MULTILINE,
     )

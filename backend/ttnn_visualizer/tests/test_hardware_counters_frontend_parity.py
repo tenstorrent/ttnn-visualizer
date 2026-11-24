@@ -34,10 +34,9 @@ from ttnn_visualizer.tests.frontend_parity import (
     typescript_string_constant,
 )
 
-_DEFINITIONS = Path(__file__).resolve().parents[3] / "src" / "definitions"
-_STALL_FIXTURES = (
-    Path(__file__).resolve().parents[3] / "tests/helpers/pipelineStallFixtures.ts"
-)
+_REPO = Path(__file__).resolve().parents[3]
+_DEFINITIONS = _REPO / "src" / "definitions"
+_STALL_FIXTURES = _REPO / "tests" / "helpers" / "pipelineStallFixtures.ts"
 
 
 @pytest.mark.parametrize(

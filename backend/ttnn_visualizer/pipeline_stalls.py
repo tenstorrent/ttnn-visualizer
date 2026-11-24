@@ -46,7 +46,7 @@ STALL_GROUPS = (
     CaptureGroup.FPU,
 )
 STALL_COUNTER_GROUPS = ",".join(group.value for group in STALL_GROUPS)
-_FPU_NOTE = "fpu for utilization"
+_FPU_NOTE = "fpu only for utilization"
 STALL_CAPTURE_FLAGS = (
     f"{CAPTURE_FLAG}={STALL_COUNTER_GROUPS} for the thread figures ({_FPU_NOTE}) "
     f"and {SUM_PROFILING_FLAG} for the CB waits"
