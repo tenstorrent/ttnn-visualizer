@@ -21,7 +21,7 @@ import { TestProviders } from './helpers/TestProviders';
 const MAX_CORES = 64;
 
 // `device_time` arrives in µs, so these ops run for 370,000, 12,500 and 20,000 ns.
-const row = (deviceTimeUs: number): TypedPerfTableRow =>
+const row = (deviceTimeUs: number | null): TypedPerfTableRow =>
     ({
         op_type: OpType.DEVICE_OP,
         op_code: 'Matmul',
@@ -69,7 +69,7 @@ const KERNEL_DURATION_UTILIZATION_CHART: DeviceTimeChart = {
     hoverText: 'Duration: %{y} ns',
 };
 
-// The charts that plotted the µs value as it came, under ns labels.
+// Every chart that plots device time as Device Kernel Duration.
 const KERNEL_DURATION_CHARTS: DeviceTimeChart[] = [
     KERNEL_DURATION_UTILIZATION_CHART,
     {
@@ -122,6 +122,8 @@ const DEVICE_TIME_CHART: DeviceTimeChart = {
     hoverText: 'Device time: %{y} ns',
 };
 
+const ALL_CHARTS = [...KERNEL_DURATION_CHARTS, DEVICE_TIME_CHART];
+
 const latestPlot = () => getPlotInstances().at(-1);
 const layout = () => latestPlot()?.layout as Partial<Layout>;
 const deviceTimeTraces = (chart: DeviceTimeChart) =>
@@ -129,6 +131,23 @@ const deviceTimeTraces = (chart: DeviceTimeChart) =>
 
 const renderChart = (chart: DeviceTimeChart, datasets: TypedPerfTableRow[][]) =>
     render(<TestProviders>{chart.renderChart(datasets)}</TestProviders>);
+
+// Renders the charts one at a time, keyed by name so a failure lists every chart that disagrees.
+const readEachChart = <Reading,>(
+    datasets: TypedPerfTableRow[][],
+    read: (chart: DeviceTimeChart, trace: Partial<PlotData>) => Reading,
+): Record<string, Reading> =>
+    Object.fromEntries(
+        ALL_CHARTS.map((chart) => {
+            renderChart(chart, datasets);
+            const reading = read(chart, deviceTimeTraces(chart)[0]);
+
+            cleanup();
+            resetPlotPropsCapture();
+
+            return [chart.name, reading];
+        }),
+    );
 
 const unitInParentheses = (text: string | undefined) => text?.match(/\((\S+)\)$/)?.[1];
 const unitAfterValue = (template: string | undefined, coordinate: DeviceTimeChart['coordinate']) =>
@@ -158,28 +177,28 @@ describe('device-time charts', () => {
     });
 
     it('read one op as the same duration, in ns, on every chart that plots device time', () => {
-        const charts = [...KERNEL_DURATION_CHARTS, DEVICE_TIME_CHART];
+        const readings = readEachChart([[row(370)]], (chart, trace) => ({
+            duration: (trace[chart.coordinate] as number[])[0],
+            axisUnit: unitInParentheses(layout()[chart.axis]?.title?.text),
+            hoverUnit: unitAfterValue(trace.hovertemplate as string, chart.coordinate),
+        }));
 
-        const readings = charts.map((chart) => {
-            renderChart(chart, [[row(370)]]);
-
-            const [trace] = deviceTimeTraces(chart);
-            const reading = {
-                duration: (trace[chart.coordinate] as number[])[0],
-                axisUnit: unitInParentheses(layout()[chart.axis]?.title?.text),
-                hoverUnit: unitAfterValue(trace.hovertemplate as string, chart.coordinate),
-            };
-
-            cleanup();
-            resetPlotPropsCapture();
-
-            return [chart.name, reading];
-        });
-
-        expect(Object.fromEntries(readings)).toEqual(
+        expect(readings).toEqual(
             Object.fromEntries(
-                charts.map((chart) => [chart.name, { duration: 370_000, axisUnit: 'ns', hoverUnit: 'ns' }]),
+                ALL_CHARTS.map((chart) => [chart.name, { duration: 370_000, axisUnit: 'ns', hoverUnit: 'ns' }]),
             ),
         );
+    });
+
+    it('leave a gap for a missing device time, but a zero bar on Device Time + Ideal Time', () => {
+        const durations = readEachChart(
+            [[row(370), row(Number.NaN), row(null)]],
+            (chart, trace) => trace[chart.coordinate],
+        );
+
+        expect(durations).toEqual({
+            ...Object.fromEntries(KERNEL_DURATION_CHARTS.map((chart) => [chart.name, [370_000, null, null]])),
+            [DEVICE_TIME_CHART.name]: [370_000, 0, 0],
+        });
     });
 });

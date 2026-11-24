@@ -23,7 +23,7 @@ import {
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom, mergeDevicesAtom } from '../../store/app';
 import { getPrimaryDataColours } from '../../definitions/PerformancePlotColours';
 import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
-import { getMaxValue } from '../../functions/numericExtent';
+import { getMaxFiniteValue } from '../../functions/numericExtent';
 
 interface PerfOperationKernelUtilizationChartProps {
     datasets?: TypedPerfTableRow[][];
@@ -59,7 +59,7 @@ function PerfOperationKernelUtilizationChart({
         [datasets, maxCores, reportName, comparisonReportList],
     );
 
-    const maxYValue = getMaxValue(chartDataDuration.flatMap((data) => (data.y as number[]) ?? []));
+    const maxYValue = getMaxFiniteValue(chartDataDuration.flatMap((data) => (data.y as (number | null)[]) ?? []));
 
     const configuration: PlotConfiguration = {
         margin: {

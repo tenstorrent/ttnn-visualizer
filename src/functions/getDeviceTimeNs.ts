@@ -6,7 +6,7 @@ import { TypedPerfTableRow } from '../model/PerfTable';
 import isValidNumber from './isValidNumber';
 import { NS_PER_US } from './math';
 
-// `device_time` is tt-perf-report's Device Time, in µs as the perf table shows it; charts plot it in ns, beside ideal time.
+// `device_time` is tt-perf-report's Device Time, in µs; the charts plot durations in ns, the unit of `pm_ideal_ns`.
 const getDeviceTimeNs = ({ device_time: deviceTimeUs }: Pick<TypedPerfTableRow, 'device_time'>): number | null =>
     isValidNumber(deviceTimeUs) ? deviceTimeUs * NS_PER_US : null;
 
