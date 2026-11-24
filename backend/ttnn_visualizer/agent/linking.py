@@ -51,6 +51,7 @@ from ttnn_visualizer.agent.bounds import (
     GraphTooLargeError,
     bounded,
     ensure_graph_readable,
+    parsed_offset,
 )
 from ttnn_visualizer.agent.captured_graph import UnreadableGraphError, parse_graph
 from ttnn_visualizer.agent.handles import CacheVariant, ReportRegistry
@@ -976,10 +977,13 @@ def source_lines_by_call_site(
     start_signpost: Optional[str] = None,
     end_signpost: Optional[str] = None,
     rank: Optional[int] = None,
+    offset: Optional[int] = None,
 ) -> Dict[str, object]:
     """The performance rows rolled up by the call site of their linked operation, as
-    the stacked table's Source line grouping rolls them up. #2359"""
+    the stacked table's Source line grouping rolls them up, a page from `offset`.
+    #2359 #2369"""
     count = bounded(limit, MAX_DETAILED_LIMIT)
+    requested_start = parsed_offset(offset)
     signposts = tools.SignpostRange.of(start_signpost, end_signpost)
     # First, so a range the report lacks is refused before any trace is read.
     report = tools.canonical_report(registry, handle, signposts)
@@ -1033,12 +1037,19 @@ def source_lines_by_call_site(
     def share(device_time: float) -> Optional[float]:
         return tools.share_percent(device_time, device_time_total)
 
-    shown, rest = groups[:count], groups[count:]
+    # An offset past the end starts at the end, so the page is empty and says where.
+    start = min(requested_start, len(groups))
+    shown = groups[start : start + count]
+    end = start + len(shown)
+    # Only the groups after the page: those before it were an earlier page's.
+    rest = groups[end:]
     result: Dict[str, object] = {
         "handle": handle,
         "row_count": len(rows),
         "group_count": len(groups),
+        "offset": start,
         "returned": len(shown),
+        "next_offset": end if end < len(groups) else None,
         "device_time_unit": tools.DEVICE_TIME_UNIT,
         "device_time_total": report_diff.as_answered(device_time_total),
         "groups": [

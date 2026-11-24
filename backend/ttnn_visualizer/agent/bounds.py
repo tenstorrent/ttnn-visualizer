@@ -83,6 +83,22 @@ def bounded(limit: Optional[int], maximum: int = MAX_LIMIT) -> int:
     return max(1, min(requested, maximum))
 
 
+def parsed_offset(offset: Optional[int]) -> int:
+    """Where a page starts in a ranking, 0 unless given. A page past the end is the
+    caller's to clamp, since only it knows the ranking's length."""
+    if offset is None:
+        return 0
+    try:
+        start = int(offset)
+    except (TypeError, ValueError):
+        raise ValueError(
+            f"offset must be a whole number, not {echoed(offset)}"
+        ) from None
+    if start < 0:
+        raise ValueError(f"offset must be 0 or more, not {echoed(offset)}")
+    return start
+
+
 def cut_text(
     field: str, text: object, limit: int, digest: bool = False
 ) -> Dict[str, object]:

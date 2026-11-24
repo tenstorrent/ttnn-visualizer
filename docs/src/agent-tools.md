@@ -562,8 +562,12 @@ by kind, path and line as text, and `top_op_codes` with equal device time by op 
 by code point, where the application compares them by locale: two paths that differ in
 case or punctuation (`_`, `-` or `.`) can come out swapped, and of tied op codes that
 differ so, a different 3 can be listed. With no countable device time at all, every
-`device_time_share_percent` is `null`, where the application shows 0%. `limit` caps the
-groups at 25, ranked by device time, and those past it are summed into `rest`. Over a
+`device_time_share_percent` is `null`, where the application shows 0%. The groups are a
+page of the ranking by device time from `offset`, 0 unless given, which the answer states
+with how many it `returned`; `next_offset` starts the next page and is null on the last,
+so every call site can be reached, and an `offset` past the end returns none. `limit`
+caps the groups at 25 a page, and `rest` sums only the groups after the page, so the
+shares add up to 100 across every page rather than within one. Over a
 range, the rows and shares are the window's, the unlinked group's `unlinked_by_reason`
 included, while `operation_link` carries `scope: whole_report`, as `top_ops`'s does, since
 its `matched_rows` counts the whole report. The tool refuses a handle whose two reports
