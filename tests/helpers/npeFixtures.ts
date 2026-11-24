@@ -2,7 +2,14 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { type CommonInfo, type NPEData, NoCType, type NpeSummary, type NpeWindow } from '../../src/model/NPEModel';
+import {
+    type CommonInfo,
+    type NPEData,
+    type NoCTransfer,
+    NoCType,
+    type NpeSummary,
+    type NpeWindow,
+} from '../../src/model/NPEModel';
 
 /** Minimal well-formed whole-file NPE payload for parse / validate / route specs. */
 export const minimalValidNpeData = {
@@ -16,6 +23,7 @@ export const summary: NpeSummary = {
     common_info: { version: '1.0.0' } as CommonInfo,
     chips: {},
     zones: [],
+    has_fabric_events: false,
     n_timesteps: 3,
     timesteps: {
         start_cycle: [0, 10, 20],
@@ -44,4 +52,17 @@ export const npeWindow: NpeWindow = {
         },
     },
     transfers: [],
+};
+
+/** A fabric transfer, inactive at every timestep: it exists only so a trace or window counts as carrying fabric events. */
+export const fabricTransfer: NoCTransfer = {
+    id: 0,
+    src: [0, 0, 0],
+    dst: [[0, 1, 1]],
+    total_bytes: 0,
+    noc_event_type: '',
+    fabric_event_type: true,
+    start_cycle: 0,
+    end_cycle: 0,
+    route: [],
 };

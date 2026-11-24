@@ -43,9 +43,11 @@ import {
     PerformanceReportParams,
     getLinkedPerformanceReportParams,
     getPerformanceComparisonReportQueryKey,
+    getPerformanceCountersQueryKey,
     getPerformanceReportQueryKey,
     toBackendStackedGroupBy,
 } from '../functions/performanceReportQueryKey';
+import { OperationHardwareCounters } from '../model/HardwareCounters';
 import { L1PressureResult } from '../model/L1Pressure';
 import { buildL1PressureResult } from '../functions/l1Pressure';
 import { StackedPerfRow } from '../definitions/StackedPerfTable';
@@ -409,6 +411,10 @@ export interface PerformanceReportResponse {
     // True when a signpost range was asked of a report holding no signposts: the
     // report is then whole rather than the window the range names.
     signpost_range_ignored?: boolean;
+    // Any hardware counter column, which the rows' headline keys miss for a capture of other groups only.
+    has_hardware_counters?: boolean;
+    // The devices the CSV names; a merged row on a report of several is one device's.
+    device_count?: number | null;
 }
 
 // Takes the params as one object rather than positionally: `hideHostOps`,
@@ -654,11 +660,13 @@ export const useGetClusterTopology = () => {
     });
 };
 
+export const OPERATIONS_QUERY_KEY = 'get-operations';
+
 export const useOperationsList = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
     return useQuery<OperationDescription[], AxiosError>({
         queryFn: () => (activeProfilerReport !== null ? fetchOperations() : Promise.resolve([])),
-        queryKey: ['get-operations', activeProfilerReport?.path],
+        queryKey: [OPERATIONS_QUERY_KEY, activeProfilerReport?.path],
         retry: false,
         staleTime: Infinity,
     });
@@ -947,6 +955,19 @@ export const clearReportCaches = (queryClient: QueryClient) => {
     getDeviceOperationListPerfByOpId.reset();
 };
 
+/**
+ * Forgets what is cached of one memory report's operations and metadata, so the next read of
+ * either asks the server again. Both are keyed by folder path alone and never go stale, so a
+ * report chosen again would otherwise be answered from an earlier attempt: an error the server
+ * has since recovered from, or another location's report with the same folder name.
+ */
+export const resetMemoryReportReads = (queryClient: QueryClient, path: string) =>
+    Promise.all(
+        [OPERATIONS_QUERY_KEY, REPORT_METADATA_QUERY_KEY].map((key) =>
+            queryClient.resetQueries({ queryKey: [key, path], exact: true }),
+        ),
+    );
+
 export const useGetDeviceOperationListPerf = () => {
     const { data: operations } = useOperationsList();
     const deviceOperationOrderCandidates = getDeviceOperationOrderCandidates(operations);
@@ -1020,12 +1041,14 @@ export const fetchReportMetadata = async (): Promise<ReportMetadata> => {
     } as ReportMetadata;
 };
 
+export const REPORT_METADATA_QUERY_KEY = 'get-report-metadata';
+
 // The endpoint returns 422 on legacy reports that lack the table
 export const useReportMetadata = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
     return useQuery<ReportMetadata, AxiosError>({
-        queryKey: ['get-report-metadata', activeProfilerReport?.path],
+        queryKey: [REPORT_METADATA_QUERY_KEY, activeProfilerReport?.path],
         queryFn: fetchReportMetadata,
         enabled: activeProfilerReport !== null,
         retry: false,
@@ -1349,6 +1372,28 @@ const usePerformanceReportQuery = (name: string | null, params: PerformanceRepor
     });
 
     return response;
+};
+
+const fetchOperationHardwareCounters = async (name: string | null, perfId: number) => {
+    const { data } = await axiosInstance.get<OperationHardwareCounters>(`${Endpoints.PERFORMANCE_COUNTERS}/${perfId}`, {
+        params: { name },
+    });
+
+    return data;
+};
+
+/** @description One row of the active performance report's hardware counters, every label. */
+export const useOperationHardwareCounters = (perfId: number | null) => {
+    const name = useAtomValue(activePerformanceReportFolderNameAtom);
+    const location = useAtomValue(performanceReportLocationAtom);
+
+    return useQuery<OperationHardwareCounters, AxiosError>({
+        queryFn: () => fetchOperationHardwareCounters(name, perfId!),
+        queryKey: getPerformanceCountersQueryKey({ name, instanceId: getOrCreateInstanceId(), location, perfId }),
+        enabled: name !== null && perfId !== null,
+        retry: false,
+        staleTime: Infinity,
+    });
 };
 
 /**

@@ -16,6 +16,7 @@ import { noSshConfigResult } from './helpers/sshConfigFixtures';
 import mockProfilerFolderList from './data/mockProfilerFolderList.json';
 import mockPerformanceReportFolders from './data/mockPerformanceReportFolders.json';
 import FooterInfobar from '../src/components/FooterInfobar';
+import ReportLoadRecorder from '../src/components/ReportLoadRecorder';
 import ProtectedRoute from '../src/components/ProtectedRoute';
 import Home from '../src/routes/Home';
 import NPE from '../src/routes/NPE';
@@ -24,7 +25,7 @@ import { L1PressureStatus } from '../src/model/L1Pressure';
 import ROUTES, { ROUTE_PATTERNS } from '../src/definitions/Routes';
 import Endpoints from '../src/definitions/Endpoints';
 import { TEST_IDS } from '../src/definitions/TestIds';
-import { ReportKind, ReportSource } from '../src/definitions/EventLogEvent';
+import { ReportKind, ReportLoadFailureReason, ReportSource } from '../src/definitions/EventLogEvent';
 import { ReportLocation } from '../src/definitions/Reports';
 import { TARGET_DB_VERSION_MAX } from '../src/definitions/Versions';
 import { RemoteConnection, RemoteFolder } from '../src/model/RemoteConnection';
@@ -93,7 +94,8 @@ vi.mock('../src/hooks/useAPI', async () => {
         useGetClusterDescription: () => ({ data: null }),
         // The footer's data hooks: its range slider is where a failed performance report is handled.
         useGetLatestAppVersion: () => ({ data: undefined, isPending: false, isError: false }),
-        useOperationsList: () => ({ data: undefined }),
+        // Settled, so a memory report's load is decided by its metadata alone here
+        useOperationsList: () => ({ data: [], error: null }),
         useGetDeviceOperationListPerf: () => [],
         useOperationListRange: () => null,
         // The Performance route's other data hooks, settled so only the report itself can
@@ -261,6 +263,9 @@ const renderRestored = (path: string) =>
                 {/* Layout's footer keeps the range slider mounted while a report is active, and
                     that slider handles a failed performance report on every route. */}
                 <FooterInfobar />
+                {/* Layout's other host of load recording: a chosen report's event is recorded
+                    here once its data settles, so without it every no-record case is vacuous. */}
+                <ReportLoadRecorder />
             </ProtectedRoute>
         </TestProviders>,
     );
@@ -375,13 +380,16 @@ describe('boot-restored reports on Home', () => {
     });
 
     // The positive control for every no-load case above: after either restore shape, the
-    // next pick is still counted. Without the opened-by-path run, suppressing all recording
-    // would pass every opened-by-path case, since that restore starts with both pickers empty.
+    // next pick is still counted, once its data has loaded. Without the opened-by-path run,
+    // suppressing all recording would pass every opened-by-path case, since that restore
+    // starts with both pickers empty.
     it.each(RESTORED_SHAPES)(
         'still records a user selection made after the $shape restore',
         async ({ instance, memoryPickerLabel }) => {
             const nextProfiler = mockProfilerFolderList[1];
             h.instance = instance();
+            h.reportMetadataResponse = () =>
+                Promise.resolve({ data: { schema_version: `${TARGET_DB_VERSION_MAX}.0.0` } });
 
             renderRestored(ROUTES.HOME);
 
@@ -398,6 +406,29 @@ describe('boot-restored reports on Home', () => {
             expect(recordReportLoadFailed).not.toHaveBeenCalled();
         },
     );
+
+    // Its failing counterpart: a pick whose data cannot be read records the failure, not a load.
+    it('records an unsupported version on a user selection made after a restore', async () => {
+        const nextProfiler = mockProfilerFolderList[1];
+        h.reportMetadataResponse = () =>
+            Promise.resolve({ data: { schema_version: `${TARGET_DB_VERSION_MAX + 1}.0.0` } });
+
+        renderRestored(ROUTES.HOME);
+
+        await waitForRestoredReports();
+        await settle();
+        expectNothingRecorded();
+
+        await openPopover(getAllButtonsWithText(RESTORED_PROFILER.reportName)[0]);
+        (await screen.findByText(nextProfiler.reportName)).click();
+
+        await waitFor(() => expect(recordReportLoadFailed).toHaveBeenCalledTimes(1));
+        expect(recordReportLoadFailed).toHaveBeenCalledWith(
+            ReportKind.PROFILER,
+            ReportLoadFailureReason.UNSUPPORTED_VERSION,
+        );
+        expect(recordReportLoaded).not.toHaveBeenCalled();
+    });
 });
 
 describe('boot-restored memory and performance reports that fail to load', () => {

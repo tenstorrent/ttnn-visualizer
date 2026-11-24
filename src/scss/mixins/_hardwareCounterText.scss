@@ -1,0 +1,12 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+// The counters panel's small print, which its Utilization and Stalls tabs share.
+$caption-font-size: 12px;
+$block-gap: 8px;
+
+@mixin caption {
+    margin: 0 0 $block-gap;
+    font-size: $caption-font-size;
+}

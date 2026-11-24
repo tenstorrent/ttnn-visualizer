@@ -7,7 +7,11 @@ import { renderHook } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useDeviceOperationPerf } from '../src/hooks/useDeviceOperationPerf';
-import { useGetDeviceOperationListPerfByOpId, useLinkedPerformanceReport } from '../src/hooks/useAPI';
+import {
+    PerformanceReportResponse,
+    useGetDeviceOperationListPerfByOpId,
+    useLinkedPerformanceReport,
+} from '../src/hooks/useAPI';
 import { useReportLinkMatch } from '../src/hooks/useReportLinkMatch';
 import { ReportLinkMatchResult } from '../src/definitions/ReportLinks';
 import { ReportFolder } from '../src/definitions/Reports';
@@ -27,10 +31,12 @@ vi.mock('../src/hooks/useReportLinkMatch', () => ({
 
 const OPERATION_ID = 4;
 
-const givenLinkedReport = (rows: PerfTableRow[] | undefined) =>
+const givenLinkedReport = (rows: PerfTableRow[] | undefined, envelope: Partial<PerformanceReportResponse> = {}) =>
     vi
         .mocked(useLinkedPerformanceReport)
-        .mockReturnValue({ data: rows && { report: rows } } as ReturnType<typeof useLinkedPerformanceReport>);
+        .mockReturnValue({ data: rows && { report: rows, ...envelope } } as ReturnType<
+            typeof useLinkedPerformanceReport
+        >);
 
 const givenMatches = (mappingsByOpId: Map<number, DeviceOperationMapping[]>) =>
     vi.mocked(useGetDeviceOperationListPerfByOpId).mockReturnValue(mappingsByOpId);
@@ -109,5 +115,24 @@ describe('useDeviceOperationPerf', () => {
         ]);
 
         expect(renderPerf().totalDeviceTimeUs).toBe(40.5);
+    });
+
+    it("says whether the linked report has hardware counters, from its envelope rather than its rows' keys", () => {
+        expect(renderPerf().hasHardwareCounters).toBe(false);
+
+        givenLinkedReport([firstPermute], { has_hardware_counters: true });
+
+        expect(renderPerf().hasHardwareCounters).toBe(true);
+    });
+
+    it.each([
+        [undefined, false],
+        [null, false],
+        [1, false],
+        [2, true],
+    ])('reads a report naming %s devices as multi-device: %s', (deviceCount, isMultiDevice) => {
+        givenLinkedReport([firstPermute], { device_count: deviceCount });
+
+        expect(renderPerf().isMultiDeviceReport).toBe(isMultiDevice);
     });
 });

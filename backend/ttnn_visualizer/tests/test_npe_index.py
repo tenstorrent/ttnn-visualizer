@@ -11,6 +11,7 @@ readers `noc_congestion` uses, which must never write beside the trace (#2156).
 """
 
 import json
+import logging
 import os
 import random
 import sqlite3
@@ -180,6 +181,52 @@ def test_summary_reports_no_soc_descriptor_when_the_report_has_none(tmp_path):
 
     assert "soc_descriptor" in summary
     assert summary["soc_descriptor"] is None
+
+
+def test_summary_reports_fabric_events_when_any_transfer_is_fabric(tmp_path):
+    # The last transfer only: the flag covers the whole trace, which a windowed
+    # client cannot see, not just the transfers of an early window. #2356
+    obj = _make_npe_object(n_transfers=3)
+    obj["noc_transfers"][-1]["fabric_event_type"] = True
+    npe_path = _write_npe(tmp_path, obj)
+
+    summary = read_summary(ensure_index(npe_path))
+
+    assert summary["has_fabric_events"] is True
+
+
+def test_summary_reports_fabric_events_from_a_transfer_with_no_id(tmp_path, caplog):
+    # The build skips a transfer with no id, but the whole-file path still sees
+    # it, so the flag must be decided before that skip.
+    obj = _make_npe_object(n_transfers=3)
+    obj["noc_transfers"][-1]["fabric_event_type"] = True
+    del obj["noc_transfers"][-1]["id"]
+    npe_path = _write_npe(tmp_path, obj)
+
+    with caplog.at_level(logging.WARNING, logger="ttnn_visualizer.npe_index"):
+        summary = read_summary(ensure_index(npe_path))
+
+    # Guards the premise: the test means nothing if the build kept the transfer.
+    assert "skipped 1 transfer(s) with no id" in caplog.text
+    assert summary["has_fabric_events"] is True
+
+
+def test_summary_reports_no_fabric_events_when_none_are_fabric(tmp_path):
+    obj = _make_npe_object(n_transfers=3)
+    obj["noc_transfers"][0]["fabric_event_type"] = False
+    npe_path = _write_npe(tmp_path, obj)
+
+    summary = read_summary(ensure_index(npe_path))
+
+    assert summary["has_fabric_events"] is False
+
+
+def test_summary_reports_no_fabric_events_for_an_empty_trace(tmp_path):
+    npe_path = _write_npe(tmp_path, _make_npe_object(n_transfers=0, n_timesteps=0))
+
+    summary = read_summary(ensure_index(npe_path))
+
+    assert summary["has_fabric_events"] is False
 
 
 def test_summary_max_link_demand_values(tmp_path):

@@ -153,3 +153,17 @@ export const getPerformanceComparisonReportQueryKey = ({
     names,
     ...getFilterKeySegments(params),
 ];
+
+/** One performance row's hardware counters, keyed on the report as its rows are. */
+export const getPerformanceCountersQueryKey = ({
+    name,
+    instanceId,
+    location,
+    perfId,
+}: Omit<PerformanceReportQueryKeyInput, 'params'> & { name: string | null; perfId: number | null }) => [
+    'get-performance-counters',
+    instanceId,
+    location,
+    name,
+    perfId,
+];

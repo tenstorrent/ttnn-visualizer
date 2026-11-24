@@ -6,6 +6,7 @@ import {
     ColumnDefinition,
     ColumnKeys,
     Columns,
+    HardwareCounterColumns,
     L1PressureColumns,
     LOCKED_PERF_COLUMN_KEYS,
 } from '../definitions/PerfTable';
@@ -13,6 +14,7 @@ import {
 const OP_ID_INSERTION_POINT = 1;
 const L1_PRESSURE_INSERTION_POINT = 2;
 const HIGH_DISPATCH_INSERTION_POINT = Columns.findIndex((column) => column.key === ColumnKeys.BufferType);
+const HARDWARE_COUNTER_INSERTION_POINT = Columns.findIndex((column) => column.key === ColumnKeys.Hash);
 
 export interface EligiblePerfColumnsFlags {
     hasOpIds: boolean;
@@ -21,6 +23,8 @@ export interface EligiblePerfColumnsFlags {
     hasNpe: boolean;
     hasSubDeviceIds: boolean;
     hasMultipleAvailableCoreBudgets: boolean;
+    // Empty until the user opts in to the hardware counter columns.
+    hardwareCounterKeys: ReadonlySet<ColumnKeys>;
 }
 
 export function getEligiblePerfColumns(flags: EligiblePerfColumnsFlags): ColumnDefinition[] {
@@ -35,7 +39,9 @@ export function getEligiblePerfColumns(flags: EligiblePerfColumnsFlags): ColumnD
                 (column.key !== ColumnKeys.AVAILABLE_CORES || flags.hasMultipleAvailableCoreBudgets),
         ),
         ...(flags.hiliteHighDispatch ? [{ name: 'Slow', key: ColumnKeys.HighDispatch }] : []),
-        ...Columns.slice(HIGH_DISPATCH_INSERTION_POINT),
+        ...Columns.slice(HIGH_DISPATCH_INSERTION_POINT, HARDWARE_COUNTER_INSERTION_POINT),
+        ...HardwareCounterColumns.filter((column) => flags.hardwareCounterKeys.has(column.key)),
+        ...Columns.slice(HARDWARE_COUNTER_INSERTION_POINT),
         ...(flags.hasNpe ? [{ name: 'NPE', key: ColumnKeys.GlobalCallCount }] : []),
     ];
 }

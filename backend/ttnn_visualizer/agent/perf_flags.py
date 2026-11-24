@@ -44,6 +44,7 @@ from ttnn_visualizer.agent.js_values import (
 )
 from ttnn_visualizer.agent.perf_detail import is_unmodelled
 from ttnn_visualizer.csv_queries import SIGNPOST_OP_TYPE, DeviceLogMeta
+from ttnn_visualizer.device_architecture import DeviceArchitecture, architecture_of
 
 
 class PerfHeuristicFlag(str, Enum):
@@ -68,17 +69,6 @@ class MaxCoresSource(str, Enum):
     ARCHITECTURE_DEFAULT = "architecture_default"
     REPORT_ROWS = "report_rows"
     FALLBACK_DEFAULT = "fallback_default"
-
-
-class DeviceArchitecture(str, Enum):
-    """`DeviceArchitecture` in `src/definitions/DeviceArchitecture.ts`."""
-
-    UNKNOWN = ""
-    GRAYSKULL = "grayskull"
-    WORMHOLE = "wormhole_b0"
-    BLACKHOLE = "blackhole"
-    QUASAR = "quasar"
-    GRENDEL = "grendel"
 
 
 class BoundType(str, Enum):
@@ -121,15 +111,6 @@ _CORE_COUNT = {
     DeviceArchitecture.GRENDEL: 32,
 }
 DEFAULT_MAX_CORES = _CORE_COUNT[DeviceArchitecture.WORMHOLE]
-
-# `stringToArchitecture`'s prefixes, in the order it tries them.
-_ARCHITECTURE_PREFIXES = (
-    ("wormhole", DeviceArchitecture.WORMHOLE),
-    ("blackhole", DeviceArchitecture.BLACKHOLE),
-    ("quasar", DeviceArchitecture.QUASAR),
-    ("grendel", DeviceArchitecture.GRENDEL),
-    ("grayskull", DeviceArchitecture.GRAYSKULL),
-)
 
 _BOUND_ANALYSES = frozenset(analysis.value for analysis in BoundAnalysis)
 
@@ -385,17 +366,6 @@ def heuristic_flags(row: FlagRow, max_cores: float) -> List[Dict[str, object]]:
     return [_EVIDENCE[name](row, max_cores) for name in flag_names(row, max_cores)]
 
 
-def architecture_of(name: object) -> DeviceArchitecture:
-    """`stringToArchitecture`: an architecture by its name's prefix, else unknown."""
-    if not isinstance(name, str):
-        return DeviceArchitecture.UNKNOWN
-    lowered = name.lower()
-    return next(
-        (arch for prefix, arch in _ARCHITECTURE_PREFIXES if lowered.startswith(prefix)),
-        DeviceArchitecture.UNKNOWN,
-    )
-
-
 def _architecture_default(architecture: DeviceArchitecture) -> int:
     return _CORE_COUNT.get(architecture, DEFAULT_MAX_CORES)
 
@@ -550,7 +520,6 @@ __all__ = [
     "BoundAnalysis",
     "BoundType",
     "CoreCapacitySource",
-    "DeviceArchitecture",
     "DramBoundReason",
     "FlagInputs",
     "FlagRow",
@@ -558,7 +527,6 @@ __all__ = [
     "MaxCoresSource",
     "PerfHeuristicFlag",
     "RepeatCacheOutcome",
-    "architecture_of",
     "cache_looks_disabled",
     "core_count",
     "core_utilisation",

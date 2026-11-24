@@ -72,6 +72,8 @@ import AllocationFailureSummary from './AllocationFailureSummary';
 import isSignpostOutsideRange from '../../functions/isSignpostOutsideRange';
 import { SignpostSelectType } from '../../definitions/Performance';
 import { AllocationFailureListing } from '../../model/AllocationFailure';
+import { getHardwareCountersSwitchHint, hasHardwareCounterColumns } from '../../functions/hardwareCounters';
+import { HARDWARE_COUNTERS_SWITCH_LABEL } from '../../definitions/HardwareCounters';
 import { useOperationsList } from '../../hooks/useAPI';
 import indexFirstById from '../../functions/indexFirstById';
 import { SourceLineGroup, getSourceLineGroups, isSourceLineGroupMatch } from '../../functions/perfSourceLines';
@@ -92,6 +94,8 @@ interface PerformanceReportProps {
     maxCores: number;
     comparisonMaxCores?: number[];
     allocationFailureListings?: AllocationFailureListing[];
+    // From the reports' envelopes: a capture of other counter groups has none of the table's columns.
+    hasHardwareCounters?: boolean;
     /**
      * Whether any row of the whole report links to a memory-report operation. `data` holds only
      * the range slider's rows, which can all be unlinked while the report is linked.
@@ -156,6 +160,7 @@ const PerformanceReport = ({
     maxCores,
     comparisonMaxCores = [],
     allocationFailureListings = EMPTY_ALLOCATION_FAILURE_LISTINGS,
+    hasHardwareCounters = false,
     hasLinkedOperations,
 }: PerformanceReportProps) => {
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
@@ -179,6 +184,7 @@ const PerformanceReport = ({
     // const [isMultiDevice, _setIsMultiDevice] = useState<boolean>(false);
     const [provideMatmulAdvice, setProvideMatmulAdvice] = useState(false);
     const [hiliteHighDispatch, setHiliteHighDispatch] = useState(false);
+    const [showHardwareCounters, setShowHardwareCounters] = useState(false);
     const [selectedTabId, setSelectedTabId] = useState<TabId>(INITIAL_TAB_ID);
     const [useNormalisedData, setUseNormalisedData] = useState(true);
     const recordOpCodeFilterUsed = useRecordFilterUsed(FilterSurface.PERF_OP_CODE);
@@ -214,6 +220,13 @@ const PerformanceReport = ({
         Object.fromEntries(filterableStackedColumnKeys.map((key) => [key, ''])) as StackedTableFilter,
     );
 
+    const hasCounterColumns = useMemo(
+        () =>
+            hasHardwareCounters &&
+            (hasHardwareCounterColumns(data ?? []) || (comparisonData ?? []).some(hasHardwareCounterColumns)),
+        [hasHardwareCounters, data, comparisonData],
+    );
+    const isShowingHardwareCounters = showHardwareCounters && hasCounterColumns;
     const isSignpostsDisabled = !signposts || signposts.length === 0;
     const isTableLoading = isLoading || isComparisonLoading;
     const comparisonIndex = (activeComparisonReportList ?? []).findIndex((value) => value === selectedTabId);
@@ -516,6 +529,7 @@ const PerformanceReport = ({
                 hiliteHighDispatch={hiliteHighDispatch}
                 reportFolderName={activeReportFolderName}
                 hasL1PressureData={hasL1PressureData}
+                showHardwareCounters={isShowingHardwareCounters}
                 maxCores={maxCores}
                 isLoading={isTableLoading}
             />
@@ -564,6 +578,7 @@ const PerformanceReport = ({
                 hiliteHighDispatch={hiliteHighDispatch}
                 reportFolderName={report}
                 hasL1PressureData={hasL1PressureData}
+                showHardwareCounters={isShowingHardwareCounters}
                 maxCores={comparisonMaxCores[index] ?? maxCores}
                 activeReportComparisonIndex={0}
                 isLoading={isTableLoading}
@@ -861,6 +876,23 @@ const PerformanceReport = ({
                                     className='option-switch'
                                     disabled={isStackedView}
                                 />
+
+                                <Tooltip
+                                    content={getHardwareCountersSwitchHint(hasHardwareCounters, hasCounterColumns)}
+                                    position={Position.TOP}
+                                >
+                                    <Switch
+                                        label={HARDWARE_COUNTERS_SWITCH_LABEL}
+                                        onChange={toggleTableOption(
+                                            setShowHardwareCounters,
+                                            PerfTableOption.HARDWARE_COUNTERS,
+                                        )}
+                                        checked={isShowingHardwareCounters}
+                                        className='option-switch'
+                                        disabled={!hasCounterColumns || isStackedView}
+                                        data-testid={TEST_IDS.PERF_HARDWARE_COUNTERS_SWITCH}
+                                    />
+                                </Tooltip>
 
                                 <Tooltip
                                     content='Tries to match up operations between the performance reports'
