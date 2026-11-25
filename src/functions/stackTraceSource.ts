@@ -105,21 +105,25 @@ export const getCallSiteFrame = (stackTrace: string): StackTraceFrame | null => 
 };
 
 /**
- * `<basename>:<line>` of the call site, the frame the Source button opens, or `''` when the
- * trace has no frame or the frame names no file (an empty or slash-terminated path). Read
- * through `getCallSiteFrame` so the label can never name a different frame from the one
- * `extractOperationSourceData` links to.
+ * `<basename>:<line>` of a frame, or `''` when it names no file (an empty or slash-terminated
+ * path). The operations list and the Stacked view's source-line groups both label a call site
+ * with it, so the two cannot drift apart.
+ */
+export const formatFrameLabel = (frame: Pick<StackTraceFrame, 'file' | 'line'>): string => {
+    const fileName = getPathBasename(frame.file);
+
+    return fileName ? `${fileName}:${frame.line}` : '';
+};
+
+/**
+ * `formatFrameLabel` of the call site, the frame the Source button opens, or `''` when the trace
+ * has no frame. Read through `getCallSiteFrame` so the label can never name a different frame
+ * from the one `extractOperationSourceData` links to.
  */
 export const getOperationFileIdentifier = (stackTrace: string): string => {
     const callSite = getCallSiteFrame(stackTrace);
 
-    if (!callSite) {
-        return '';
-    }
-
-    const fileName = getPathBasename(callSite.file);
-
-    return fileName ? `${fileName}:${callSite.line}` : '';
+    return callSite ? formatFrameLabel(callSite) : '';
 };
 
 /**
