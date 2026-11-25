@@ -321,6 +321,15 @@ class TestPerfModelPlaceholder:
         assert fields["ideal_compute_us"] == 1.568
         assert fields["fpu_util_percent"] == 6.54
 
+    @pytest.mark.parametrize("cell", ["1.0004", "0.9996"])
+    def test_only_exactly_one_nanosecond_is_the_placeholder(self, cell):
+        """As the view's `isUnmodelledIdealTime` reads it, which the flags' golden pins."""
+        fields = perf_detail.detail_fields(
+            {"pm_ideal_ns": cell}, [DetailGroup.UTILISATION]
+        )
+
+        assert fields["ideal_us"] == 0.001
+
     def test_a_report_of_placeholders_names_them_as_unmodelled(self):
         named = perf_detail.empty_in_report(
             perf_detail.empty_fields([{"pm_ideal_ns": "1"}, {"pm_ideal_ns": "1"}]),

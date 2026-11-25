@@ -4,6 +4,7 @@
 
 import { NumberRange } from '@blueprintjs/core';
 import { PerfTableRow } from '../model/PerfTable';
+import isValidNumber from './isValidNumber';
 
 /**
  * @description The largest of `values`, for data-sized input. `Math.max(...values)` passes
@@ -19,6 +20,19 @@ export const getMaxValue = (values: Iterable<number>): number => {
 
     for (const value of values) {
         result = Math.max(result, value);
+    }
+
+    return result;
+};
+
+/** @description The largest finite value, skipping the nulls a chart plots as gaps; `-Infinity` when there is none. */
+export const getMaxFiniteValue = (values: Iterable<number | null>): number => {
+    let result = -Infinity;
+
+    for (const value of values) {
+        if (isValidNumber(value) && value > result) {
+            result = value;
+        }
     }
 
     return result;
