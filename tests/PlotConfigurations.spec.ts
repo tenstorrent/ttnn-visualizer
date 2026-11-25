@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+    CORE_COUNT_AXIS_HOVER_FORMAT,
     CORE_COUNT_AXIS_TICK_FORMAT,
     NS_AXIS_HOVER_FORMAT,
     NS_AXIS_TICK_FORMAT,
@@ -62,17 +63,19 @@ describe('getNsAxisConfig', () => {
 });
 
 describe('getCoreCountAxisConfig', () => {
-    it('uses plain integer ticks (not ns thousands separators) and a max-cores range', () => {
+    it('uses plain integer ticks and hover (not the ns formats) and a max-cores range', () => {
         const axis = getCoreCountAxisConfig(64);
 
         expect(axis).toEqual({
             title: { text: 'Core Count' },
             tickformat: 'd',
-            hoverformat: NS_AXIS_HOVER_FORMAT,
+            hoverformat: 'd',
             range: [0, 64],
         });
         expect(CORE_COUNT_AXIS_TICK_FORMAT).toBe('d');
         expect(CORE_COUNT_AXIS_TICK_FORMAT).not.toBe(NS_AXIS_TICK_FORMAT);
+        expect(CORE_COUNT_AXIS_HOVER_FORMAT).toBe('d');
+        expect(CORE_COUNT_AXIS_HOVER_FORMAT).not.toBe(NS_AXIS_HOVER_FORMAT);
     });
 });
 
