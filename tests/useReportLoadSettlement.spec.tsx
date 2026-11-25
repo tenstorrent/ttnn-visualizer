@@ -249,14 +249,15 @@ describe('a chosen memory report', () => {
         expect(recordReportLoaded).not.toHaveBeenCalled();
     });
 
-    // The server already held the next pick when it answered this one's reads (#2375)
+    // The server already held the next pick when it answered this one's reads (#2375). The
+    // other read settles too, so neither case passes on a still-pending metadata read alone.
     it.each([
-        ['operations', queries.operations],
-        ['metadata', queries.metadata],
-    ])('records nothing when its %s were answered for a report chosen since', (_name, map) => {
+        ['operations', settledMetadata(TARGET_DB_VERSION_MAX), superseded],
+        ['metadata', superseded, settledOperations],
+    ])('records nothing when its %s were answered for a report chosen since', (_name, metadata, operations) => {
         renderRecorder();
         choose(ReportKind.PROFILER, REPORT_A);
-        settle(map, REPORT_A.path, superseded);
+        settleMemory(REPORT_A.path, metadata, operations);
 
         expect(recordReportLoadFailed).not.toHaveBeenCalled();
         expect(recordReportLoaded).not.toHaveBeenCalled();

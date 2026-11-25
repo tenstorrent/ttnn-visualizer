@@ -29,7 +29,15 @@ vi.mock('../src/libs/axiosInstance', () => ({
     getOrCreateInstanceId: () => 'test-instance',
 }));
 
-const ACTIVE_REPORT = { path: 'memory-run', reportName: 'memory-run' };
+type ActiveReport = { path: string; reportName: string; syncedName?: string };
+
+const ACTIVE_REPORT: ActiveReport = { path: 'memory-run', reportName: 'memory-run' };
+// Freshly picked: `path` is the remote path, and its basename is not the synced folder's name
+const REMOTE_REPORT: ActiveReport = {
+    path: '/remote/profiler/reports/memory-run',
+    reportName: 'memory-run',
+    syncedName: 'memory-run-synced',
+};
 const OTHER_REPORT_ID = 'other-run';
 
 /** A rank's descriptor, linked to the other rank so rank 0 reads as multi-host. */
@@ -69,8 +77,14 @@ const notFoundFor = (reportId: string) =>
 
 type Answer = () => Promise<unknown>;
 
-/** Serves two ranks of this report, then says there is no third; `descriptor` and `mesh` override rank 1. */
-const serveRanks = ({ descriptor, mesh }: { descriptor?: Answer; mesh?: Answer } = {}) =>
+/**
+ * Serves two ranks of the report the server names `reportId`, then says there is no third;
+ * `descriptor` and `mesh` override rank 1.
+ */
+const serveRanks = (
+    { descriptor, mesh }: { descriptor?: Answer; mesh?: Answer } = {},
+    reportId: string = ACTIVE_REPORT.path,
+) =>
     vi.mocked(axiosInstance.get).mockImplementation((url, config?: AxiosRequestConfig) => {
         const rank = Number(config?.params?.rank ?? 0);
         const isMesh = String(url) === Endpoints.MESH_DESCRIPTOR;
@@ -82,15 +96,15 @@ const serveRanks = ({ descriptor, mesh }: { descriptor?: Answer; mesh?: Answer }
             return descriptor();
         }
         if (rank > 1 || isMesh) {
-            return Promise.reject(notFoundFor(ACTIVE_REPORT.path));
+            return Promise.reject(notFoundFor(reportId));
         }
 
-        return Promise.resolve(answeredFor(ACTIVE_REPORT.path, rankedDescriptor(rank)));
+        return Promise.resolve(answeredFor(reportId, rankedDescriptor(rank)));
     });
 
-const renderTopology = () => {
+const renderTopology = (report: ActiveReport = ACTIVE_REPORT) => {
     const store = createStore();
-    store.set(activeProfilerReportAtom, ACTIVE_REPORT);
+    store.set(activeProfilerReportAtom, report);
     const queryClient = new QueryClient();
 
     return renderHook(() => useGetClusterTopology(), {
@@ -117,6 +131,15 @@ describe('useGetClusterTopology', () => {
     it('reads every rank until the server says there are no more', async () => {
         serveRanks();
         const { result } = renderTopology();
+
+        await waitFor(() => expect(result.current.isSuccess && result.current.data !== null).toBe(true));
+        expect(result.current.data?.hosts).toHaveLength(2);
+    });
+
+    // The server names a synced remote report by its folder, not by the remote path's basename
+    it('reads a freshly picked remote report under its synced name', async () => {
+        serveRanks({}, REMOTE_REPORT.syncedName);
+        const { result } = renderTopology(REMOTE_REPORT);
 
         await waitFor(() => expect(result.current.isSuccess && result.current.data !== null).toBe(true));
         expect(result.current.data?.hosts).toHaveLength(2);

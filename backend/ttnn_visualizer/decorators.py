@@ -28,7 +28,8 @@ from ttnn_visualizer.ssh_client import SSH_AUTH_FAILURE_MESSAGE
 
 logger = logging.getLogger(__name__)
 
-# Mirrored by ACTIVE_MEMORY_REPORT_HEADER in src/definitions/ReportHeaders.ts.
+# Mirrored by ACTIVE_MEMORY_REPORT_HEADER in src/definitions/ReportHeaders.ts;
+# tests/test_report_headers_frontend_parity.py pins the two together.
 ACTIVE_MEMORY_REPORT_HEADER = "X-Active-Memory-Report"
 
 

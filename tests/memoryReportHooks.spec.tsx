@@ -9,7 +9,7 @@
  * the server names it by the folder it synced to. A hook that compared the path's basename,
  * or skipped the check, would cache another report's answer or refuse its own.
  *
- * `useGetClusterTopology` has its own spec, since it reads rank by rank.
+ * `useGetClusterTopology` has its own spec, remote case included, since it reads rank by rank.
  */
 
 import { cleanup, renderHook, waitFor } from '@testing-library/react';

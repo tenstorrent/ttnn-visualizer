@@ -7,7 +7,7 @@ import axiosInstance from '../libs/axiosInstance';
 import { ACTIVE_MEMORY_REPORT_HEADER } from '../definitions/ReportHeaders';
 import { getReportId } from './reportLinks';
 
-export const REPORT_CHANGED_ERROR_CODE = 'REPORT_CHANGED';
+const REPORT_CHANGED_ERROR_CODE = 'REPORT_CHANGED';
 
 /**
  * An answer for another memory report than the one asked about. It extends `AxiosError`
@@ -94,7 +94,7 @@ export const fetchMemoryReportData = async <T>(
         throw (axios.isAxiosError(error) && getReportChangedError(error.response?.headers, reportId)) || error;
     }
 
-    const reportChangedError = getReportChangedError(response?.headers, reportId);
+    const reportChangedError = getReportChangedError(response.headers, reportId);
 
     if (reportChangedError) {
         throw reportChangedError;
