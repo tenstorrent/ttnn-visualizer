@@ -12,9 +12,9 @@ export enum SortingDirection {
 type SortingValue = string | number | null;
 
 const sortAsc = (a: SortingValue, b: SortingValue): number => {
-    // NaN and nulls should be sorted to the end
-    const aIsInvalid = a === null || (typeof a === 'number' && Number.isNaN(a));
-    const bIsInvalid = b === null || (typeof b === 'number' && Number.isNaN(b));
+    // NaN, nulls and missing keys, which read as undefined, should be sorted to the end
+    const aIsInvalid = a === null || a === undefined || (typeof a === 'number' && Number.isNaN(a));
+    const bIsInvalid = b === null || b === undefined || (typeof b === 'number' && Number.isNaN(b));
 
     if (aIsInvalid || bIsInvalid) {
         if (aIsInvalid && bIsInvalid) {
@@ -23,7 +23,7 @@ const sortAsc = (a: SortingValue, b: SortingValue): number => {
         return aIsInvalid ? 1 : -1;
     }
 
-    if (a === undefined || b === undefined || a === b) {
+    if (a === b) {
         return 0;
     }
 
@@ -35,9 +35,9 @@ const sortAsc = (a: SortingValue, b: SortingValue): number => {
 };
 
 const sortDesc = (a: SortingValue, b: SortingValue): number => {
-    // NaN and nulls should be sorted to the end
-    const aIsInvalid = a === null || (typeof a === 'number' && Number.isNaN(a));
-    const bIsInvalid = b === null || (typeof b === 'number' && Number.isNaN(b));
+    // NaN, nulls and missing keys, which read as undefined, should be sorted to the end
+    const aIsInvalid = a === null || a === undefined || (typeof a === 'number' && Number.isNaN(a));
+    const bIsInvalid = b === null || b === undefined || (typeof b === 'number' && Number.isNaN(b));
 
     if (aIsInvalid || bIsInvalid) {
         if (aIsInvalid && bIsInvalid) {
@@ -46,7 +46,7 @@ const sortDesc = (a: SortingValue, b: SortingValue): number => {
         return aIsInvalid ? 1 : -1;
     }
 
-    if (a === undefined || b === undefined || a === b) {
+    if (a === b) {
         return 0;
     }
 

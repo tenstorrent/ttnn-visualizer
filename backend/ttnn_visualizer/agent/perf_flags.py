@@ -5,11 +5,12 @@
 """The performance view's heuristic flags, each with the evidence behind it. #2193
 
 A port of `annotatePerfHeuristicFlags` (`src/functions/computePerfHeuristicFlags.ts`),
-with `getCoreUtilization`, `isSlowDramDominant`, `resolveMaxCores`, `getCoreCount`, the
-thresholds in `src/definitions/PerfHeuristics.ts`, and the fields and first-call rule
-`enrichRowData` parses for them; mirror a change there. The view's allocation-failure
-and DRAM-fallback flags are not ported, because `errors` and `dram_fallbacks` answer
-them.
+with `getCoreUtilization` and the `isUnmodelledIdealTime` it reads (`is_unmodelled`),
+`isSlowDramDominant`, `resolveMaxCores`, `getCoreCount`, the thresholds in
+`src/definitions/PerfHeuristics.ts`, and the fields and first-call rule `enrichRowData`
+parses for them; mirror a change there. The view's allocation-failure and DRAM-fallback
+flags are not ported, because `errors` and `dram_fallbacks` answer them, nor is its
+utilisation-unknown note, which a null `ideal_us` and `FLAGS_NOTE` answer.
 
 Values are read as JavaScript reads them, through `js_values`: a NaN stays one where
 `parseFloat` gives it, and None is null, since which of the two a cell becomes decides
@@ -17,7 +18,7 @@ some flags.
 """
 
 import math
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import (
     Callable,
@@ -43,6 +44,7 @@ from ttnn_visualizer.agent.js_values import (
 )
 from ttnn_visualizer.agent.perf_detail import is_unmodelled
 from ttnn_visualizer.csv_queries import SIGNPOST_OP_TYPE, DeviceLogMeta
+from ttnn_visualizer.device_architecture import DeviceArchitecture, architecture_of
 
 
 class PerfHeuristicFlag(str, Enum):
@@ -67,17 +69,6 @@ class MaxCoresSource(str, Enum):
     ARCHITECTURE_DEFAULT = "architecture_default"
     REPORT_ROWS = "report_rows"
     FALLBACK_DEFAULT = "fallback_default"
-
-
-class DeviceArchitecture(str, Enum):
-    """`DeviceArchitecture` in `src/definitions/DeviceArchitecture.ts`."""
-
-    UNKNOWN = ""
-    GRAYSKULL = "grayskull"
-    WORMHOLE = "wormhole_b0"
-    BLACKHOLE = "blackhole"
-    QUASAR = "quasar"
-    GRENDEL = "grendel"
 
 
 class BoundType(str, Enum):
@@ -120,15 +111,6 @@ _CORE_COUNT = {
     DeviceArchitecture.GRENDEL: 32,
 }
 DEFAULT_MAX_CORES = _CORE_COUNT[DeviceArchitecture.WORMHOLE]
-
-# `stringToArchitecture`'s prefixes, in the order it tries them.
-_ARCHITECTURE_PREFIXES = (
-    ("wormhole", DeviceArchitecture.WORMHOLE),
-    ("blackhole", DeviceArchitecture.BLACKHOLE),
-    ("quasar", DeviceArchitecture.QUASAR),
-    ("grendel", DeviceArchitecture.GRENDEL),
-    ("grayskull", DeviceArchitecture.GRAYSKULL),
-)
 
 _BOUND_ANALYSES = frozenset(analysis.value for analysis in BoundAnalysis)
 
@@ -240,18 +222,21 @@ def _core_capacity(row: FlagRow, max_cores: float) -> float:
     return row.available_cores if row.available_cores is not None else max_cores
 
 
-def core_utilisation(row: FlagRow, max_cores: float) -> float:
+def core_utilisation(row: FlagRow, max_cores: float) -> Optional[float]:
     """`getCoreUtilization`, as a ratio: the ideal time over the device time, scaled by
-    the cores the op could have used over the cores it did; 0 where it cannot be read.
+    the cores the op could have used over the cores it did; None where it cannot be
+    read, which includes an ideal time that is the perf model's 1 ns placeholder.
     """
     ideal, duration, cores = row.pm_ideal_ns, row.device_time, row.cores
+    if is_unmodelled(ideal):
+        return None
     if js_is_finite(ideal) and js_is_finite(duration) and js_is_finite(cores):
         utilisation = js_divide(ideal, duration * 1000) * js_divide(
             _core_capacity(row, max_cores), cores
         )
         if js_is_finite(utilisation):
             return utilisation
-    return 0.0
+    return None
 
 
 def _is_eligible(row: FlagRow) -> bool:
@@ -304,9 +289,8 @@ def flag_names(row: FlagRow, max_cores: float) -> List[PerfHeuristicFlag]:
     has_min_impact = _meets_min_impact(row)
     if has_min_impact and (row.bound == BoundType.DRAM or _is_slow_dram_dominant(row)):
         names.append(PerfHeuristicFlag.DRAM_BOUND)
-    # `core_utilisation` is 0 wherever the view's own guard on its three inputs refuses.
-    utilisation = core_utilisation(row, max_cores) if has_min_impact else 0
-    if 0 < utilisation < LOW_CORE_UTILISATION_RATIO:
+    utilisation = core_utilisation(row, max_cores) if has_min_impact else None
+    if utilisation is not None and 0 < utilisation < LOW_CORE_UTILISATION_RATIO:
         names.append(PerfHeuristicFlag.LOW_UTILISATION)
     if has_min_impact and _is_underutilised_cores(row, max_cores):
         names.append(PerfHeuristicFlag.UNDERUTILISED_CORES)
@@ -337,7 +321,9 @@ def _low_utilisation(row: FlagRow, max_cores: float) -> Dict[str, object]:
     return {
         "flag": PerfHeuristicFlag.LOW_UTILISATION.value,
         # Cut, not rounded, so a figure under the threshold never reads as at it.
-        "core_utilisation_percent": math.floor(utilisation * 100_000) / 1000,
+        "core_utilisation_percent": (
+            None if utilisation is None else math.floor(utilisation * 100_000) / 1000
+        ),
         "roofline_modelled": (
             None
             if row.bound_analysis is None
@@ -378,17 +364,6 @@ def heuristic_flags(row: FlagRow, max_cores: float) -> List[Dict[str, object]]:
     recompute candidate's program is the `cache` group's `program_hash`.
     """
     return [_EVIDENCE[name](row, max_cores) for name in flag_names(row, max_cores)]
-
-
-def architecture_of(name: object) -> DeviceArchitecture:
-    """`stringToArchitecture`: an architecture by its name's prefix, else unknown."""
-    if not isinstance(name, str):
-        return DeviceArchitecture.UNKNOWN
-    lowered = name.lower()
-    return next(
-        (arch for prefix, arch in _ARCHITECTURE_PREFIXES if lowered.startswith(prefix)),
-        DeviceArchitecture.UNKNOWN,
-    )
 
 
 def _architecture_default(architecture: DeviceArchitecture) -> int:
@@ -470,19 +445,11 @@ def flag_inputs(rows: Sequence[Dict], meta: Optional[DeviceLogMeta]) -> FlagInpu
     )
 
 
-def _agent_row(row: Dict, inputs: FlagInputs) -> FlagRow:
-    typed = typed_row(row, inputs.is_first_call(row))
-    # The view reads tt-metal's 1 ns placeholder as a modelled ideal time (#2162).
-    if is_unmodelled(row.get("pm_ideal_ns")):
-        typed = replace(typed, pm_ideal_ns=None)
-    return typed
-
-
 def flag_fields(row: Dict, inputs: Optional[FlagInputs]) -> Dict[str, object]:
     """A row's `flags`, when asked for, and the `total_percent` that gates them."""
     if inputs is None:
         return {}
-    typed = _agent_row(row, inputs)
+    typed = typed_row(row, inputs.is_first_call(row))
     return {
         "total_percent": _figure(typed.total_percent),
         "flags": heuristic_flags(typed, inputs.max_cores.cores),
@@ -493,7 +460,8 @@ def count_flags(rows: Iterable[Dict], inputs: FlagInputs) -> Dict[str, int]:
     """How many of `rows` carry each flag."""
     counts = {flag.value: 0 for flag in PerfHeuristicFlag}
     for row in rows:
-        for name in flag_names(_agent_row(row, inputs), inputs.max_cores.cores):
+        typed = typed_row(row, inputs.is_first_call(row))
+        for name in flag_names(typed, inputs.max_cores.cores):
             counts[name.value] += 1
     return counts
 
@@ -515,10 +483,12 @@ def flagged_rows(
 
 
 FLAGS_NOTE = (
-    "Flags are the performance view's, except that tt-metal's 1 ns perf-model "
-    "placeholder never flags low_utilisation (#2162), and that over a signpost range "
-    "first calls and the report_rows max-core fallback still read the whole report. "
-    "flagged_rows counts every row read, not only those returned."
+    "Flags are the performance view's, except that over a signpost range first calls "
+    "and the report_rows max-core fallback still read the whole report. A row whose "
+    "ideal time is tt-metal's 1 ns perf-model placeholder is never flagged "
+    "low_utilisation, here or in the view: its utilisation is unknown, not low, and "
+    "the utilisation group shows its ideal_us as null. flagged_rows counts every row "
+    "read, not only those returned."
 )
 
 
@@ -550,7 +520,6 @@ __all__ = [
     "BoundAnalysis",
     "BoundType",
     "CoreCapacitySource",
-    "DeviceArchitecture",
     "DramBoundReason",
     "FlagInputs",
     "FlagRow",
@@ -558,7 +527,6 @@ __all__ = [
     "MaxCoresSource",
     "PerfHeuristicFlag",
     "RepeatCacheOutcome",
-    "architecture_of",
     "cache_looks_disabled",
     "core_count",
     "core_utilisation",

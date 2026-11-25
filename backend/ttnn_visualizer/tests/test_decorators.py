@@ -16,9 +16,11 @@ contract intact.
 
 from http import HTTPStatus
 from unittest.mock import Mock
+from urllib.parse import unquote
 
 import pytest
 from ttnn_visualizer.csv_queries import NPEQueries
+from ttnn_visualizer.decorators import ACTIVE_MEMORY_REPORT_HEADER
 from ttnn_visualizer.exceptions import (
     PerformanceReportNotLoadedException,
     ProfilerReportNotLoadedException,
@@ -121,6 +123,60 @@ def test_profiler_route_returns_404_when_db_file_missing(client, app):
     error_json = response.get_json()
     assert error_json is not None
     assert error_json["error"].startswith("Database not found at path:")
+
+
+# The client caches a memory-report read under the report it asked about, so each
+# response names the report it was answered for (#2375).
+NAMED_REPORT_INSTANCE_ID = "pytest-named-report"
+
+
+def _add_instance_with_memory_report(app, profiler_name):
+    with app.app_context():
+        db.session.add(
+            InstanceTable(
+                instance_id=NAMED_REPORT_INSTANCE_ID,
+                active_report={"profiler_name": profiler_name},
+                profiler_path="/tmp/pytest-does-not-exist/db.sqlite",
+            )
+        )
+        db.session.commit()
+
+
+@pytest.mark.parametrize(
+    "profiler_name",
+    ["memory-run", "mémoire run/äöü 报告"],
+    ids=["ascii", "non-ascii-with-separator"],
+)
+def test_with_instance_names_the_active_memory_report(client, app, profiler_name):
+    _add_instance_with_memory_report(app, profiler_name)
+
+    response = client.get(
+        "/api/instance", query_string={"instanceId": NAMED_REPORT_INSTANCE_ID}
+    )
+
+    assert response.status_code == HTTPStatus.OK
+    header = response.headers[ACTIVE_MEMORY_REPORT_HEADER]
+    assert header.isascii()
+    assert unquote(header) == profiler_name
+
+
+def test_with_instance_names_the_report_on_an_error_handler_response(client, app):
+    """A missing database is answered by the app's error handler, not the view's
+    return value, and the client must still be able to tell whose error it is."""
+    _add_instance_with_memory_report(app, "memory-run")
+
+    response = client.get(
+        "/api/operations", query_string={"instanceId": NAMED_REPORT_INSTANCE_ID}
+    )
+
+    assert response.status_code == HTTPStatus.NOT_FOUND
+    assert response.headers[ACTIVE_MEMORY_REPORT_HEADER] == "memory-run"
+
+
+def test_with_instance_sends_an_empty_name_without_an_active_memory_report(client):
+    response = client.get("/api/instance", query_string={"instanceId": INSTANCE_ID})
+
+    assert response.headers[ACTIVE_MEMORY_REPORT_HEADER] == ""
 
 
 # Routes that read from a performance report directory, paired with the

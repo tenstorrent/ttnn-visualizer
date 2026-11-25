@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { Operation, ReportSourceFiles } from '../model/APIData';
+import { getPathBasename } from './formatting';
 
 // One frame of a Python traceback, the same shape as `_TRACE_FRAME` in
 // `backend/ttnn_visualizer/agent/operations.py` so the operation details panel and the MCP
@@ -101,6 +102,24 @@ export const getCallSiteFrame = (stackTrace: string): StackTraceFrame | null => 
 
         lineStart = lineBreak.lastIndex;
     }
+};
+
+/**
+ * `<basename>:<line>` of the call site, the frame the Source button opens, or `''` when the
+ * trace has no frame or the frame names no file (an empty or slash-terminated path). Read
+ * through `getCallSiteFrame` so the label can never name a different frame from the one
+ * `extractOperationSourceData` links to.
+ */
+export const getOperationFileIdentifier = (stackTrace: string): string => {
+    const callSite = getCallSiteFrame(stackTrace);
+
+    if (!callSite) {
+        return '';
+    }
+
+    const fileName = getPathBasename(callSite.file);
+
+    return fileName ? `${fileName}:${callSite.line}` : '';
 };
 
 /**

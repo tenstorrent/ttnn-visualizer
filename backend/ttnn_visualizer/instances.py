@@ -188,55 +188,66 @@ def update_existing_instance(
             instance_data.remote_connection
         )
 
-    if profiler_path is not _sentinel:
-        instance_data.profiler_path = profiler_path
-    else:
-        instance_data.profiler_path = _resolve_report_path(
-            profiler_name,
-            get_profiler_path,
-            KEY_PROFILER_NAME,
-            KEY_PROFILER_LOCATION,
+    def next_path(
+        current,
+        explicit,
+        name,
+        path_getter,
+        name_key,
+        location_key,
+        keep_if_unnamed=False,
+    ):
+        if explicit is not _sentinel:
+            return explicit
+        if name is None and (keep_if_unnamed or current_app.config["SERVER_MODE"]):
+            # Hosted, a report the update leaves out keeps the path it has: the stored
+            # name it would be rebuilt from may never have been checked against the
+            # session, and the path is what the session was given.
+            return current
+        return _resolve_report_path(
+            name,
+            path_getter,
+            name_key,
+            location_key,
             active_report,
             effective_remote_connection,
         )
 
-    if performance_path is not _sentinel:
-        instance_data.performance_path = performance_path
-    else:
-        instance_data.performance_path = _resolve_report_path(
-            performance_name,
-            get_performance_path,
-            KEY_PERFORMANCE_NAME,
-            KEY_PERFORMANCE_LOCATION,
-            active_report,
-            effective_remote_connection,
-        )
-
-    if npe_path is not _sentinel:
-        instance_data.npe_path = npe_path
-    elif npe_name is not None:
-        # An update that leaves the NPE report out keeps its file: the name can't tell
-        # apart uploads that share it, and a hosted file's timestamp prefix isn't in it.
-        instance_data.npe_path = _resolve_report_path(
-            npe_name,
-            get_npe_path,
-            KEY_NPE_NAME,
-            KEY_NPE_LOCATION,
-            active_report,
-            effective_remote_connection,
-        )
-
-    if mlir_path is not _sentinel:
-        instance_data.mlir_path = mlir_path
-    else:
-        instance_data.mlir_path = _resolve_report_path(
-            mlir_name,
-            get_mlir_path,
-            KEY_MLIR_NAME,
-            KEY_MLIR_LOCATION,
-            active_report,
-            effective_remote_connection,
-        )
+    instance_data.profiler_path = next_path(
+        instance_data.profiler_path,
+        profiler_path,
+        profiler_name,
+        get_profiler_path,
+        KEY_PROFILER_NAME,
+        KEY_PROFILER_LOCATION,
+    )
+    instance_data.performance_path = next_path(
+        instance_data.performance_path,
+        performance_path,
+        performance_name,
+        get_performance_path,
+        KEY_PERFORMANCE_NAME,
+        KEY_PERFORMANCE_LOCATION,
+    )
+    # Locally too, an NPE report the update leaves out keeps its file: the name can't
+    # tell apart uploads that share it (`trace.json`, `trace.npeviz.zst`).
+    instance_data.npe_path = next_path(
+        instance_data.npe_path,
+        npe_path,
+        npe_name,
+        get_npe_path,
+        KEY_NPE_NAME,
+        KEY_NPE_LOCATION,
+        keep_if_unnamed=True,
+    )
+    instance_data.mlir_path = next_path(
+        instance_data.mlir_path,
+        mlir_path,
+        mlir_name,
+        get_mlir_path,
+        KEY_MLIR_NAME,
+        KEY_MLIR_LOCATION,
+    )
 
 
 def clear_remote_data(instance_data):
@@ -447,10 +458,12 @@ def get_or_create_instance(
     mlir_location=None,
     remote_connection=None,
     remote_profiler_folder=None,
+    owner=None,
 ):
     """
     Retrieve an existing tab instance or create a new one if it doesn't exist.
     Uses the Instance model to manage instance data and supports conditional updates.
+    *owner* is recorded only on a new instance, never on an existing one.
     """
     try:
         # Query the database for the tab instance
@@ -463,6 +476,7 @@ def get_or_create_instance(
                 active_report={},
                 remote_connection=None,
                 remote_profiler_folder=None,
+                owner=owner,
             )
             db.session.add(instance_data)
 

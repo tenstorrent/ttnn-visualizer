@@ -408,6 +408,7 @@ class PerfTableOption(str, Enum):
     MATMUL_ADVICE = "matmul_advice"
     HIGHLIGHT_HIGH_DISPATCH = "highlight_high_dispatch"
     NORMALISE_DATA = "normalise_data"
+    HARDWARE_COUNTERS = "hardware_counters"
 
 
 class ComparisonReportCountBucket(str, Enum):
@@ -461,6 +462,7 @@ class DrilldownTarget(str, Enum):
     BUFFER_DETAILS = "buffer_details"
     STACK_TRACE = "stack_trace"
     SOURCE_FILE = "source_file"
+    HARDWARE_COUNTERS = "hardware_counters"
 
 
 class FilterSurface(str, Enum):

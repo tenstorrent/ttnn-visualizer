@@ -821,6 +821,9 @@ def test_folder_upload_cannot_overwrite_the_app_database(
     instance_id = make_report()
     app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
     app.config["SERVER_MODE"] = server_mode
+    # Hosted, a session's first request claims the ownerless `make_report` row, which
+    # writes to the app DB. Claim it before the snapshot so only the upload is compared.
+    client.get("/api/instance", query_string={"instanceId": instance_id})
 
     app_db = Path(app.config["SQLALCHEMY_DATABASE_URI"].removeprefix("sqlite:///"))
     original_db = app_db.read_bytes()

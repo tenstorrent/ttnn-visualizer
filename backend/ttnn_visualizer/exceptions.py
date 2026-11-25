@@ -23,12 +23,16 @@ def error_response(
     message: Optional[str] = None,
     detail: Optional[str] = None,
     sync_method: Optional[str] = None,
+    reason: Optional[str] = None,
 ):
     payload = {"error": message or status.phrase}
     if detail:
         payload["detail"] = detail
     if sync_method:
         payload["syncMethod"] = sync_method
+    if reason:
+        # A stable code the frontend can match, where `error` is for people.
+        payload["reason"] = reason
     return jsonify(payload), status
 
 
@@ -52,8 +56,12 @@ def response_internal_server_error(
     return error_response(HTTPStatus.INTERNAL_SERVER_ERROR, message, detail)
 
 
-def response_forbidden(message: Optional[str] = None, detail: Optional[str] = None):
-    return error_response(HTTPStatus.FORBIDDEN, message, detail)
+def response_forbidden(
+    message: Optional[str] = None,
+    detail: Optional[str] = None,
+    reason: Optional[str] = None,
+):
+    return error_response(HTTPStatus.FORBIDDEN, message, detail, reason=reason)
 
 
 class RemoteConnectionException(Exception):

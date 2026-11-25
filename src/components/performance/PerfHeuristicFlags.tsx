@@ -8,6 +8,7 @@ import {
     PERF_HEURISTIC_FLAG_DEFINITIONS,
     PERF_HEURISTIC_FLAG_SOURCE_LABELS,
     PerfHeuristicFlagIntent,
+    UTILISATION_UNKNOWN_NOTE,
 } from '../../definitions/PerfHeuristics';
 import { TEST_IDS } from '../../definitions/TestIds';
 
@@ -23,7 +24,7 @@ interface PerfHeuristicFlagsProps {
 function PerfHeuristicFlags({ row }: PerfHeuristicFlagsProps) {
     const flags = row.heuristicFlags ?? [];
 
-    if (flags.length === 0) {
+    if (flags.length === 0 && !row.hasUtilisationUnknownNote) {
         return null;
     }
 
@@ -64,6 +65,26 @@ function PerfHeuristicFlags({ row }: PerfHeuristicFlagsProps) {
                     </Tooltip>
                 );
             })}
+            {row.hasUtilisationUnknownNote && (
+                <Tooltip
+                    content={
+                        <div className='perf-heuristic-flag-tooltip'>
+                            <strong>{UTILISATION_UNKNOWN_NOTE.label}</strong>
+                            <p>{UTILISATION_UNKNOWN_NOTE.description}</p>
+                            <p className='perf-heuristic-flag-detail'>{UTILISATION_UNKNOWN_NOTE.detail}</p>
+                        </div>
+                    }
+                    usePortal={false}
+                >
+                    <Tag
+                        className='perf-heuristic-flag'
+                        data-testid={TEST_IDS.PERF_UTILISATION_UNKNOWN}
+                        minimal
+                    >
+                        {UTILISATION_UNKNOWN_NOTE.shortLabel}
+                    </Tag>
+                </Tooltip>
+            )}
         </div>
     );
 }

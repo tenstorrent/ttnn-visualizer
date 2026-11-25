@@ -14,12 +14,15 @@
 import { cleanup, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { AxiosError, AxiosHeaders, HttpStatusCode, InternalAxiosRequestConfig } from 'axios';
 import { Provider, createStore } from 'jotai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGetClusterDescription } from '../src/hooks/useAPI';
 import { activeProfilerReportAtom } from '../src/store/app';
 import axiosInstance from '../src/libs/axiosInstance';
 import Endpoints from '../src/definitions/Endpoints';
+import { ACTIVE_MEMORY_REPORT_HEADER } from '../src/definitions/ReportHeaders';
+import { isReportChangedError } from '../src/functions/memoryReportRequest';
 
 vi.mock('../src/libs/axiosInstance', () => ({
     default: {
@@ -87,5 +90,64 @@ describe('useGetClusterDescription', () => {
         store.set(activeProfilerReportAtom, ACTIVE_REPORT);
 
         await waitFor(() => expect(getClusterRequestCount()).toBe(1));
+    });
+
+    // The mesh descriptor is optional, so its absence is swallowed; an answer for another
+    // report must not be, or that report's missing mesh is cached as this one's (#2375)
+    describe('when the mesh descriptor fails', () => {
+        const DESCRIPTOR = { chips: { 0: [0, 0, 0, 0] } };
+        const answeredFor = (name: string, data: unknown) => ({
+            data,
+            headers: { [ACTIVE_MEMORY_REPORT_HEADER]: name },
+        });
+        const notFoundFor = (name: string) =>
+            new AxiosError(
+                'Request failed',
+                AxiosError.ERR_BAD_REQUEST,
+                { headers: new AxiosHeaders() } as InternalAxiosRequestConfig,
+                undefined,
+                {
+                    data: {},
+                    status: HttpStatusCode.NotFound,
+                    statusText: '',
+                    headers: { [ACTIVE_MEMORY_REPORT_HEADER]: name },
+                    config: { headers: new AxiosHeaders() },
+                },
+            );
+
+        afterEach(() => {
+            vi.restoreAllMocks();
+        });
+
+        const renderWithMesh = (mesh: () => Promise<unknown>) => {
+            vi.mocked(axiosInstance.get).mockImplementation((url) =>
+                String(url) === Endpoints.MESH_DESCRIPTOR
+                    ? mesh()
+                    : Promise.resolve(answeredFor(ACTIVE_REPORT.path, DESCRIPTOR)),
+            );
+            const store = createStore();
+            store.set(activeProfilerReportAtom, ACTIVE_REPORT);
+
+            return renderGate(store);
+        };
+
+        it("keeps this report's descriptor when it has no mesh", async () => {
+            vi.spyOn(console, 'error').mockImplementation(() => {});
+            const { result } = renderWithMesh(() => Promise.reject(notFoundFor(ACTIVE_REPORT.path)));
+
+            await waitFor(() => expect(result.current.isSuccess).toBe(true));
+            expect(result.current.data).toEqual(DESCRIPTOR);
+        });
+
+        it.each([
+            ['answers', () => Promise.resolve(answeredFor('other-run', { chips: {} }))],
+            ['fails', () => Promise.reject(notFoundFor('other-run'))],
+        ])('throws away the descriptor when the mesh %s for another report', async (_case, mesh) => {
+            const { result } = renderWithMesh(mesh);
+
+            await waitFor(() => expect(result.current.isError).toBe(true));
+            expect(isReportChangedError(result.current.error)).toBe(true);
+            expect(result.current.data).toBeUndefined();
+        });
     });
 });
