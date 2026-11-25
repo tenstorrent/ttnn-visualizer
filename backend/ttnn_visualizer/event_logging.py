@@ -289,10 +289,10 @@ class ReportSource(str, Enum):
 class ReportLoadFailureReason(str, Enum):
     """Why a report failed to load, coarsely enough to never carry a message body.
 
-    ``unsupported_version`` is NPE-only today. NPE refuses an out-of-range format
-    version and never shows the report. Memory and performance reports still
-    activate on an incompatible DB major version: they toast a warning and count
-    as ``report_loaded``, because the UI continues to show them.
+    ``unsupported_version`` covers an NPE trace whose format version is out of
+    range, which is never shown, and a memory report whose DB major version is out
+    of range. The UI still opens such a memory report with a warning, but it counts
+    as a failure rather than ``report_loaded``, because it may not display correctly.
     """
 
     UNSUPPORTED_VERSION = "unsupported_version"
@@ -408,6 +408,7 @@ class PerfTableOption(str, Enum):
     MATMUL_ADVICE = "matmul_advice"
     HIGHLIGHT_HIGH_DISPATCH = "highlight_high_dispatch"
     NORMALISE_DATA = "normalise_data"
+    HARDWARE_COUNTERS = "hardware_counters"
 
 
 class ComparisonReportCountBucket(str, Enum):
@@ -461,6 +462,7 @@ class DrilldownTarget(str, Enum):
     BUFFER_DETAILS = "buffer_details"
     STACK_TRACE = "stack_trace"
     SOURCE_FILE = "source_file"
+    HARDWARE_COUNTERS = "hardware_counters"
 
 
 class FilterSurface(str, Enum):

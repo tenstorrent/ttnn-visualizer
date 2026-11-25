@@ -221,6 +221,9 @@ export interface NpeSummary {
     soc_descriptor?: unknown;
     chips: NPEData['chips'];
     zones?: NPERootZone[];
+    // Whether any transfer in the whole trace is a fabric event. A window holds only
+    // its own transfers, so the event filter cannot decide this from one. #2356
+    has_fabric_events: boolean;
     n_timesteps: number;
     timesteps: NpeTimestepColumns;
 }

@@ -18,6 +18,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from ttnn_visualizer import file_uploads
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.file_uploads import (
@@ -715,3 +716,169 @@ def test_profiler_upload_rejects_traversal_within_folder(app, client, make_repor
         assert (
             path.name != "escape.json"
         ), f"`../escape.json` should have been rejected, found {resolved}"
+
+
+# ---- Report folder name: client-controlled, must stay one path segment -----
+#
+# ITSEC-561: an unauthenticated `folderName` of `../..` put the report root
+# outside the upload directory, and the filename containment check, being
+# relative to that root, let the upload overwrite the app database.
+
+
+@pytest.mark.parametrize(
+    "folder_name",
+    ["..", ".", "../..", "../app", "x/../../app", "nested/report", "..\\app"],
+)
+def test_validate_files_rejects_an_unsafe_explicit_folder_name(folder_name):
+    files = [_faux_file("db.sqlite"), _faux_file("config.json")]
+    assert validate_files(files, {"db.sqlite"}, folder_name=folder_name) is False
+
+
+def test_validate_files_rejects_an_unsafe_inferred_folder_name():
+    """A bare `..` first file must not become the inferred report folder.
+
+    The leading-segment consistency check skips bare names, so without this the
+    folder inferred from `files[0]` would be `..` while `db.sqlite` sits under
+    an ordinary-looking `x/`.
+    """
+    files = [_faux_file(".."), _faux_file("x/db.sqlite")]
+    assert validate_files(files, {"db.sqlite"}, folder_name=None) is False
+
+
+def test_validate_files_rejects_a_dotdot_leading_segment_and_logs_it(caplog):
+    """The Chromium / Firefox shape: no `folderName`, every part named `../<file>`.
+
+    Each part sits one level below `..`, so the depth and consistency checks pass
+    and `..` would become the report folder. The warning must name what was
+    refused, which is inferred here, not the absent form field.
+    """
+    files = [_faux_file("../db.sqlite"), _faux_file("../config.json")]
+
+    with caplog.at_level("WARNING", logger="ttnn_visualizer.file_uploads"):
+        assert validate_files(files, {"db.sqlite"}, folder_name=None) is False
+
+    assert "unsafe report folder name: '..'" in caplog.text
+
+
+@pytest.mark.parametrize("server_mode", [False, True])
+@pytest.mark.parametrize("folder_name", ["..", "../..", "x/../..", "a/b"])
+def test_construct_dest_path_rejects_an_unsafe_folder_name(
+    app, tmp_path, server_mode, folder_name
+):
+    """Defence in depth for callers that skip `validate_files`."""
+    app.config["SERVER_MODE"] = server_mode
+    with app.app_context():
+        with pytest.raises(DataFormatError):
+            construct_dest_path(
+                _faux_file("db.sqlite"), tmp_path / "uploads", folder_name
+            )
+
+
+@pytest.mark.parametrize("server_mode", [False, True])
+def test_construct_dest_path_rejects_a_report_folder_that_links_outside(
+    app, tmp_path, monkeypatch, server_mode
+):
+    """A safe name whose folder is a symlink out of the upload directory is refused.
+
+    Only the resolved-root check can catch this: the name passes
+    `_is_safe_folder_name`, and the file stays inside the (resolved) report folder.
+    Under `SERVER_MODE` the folder carries a `<unix seconds>_` prefix, so the clock
+    is pinned to know which name to plant the link under.
+    """
+    monkeypatch.setattr(file_uploads.time, "time", lambda: 1700000000)
+    app.config["SERVER_MODE"] = server_mode
+    uploads = tmp_path / "uploads"
+    outside = tmp_path / "outside"
+    uploads.mkdir()
+    outside.mkdir()
+    link_name = "1700000000_report" if server_mode else "report"
+    (uploads / link_name).symlink_to(outside, target_is_directory=True)
+
+    with app.app_context():
+        with pytest.raises(DataFormatError, match="escapes upload directory"):
+            construct_dest_path(_faux_file("db.sqlite"), uploads, "report")
+
+
+_TRAVERSAL_UPLOADS = {
+    "/api/local/upload/profiler": ("PROFILER_DIRECTORY_NAME", ["db.sqlite"]),
+    "/api/local/upload/performance": (
+        "PERFORMANCE_DIRECTORY_NAME",
+        ["profile_log_device.csv", "ops_perf_results_2026.csv"],
+    ),
+}
+
+
+@pytest.mark.parametrize("server_mode", [False, True])
+@pytest.mark.parametrize("endpoint", sorted(_TRAVERSAL_UPLOADS))
+def test_folder_upload_cannot_overwrite_the_app_database(
+    app, client, make_report, endpoint, server_mode
+):
+    """The ITSEC-561 reproduction: `folderName` climbing to the app DB's directory.
+
+    In `SERVER_MODE` the `<timestamp>_` prefix absorbs the first segment, so the
+    payload leads with a throwaway `x/` to climb the same distance.
+    """
+    instance_id = make_report()
+    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    app.config["SERVER_MODE"] = server_mode
+
+    app_db = Path(app.config["SQLALCHEMY_DATABASE_URI"].removeprefix("sqlite:///"))
+    original_db = app_db.read_bytes()
+    directory_setting, required_files = _TRAVERSAL_UPLOADS[endpoint]
+    upload_root = (
+        app.config["LOCAL_DATA_DIRECTORY"] / app.config[directory_setting]
+    ).resolve()
+    # `local/<upload dir>` is two levels below the directory holding the app DB,
+    # which is what `folder_name` below climbs.
+    assert upload_root.parent.parent == app_db.parent.resolve()
+    folder_name = "x/../../.." if server_mode else "../.."
+
+    response = client.post(
+        endpoint,
+        query_string={"instanceId": instance_id},
+        data={
+            "folderName": folder_name,
+            "files": [(BytesIO(b"payload"), name) for name in required_files]
+            + [(BytesIO(b"PWNED"), app_db.name)],
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+    assert response.get_json()["status"] == ConnectionTestStates.FAILED.value
+    assert app_db.read_bytes() == original_db
+    for name in required_files:
+        assert not (app_db.parent / name).exists()
+
+
+@pytest.mark.parametrize("server_mode", [False, True])
+@pytest.mark.parametrize("endpoint", sorted(_TRAVERSAL_UPLOADS))
+def test_folder_upload_cannot_climb_through_an_inferred_folder_name(
+    app, client, make_report, endpoint, server_mode
+):
+    """Without `folderName` the report folder comes from the parts' leading segment.
+
+    Parts named `../<file>` made that segment `..`; the duplicate-segment strip in
+    `construct_dest_path` then wrote each file one level above the upload directory.
+    """
+    instance_id = make_report()
+    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    app.config["SERVER_MODE"] = server_mode
+    directory_setting, required_files = _TRAVERSAL_UPLOADS[endpoint]
+    upload_root = (
+        app.config["LOCAL_DATA_DIRECTORY"] / app.config[directory_setting]
+    ).resolve()
+
+    response = client.post(
+        endpoint,
+        query_string={"instanceId": instance_id},
+        data={
+            "files": [(BytesIO(b"payload"), f"../{name}") for name in required_files]
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+    assert response.get_json()["status"] == ConnectionTestStates.FAILED.value
+    for name in required_files:
+        assert not (upload_root.parent / name).exists()

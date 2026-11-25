@@ -25,6 +25,9 @@ export interface DeviceOperationPerf {
      * Mirrored as `report_device_time_total` in `backend/ttnn_visualizer/agent/linking.py`.
      */
     totalDeviceTimeUs: number;
+    hasHardwareCounters: boolean;
+    // A merged row on a report of several devices is one device's, which its counters must name.
+    isMultiDeviceReport: boolean;
 }
 
 const NO_ROWS: ReadonlyMap<number, TypedPerfTableRow> = new Map();
@@ -65,8 +68,25 @@ export const useDeviceOperationPerf = (operationId: number): DeviceOperationPerf
         return new Map(matched.map(({ startNodeId }, index) => [startNodeId, typedRows[index]]));
     }, [linkStatus, mappings]);
 
+    const hasHardwareCounters = perfReport?.has_hardware_counters === true;
+    const isMultiDeviceReport = (perfReport?.device_count ?? 0) > 1;
+
     return useMemo(
-        () => ({ linkStatus, hasPerformanceReport, rowByStartNodeId, totalDeviceTimeUs }),
-        [linkStatus, hasPerformanceReport, rowByStartNodeId, totalDeviceTimeUs],
+        () => ({
+            linkStatus,
+            hasPerformanceReport,
+            rowByStartNodeId,
+            totalDeviceTimeUs,
+            hasHardwareCounters,
+            isMultiDeviceReport,
+        }),
+        [
+            linkStatus,
+            hasPerformanceReport,
+            rowByStartNodeId,
+            totalDeviceTimeUs,
+            hasHardwareCounters,
+            isMultiDeviceReport,
+        ],
     );
 };

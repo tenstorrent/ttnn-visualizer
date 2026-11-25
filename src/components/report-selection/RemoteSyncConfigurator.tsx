@@ -49,12 +49,11 @@ import AddRemoteConnection from './AddRemoteConnection';
 import RemoteConnectionSelector from './RemoteConnectionSelector';
 import RemoteFolderSelector from './RemoteFolderSelector';
 import RemoteSyncButton from './RemoteSyncButton';
-import { clearReportCaches, updateInstance, useReportMetadata } from '../../hooks/useAPI';
+import { clearReportCaches, updateInstance } from '../../hooks/useAPI';
 import { ActiveReport } from '../../model/APIData';
-import { DBVersionValidation } from '../../definitions/Versions';
-import { evaluateDbVersion } from '../../functions/compareDbVersion';
 import { ReportKind, ReportLoadFailureReason, ReportSource } from '../../definitions/EventLogEvent';
-import { recordReportLoadFailed, recordReportLoadFailure, recordReportLoaded } from '../../functions/reportLoadEvents';
+import { recordReportLoadFailed, recordReportLoadFailure } from '../../functions/reportLoadEvents';
+import { useMarkReportLoadPending } from '../../hooks/useReportLoadSettlement';
 
 interface RemoteReportActions {
     mount: (connection: RemoteConnection, folder: RemoteFolder) => Promise<AxiosResponse>;
@@ -76,19 +75,7 @@ const RemoteSyncConfigurator = () => {
     const [activePerformanceReport, setActivePerformanceReport] = useAtom(activePerformanceReportAtom);
     const { isActivatingReport, withActivatingReport } = useActivatingReport();
 
-    const { data: reportMetadata, error: reportMetadataError } = useReportMetadata();
-    useEffect(() => {
-        if (reportMetadataError) {
-            return;
-        }
-        if (reportMetadata) {
-            const dbValidationResult = evaluateDbVersion(reportMetadata.version);
-            if (dbValidationResult.statusCode !== DBVersionValidation.OK) {
-                // @ts-expect-error its only empty when status is OK, and we dont do a toast here
-                createToastNotification('Incompatible report version', dbValidationResult.message, ToastType.WARNING);
-            }
-        }
-    }, [reportMetadata, reportMetadataError]);
+    const markReportLoadPending = useMarkReportLoadPending();
 
     // The saved list and the selection live in localStorage, so persisting them doesn't re-render on
     // its own. Both are mirrored in state and written through persistConnectionList /
@@ -397,7 +384,7 @@ const RemoteSyncConfigurator = () => {
             reportName: folder.reportName,
             syncedName: folder.syncedName,
         });
-        recordReportLoaded(ReportKind.PROFILER, ReportSource.REMOTE_SYNC);
+        markReportLoadPending(ReportKind.PROFILER, folder.remotePath, ReportSource.REMOTE_SYNC);
     };
 
     const applyPerformanceReportSelection = (folder: RemoteFolder) => {
@@ -408,7 +395,7 @@ const RemoteSyncConfigurator = () => {
             reportName: folder.reportName,
             syncedName: folder.syncedName,
         });
-        recordReportLoaded(ReportKind.PERFORMANCE, ReportSource.REMOTE_SYNC);
+        markReportLoadPending(ReportKind.PERFORMANCE, folder.remotePath, ReportSource.REMOTE_SYNC);
     };
 
     const updateReportSelection = (folder: RemoteFolder) => {

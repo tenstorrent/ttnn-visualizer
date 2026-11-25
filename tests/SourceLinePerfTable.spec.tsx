@@ -20,6 +20,7 @@ import {
 import { mergeDevicesAtom } from '../src/store/app';
 import { TestProviders } from './helpers/TestProviders';
 import { AtomProviderInitialValues } from './helpers/atomProvider';
+import { focusTooltipTarget } from './helpers/focusTooltipTarget';
 
 const isSourceFileAvailable = vi.fn();
 
@@ -360,7 +361,7 @@ describe('SourceLinePerfTable', () => {
         const percent = document.querySelector(`tfoot .${Classes.TOOLTIP_INDICATOR}`) as HTMLElement;
         expect(percent).toHaveTextContent('100%');
 
-        fireEvent.focus(percent);
+        focusTooltipTarget(percent);
         expect(await screen.findByText(PERF_FOOTER_ALL_DEVICES_NOTE)).toBeInTheDocument();
     });
 

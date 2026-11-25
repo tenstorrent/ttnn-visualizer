@@ -5,7 +5,7 @@
 import axios from 'axios';
 import { Mock } from 'vitest';
 import type * as ReportLoadEvents from '../../src/functions/reportLoadEvents';
-import { ReportKind } from '../../src/definitions/EventLogEvent';
+import { ReportKind, ReportLoadFailureReason } from '../../src/definitions/EventLogEvent';
 
 type ReportLoadEventsModule = typeof ReportLoadEvents;
 
@@ -24,12 +24,16 @@ export async function reportLoadEventsSpiesMock(
         ...actual,
         recordReportLoaded,
         recordReportLoadFailed,
-        recordReportLoadFailure: (kind: ReportKind, error: unknown) => {
+        recordReportLoadFailure: (
+            kind: ReportKind,
+            error: unknown,
+            classify: (error: unknown) => ReportLoadFailureReason = actual.getReportLoadFailureReason,
+        ) => {
             if (axios.isCancel(error)) {
                 return;
             }
 
-            recordReportLoadFailed(kind, actual.getReportLoadFailureReason(error));
+            recordReportLoadFailed(kind, classify(error));
         },
     };
 }
