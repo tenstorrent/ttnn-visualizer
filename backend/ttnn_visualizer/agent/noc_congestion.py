@@ -347,7 +347,7 @@ def _trace_json(npe_path: Path, compressed: bool) -> bytes:
 def _from_trace(npe_path: Path) -> _NocRead:
     """The trace's summed link demand, read from the trace a timestep at a time."""
     # Every refusal `from None`: its message carries the cause, and no frame of the read.
-    compressed = npe_path.suffix == ".zst"
+    compressed = npe_index.is_zstd_trace(npe_path)
     try:
         text = npe_index.trace_text(_trace_json(npe_path, compressed))
     except OSError as error:

@@ -60,6 +60,7 @@ from ttnn_visualizer.exceptions import (
 )
 from ttnn_visualizer.file_source import FileSource
 from ttnn_visualizer.models import Instance
+from ttnn_visualizer.npe_index import is_zstd_trace
 from ttnn_visualizer.utils import newest_ops_perf_file
 
 logger = logging.getLogger(__name__)
@@ -1140,7 +1141,7 @@ class NPEQueries:
 
         file_path = Path(instance.performance_path, NPEQueries.NPE_FOLDER, filename)
 
-        if filename.endswith(".zst"):
+        if is_zstd_trace(file_path):
             with open(file_path, "rb") as file:
                 compressed_data = file.read()
                 uncompressed_data = zstd.uncompress(compressed_data)

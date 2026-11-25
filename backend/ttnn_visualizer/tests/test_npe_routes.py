@@ -21,7 +21,8 @@ import zstd
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.extensions import db
 from ttnn_visualizer.models import InstanceTable, ReportLocation
-from ttnn_visualizer.npe_index import get_index_path
+from ttnn_visualizer.npe_index import get_index_path, is_zstd_trace
+from ttnn_visualizer.utils import NPE_UPLOAD_EXTENSIONS
 
 API = "/api"
 
@@ -406,6 +407,61 @@ def test_naming_an_npe_upload_finds_the_file_it_saved(app, client, file_name):
 
     assert response.status_code == 200
     assert _stored_instance(client, instance_id).npe_path == uploaded.npe_path
+
+
+@pytest.mark.parametrize("extension", NPE_UPLOAD_EXTENSIONS)
+def test_every_accepted_npe_extension_uploads_names_and_serves(app, client, extension):
+    """#2406: the upload check, `get_npe_path` and `GET /npe` each list the NPE
+    formats; an extension added to the upload list alone fails here."""
+    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    instance_id = "pytest-npe-every-extension"
+    file_name = f"trace{extension}"
+    payload = orjson.dumps(_make_npe_object(n_timesteps=2))
+    stored = zstd.compress(payload) if is_zstd_trace(Path(file_name)) else payload
+    _upload_npe(client, instance_id, stored, file_name=file_name)
+    uploaded = _stored_instance(client, instance_id)
+
+    response = _put_active_report(
+        client, instance_id, {"npe_name": uploaded.active_report["npe_name"]}
+    )
+
+    assert response.status_code == 200
+    assert _stored_instance(client, instance_id).npe_path == uploaded.npe_path
+    npe = client.get(f"{API}/npe", query_string={"instanceId": instance_id})
+    assert npe.status_code == 200
+    assert npe.get_data() == payload
+
+
+def test_a_refused_npe_upload_names_every_accepted_extension(client):
+    response = client.post(
+        f"{API}/local/upload/npe",
+        query_string={"instanceId": "pytest-npe-refused"},
+        data={"files": [(BytesIO(b"{}"), "trace.txt")]},
+        content_type="multipart/form-data",
+    )
+
+    body = response.get_json()
+    assert body["status"] == ConnectionTestStates.FAILED.value
+    for extension in NPE_UPLOAD_EXTENSIONS:
+        assert extension in body["message"]
+
+
+def test_npe_reads_a_file_of_another_extension_as_json(app, client, tmp_path):
+    """A local `PUT /instance` may store any path; `/npe` reads it as the index
+    routes do, as JSON unless it ends in `.zst`."""
+    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    instance_id = "pytest-npe-other-extension"
+    _upload_npe(client, instance_id, b"{}")
+    payload = orjson.dumps(_make_npe_object(n_timesteps=2))
+    other = tmp_path / "trace.txt"
+    other.write_bytes(payload)
+
+    response = _put_active_report(client, instance_id, {"npe_path": str(other)})
+
+    assert response.status_code == 200
+    npe = client.get(f"{API}/npe", query_string={"instanceId": instance_id})
+    assert npe.status_code == 200
+    assert npe.get_data() == payload
 
 
 @pytest.mark.parametrize("server_mode", [False, True], ids=["local", "server-mode"])
