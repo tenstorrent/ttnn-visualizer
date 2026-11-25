@@ -8,19 +8,26 @@ import { ACTIVE_MEMORY_REPORT_HEADER } from '../definitions/ReportHeaders';
 import { getReportId } from './reportLinks';
 
 const REPORT_CHANGED_ERROR_CODE = 'REPORT_CHANGED';
+export const REPORT_CHANGED_MESSAGE =
+    'The active memory report changed while this was loading. Select the report again to reload it.';
 
 /**
  * An answer for another memory report than the one asked about. It extends `AxiosError`
  * so report hooks keep their `AxiosError` type, and carries no status, so no status
- * check mistakes it for a server error.
+ * check mistakes it for a server error. Its message is what the user sees: lists and the
+ * buffer summary show it as is, and it usually means another tab sharing this instance
+ * picked a report. The two report ids are kept as fields for debugging.
  */
 export class ReportChangedError extends AxiosError {
+    readonly expectedReportId: string | null;
+
+    readonly answeredReportId: string | null;
+
     constructor(expectedReportId: string | null, answeredReportId: string | null) {
-        super(
-            `Asked about memory report ${expectedReportId ?? '(none)'}, answered for ${answeredReportId ?? '(none)'}`,
-            REPORT_CHANGED_ERROR_CODE,
-        );
+        super(REPORT_CHANGED_MESSAGE, REPORT_CHANGED_ERROR_CODE);
         this.name = 'ReportChangedError';
+        this.expectedReportId = expectedReportId;
+        this.answeredReportId = answeredReportId;
     }
 }
 

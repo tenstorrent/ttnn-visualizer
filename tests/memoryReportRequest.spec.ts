@@ -13,6 +13,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import axiosInstance from '../src/libs/axiosInstance';
 import { ACTIVE_MEMORY_REPORT_HEADER } from '../src/definitions/ReportHeaders';
 import {
+    REPORT_CHANGED_MESSAGE,
     ReportChangedError,
     fetchMemoryReportData,
     getMemoryReportRetry,
@@ -77,6 +78,17 @@ describe('fetchMemoryReportData', () => {
         expect(error).toBeInstanceOf(AxiosError);
         expect(isReportChangedError(error)).toBe(true);
         expect((error as AxiosError).status).toBeUndefined();
+    });
+
+    // Lists and the buffer summary show the message as is, so it names no ids
+    it('tells the user what to do, and keeps both report ids for debugging', async () => {
+        vi.mocked(axiosInstance.get).mockResolvedValue(answeredFor('other-run'));
+
+        const error = (await fetchMemoryReportData(ENDPOINT, REPORT_ID).catch((e: unknown) => e)) as ReportChangedError;
+
+        expect(error.message).toBe(REPORT_CHANGED_MESSAGE);
+        expect(error.expectedReportId).toBe(REPORT_ID);
+        expect(error.answeredReportId).toBe('other-run');
     });
 
     it('throws away an answer naming no report while one is expected', async () => {
