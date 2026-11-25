@@ -23,6 +23,7 @@ import Range from '../src/components/RangeSlider';
 import ReportLoadRecorder from '../src/components/ReportLoadRecorder';
 import { ReportKind, ReportLoadFailureReason, ReportSource } from '../src/definitions/EventLogEvent';
 import { TARGET_DB_VERSION_MAX } from '../src/definitions/Versions';
+import { ReportChangedError } from '../src/functions/memoryReportRequest';
 import { useMarkReportLoadPending } from '../src/hooks/useReportLoadSettlement';
 import { OPERATIONS_QUERY_KEY, REPORT_METADATA_QUERY_KEY } from '../src/hooks/useAPI';
 import {
@@ -107,6 +108,7 @@ const settledMetadata = (major: number) => () => ({ data: { version: { major, mi
 const failed = (status: HttpStatusCode) => () => ({ data: undefined, error: failedWith(status) });
 const settledRows = () => ({ data: { report: [] }, error: null });
 const settledOperations = () => ({ data: [], error: null });
+const superseded = () => ({ data: undefined, error: new ReportChangedError(REPORT_A.path, REPORT_B.path) });
 
 let store: ReturnType<typeof createStore>;
 
@@ -245,6 +247,49 @@ describe('a chosen memory report', () => {
 
         expect(recordReportLoadFailed).toHaveBeenCalledWith(ReportKind.PROFILER, ReportLoadFailureReason.MISSING_FILE);
         expect(recordReportLoaded).not.toHaveBeenCalled();
+    });
+
+    // The server already held the next pick when it answered this one's reads (#2375). The
+    // other read settles too, so neither case passes on a still-pending metadata read alone.
+    it.each([
+        ['operations', settledMetadata(TARGET_DB_VERSION_MAX), superseded],
+        ['metadata', superseded, settledOperations],
+    ])('records nothing when its %s were answered for a report chosen since', (_name, metadata, operations) => {
+        renderRecorder();
+        choose(ReportKind.PROFILER, REPORT_A);
+        settleMemory(REPORT_A.path, metadata, operations);
+
+        expect(recordReportLoadFailed).not.toHaveBeenCalled();
+        expect(recordReportLoaded).not.toHaveBeenCalled();
+        expect(getProbedPendingReportLoads()).toEqual({
+            [ReportKind.PROFILER]: { path: REPORT_A.path, source: ReportSource.LOCAL_TT_METAL },
+        });
+
+        choose(ReportKind.PROFILER, REPORT_B);
+
+        expect(getProbedPendingReportLoads()).toEqual({
+            [ReportKind.PROFILER]: { path: REPORT_B.path, source: ReportSource.LOCAL_TT_METAL },
+        });
+        expect(recordReportLoadFailed).not.toHaveBeenCalled();
+    });
+
+    // The active report is still this one, so nothing clears the marker but the next choice
+    it('stays pending while it remains active with a read answered for another report', () => {
+        renderRecorder();
+        choose(ReportKind.PROFILER, REPORT_A);
+        settleMemory(REPORT_A.path, settledMetadata(TARGET_DB_VERSION_MAX), superseded);
+
+        expect(recordReportLoaded).not.toHaveBeenCalled();
+        expect(recordReportLoadFailed).not.toHaveBeenCalled();
+        expect(getProbedPendingReportLoads()).toEqual({
+            [ReportKind.PROFILER]: { path: REPORT_A.path, source: ReportSource.LOCAL_TT_METAL },
+        });
+
+        choose(ReportKind.PROFILER, REPORT_A);
+        settle(queries.operations, REPORT_A.path, settledOperations);
+
+        expect(recordReportLoaded).toHaveBeenCalledTimes(1);
+        expect(recordReportLoadFailed).not.toHaveBeenCalled();
     });
 });
 

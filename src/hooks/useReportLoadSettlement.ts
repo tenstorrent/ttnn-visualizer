@@ -10,6 +10,7 @@ import { ReportKind, ReportLoadFailureReason, ReportSource } from '../definition
 import { DBVersionValidation } from '../definitions/Versions';
 import { evaluateDbVersion } from '../functions/compareDbVersion';
 import getErrorStatus, { isRefusedSignpostRange } from '../functions/getErrorStatus';
+import { isReportChangedError } from '../functions/memoryReportRequest';
 import {
     getParsedReportLoadFailureReason,
     recordReportLoadFailed,
@@ -120,6 +121,15 @@ const useReportLoadSettlement = () => {
         // the same batch as the active report, so a mismatch is never a choice still landing.
         if (pendingProfiler.path !== activeProfilerPath) {
             clearPending(ReportKind.PROFILER, pendingProfiler);
+            return;
+        }
+
+        // Answered for another report, so it says nothing about this load. Usually that report
+        // was chosen since, and the branch above clears the marker once the active path moves to
+        // it. When the path stays put (this report's one retry was answered for another report
+        // too, or another tab sharing the instance switched it) the marker stays pending until a
+        // report is next chosen: recording a failure would blame this report for the switch.
+        if (isReportChangedError(operationsError) || isReportChangedError(reportMetadataError)) {
             return;
         }
 

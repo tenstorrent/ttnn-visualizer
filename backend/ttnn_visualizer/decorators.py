@@ -6,8 +6,9 @@ import logging
 import re
 from functools import wraps
 from typing import Any, Callable
+from urllib.parse import quote
 
-from flask import abort, request, session
+from flask import Response, abort, after_this_request, request, session
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import (
     AuthenticationException,
@@ -27,8 +28,23 @@ from ttnn_visualizer.ssh_client import SSH_AUTH_FAILURE_MESSAGE
 
 logger = logging.getLogger(__name__)
 
+# Mirrored by ACTIVE_MEMORY_REPORT_HEADER in src/definitions/ReportHeaders.ts;
+# tests/test_report_headers_frontend_parity.py pins the two together.
+ACTIVE_MEMORY_REPORT_HEADER = "X-Active-Memory-Report"
+
 
 def with_instance(func):
+    """Resolves the request's instance and passes it to the view as ``instance``.
+
+    Every response names the memory report the view read in the
+    ``X-Active-Memory-Report`` header, percent-encoded because folder names need not
+    be Latin-1. A later pick can make another report active before an earlier
+    request is handled, and the client caches each answer under the report it asked
+    about, so it discards an answer for another report rather than caching it
+    (#2375). The name comes from the same snapshot the view reads, and the header is
+    set through ``after_this_request`` so error-handler responses carry it too.
+    """
+
     @wraps(func)
     def wrapper(*args, **kwargs):
         from flask import current_app
@@ -51,6 +67,17 @@ def with_instance(func):
         instance = instance_query_data.to_pydantic()
 
         kwargs["instance"] = instance
+
+        active_memory_report = (
+            instance.active_report.profiler_name if instance.active_report else None
+        ) or ""
+
+        @after_this_request
+        def _name_active_memory_report(response: Response) -> Response:
+            response.headers[ACTIVE_MEMORY_REPORT_HEADER] = quote(
+                active_memory_report, safe=""
+            )
+            return response
 
         if "instances" not in session:
             session["instances"] = []
