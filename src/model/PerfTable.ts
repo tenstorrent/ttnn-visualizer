@@ -148,6 +148,8 @@ export interface TypedPerfTableRow extends Omit<
     dram_fallback: DramFallback | null;
     heuristicFlags?: PerfHeuristicFlag[];
     heuristicFlagDetails?: Partial<Record<PerfHeuristicFlag, string>>;
+    // Set where the low-utilisation check reads the row, but its ideal time is the perf model's placeholder.
+    hasUtilisationUnknownNote?: boolean;
 }
 
 /** Per-operation data from the linked memory report, keyed by its operation id. */
