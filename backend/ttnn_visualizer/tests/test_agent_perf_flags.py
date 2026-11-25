@@ -6,7 +6,7 @@
 
 `test_agent_perf_flags_parity.py` holds the port to the app's functions. These hold what
 the tools add around it: the device log and the whole report the flags are read against,
-the perf model's placeholder the view misreads, and where the flags reach a response.
+the perf model's placeholder that flags nothing, and where the flags reach a response.
 """
 
 import json
@@ -201,6 +201,22 @@ class TestEvidence:
             ]
         )
 
+    @pytest.mark.parametrize(
+        "fields",
+        [
+            {"pm_ideal_ns": "1"},
+            {"pm_ideal_ns": ""},
+            {"device_time": ""},
+            {"device_time": "0"},
+            {"cores": "abc"},
+        ],
+    )
+    def test_a_utilisation_it_cannot_read_is_none_rather_than_zero(self, fields):
+        """`getCoreUtilization` returns null there, and the charts leave the op out."""
+        row = perf_flags.typed_row(_row(1, **{**_LOW, **fields}))
+
+        assert perf_flags.core_utilisation(row, 64) is None
+
     def test_utilisation_is_a_percent_cut_to_three_places(self):
         row = perf_flags.typed_row(_row(1, pm_ideal_ns="12.3456789", device_time="1"))
 
@@ -222,6 +238,16 @@ class TestEvidence:
         (low,) = perf_flags.heuristic_flags(row, 64)
 
         assert 29.99 <= low["core_utilisation_percent"] < 30
+
+    def test_a_low_utilisation_flag_without_a_utilisation_gives_no_figure(self):
+        """Should `flag_names` ever flag a row whose utilisation can't be read."""
+        row = perf_flags.typed_row(_row(1, **{**_LOW, "pm_ideal_ns": "1"}))
+        flagged = [perf_flags.PerfHeuristicFlag.LOW_UTILISATION]
+
+        with patch.object(perf_flags, "flag_names", return_value=flagged):
+            (low,) = perf_flags.heuristic_flags(row, 64)
+
+        assert low["core_utilisation_percent"] is None
 
     def test_a_recompute_candidate_carries_no_figure(self):
         """Its program's hash is the `cache` group's `program_hash`."""
@@ -259,11 +285,16 @@ class TestFlagFields:
         assert perf_flags.flagged_rows([_row(1, **_LOW)], None) is None
         assert perf_flags.summary(None) == {}
 
-    def test_the_note_names_both_ways_the_flags_differ_from_the_view(self):
-        """An agent reads the note, not the docs page."""
-        assert "#2162" in perf_flags.FLAGS_NOTE
+    def test_the_note_names_how_the_flags_read_the_report(self):
+        """An agent reads the note, not the docs page: the one way the flags differ from
+        the view, and the placeholder rows `flagged_rows` never counts as low (#2162).
+        """
         assert "signpost range" in perf_flags.FLAGS_NOTE
         assert "report_rows" in perf_flags.FLAGS_NOTE
+        assert (
+            "1 ns perf-model placeholder is never flagged low_utilisation"
+            in perf_flags.FLAGS_NOTE
+        )
 
     def test_a_row_flags_nothing_with_an_empty_list_and_its_gate(self):
         assert perf_flags.flag_fields(_row(1), self._INPUTS) == {
@@ -287,14 +318,13 @@ class TestFlagFields:
     def test_the_perf_models_placeholder_never_reads_as_low_utilisation(
         self, placeholder
     ):
-        """The view flags it (#2162); the port does too, which the golden pins."""
+        """Its utilisation is unknown, in the port as in the view (#2162)."""
         row = _row(1, pm_ideal_ns=placeholder, device_time="100.0")
         typed = perf_flags.typed_row(row)
 
         assert _flag_names(perf_flags.flag_fields(row, self._INPUTS)) == []
-        assert [entry["flag"] for entry in perf_flags.heuristic_flags(typed, 64)] == [
-            "low_utilisation"
-        ]
+        assert perf_flags.heuristic_flags(typed, 64) == []
+        assert perf_flags.core_utilisation(typed, 64) is None
 
     def test_a_modelled_time_however_short_still_flags(self):
         row = _row(1, pm_ideal_ns="2", device_time="100.0")
@@ -732,8 +762,8 @@ class TestEndToEnd:
     """The mocked rows above skip the generator; these run a real capture through it."""
 
     def test_a_smoke_capture_is_flagged_as_the_port_reads_its_rows(self, tmp_path):
-        """Two of its rows carry the 1 ns placeholder: the view flags both, the tool
-        neither."""
+        """Two of its rows carry the 1 ns placeholder, which neither the port, and so
+        the view, nor the tool flags."""
         write_ops_perf(tmp_path, smoke_rows())
         _write_device_log(tmp_path, "ARCH: wormhole_b0, CHIP_FREQ[MHz]: 1000")
         registry = ReportRegistry()
@@ -747,7 +777,7 @@ class TestEndToEnd:
         ]
         assert len(placeholders) == 2
         for row in placeholders:
-            assert "low_utilisation" in [
+            assert "low_utilisation" not in [
                 entry["flag"]
                 for entry in perf_flags.heuristic_flags(perf_flags.typed_row(row), 64)
             ]

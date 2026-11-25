@@ -35,7 +35,7 @@ interface FlagCase {
     rows: unknown[];
     maxCores: number | string;
     flags: FlagEvidence[][];
-    utilisation: number[];
+    utilisation: (number | null)[];
 }
 
 // The agent rounds a figure to three places, and cuts a utilisation to them.
@@ -70,7 +70,7 @@ const expectEvidence = (row: TypedPerfTableRow, evidence: FlagEvidence, maxCores
             expectFigure(evidence.flops_percent, row.flops_percent);
             break;
         case PerfHeuristicFlag.LOW_UTILISATION: {
-            const cut = getCoreUtilization(row, maxCores) * 100 - (evidence.core_utilisation_percent ?? NaN);
+            const cut = (getCoreUtilization(row, maxCores) ?? NaN) * 100 - (evidence.core_utilisation_percent ?? NaN);
 
             expect(cut).toBeGreaterThan(-FLOAT_TOLERANCE);
             expect(cut).toBeLessThan(UTILISATION_PLACE + FLOAT_TOLERANCE);

@@ -10,7 +10,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { getMaxValue, getPerformanceIdRange } from '../src/functions/numericExtent';
+import { getMaxFiniteValue, getMaxValue, getPerformanceIdRange } from '../src/functions/numericExtent';
 import { PerfTableRow } from '../src/model/PerfTable';
 
 const LARGE_REPORT_ROWS = 200_000;
@@ -51,5 +51,20 @@ describe('getMaxValue', () => {
         const withNull = [-2, null as unknown as number];
 
         expect(getMaxValue(withNull)).toBe(Math.max(...withNull));
+    });
+});
+
+describe('getMaxFiniteValue', () => {
+    it('skips the nulls a chart plots as gaps, and any value that is not finite', () => {
+        expect(getMaxFiniteValue([0.2, null, 0.5, Number.NaN, 0.1, Number.POSITIVE_INFINITY])).toBe(0.5);
+    });
+
+    it('is -Infinity when no value is finite', () => {
+        expect(getMaxFiniteValue([])).toBe(-Infinity);
+        expect(getMaxFiniteValue([null, Number.NaN])).toBe(-Infinity);
+    });
+
+    it('reduces input too large for a spread', () => {
+        expect(getMaxFiniteValue(scrambledIds(LARGE_REPORT_ROWS))).toBe(LARGE_REPORT_ROWS);
     });
 });

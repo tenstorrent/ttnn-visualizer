@@ -71,7 +71,10 @@ _UNMODELLED_NS = 1.0
 
 
 def is_unmodelled(nanoseconds: object) -> bool:
-    return _number(nanoseconds) == _UNMODELLED_NS
+    """Exactly 1 ns, as `isUnmodelledIdealTime` (`src/functions/isUnmodelledIdealTime.ts`)
+    reads an ideal time; it also nulls the perf model's compute and bandwidth fields here.
+    """
+    return finite_number(nanoseconds) == _UNMODELLED_NS
 
 
 _FIDELITY = re.compile(r"(LoFi|HiFi[234])$")

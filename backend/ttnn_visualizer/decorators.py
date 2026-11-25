@@ -4,10 +4,12 @@
 
 import logging
 import re
+import secrets
 from functools import wraps
-from typing import Any, Callable
+from typing import Any, Callable, Optional
+from urllib.parse import quote
 
-from flask import abort, request, session
+from flask import Response, abort, after_this_request, request, session
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import (
     AuthenticationException,
@@ -22,13 +24,102 @@ from ttnn_visualizer.exceptions import (
     UnreachableHostException,
     response_forbidden,
 )
+from ttnn_visualizer.extensions import db
 from ttnn_visualizer.instances import get_or_create_instance
+from ttnn_visualizer.models import InstanceTable
 from ttnn_visualizer.ssh_client import SSH_AUTH_FAILURE_MESSAGE
 
 logger = logging.getLogger(__name__)
 
+# Mirrored by ACTIVE_MEMORY_REPORT_HEADER in src/definitions/ReportHeaders.ts;
+# tests/test_report_headers_frontend_parity.py pins the two together.
+ACTIVE_MEMORY_REPORT_HEADER = "X-Active-Memory-Report"
+
+
+# The `reason` a hosted request gets when its instance belongs to another session. The
+# frontend matches it to start the tab afresh on a new instance ID.
+INSTANCE_NOT_OWNED = "instance_not_owned"
+
+
+def ensure_instance_owner() -> str:
+    """This hosted session's owner token, made on first use.
+
+    The page itself mints it (`app.catch_all`): a page load's first API requests leave
+    together, and if each minted its own, all but one would be refused as another
+    session's. Minting here as well covers clients that never load the page.
+    """
+    owner = session.get("instance_owner")
+    if not owner:
+        owner = secrets.token_urlsafe(16)
+        session["instance_owner"] = owner
+    return owner
+
+
+def _hosted_instance_for_session(instance_id: str) -> Optional[InstanceTable]:
+    """The instance *instance_id* names, or None when this hosted session doesn't own it.
+
+    A new ID becomes this session's instance. An existing one is this session's only if
+    it was created here: instance IDs travel in every query string, so holding one
+    proves nothing. A row with no owner goes to the first session that uses it; hosted
+    rows always have one, since `DB_VERSION` moved with migration 002 and rows from
+    before it stay in the old database file.
+    """
+    owner = ensure_instance_owner()
+    instance_data = get_or_create_instance(instance_id=instance_id, owner=owner)
+    if instance_data is None:
+        abort(500)
+    if instance_data.owner == owner:
+        return instance_data
+    if instance_data.owner is None:
+        instance_data.owner = owner
+        db.session.commit()
+        return instance_data
+    return None
+
+
+def _instance_not_owned_response():
+    return response_forbidden(
+        "This instance belongs to another session.", reason=INSTANCE_NOT_OWNED
+    )
+
+
+def hosted_instance_owner_required(func):
+    """Refuse a hosted request naming an instance another session owns.
+
+    For routes that read `instanceId` themselves rather than through `with_instance`.
+    Locally there is one user, so every instance is theirs.
+    """
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        from flask import current_app
+
+        instance_id = request.args.get("instanceId")
+        if (
+            current_app.config["SERVER_MODE"]
+            and instance_id
+            and _hosted_instance_for_session(instance_id) is None
+        ):
+            logger.warning("Refusing a hosted request for another session's instance")
+            return _instance_not_owned_response()
+
+        return func(*args, **kwargs)
+
+    return wrapper
+
 
 def with_instance(func):
+    """Resolves the request's instance and passes it to the view as ``instance``.
+
+    Every response names the memory report the view read in the
+    ``X-Active-Memory-Report`` header, percent-encoded because folder names need not
+    be Latin-1. A later pick can make another report active before an earlier
+    request is handled, and the client caches each answer under the report it asked
+    about, so it discards an answer for another report rather than caching it
+    (#2375). The name comes from the same snapshot the view reads, and the header is
+    set through ``after_this_request`` so error-handler responses carry it too.
+    """
+
     @wraps(func)
     def wrapper(*args, **kwargs):
         from flask import current_app
@@ -39,7 +130,15 @@ def with_instance(func):
             current_app.logger.error("No instanceId present on request, returning 400")
             abort(400, description="Missing required query parameter: instanceId")
 
-        instance_query_data = get_or_create_instance(instance_id=instance_id)
+        if current_app.config["SERVER_MODE"]:
+            instance_query_data = _hosted_instance_for_session(instance_id)
+            if instance_query_data is None:
+                logger.warning(
+                    "Refusing a hosted request for another session's instance"
+                )
+                return _instance_not_owned_response()
+        else:
+            instance_query_data = get_or_create_instance(instance_id=instance_id)
 
         # Handle case where get_or_create_instance returns None due to database error
         if instance_query_data is None:
@@ -51,6 +150,17 @@ def with_instance(func):
         instance = instance_query_data.to_pydantic()
 
         kwargs["instance"] = instance
+
+        active_memory_report = (
+            instance.active_report.profiler_name if instance.active_report else None
+        ) or ""
+
+        @after_this_request
+        def _name_active_memory_report(response: Response) -> Response:
+            response.headers[ACTIVE_MEMORY_REPORT_HEADER] = quote(
+                active_memory_report, safe=""
+            )
+            return response
 
         if "instances" not in session:
             session["instances"] = []

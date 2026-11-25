@@ -15,6 +15,7 @@ import {
 } from '../../definitions/PlotConfigurations';
 import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
 import getPlotLabel from '../../functions/getPlotLabel';
+import getDeviceTimeNs from '../../functions/getDeviceTimeNs';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import { getPrimaryDataColours, getSecondaryDataColours } from '../../definitions/PerformancePlotColours';
 import { usePerfMeta } from '../../hooks/useAPI';
@@ -52,7 +53,7 @@ function PerfDeviceKernelRuntimeChart({ datasets = [] }: PerfDeviceKernelRuntime
         () =>
             datasets.map((data, dataIndex) => ({
                 x: data?.map((_row, index) => index + 1),
-                y: data?.map((row) => row.device_time),
+                y: data?.map(getDeviceTimeNs),
                 yaxis: 'y2',
                 hovertemplate: `Operation: %{x}<br />Device Kernel Duration: %{y} ns`,
                 name: getPlotLabel(dataIndex, perfReport?.reportName, comparisonReportList),

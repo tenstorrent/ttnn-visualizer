@@ -57,7 +57,7 @@ describe('useReportSourceFiles', () => {
 
         await waitFor(() => expect(result.current.sourceFiles.data).toBeDefined());
 
-        expect(axiosInstance.get).toHaveBeenCalledWith(Endpoints.SOURCE_FILES);
+        expect(axiosInstance.get).toHaveBeenCalledWith(Endpoints.SOURCE_FILES, undefined);
         expect(result.current.sourceFiles.data).toEqual({
             ids: new Set([1, 2]),
             paths: new Set(['/a.py', '/b.py']),

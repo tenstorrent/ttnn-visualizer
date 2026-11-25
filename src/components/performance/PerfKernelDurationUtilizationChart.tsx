@@ -7,6 +7,7 @@ import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { TypedPerfTableRow } from '../../model/PerfTable';
 import getCoreUtilization from '../../functions/getCoreUtilization';
+import getDeviceTimeNs from '../../functions/getDeviceTimeNs';
 import {
     PlotConfiguration,
     getDeviceUtilizationAxisConfig,
@@ -18,7 +19,7 @@ import getPlotLabel from '../../functions/getPlotLabel';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom, mergeDevicesAtom } from '../../store/app';
 import { getPrimaryDataColours } from '../../definitions/PerformancePlotColours';
 import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
-import { getMaxValue } from '../../functions/numericExtent';
+import { getMaxFiniteValue, getMaxValue } from '../../functions/numericExtent';
 
 interface PerfKernelDurationUtilizationChartProps {
     datasets: TypedPerfTableRow[][];
@@ -27,28 +28,31 @@ interface PerfKernelDurationUtilizationChartProps {
 }
 
 function PerfKernelDurationUtilizationChart({ datasets, maxCores, chartId }: PerfKernelDurationUtilizationChartProps) {
-    const perfReport = useAtomValue(activePerformanceReportAtom);
+    const reportName = useAtomValue(activePerformanceReportAtom)?.reportName ?? null;
     const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
     const mergeDevices = useAtomValue(mergeDevicesAtom);
 
     const chartData = useMemo(
         () =>
             datasets.map((data, dataIndex) => ({
-                x: data?.map((row) => row.device_time),
-                y: data?.map((row) => getCoreUtilization(row, maxCores)).filter((value) => value !== -1),
+                x: data?.map(getDeviceTimeNs),
+                y: data?.map((row) => getCoreUtilization(row, maxCores)),
                 mode: 'markers',
                 type: 'scatter',
-                name: getPlotLabel(dataIndex, perfReport?.reportName, comparisonReportList),
+                name: getPlotLabel(dataIndex, reportName, comparisonReportList),
                 marker: {
                     size: 10,
                     color: getPrimaryDataColours(dataIndex),
                 },
                 hovertemplate: `Duration: %{x} ns<br />Utilization: %{y}`,
             })) as Partial<PlotData>[],
-        [datasets, maxCores, perfReport, comparisonReportList],
+        [datasets, maxCores, reportName, comparisonReportList],
     );
 
-    const maxYValue = getMaxValue(chartData.flatMap((data) => (data.y as number[]) ?? []));
+    const maxYValue = useMemo(
+        () => getMaxValue(chartData.map((trace) => getMaxFiniteValue((trace.y as (number | null)[]) ?? []))),
+        [chartData],
+    );
 
     const configuration: PlotConfiguration = {
         showLegend: true,
