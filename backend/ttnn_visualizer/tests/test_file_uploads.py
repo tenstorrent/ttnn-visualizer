@@ -217,7 +217,7 @@ def test_construct_dest_path_folder_branch_allows_intermediate_dotdot(app, tmp_p
 
 
 def test_extract_uploaded_name_strips_traversal_from_db_name():
-    """`mlir_name` is rebuilt by `get_mlir_path` — must not contain `..`."""
+    """`get_npe_path` maps the stored name back to a file, so it must not hold `..`."""
     name = extract_uploaded_name([_faux_file("../etc/passwd.json")])
     assert name == "passwd"
     assert ".." not in name

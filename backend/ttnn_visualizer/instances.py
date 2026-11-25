@@ -188,10 +188,18 @@ def update_existing_instance(
             instance_data.remote_connection
         )
 
-    def next_path(current, explicit, name, path_getter, name_key, location_key):
+    def next_path(
+        current,
+        explicit,
+        name,
+        path_getter,
+        name_key,
+        location_key,
+        keep_if_unnamed=False,
+    ):
         if explicit is not _sentinel:
             return explicit
-        if name is None and current_app.config["SERVER_MODE"]:
+        if name is None and (keep_if_unnamed or current_app.config["SERVER_MODE"]):
             # Hosted, a report the update leaves out keeps the path it has: the stored
             # name it would be rebuilt from may never have been checked against the
             # session, and the path is what the session was given.
@@ -221,6 +229,8 @@ def update_existing_instance(
         KEY_PERFORMANCE_NAME,
         KEY_PERFORMANCE_LOCATION,
     )
+    # Locally too, an NPE report the update leaves out keeps its file: the name can't
+    # tell apart uploads that share it (`trace.json`, `trace.npeviz.zst`).
     instance_data.npe_path = next_path(
         instance_data.npe_path,
         npe_path,
@@ -228,6 +238,7 @@ def update_existing_instance(
         get_npe_path,
         KEY_NPE_NAME,
         KEY_NPE_LOCATION,
+        keep_if_unnamed=True,
     )
     instance_data.mlir_path = next_path(
         instance_data.mlir_path,

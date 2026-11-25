@@ -14,11 +14,14 @@ from ttnn_visualizer.extensions import db
 from ttnn_visualizer.instances import (
     KEY_MLIR_LOCATION,
     KEY_MLIR_NAME,
+    KEY_NPE_LOCATION,
+    KEY_NPE_NAME,
     KEY_PERFORMANCE_LOCATION,
     KEY_PERFORMANCE_NAME,
     KEY_PROFILER_LOCATION,
     KEY_PROFILER_NAME,
     create_instance_from_local_paths,
+    create_new_instance,
     update_existing_instance,
 )
 from ttnn_visualizer.models import (
@@ -69,20 +72,12 @@ def test_local_performance_path_when_mounting_remote_profiler(local_app):
             lastModified=0,
         )
 
-        update_existing_instance(
+        _update_existing(
             instance,
             profiler_name="remote-mem",
             profiler_location=ReportLocation.REMOTE.value,
-            performance_name=None,
-            performance_location=None,
-            npe_name=None,
-            npe_location=None,
-            mlir_name=None,
-            mlir_location=None,
             remote_connection=connection,
             remote_profiler_folder=remote_profiler,
-            remote_performance_folder=None,
-            clear_remote=False,
         )
 
         local_root = Path(local_app.config["LOCAL_DATA_DIRECTORY"])
@@ -130,20 +125,10 @@ def test_mlir_path_remains_a_file_when_switching_unrelated_report(local_app):
 
         # Caller updates the profiler but doesn't touch MLIR — exactly the
         # scenario the bug surfaced in.
-        update_existing_instance(
+        _update_existing(
             instance,
             profiler_name="some-profiler",
             profiler_location=ReportLocation.LOCAL.value,
-            performance_name=None,
-            performance_location=None,
-            npe_name=None,
-            npe_location=None,
-            mlir_name=None,
-            mlir_location=None,
-            remote_connection=None,
-            remote_profiler_folder=None,
-            remote_performance_folder=None,
-            clear_remote=False,
         )
 
         remote_root = Path(local_app.config["REMOTE_DATA_DIRECTORY"])
@@ -156,6 +141,167 @@ def test_mlir_path_remains_a_file_when_switching_unrelated_report(local_app):
         # The path must point at a file, not the directory (the pre-fix value).
         assert instance.mlir_path == expected_file
         assert instance.mlir_path != expected_dir
+
+
+# Every report left out, as `update_existing_instance` and `create_new_instance` take it.
+_NO_REPORT_CHANGES = {
+    "profiler_name": None,
+    "profiler_location": None,
+    "performance_name": None,
+    "performance_location": None,
+    "npe_name": None,
+    "npe_location": None,
+    "mlir_name": None,
+    "mlir_location": None,
+    "remote_connection": None,
+    "remote_profiler_folder": None,
+    "remote_performance_folder": None,
+    "clear_remote": False,
+}
+
+
+def _update_existing(instance, **changes):
+    """`update_existing_instance` with every report left out unless named."""
+    update_existing_instance(instance, **{**_NO_REPORT_CHANGES, **changes})
+
+
+def _npe_uploads(app, *file_names):
+    """Upload-folder files, oldest first, so each later one is newer."""
+    directory = (
+        Path(app.config["LOCAL_DATA_DIRECTORY"]) / app.config["NPE_DIRECTORY_NAME"]
+    )
+    directory.mkdir(parents=True, exist_ok=True)
+    paths = []
+    for age, file_name in enumerate(file_names):
+        path = directory / file_name
+        path.write_bytes(b"{}")
+        os.utime(path, (1_000_000 + age, 1_000_000 + age))
+        paths.append(path)
+    return paths
+
+
+def _instance_with_npe_upload(npe_name, npe_path):
+    instance = InstanceTable(
+        instance_id="test-instance-npe-upload",
+        active_report={
+            KEY_NPE_NAME: npe_name,
+            KEY_NPE_LOCATION: ReportLocation.LOCAL.value,
+        },
+        npe_path=str(npe_path),
+    )
+    db.session.add(instance)
+    db.session.commit()
+    return instance
+
+
+@pytest.mark.parametrize(
+    ("server_mode", "uploaded_file_name"),
+    [
+        pytest.param(False, "trace.npeviz.zst", id="local"),
+        pytest.param(True, "1795540000_trace.npeviz.zst", id="server-mode"),
+    ],
+)
+def test_an_update_leaving_the_npe_report_out_keeps_its_file(
+    app, server_mode, uploaded_file_name
+):
+    """#2381: rebuilt from its name, the path became the upload folder.
+
+    The name can't stand in for the file: a newer `trace.json` answers to it too, and
+    it lacks the timestamp prefix of a hosted upload's file.
+    """
+    app.config["SERVER_MODE"] = server_mode
+    uploaded, _newer_with_the_same_name = _npe_uploads(
+        app, uploaded_file_name, "trace.json"
+    )
+
+    with app.app_context():
+        instance = _instance_with_npe_upload("trace", uploaded)
+
+        _update_existing(
+            instance,
+            profiler_name="some-profiler",
+            profiler_location=ReportLocation.LOCAL.value,
+        )
+
+        assert instance.npe_path == str(uploaded)
+        assert instance.active_report[KEY_NPE_NAME] == "trace"
+
+
+def test_an_update_naming_the_npe_report_resolves_or_clears_its_file(app):
+    app.config["SERVER_MODE"] = False
+    trace, other = _npe_uploads(app, "trace.json", "other.npeviz.zst")
+
+    with app.app_context():
+        instance = _instance_with_npe_upload("trace", trace)
+
+        _update_existing(
+            instance, npe_name="other", npe_location=ReportLocation.LOCAL.value
+        )
+        assert instance.npe_path == str(other)
+
+        _update_existing(instance, npe_name="", npe_location=ReportLocation.LOCAL.value)
+        assert instance.npe_path is None
+        assert KEY_NPE_NAME not in instance.active_report
+
+
+@pytest.mark.parametrize("server_mode", [False, True], ids=["local", "server-mode"])
+def test_an_update_naming_an_npe_report_with_no_upload_keeps_the_name(app, server_mode):
+    """The name stays active with no file, so the NPE page reports it missing."""
+    app.config["SERVER_MODE"] = server_mode
+    (trace,) = _npe_uploads(app, "trace.json")
+
+    with app.app_context():
+        instance = _instance_with_npe_upload("trace", trace)
+
+        _update_existing(
+            instance, npe_name="missing", npe_location=ReportLocation.LOCAL.value
+        )
+
+        assert instance.npe_path is None
+        assert instance.active_report[KEY_NPE_NAME] == "missing"
+
+
+def test_a_hosted_update_naming_the_current_npe_report_leaves_no_file(app):
+    """Hosted, no name resolves, the current report's own included."""
+    app.config["SERVER_MODE"] = True
+    (uploaded,) = _npe_uploads(app, "1795540000_trace.json")
+
+    with app.app_context():
+        instance = _instance_with_npe_upload("trace", uploaded)
+
+        _update_existing(
+            instance, npe_name="trace", npe_location=ReportLocation.LOCAL.value
+        )
+
+        assert instance.npe_path is None
+        assert instance.active_report[KEY_NPE_NAME] == "trace"
+
+
+@pytest.mark.parametrize(
+    ("server_mode", "resolves"),
+    [
+        pytest.param(False, True, id="local"),
+        pytest.param(True, False, id="server-mode"),
+    ],
+)
+def test_a_new_instance_named_after_an_npe_report_takes_its_newest_upload(
+    app, server_mode, resolves
+):
+    """`create_new_instance` has no stored file to keep, so it resolves the name."""
+    app.config["SERVER_MODE"] = server_mode
+    _older, newer = _npe_uploads(app, "trace.json", "trace.npeviz.zst")
+
+    with app.app_context():
+        instance = create_new_instance(
+            "test-instance-new-npe",
+            **{
+                **_NO_REPORT_CHANGES,
+                "npe_name": "trace",
+                "npe_location": ReportLocation.LOCAL.value,
+            },
+        )
+
+        assert instance.npe_path == (str(newer) if resolves else None)
 
 
 # Reading an instance drops a stored connection the current validators reject rather than
@@ -186,21 +332,7 @@ def test_update_tolerates_a_stored_connection_the_validators_now_reject(
         db.session.commit()
 
         with caplog.at_level(logging.WARNING):
-            update_existing_instance(
-                instance,
-                profiler_name=None,
-                profiler_location=None,
-                performance_name=None,
-                performance_location=None,
-                npe_name=None,
-                npe_location=None,
-                mlir_name=None,
-                mlir_location=None,
-                remote_connection=None,
-                remote_profiler_folder=None,
-                remote_performance_folder=None,
-                clear_remote=False,
-            )
+            _update_existing(instance)
 
         assert "unusable stored remote connection" in caplog.text
         # Treated as absent, so the local report resolves under LOCAL_DATA_DIRECTORY

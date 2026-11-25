@@ -160,6 +160,7 @@ from ttnn_visualizer.stack_trace_source import (
     stack_source_response,
 )
 from ttnn_visualizer.utils import (
+    NPE_UPLOAD_EXTENSIONS,
     PERFORMANCE_OPS_PERF_PREFIX,
     PERFORMANCE_REPORT_REQUIRED_FILES,
     create_path_resolver,
@@ -1818,11 +1819,7 @@ def create_npe_files():
     data_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
 
     for file in files:
-        if (
-            not file.filename.endswith(".json")
-            and not file.filename.endswith(".zst")
-            and not file.filename.endswith(".npeviz")
-        ):
+        if not file.filename.endswith(NPE_UPLOAD_EXTENSIONS):
             return StatusMessage(
                 status=ConnectionTestStates.FAILED,
                 message="NPE requires a valid .json or .zst file",
@@ -2948,8 +2945,9 @@ def update_current_instance(instance: Instance):
         }
 
         # Pass explicit `*_path` values through only when the payload supplies
-        # them, so `update_instance`'s sentinel default ("recompute from name")
-        # stays in effect for callers that omit them. This lets API consumers
+        # them, so `update_instance`'s sentinel default stays in effect for
+        # callers that omit them: `next_path` in `update_existing_instance` keeps
+        # the path or rebuilds it from the report's name. API consumers can
         # pin an exact path while preserving the current frontend behaviour
         # (which sends names but not paths).
         for path_key in _INSTANCE_PATH_KEYS:
