@@ -14,6 +14,7 @@ import {
     PerformanceReportParams,
     getLinkedPerformanceReportParams,
     getPerformanceComparisonReportQueryKey,
+    getPerformanceCountersQueryKey,
     getPerformanceReportQueryKey,
     toBackendStackedGroupBy,
 } from '../src/functions/performanceReportQueryKey';
@@ -172,6 +173,21 @@ describe('getPerformanceComparisonReportQueryKey', () => {
         expect(comparisonKey(COMPARISON_NAMES, defaultViewParams)).not.toEqual(
             comparisonKey(COMPARISON_NAMES, { ...defaultViewParams, mergeDevices: false }),
         );
+    });
+});
+
+describe('getPerformanceCountersQueryKey', () => {
+    const countersKey = (perfId: number, name = REPORT_NAME, location = ReportLocation.LOCAL) =>
+        getPerformanceCountersQueryKey({ name, instanceId: INSTANCE_ID, location, perfId });
+
+    it('keys a row on its report as the report itself is keyed, and on the row', () => {
+        expect(countersKey(2)).toEqual(['get-performance-counters', INSTANCE_ID, ReportLocation.LOCAL, REPORT_NAME, 2]);
+    });
+
+    it('separates the same row id in different reports and locations, since ids restart per report', () => {
+        expect(countersKey(2)).not.toEqual(countersKey(2, 'another-report'));
+        expect(countersKey(2)).not.toEqual(countersKey(2, REPORT_NAME, ReportLocation.REMOTE));
+        expect(countersKey(2)).not.toEqual(countersKey(3));
     });
 });
 

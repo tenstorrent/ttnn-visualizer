@@ -1278,6 +1278,8 @@ if not files:
 Without the guard, downstream `files[0]` indexing or empty-collection iteration falls over silently or with an opaque error.
 
 > **Note:** the rules above cover **single-file** uploads (NPE, MLIR, future single-blob endpoints). **Folder-upload** branches (profiler/performance report trees) deliberately preserve subpath structure and use a different fix shape — a resolved-path containment check inside `construct_dest_path` that rejects any candidate whose resolved path lands outside the per-report folder (raising `DataFormatError`, which the view handlers map to 422). Don't extend the `.name` collapse pattern into the folder branch; rely on the containment check.
+>
+> The per-report folder is itself client-controlled (the `folderName` form field, or the leading segment of the first filename), so containment within it proves nothing on its own. `validate_files` refuses any folder name that is not a single plain segment, and `construct_dest_path` also requires the resolved report folder to sit directly under the server-chosen upload directory. Before both checks existed, `folderName=../..` let an unauthenticated upload overwrite the app database (ITSEC-561). A new folder-upload handler must go through `validate_files` and `construct_dest_path`, not compose its own path from the folder name.
 
 ---
 

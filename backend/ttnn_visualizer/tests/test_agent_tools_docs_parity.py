@@ -17,12 +17,15 @@ from pathlib import Path
 from typing import Dict, Set
 
 import pytest
+from ttnn_visualizer import hardware_counters, pipeline_stalls
 from ttnn_visualizer.agent import (
     failures,
+    hw_utilisation,
     op_configurations,
     report_diff,
     server,
     source_lines,
+    stall_breakdown,
     tools,
 )
 from ttnn_visualizer.agent.bounds import (
@@ -452,7 +455,7 @@ def test_the_page_names_every_tool_a_csv_that_cannot_be_read_costs():
     named = re.findall(r"`([a-z_]+)`", sentence.group(2))
     assert set(named) == PERF_CSV_TOOLS
     assert len(named) == len(PERF_CSV_TOOLS)
-    assert sentence.group(1) == "six"
+    assert sentence.group(1) == "eight"
 
 
 def test_the_signpost_listing_cap_the_page_states_is_the_enforced_one():
@@ -483,3 +486,93 @@ def test_agents_md_points_at_the_agent_tools_page():
         "AGENTS.md must point at the agent-tools page from the Agent-facing tools "
         "section, so adding a tool without documenting it is visible in review."
     )
+
+
+def test_the_page_carries_the_hw_utilisation_caveats():
+    """Counters are per op and per core, a merged row is one device's, and an op
+    without a compute kernel is left out rather than read as idle."""
+    page = " ".join(_read(_AGENT_DOCS).split())
+
+    assert f"lists the {hw_utilisation.TOP_OPS_PER_UNIT} operations" in page
+    assert "the slowest device's" in page
+    assert "left out of every figure rather than read as 0" in page
+    assert "not a time series" in page
+    assert (
+        "`--profiler-capture-perf-counters=<group>` for each `counters` field" in page
+    )
+    assert f"`{hardware_counters.EXAMPLE_GROUPS}`" in page
+
+
+def test_the_page_carries_the_stall_breakdown_caveats():
+    """The counters cannot see a CB poll, the CSV sums CB waits over cores, waits
+    overlap, a CB copy on an op without a compute kernel is ignored, the stalled time
+    is an estimate, a downstream wait is a symptom wherever it is listed, and CB waits
+    alone are refused."""
+    page = " ".join(_read(_AGENT_DOCS).split())
+
+    assert "issue no Tensix instruction" in page
+    assert "with a stall rate near 0" in page
+    assert "as a sum over the operation's cores" in page
+    assert "they never add up to the stall rate" in page
+    assert "are ignored (`cb_waits` reads `ignored`)" in page
+    assert "never their sum" in page
+    assert "`stalled_us` estimates it as an average core's time" in page
+    assert "a ratio rather than a percentage" in page
+    assert "Semaphore Zero Wait T2" in page
+    assert "a symptom of what held the pipeline up" in page
+    assert "Each `waits` entry carries the same flag" in page
+    assert "`sum_profiling` alone is read from the CSV itself, every device's" in page
+    assert "rather than tt-perf-report's `cores`" in page
+    assert "sum profiling but no hardware counters is out of scope" in page
+    assert f"up to {stall_breakdown.MAX_PERF_IDS} performance row ids" in page
+    assert f"capped at {MAX_DETAILED_LIMIT}, and `matched`" in page
+
+
+def test_the_page_names_the_flags_a_stall_breakdown_refusal_names():
+    page = " ".join(_read(_AGENT_DOCS).split())
+
+    assert (
+        f"`{hardware_counters.CAPTURE_FLAG}={pipeline_stalls.STALL_COUNTER_GROUPS}`"
+        in page
+    )
+    assert f"`{pipeline_stalls.SUM_PROFILING_FLAG}`" in page
+
+
+def test_the_page_names_each_stall_breakdown_answer_key():
+    page = _read(_AGENT_DOCS)
+
+    for key in (
+        "hardware_counters",
+        "instrumentation",
+        "issue_rate",
+        "stall_rate",
+        "waits",
+        "zero_waits",
+        "math_pipeline_stalls",
+        "stall_overlap",
+        "sum_us",
+        "per_core_us",
+        "core_count",
+        "kernel_share_percent",
+        "stalled_percent",
+        "stalled_us",
+        "stalled_thread",
+        "largest_wait",
+        "matched",
+        "state",
+        "fill_hint",
+        "downstream",
+        "capture_groups",
+        "sum_profiling",
+        "wait_labels_absent",
+        *(zone.value for zone in pipeline_stalls.CbWaitZone),
+    ):
+        assert f"`{key}`" in page, key
+
+
+def test_the_page_names_each_hardware_counter_sort_key():
+    """A renamed key the page still spells the old way is one an agent cannot pass."""
+    page = _read(_AGENT_DOCS)
+
+    for metric in tools.COUNTER_METRICS:
+        assert f"`{metric}`" in page, metric
