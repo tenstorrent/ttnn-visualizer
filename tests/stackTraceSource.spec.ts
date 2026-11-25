@@ -7,9 +7,11 @@ import {
     extractOperationSourceData,
     getCallSiteFrame,
     getFrameSourceFileId,
+    getOperationFileIdentifier,
     isFrameSourceInReport,
     parseStackTraceFrames,
 } from '../src/functions/stackTraceSource';
+import { getPathBasename } from '../src/functions/formatting';
 
 const PYTHON_TRACE =
     'File "/models/resnet/ttnn_functional_resnet50.py", line 641, in forward\n    return ttnn.matmul(a, b)';
@@ -206,5 +208,55 @@ describe('extractOperationSourceData', () => {
                 stack_trace_source_file_id: null,
             }),
         ).toBeNull();
+    });
+});
+
+describe('getOperationFileIdentifier', () => {
+    // The label the Source button's target reads as: its file's basename and line.
+    const sourceButtonLabel = (stackTrace: string): string => {
+        const sourceData = extractOperationSourceData({ stack_trace: stackTrace, stack_trace_source_file_id: null });
+
+        return sourceData ? `${getPathBasename(sourceData.filePath)}:${sourceData.lineNumber}` : '';
+    };
+
+    it("reads the call site's basename and line", () => {
+        expect(getOperationFileIdentifier(PYTHON_TRACE)).toBe('ttnn_functional_resnet50.py:641');
+        expect(getOperationFileIdentifier(MULTI_FRAME_TRACE)).toBe('resnet.py:135');
+    });
+
+    it('reads the basename of a Windows path', () => {
+        expect(getOperationFileIdentifier('  File "C:\\m\\model.py", line 9, in f')).toBe('model.py:9');
+    });
+
+    it('is empty when the trace has no frame', () => {
+        expect(getOperationFileIdentifier('')).toBe('');
+        expect(getOperationFileIdentifier('#0 0x7f in ttnn::run()')).toBe('');
+        expect(getOperationFileIdentifier(null as unknown as string)).toBe('');
+    });
+
+    it('is empty when the frame names no file', () => {
+        expect(getOperationFileIdentifier('  File "", line 3, in f')).toBe('');
+        expect(getOperationFileIdentifier('  File "/m/", line 3, in f')).toBe('');
+    });
+
+    // Traces where a label read any other way could name a frame the Source button does not open.
+    it.each([
+        [
+            'a code line quoting a frame',
+            `    raise ValueError('File "/m/quoted.py", line 3, in f')\n  File "/m/real.py", line 7, in fn`,
+            'real.py:7',
+        ],
+        [
+            'a frame line with no function',
+            '  File "/m/nofn.py", line 4\n  File "/m/real.py", line 7, in fn',
+            'real.py:7',
+        ],
+        ['a path with a quote in it', '  File "/m/we"ird.py", line 20, in f', ''],
+        ['a root-level path', '  File "/run.py", line 5, in f\n  File "/app/b.py", line 9, in g', 'run.py:5'],
+        ['an empty path', '  File "", line 3, in f', ''],
+        ['a CRLF trace', MULTI_FRAME_TRACE.replace(/\n/g, '\r\n'), 'resnet.py:135'],
+    ])('names the frame the Source button opens for %s', (_case, stackTrace, expected) => {
+        expect(getOperationFileIdentifier(stackTrace)).toBe(expected);
+        expect(getOperationFileIdentifier(stackTrace)).toBe(sourceButtonLabel(stackTrace));
     });
 });

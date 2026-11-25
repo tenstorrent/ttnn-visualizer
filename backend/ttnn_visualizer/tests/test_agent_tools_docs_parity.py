@@ -158,12 +158,15 @@ def test_the_page_describes_every_include_group():
 
 
 def test_the_page_carries_where_the_flags_differ_from_the_view():
-    """The one flag the tools answer differently, and the rule a range does not move."""
+    """The rule a range does not move, and the placeholder neither side flags."""
     page = " ".join(_read(_AGENT_DOCS).split())
 
-    assert "#2162" in page
-    assert "a 1 ns ideal time never flags `low_utilisation`" in page
+    assert "in one deliberate way" in page
     assert "decided over the whole report" in page
+    assert (
+        "1 ns placeholder, described above, is never flagged, here or in the view"
+        in page
+    )
     assert "`errors`" in page and "`dram_fallbacks`" in page
 
 

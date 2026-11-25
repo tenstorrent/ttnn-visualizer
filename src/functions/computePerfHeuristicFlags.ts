@@ -7,6 +7,7 @@ import { TypedPerfTableRow } from '../model/PerfTable';
 import { PERF_HEURISTIC_THRESHOLDS, PerfHeuristicFlag } from '../definitions/PerfHeuristics';
 import { OpType } from '../definitions/Performance';
 import getCoreUtilization from './getCoreUtilization';
+import isUnmodelledIdealTime from './isUnmodelledIdealTime';
 import isValidNumber from './isValidNumber';
 import { formatPercentage } from './math';
 import { isSlowDramDominant } from './perfBoundPredicates';
@@ -17,6 +18,7 @@ import { getRepeatCacheOutcome } from './enrichPerfRowData';
 interface RowHeuristicEvaluation {
     flags: PerfHeuristicFlag[];
     details: Partial<Record<PerfHeuristicFlag, string>> | undefined;
+    hasUtilisationUnknownNote: boolean;
 }
 
 // The ideal time behind utilisation is tt-metal's op perf model, which is most trustworthy for the
@@ -93,7 +95,7 @@ function evaluateRowHeuristics(row: TypedPerfTableRow, maxCores: number): RowHeu
     }
 
     if (!isEligibleRow(row)) {
-        return { flags, details: flags.length > 0 ? details : undefined };
+        return { flags, details: flags.length > 0 ? details : undefined, hasUtilisationUnknownNote: false };
     }
 
     // Inferred, so eligibility applies; impact does not, because the cost lands on the later
@@ -114,18 +116,16 @@ function evaluateRowHeuristics(row: TypedPerfTableRow, maxCores: number): RowHeu
         }
     }
 
-    if (hasMinImpact && isValidNumber(row.pm_ideal_ns) && isValidNumber(row.device_time) && isValidNumber(row.cores)) {
-        const utilisation = getCoreUtilization(row, maxCores);
+    const utilisation = hasMinImpact ? getCoreUtilization(row, maxCores) : null;
 
-        if (utilisation > 0 && utilisation < LOW_CORE_UTILISATION_RATIO) {
-            flags.push(PerfHeuristicFlag.LOW_UTILISATION);
-            const utilisationDetail = `Core utilisation: ${formatPercentage(utilisation * 100)}`;
+    if (utilisation !== null && utilisation > 0 && utilisation < LOW_CORE_UTILISATION_RATIO) {
+        flags.push(PerfHeuristicFlag.LOW_UTILISATION);
+        const utilisationDetail = `Core utilisation: ${formatPercentage(utilisation * 100)}`;
 
-            details[PerfHeuristicFlag.LOW_UTILISATION] =
-                row.bound_analysis === BoundAnalysis.NONE
-                    ? `${utilisationDetail}. ${LOW_UTILISATION_UNMODELLED_NOTE}`
-                    : utilisationDetail;
-        }
+        details[PerfHeuristicFlag.LOW_UTILISATION] =
+            row.bound_analysis === BoundAnalysis.NONE
+                ? `${utilisationDetail}. ${LOW_UTILISATION_UNMODELLED_NOTE}`
+                : utilisationDetail;
     }
 
     if (isUnderutilisedCores(row, maxCores, hasMinImpact)) {
@@ -144,19 +144,21 @@ function evaluateRowHeuristics(row: TypedPerfTableRow, maxCores: number): RowHeu
     return {
         flags,
         details: flags.length > 0 ? details : undefined,
+        hasUtilisationUnknownNote: hasMinImpact && isUnmodelledIdealTime(row.pm_ideal_ns),
     };
 }
 
-// Mirrored, less the allocation-failure and DRAM-fallback flags, as `heuristic_flags` in
-// `backend/ttnn_visualizer/agent/perf_flags.py`.
+// Mirrored, less the allocation-failure and DRAM-fallback flags and the utilisation-unknown note, as
+// `heuristic_flags` in `backend/ttnn_visualizer/agent/perf_flags.py`.
 export function annotatePerfHeuristicFlags(rows: TypedPerfTableRow[], maxCores: number): TypedPerfTableRow[] {
     return rows.map((row) => {
-        const { flags, details } = evaluateRowHeuristics(row, maxCores);
+        const { flags, details, hasUtilisationUnknownNote } = evaluateRowHeuristics(row, maxCores);
 
         return {
             ...row,
             heuristicFlags: flags,
             heuristicFlagDetails: details,
+            hasUtilisationUnknownNote,
         };
     });
 }
