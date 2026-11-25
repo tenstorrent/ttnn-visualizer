@@ -15,6 +15,7 @@ import {
     getCoreCountLabel,
     getCoreCountText,
     stripGitRemoteSuffix,
+    withOperationFileIdentifier,
 } from '../src/functions/formatting';
 
 describe('formatShortSha', () => {
@@ -154,5 +155,18 @@ describe('describeBakedGrids', () => {
                 { x_size: 12, y_size: 19 },
             ]),
         ).toBe('descriptors are 11x8 and 12x19');
+    });
+});
+
+describe('withOperationFileIdentifier', () => {
+    it('appends the file identifier in brackets', () => {
+        expect(withOperationFileIdentifier('12 ttnn.matmul', 'model.py:3')).toBe('12 ttnn.matmul (model.py:3)');
+    });
+
+    it.each([
+        ['empty', ''],
+        ['missing', undefined],
+    ])('returns the label alone when the identifier is %s', (_case, fileIdentifier) => {
+        expect(withOperationFileIdentifier('12 ttnn.matmul', fileIdentifier)).toBe('12 ttnn.matmul');
     });
 });

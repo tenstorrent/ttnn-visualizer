@@ -4,6 +4,7 @@
 
 import { Link } from 'react-router';
 import ROUTES from '../definitions/Routes';
+import { withOperationFileIdentifier } from '../functions/formatting';
 import { Operation, Tensor } from '../model/APIData';
 
 export const getOperationLink = (operationId: number, operations: Operation[]) => {
@@ -15,7 +16,7 @@ export const getOperationLink = (operationId: number, operations: Operation[]) =
 
     return (
         <Link to={`${ROUTES.OPERATIONS}/${operation.id}`}>
-            {operation.id} {operation.name} ({operation.operationFileIdentifier})
+            {withOperationFileIdentifier(`${operation.id} ${operation.name}`, operation.operationFileIdentifier)}
         </Link>
     );
 };

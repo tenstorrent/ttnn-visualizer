@@ -146,6 +146,22 @@ describe('OperationList errors', () => {
     });
 });
 
+describe('OperationList row label', () => {
+    it('shows the file identifier in brackets, and no brackets when there is none', () => {
+        const { container } = renderList(
+            [
+                { ...operation(1, 'ttnn.add'), operationFileIdentifier: 'model.py:3' },
+                { ...operation(2, 'ttnn.mul'), operationFileIdentifier: '' },
+            ],
+            [],
+        );
+
+        expect(rowFor(container, 1)).toHaveTextContent('1 ttnn.add (model.py:3)');
+        expect(rowFor(container, 2)).toHaveTextContent('2 ttnn.mul');
+        expect(rowFor(container, 2)).not.toHaveTextContent('()');
+    });
+});
+
 describe('OperationList filter event', () => {
     const filterUsed = {
         event: EventLogEvent.FILTER_USED,

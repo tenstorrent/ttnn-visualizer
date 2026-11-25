@@ -5,9 +5,15 @@
 import { describe, expect, it } from 'vitest';
 import { BoundAnalysis, BoundType, ColumnKeys, Columns } from '../src/definitions/PerfTable';
 import { OpType } from '../src/definitions/Performance';
-import { describePlainCell, formatCellText, formatColumnNumber } from '../src/functions/perfFunctions';
+import {
+    describePlainCell,
+    formatCellText,
+    formatColumnNumber,
+    getOperationDetails,
+} from '../src/functions/perfFunctions';
 import { NOT_MODELLED_REASON, SLOW_BOUND_REASON } from '../src/functions/perfBoundAnalysis';
 import { TypedPerfTableRow } from '../src/model/PerfTable';
+import { makeOperation } from './helpers/operationDescription';
 
 const makeRow = (overrides: Partial<TypedPerfTableRow> = {}): TypedPerfTableRow =>
     ({
@@ -108,5 +114,19 @@ describe('describePlainCell', () => {
         });
 
         expect(describePlainCell(slow, getColumn(ColumnKeys.Bound)).slowExplanation).toBe(SLOW_BOUND_REASON);
+    });
+});
+
+describe('getOperationDetails', () => {
+    it('names the operation and its file identifier', () => {
+        const operations = [makeOperation({ id: 4, name: 'ttnn.matmul', operationFileIdentifier: 'model.py:3' })];
+
+        expect(getOperationDetails(operations, 4)).toBe('ttnn.matmul (model.py:3)');
+    });
+
+    it('names the operation alone when it has no file identifier', () => {
+        const operations = [makeOperation({ id: 4, name: 'ttnn.matmul', operationFileIdentifier: '' })];
+
+        expect(getOperationDetails(operations, 4)).toBe('ttnn.matmul');
     });
 });
