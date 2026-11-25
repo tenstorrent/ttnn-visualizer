@@ -14,13 +14,19 @@ frontend always sends `instanceId`), so we pin it here. The empty-instance
 contract intact.
 """
 
+import re
 from http import HTTPStatus
 from unittest.mock import Mock
 from urllib.parse import unquote
 
 import pytest
 from ttnn_visualizer.csv_queries import NPEQueries
-from ttnn_visualizer.decorators import ACTIVE_MEMORY_REPORT_HEADER
+from ttnn_visualizer.decorators import (
+    ACTIVE_MEMORY_REPORT_HEADER,
+    is_local_only,
+    local_only,
+    with_instance,
+)
 from ttnn_visualizer.exceptions import (
     PerformanceReportNotLoadedException,
     ProfilerReportNotLoadedException,
@@ -212,3 +218,67 @@ def test_performance_route_returns_404_when_performance_not_loaded(
     assert response.get_json() == {
         "error": PerformanceReportNotLoadedException.DEFAULT_MESSAGE
     }
+
+
+def test_local_only_marks_the_view_it_returns():
+    def view():
+        return "ok"
+
+    assert is_local_only(local_only(view))
+    assert not is_local_only(view)
+
+
+def test_local_only_marker_survives_a_decorator_stacked_above():
+    """Views stack `@with_instance` over `@local_only`; the registered function must
+    still carry the marker, or the route audit below would find nothing to check."""
+
+    def view(instance):
+        return "ok"
+
+    assert is_local_only(with_instance(local_only(view)))
+
+
+# Routes known to be `@local_only`. Pinned so the audit below can't pass vacuously
+# if the marker stops reaching the registered view.
+KNOWN_LOCAL_ONLY_RULES = {
+    "/api/instance/local-paths",
+    "/api/profiler/<profiler_name>",
+    "/api/remote/ssh-config-hosts",
+    "/api/remote/sync",
+}
+PATH_PARAMETER = re.compile(r"<[^>]*>")
+IGNORED_METHODS = {"HEAD", "OPTIONS"}
+
+
+def _local_only_routes(app):
+    return [
+        (rule.rule, method)
+        for rule in app.url_map.iter_rules()
+        if is_local_only(app.view_functions[rule.endpoint])
+        for method in sorted((rule.methods or set()) - IGNORED_METHODS)
+    ]
+
+
+def test_local_only_routes_are_read_off_the_url_map(app):
+    gated = {rule for rule, _ in _local_only_routes(app)}
+
+    assert KNOWN_LOCAL_ONLY_RULES <= gated
+    assert f"{app.config['BASE_PATH']}api/up" not in gated
+
+
+def test_every_local_only_route_refuses_under_server_mode(app, client):
+    """The `app` fixture runs in the hosted posture, where each gated route must
+    answer 403 before reading its body or path parameters. Derived from the URL
+    map, so a route gated later is audited without being listed here."""
+    assert app.config["SERVER_MODE"]
+
+    not_refused = []
+    for rule, method in _local_only_routes(app):
+        path = PATH_PARAMETER.sub("local-only-audit", rule)
+        response = client.open(
+            path, method=method, query_string={"instanceId": INSTANCE_ID}
+        )
+        if response.status_code != HTTPStatus.FORBIDDEN:
+            not_refused.append(f"{method} {rule} -> {response.status_code}")
+
+    assert not_refused == []

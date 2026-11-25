@@ -268,7 +268,15 @@ def remote_exception_handler(func):
     return remote_handler
 
 
+# Attribute ``local_only`` sets on the view it returns. ``functools.wraps`` copies a
+# function's ``__dict__`` onto its wrapper, so the marker survives every decorator
+# stacked above (``@with_instance`` included) and is readable on the view function
+# Flask registers, which is what lets the gated set be read off ``app.url_map``.
+LOCAL_ONLY_MARKER = "local_only"
+
+
 def local_only(f):
+    """Refuse the route with 403 under ``SERVER_MODE``, and mark it as gated."""
     from flask import current_app
 
     @wraps(f)
@@ -278,7 +286,13 @@ def local_only(f):
 
         return f(*args, **kwargs)
 
+    setattr(decorated_function, LOCAL_ONLY_MARKER, True)
     return decorated_function
+
+
+def is_local_only(view: Callable[..., Any]) -> bool:
+    """Whether ``view`` went through ``@local_only``."""
+    return getattr(view, LOCAL_ONLY_MARKER, False) is True
 
 
 DIRECT_REPORT_MODE_DELETE_REFUSAL = (
