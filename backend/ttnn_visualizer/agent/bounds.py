@@ -18,10 +18,23 @@ non-ASCII as escapes, so a name can take up to three times as many on the wire.
 import hashlib
 import json
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any, Dict, Iterable, Optional, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 if TYPE_CHECKING:
     from ttnn_visualizer.queries import DatabaseQueries
+
+T = TypeVar("T")
 
 DEFAULT_LIMIT = 10
 MAX_LIMIT = 100
@@ -81,6 +94,43 @@ def bounded(limit: Optional[int], maximum: int = MAX_LIMIT) -> int:
     except (TypeError, ValueError):
         raise ValueError(f"limit must be a whole number, not {limit!r}") from None
     return max(1, min(requested, maximum))
+
+
+def parsed_offset(offset: Optional[int]) -> int:
+    """Where a page starts in a ranking, 0 unless given. A page past the end is
+    `page_of`'s to clamp, since only the ranking knows its length.
+
+    A fraction or a boolean is refused rather than read as the whole number `int()`
+    makes of it, so an agent is never handed a page it did not ask for.
+    """
+    if offset is None:
+        return 0
+    if isinstance(offset, bool) or (
+        isinstance(offset, float) and not float(offset).is_integer()
+    ):
+        raise ValueError(f"offset must be a whole number, not {echoed(offset)}")
+    try:
+        start = int(offset)
+    except (TypeError, ValueError):
+        raise ValueError(
+            f"offset must be a whole number, not {echoed(offset)}"
+        ) from None
+    if start < 0:
+        raise ValueError(f"offset must be 0 or more, not {echoed(offset)}")
+    return start
+
+
+def page_of(
+    ranking: Sequence[T], start: int, count: int
+) -> Tuple[int, List[T], Optional[int]]:
+    """The page of `ranking` from `start`, a `parsed_offset`, with at most `count`
+    entries: where it starts, its entries and the next page's offset, None on the
+    last. An offset past the end starts at the end, so the page is empty and says
+    where."""
+    start = min(start, len(ranking))
+    page = list(ranking[start : start + count])
+    end = start + len(page)
+    return start, page, end if end < len(ranking) else None
 
 
 def cut_text(
@@ -200,6 +250,8 @@ __all__ = [
     "ensure_graph_readable",
     "name_fits",
     "normalised_choice",
+    "page_of",
+    "parsed_offset",
     "require_choice",
     "require_name_fits",
     "short_digest",

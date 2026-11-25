@@ -273,7 +273,10 @@ def test_the_source_lines_caps_the_page_states_are_the_enforced_ones():
         f"the first {source_lines.MAX_LISTED_OPERATION_IDS} of its `operation_ids`"
         in page
     )
-    assert f"`limit` caps the groups at {MAX_DETAILED_LIMIT}" in page
+    assert f"`limit` caps the groups at {MAX_DETAILED_LIMIT} a page" in page
+    # Phrases only the source_lines paragraph holds: op_configurations pages too.
+    assert "so every call site can be reached" in page
+    assert "`rest` sums only the groups after the page" in page
     # The call-site wording, since the signature sentence states a 300 cut as well.
     assert (
         f"`function` or `code` past {failures.MAX_CALL_SITE_TEXT_CHARS} characters "

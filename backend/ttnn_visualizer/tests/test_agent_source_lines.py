@@ -335,6 +335,18 @@ class TestSourceLines:
         assert result["rest"]["group_count"] == 2
         assert "1 linked operations, launching 1 rows" in result["caveat"]
 
+    def test_the_untraced_caveat_holds_when_the_page_starts_past_that_group(
+        self, traced
+    ):
+        traces = {key: value for key, value in _TRACES.items() if key != 3}
+        registry, handle = traced(traces=traces)
+
+        result = linking.source_lines_by_call_site(registry, handle, offset=1)
+
+        assert "no_trace" not in [group["kind"] for group in result["groups"]]
+        assert "rest" not in result
+        assert "1 linked operations, launching 1 rows" in result["caveat"]
+
     def test_a_partitioned_run_carries_its_caveat(self, traced):
         registry, handle = traced()
 
@@ -448,7 +460,11 @@ class TestSourceLines:
 
         result = linking.source_lines_by_call_site(registry, handle, limit=1)
 
-        assert result["returned"] == 1
+        assert (result["offset"], result["returned"], result["next_offset"]) == (
+            0,
+            1,
+            1,
+        )
         assert result["group_count"] == 3
         assert result["rest"] == {
             "group_count": 2,
@@ -467,7 +483,122 @@ class TestSourceLines:
             result = linking.source_lines_by_call_site(registry, handle, limit=1000)
 
         assert result["returned"] == MAX_DETAILED_LIMIT
+        assert result["next_offset"] == MAX_DETAILED_LIMIT
         assert result["rest"]["group_count"] == 3
+
+    def test_offset_pages_to_every_group(self, traced):
+        registry, handle = traced()
+        whole = linking.source_lines_by_call_site(registry, handle)
+
+        pages = []
+        offset = 0
+        # Bounded, so a next_offset that never moves fails rather than spins.
+        while offset is not None and len(pages) <= whole["group_count"]:
+            pages.append(
+                linking.source_lines_by_call_site(
+                    registry, handle, limit=1, offset=offset
+                )
+            )
+            offset = pages[-1]["next_offset"]
+
+        assert [(page["offset"], page["returned"]) for page in pages] == [
+            (0, 1),
+            (1, 1),
+            (2, 1),
+        ]
+        assert [group for page in pages for group in page["groups"]] == whole["groups"]
+        assert whole["next_offset"] is None
+        assert "rest" not in whole
+
+    def test_rest_sums_only_the_groups_after_the_page(self, traced):
+        registry, handle = traced()
+
+        middle = linking.source_lines_by_call_site(registry, handle, limit=1, offset=1)
+        last = linking.source_lines_by_call_site(registry, handle, limit=1, offset=2)
+
+        # Groups rank b (9.0), a (7.0), then unlinked (1.5, 2 rows).
+        assert _by_location(middle).keys() == {("/model/a/block.py", 10)}
+        assert middle["rest"] == {
+            "group_count": 1,
+            "device_time": 1.5,
+            "device_time_share_percent": tools.share_percent(1.5, 17.5),
+            "row_count": 2,
+        }
+        assert "rest" not in last
+        assert last["next_offset"] is None
+
+    def test_a_later_page_keeps_the_shares_of_every_group(self, traced):
+        registry, handle = traced()
+
+        result = linking.source_lines_by_call_site(registry, handle, offset=1)
+
+        assert result["device_time_total"] == 17.5
+        assert [group["device_time_share_percent"] for group in result["groups"]] == [
+            tools.share_percent(time, 17.5) for time in (7.0, 1.5)
+        ]
+        # A last page cut short by the ranking's end, not by the limit.
+        assert (result["returned"], result["next_offset"]) == (2, None)
+        assert "rest" not in result
+
+    def test_a_page_of_a_signpost_range_pages_the_window(self, traced):
+        registry, handle = traced()
+        window = linking.source_lines_by_call_site(
+            registry, handle, start_signpost="signpost-start"
+        )
+
+        result = linking.source_lines_by_call_site(
+            registry, handle, start_signpost="signpost-start", limit=1, offset=1
+        )
+
+        # Paged against the window's groups, not the whole report's.
+        assert result["group_count"] == window["group_count"]
+        assert result["groups"] == window["groups"][1:2]
+        # The window has 3 groups, so one is left after the page, and rest is it.
+        assert window["group_count"] == 3
+        assert result["next_offset"] == 2
+        assert result["rest"]["group_count"] == 1
+        assert result["rest"]["device_time"] == window["groups"][2]["device_time"]
+
+    def test_a_page_starts_at_the_top_unless_given_an_offset(self, traced):
+        registry, handle = traced()
+
+        unset = linking.source_lines_by_call_site(registry, handle)
+
+        assert unset == linking.source_lines_by_call_site(registry, handle, offset=0)
+        assert unset["offset"] == 0
+
+    def test_an_offset_past_the_end_returns_nothing_and_says_where(self, traced):
+        registry, handle = traced()
+
+        result = linking.source_lines_by_call_site(registry, handle, offset=50)
+
+        assert (result["offset"], result["returned"], result["next_offset"]) == (
+            3,
+            0,
+            None,
+        )
+        assert result["groups"] == []
+        assert "rest" not in result
+
+    @pytest.mark.parametrize(
+        "offset, message",
+        [
+            (-1, "offset must be 0 or more"),
+            ("two", "offset must be a whole number"),
+            (1.5, "offset must be a whole number"),
+            (True, "offset must be a whole number"),
+        ],
+    )
+    def test_a_bad_offset_is_refused_before_the_report_is_read(
+        self, traced, offset, message
+    ):
+        registry, handle = traced()
+
+        with patch.object(tools, "canonical_report") as read:
+            with pytest.raises(ValueError, match=message):
+                linking.source_lines_by_call_site(registry, handle, offset=offset)
+
+        read.assert_not_called()
 
     def test_traces_are_read_once_per_handle_whatever_the_range(self, traced):
         registry, handle = traced()
@@ -664,8 +795,17 @@ class TestSourceLines:
         registry, handle = traced()
 
         result = server._tool_table(registry)["source_lines"]["handler"](
-            {"handle": handle}
+            {"handle": handle, "limit": 1, "offset": 1}
         )
 
         assert "{operation_id}" in result["app_link_template"]
         assert result["note"] == source_lines.SOURCE_LINES_NOTE
+        assert (result["offset"], result["next_offset"]) == (1, 2)
+
+    def test_the_server_offers_offset_and_describes_paging(self, traced):
+        registry, _ = traced()
+
+        tool = server._tool_table(registry)["source_lines"]
+
+        assert tool["schema"]["properties"]["offset"]["type"] == "integer"
+        assert source_lines.PAGING in tool["description"]

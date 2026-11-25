@@ -730,7 +730,12 @@ class TestListing:
 
     @pytest.mark.parametrize(
         "offset, refusal",
-        [(-1, "offset must be 0 or more"), ("two", "offset must be a whole number")],
+        [
+            (-1, "offset must be 0 or more"),
+            ("two", "offset must be a whole number"),
+            (1.5, "offset must be a whole number"),
+            (True, "offset must be a whole number"),
+        ],
     )
     def test_an_offset_below_0_or_not_a_number_is_refused(
         self, tmp_path, offset, refusal

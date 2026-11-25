@@ -27,6 +27,8 @@ from ttnn_visualizer.agent.bounds import (
     cut_operation_name,
     cut_text,
     echoed,
+    page_of,
+    parsed_offset,
     short_digest,
 )
 from ttnn_visualizer.agent.operations import RankScope, caveat_field, scoped
@@ -511,21 +513,6 @@ def _parsed_digest(config_digest_text: str) -> str:
     return wanted
 
 
-def _parsed_offset(offset: Optional[int]) -> int:
-    """Where a listing starts in the ranking, 0 unless given."""
-    if offset is None:
-        return 0
-    try:
-        start = int(offset)
-    except (TypeError, ValueError):
-        raise ValueError(
-            f"offset must be a whole number, not {echoed(offset)}"
-        ) from None
-    if start < 0:
-        raise ValueError(f"offset must be 0 or more, not {echoed(offset)}")
-    return start
-
-
 def _untimed_caveat(untimed_calls: int, calls: int, whose: str) -> str:
     return (
         f"{untimed_calls} of {whose} {calls} calls launched no performance row with a "
@@ -604,10 +591,9 @@ def _listing(
         ((op, count) for op, count in read.left_out.items() if needle in op.lower()),
         key=lambda pair: (-pair[1], pair[0]),
     )
-    # An offset past the end starts at the end, so the page is empty and says where.
-    start = min(_parsed_offset(offset), len(timed))
-    listed = timed[start : start + bounded(limit, MAX_LISTED_CONFIGURATIONS)]
-    end = start + len(listed)
+    start, listed, next_offset = page_of(
+        timed, parsed_offset(offset), bounded(limit, MAX_LISTED_CONFIGURATIONS)
+    )
     return {
         **cut_text("name_contains", name_contains or None, MAX_OPERATION_NAME_CHARS),
         "calls": calls,
@@ -615,7 +601,7 @@ def _listing(
         "op_count": len({entry.configuration.op for entry in timed}),
         "offset": start,
         "returned": len(listed),
-        "next_offset": end if end < len(timed) else None,
+        "next_offset": next_offset,
         "configurations": [
             _configuration_fields(
                 entry,

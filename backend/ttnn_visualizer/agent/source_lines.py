@@ -26,6 +26,13 @@ TOP_OP_CODE_COUNT = 3
 # A line inside a loop can link thousands of operations; the count says how many.
 MAX_LISTED_OPERATION_IDS = 20
 
+PAGING = (
+    "The groups are a page of the ranking: pass next_offset as offset for the next, "
+    "so every call site can be reached. rest sums only the groups after the page, so "
+    "the first page's shares and rest's add up to 100; a later page's fall short by "
+    "the groups before it, which are in neither the page nor rest."
+)
+
 SOURCE_LINES_NOTE = (
     "Each performance row is filed under frame 0 of its linked memory report "
     "operation's stack trace, the call site operation_provenance gives, keyed by full "
@@ -47,7 +54,7 @@ SOURCE_LINES_NOTE = (
     "code point, where the app compares them by locale: two paths can swap when they "
     "differ in case or punctuation (_, - or a dot), and of tied op codes so differing, "
     "a different 3 can be listed. With no countable device time at all, every "
-    "device_time_share_percent is null, where the app shows 0%."
+    "device_time_share_percent is null, where the app shows 0%. " + PAGING
 )
 
 
@@ -167,6 +174,7 @@ def group_entry(
 __all__ = [
     "CallSite",
     "MAX_LISTED_OPERATION_IDS",
+    "PAGING",
     "SOURCE_LINES_NOTE",
     "TOP_OP_CODE_COUNT",
     "SourceLineGroup",

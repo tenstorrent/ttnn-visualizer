@@ -115,7 +115,7 @@ another rank's operation under the same id.
 | `late_deallocations` | Tensors still allocated after their last use, by Buffer Summary's late-deallocation rule (L1, as the app shows it, or DRAM), grouped by the call site of that use: how many holds each has, how they ended, and the bytes per bank they held over the operations held. |
 | `noc_congestion` | How congested the NoC links were in a tt-npe trace: the trace's own run summary, the highest demand any single link reached and when, bursts of congested timesteps ranked by peak, and the links with the highest mean demand. |
 | `critical_path` | The longest chain of cumulative device time through the operation graph, source to sink, with each operation's device time, the chain's total and share of the report's, and how many of its operations have no device time. Needs a linked performance report. |
-| `source_lines` | Where in the model code the device time went: performance rows rolled up by the call site of their linked memory report operation, as the performance view's stacked table groups by Source line — each line's file, function, summed device time and share, row count, top op codes and operation ids, over the whole report or a signpost range. Needs a linked performance report and a capture that records stack traces. |
+| `source_lines` | Where in the model code the device time went: performance rows rolled up by the call site of their linked memory report operation, as the performance view's stacked table groups by Source line — each line's file, function, summed device time and share, row count, top op codes and operation ids, over the whole report or a signpost range, a page at a time. Needs a linked performance report and a capture that records stack traces. |
 | `subgraph_between` | The operations, tensor edges and tensors on every path from one operation to another, each tensor once with its shape, dtype, layout, buffer type and memory layout, so a block can be read without walking it one tensor at a time. |
 
 `top_ops`, `op_breakdown`, `program_cache`, `zone_timings`, `zone_intervals`, `core_spread`,
@@ -692,8 +692,9 @@ of its linked memory report operation's stack trace — the `ttnn.<op>` call in 
 code, which `operation_provenance` gives as the call site — keyed by full path and line,
 so two files that share a name stay apart. Device time is summed per line, as
 tt-perf-report's `Device_Time_Sum_us` sums it, so each group's `device_time_share_percent`
-is of `device_time_total`, the rows read, and the shares add up to 100, to rounding; the
-graph view weighs an operation by its slowest row instead, so its numbers can differ.
+is of `device_time_total`, the rows read, and the shares add up to 100 across every
+group, to rounding; the graph view weighs an operation by its slowest row instead, so its
+numbers can differ.
 Every row but a signpost adds to `row_count`, and only a positive device time adds to
 `device_time`. Each group names its `top_op_codes`, the 3 raw op codes with the most
 device time, and the first 20 of its `operation_ids`, with `operation_count` for all of
@@ -711,8 +712,13 @@ by kind, path and line as text, and `top_op_codes` with equal device time by op 
 by code point, where the application compares them by locale: two paths that differ in
 case or punctuation (`_`, `-` or `.`) can come out swapped, and of tied op codes that
 differ so, a different 3 can be listed. With no countable device time at all, every
-`device_time_share_percent` is `null`, where the application shows 0%. `limit` caps the
-groups at 25, ranked by device time, and those past it are summed into `rest`. Over a
+`device_time_share_percent` is `null`, where the application shows 0%. The groups are a
+page of the ranking by device time from `offset`, 0 unless given, which the answer states
+with how many it `returned`; `next_offset` starts the next page and is null on the last,
+so every call site can be reached, and an `offset` past the end returns none. `limit`
+caps the groups at 25 a page, and `rest` sums only the groups after the page, so the
+first page's shares and `rest`'s add up to 100, while a later page's fall short by the
+groups before it, which are in neither the page nor `rest`. Over a
 range, the rows and shares are the window's, the unlinked group's `unlinked_by_reason`
 included, while `operation_link` carries `scope: whole_report`, as `top_ops`'s does, since
 its `matched_rows` counts the whole report. The tool refuses a handle whose two reports
