@@ -111,6 +111,19 @@ export enum ColumnKeys {
     Trisc1KernelDuration = 'trisc1_kernel_duration',
     Trisc2KernelDuration = 'trisc2_kernel_duration',
     EriscKernelDuration = 'erisc_kernel_duration',
+    // Row keys the backend adds only to a report with hardware counter columns (#2371).
+    HW_FPU_UTIL = 'hw_fpu_util',
+    HW_SFPU_UTIL = 'hw_sfpu_util',
+    HW_MATH_UTIL = 'hw_math_util',
+    HW_PACKER_UTIL = 'hw_packer_util',
+    HW_UNPACKER0_BUSY = 'hw_unpacker0_busy',
+    HW_UNPACKER1_BUSY = 'hw_unpacker1_busy',
+    HW_L1_BANDWIDTH_UTIL = 'hw_l1_bandwidth_util',
+    HW_NOC_RING0_UTIL = 'hw_noc_ring0_util',
+    HW_NOC_RING1_UTIL = 'hw_noc_ring1_util',
+    HW_GRID_FPU_UTIL = 'hw_grid_fpu_util',
+    HW_GRID_SFPU_UTIL = 'hw_grid_sfpu_util',
+    HW_GRID_MATH_UTIL = 'hw_grid_math_util',
 }
 
 export const Columns: ColumnDefinition[] = [
@@ -163,6 +176,26 @@ export const L1PressureColumns: ColumnDefinition[] = [
     { name: 'L1 Usage %', key: ColumnKeys.L1Fullness, unit: '%', decimals: 1, sortable: true },
 ];
 
+// Each unit's average across the op's cores; the full-grid columns also count idle cores.
+export const HardwareCounterColumns: ColumnDefinition[] = [
+    { name: 'HW FPU', key: ColumnKeys.HW_FPU_UTIL, unit: '%', decimals: 1, sortable: true },
+    { name: 'HW SFPU', key: ColumnKeys.HW_SFPU_UTIL, unit: '%', decimals: 1, sortable: true },
+    { name: 'HW MATH', key: ColumnKeys.HW_MATH_UTIL, unit: '%', decimals: 1, sortable: true },
+    { name: 'HW Packer', key: ColumnKeys.HW_PACKER_UTIL, unit: '%', decimals: 1, sortable: true },
+    { name: 'HW Unpacker 0', key: ColumnKeys.HW_UNPACKER0_BUSY, unit: '%', decimals: 1, sortable: true },
+    { name: 'HW Unpacker 1', key: ColumnKeys.HW_UNPACKER1_BUSY, unit: '%', decimals: 1, sortable: true },
+    { name: 'HW L1 BW', key: ColumnKeys.HW_L1_BANDWIDTH_UTIL, unit: '%', decimals: 1, sortable: true },
+    { name: 'HW NoC Ring 0', key: ColumnKeys.HW_NOC_RING0_UTIL, unit: '%', decimals: 1, sortable: true },
+    { name: 'HW NoC Ring 1', key: ColumnKeys.HW_NOC_RING1_UTIL, unit: '%', decimals: 1, sortable: true },
+    { name: 'HW FPU Full Grid', key: ColumnKeys.HW_GRID_FPU_UTIL, unit: '%', decimals: 1, sortable: true },
+    { name: 'HW SFPU Full Grid', key: ColumnKeys.HW_GRID_SFPU_UTIL, unit: '%', decimals: 1, sortable: true },
+    { name: 'HW MATH Full Grid', key: ColumnKeys.HW_GRID_MATH_UTIL, unit: '%', decimals: 1, sortable: true },
+];
+
+export const HARDWARE_COUNTER_COLUMN_KEYS: ReadonlySet<ColumnKeys> = new Set(
+    HardwareCounterColumns.map((column) => column.key),
+);
+
 export const LOCKED_PERF_COLUMN_KEYS: ColumnKeys[] = [ColumnKeys.Id, ColumnKeys.OpCode];
 
 // The tensor drawer's disabled reason and its empty state, for a row no memory report operation launched.
@@ -175,7 +208,7 @@ export const DISPLAY_COLUMNS_LABEL = 'Display columns';
 // lookups are both keyed to that report), so it cannot be attributed per comparison report.
 // ColumnKeys.L1Fullness is intentionally excluded here — comparison sub-rows render an empty
 // L1 cell rather than the active report's numbers misattributed to another report.
-export const comparisonKeys: ColumnKeys[] = [
+export const comparisonKeys: ReadonlySet<ColumnKeys> = new Set([
     ColumnKeys.Bound,
     ColumnKeys.BufferType,
     ColumnKeys.Cores,
@@ -205,7 +238,8 @@ export const comparisonKeys: ColumnKeys[] = [
     ColumnKeys.EriscKernelDuration,
     ColumnKeys.Hash,
     ColumnKeys.CacheHit,
-];
+    ...HARDWARE_COUNTER_COLUMN_KEYS,
+]);
 
 export type PerfTableFilters = Partial<Record<ColumnKeys, string>> | null;
 
