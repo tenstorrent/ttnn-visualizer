@@ -35,7 +35,7 @@ from typing import (
     cast,
 )
 
-from ttnn_visualizer import npe_index
+from ttnn_visualizer import hardware_counters, npe_index, pipeline_stalls
 from ttnn_visualizer.csv_queries import (
     PROGRAM_CACHE_HIT_COLUMN,
     PROGRAM_HASH_COLUMN,
@@ -98,9 +98,14 @@ class CacheVariant(str, Enum):
     OP_GRAPH = "op_graph"
     # Every call grouped into its configuration by rank, which `op_configurations` lists.
     OP_CONFIGURATIONS = "op_configurations"
+    # Every hardware counter column by CSV position, which `hw_utilisation` ranks and
+    # `stall_breakdown` reads.
+    HARDWARE_COUNTERS = "hardware_counters"
     # Frame 0 of every linked operation's stack trace by rank, which `source_lines`
     # files each performance row under.
     CALL_SITES = "call_sites"
+    # Whether any op of the capture's CSV has a CB wait, which `stall_breakdown` reads.
+    SUM_PROFILING = "sum_profiling"
 
 
 # Snapshots narrowed by a scope -- a signpost range -- kept at once, across every
@@ -734,7 +739,9 @@ PERF_CSV_TOOLS = frozenset(
         "program_cache",
         "core_spread",
         "critical_path",
+        "hw_utilisation",
         "source_lines",
+        "stall_breakdown",
     }
 )
 
@@ -768,6 +775,9 @@ def _inventory(instance: Instance, perf_csv: Optional[Path]) -> Dict[str, object
     record_perf(
         "program_cache", {PROGRAM_HASH_COLUMN, PROGRAM_CACHE_HIT_COLUMN} <= perf_columns
     )
+    counter_header = hardware_counters.discover(perf_columns)
+    record_perf("hw_utilisation", counter_header.has_counters)
+    record_perf("stall_breakdown", pipeline_stalls.has_thread_counters(counter_header))
 
     profiler_path = instance.profiler_path
     device_log_columns = _answerable_device_log_columns(instance)

@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
-import { nsToUs, sumOptional, tensorBytes } from '../src/functions/math';
+import { MAX_PERCENT, clampPercent, nsToUs, sumOptional, tensorBytes } from '../src/functions/math';
 
 describe('nsToUs', () => {
     it('converts a nanosecond string to microseconds', () => {
@@ -32,6 +32,20 @@ describe('sumOptional', () => {
     it('adds finite numbers and skips the rest', () => {
         expect(sumOptional([1, undefined, 2.5, Number.NaN, Number.POSITIVE_INFINITY])).toBe(3.5);
         expect(sumOptional([])).toBe(0);
+    });
+});
+
+describe('clampPercent', () => {
+    it('holds a percentage to 0–100 for a bar', () => {
+        expect(clampPercent(42.5)).toBe(42.5);
+        expect(clampPercent(-3)).toBe(0);
+        expect(clampPercent(104)).toBe(MAX_PERCENT);
+    });
+
+    it('reads no value, or a value that is not a finite number, as 0', () => {
+        expect(clampPercent(null)).toBe(0);
+        expect(clampPercent(Number.NaN)).toBe(0);
+        expect(clampPercent(Number.POSITIVE_INFINITY)).toBe(0);
     });
 });
 

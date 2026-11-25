@@ -94,12 +94,14 @@ another rank's operation under the same id.
 | Tool | Answers |
 |---|---|
 | `load_report` | What this report contains, and which of the tools below apply to it: its signposts, architecture, device count and the tt-perf-report version. Takes a memory report directory, a performance directory, a tt-npe trace file, or any of them together. Returns a handle the others take. |
-| `top_ops` | The costliest operations by device time, op-to-op gap, total percentage, FLOPS, DRAM bandwidth or core count, over the whole report or a signpost range. Each row carries the memory report `operation_id` it links to, when the handle holds both reports — see below. `include` adds the fields that say why an operation took its time, and the performance view's heuristic flags. |
+| `top_ops` | The costliest operations by device time, op-to-op gap, total percentage, FLOPS, DRAM bandwidth or core count, or the busiest by a hardware counter's FPU, SFPU or MATH utilisation, over the whole report or a signpost range. Each row carries the memory report `operation_id` it links to, when the handle holds both reports — see below. `include` adds the fields that say why an operation took its time, and the performance view's heuristic flags. |
 | `op_breakdown` | Where the time went, per op or per op category, over the whole report or a signpost range: each group's count, and its device time and op-to-op gap with the share each is of the total. |
 | `program_cache` | Whether programs were built again rather than reused: per op code, its calls, distinct programs, and how many repeat calls hit or missed the program cache. |
 | `zone_timings` | Per-zone, per-RISC totals from `profile_log_device.csv` — firmware and kernel phases, as measured on device. |
 | `zone_intervals` | How long a zone that recurs within one kernel run takes from one start to the next — for a zone placed once per loop iteration, the iteration's steady-state time: the median, minimum and maximum interval per device and per core's RISC, never pooled across devices, and which runs filled the device profiler's L1 buffer. |
 | `core_spread` | How evenly one operation's kernel time fell across the cores that ran it, or the costliest operations': the minimum, median and maximum per-core span and per RISC, the imbalance between them, the slowest cores by coordinate, and how many cores recorded zones against the row's core count. |
+| `hw_utilisation` | How busy each Tensix unit was, from tt-metal's hardware counters: the FPU, SFPU, MATH, packer, unpackers 0 and 1, L1 bandwidth and NoC rings 0 and 1, each averaged over the report weighted by device time, with the operations that kept it busy longest; which counter groups the capture filled; and the operations ranked by any counter label. Needs a capture made with `--profiler-capture-perf-counters`. |
+| `stall_breakdown` | Why an operation's compute kernel was slow, per thread (unpack, math, pack): each thread's instruction issue rate, stall rate and named waits from tt-metal's hardware counters, beside the time the unpack and pack cores spent polling circular buffers, which the counters cannot see, from tt-metal's sum zones. For performance row ids, an op code or the costliest operations, ranked by an average core's stalled time, each naming its largest wait. Needs the `instrn` counter group, and `--enable-sum-profiling` for the circular-buffer waits. |
 | `diff_reports` | Per-operation-code deltas between two reports, largest movement first, over the whole reports or one signpost range in every capture: only moves past a noise threshold count as changes, operations one report lacks are listed apart, and repeated captures of either side are compared by their median. `match: signature` groups by raw op code and tensors instead. |
 | `find_operations` | Operations matching a name substring or a call-stack substring, with the ids `operation_detail` takes. |
 | `operation_detail` | One operation: its input and output tensors with shape, dtype, layout and memory config, what it had allocated, and the circular buffers each of its device operations allocated, with size per core, core range and device count, with its error and likely DRAM fallback when it has one, and `l1_pressure` on its most constrained device (`fullness_pct`, `free_segments`, `largest_free_block`, `largest_free_pct`). With a linked performance report, also the performance rows it launched, their device time and share of the report's, and the operation's total and slowest row, with the same `include` as `top_ops`. |
@@ -116,8 +118,8 @@ another rank's operation under the same id.
 | `source_lines` | Where in the model code the device time went: performance rows rolled up by the call site of their linked memory report operation, as the performance view's stacked table groups by Source line — each line's file, function, summed device time and share, row count, top op codes and operation ids, over the whole report or a signpost range, a page at a time. Needs a linked performance report and a capture that records stack traces. |
 | `subgraph_between` | The operations, tensor edges and tensors on every path from one operation to another, each tensor once with its shape, dtype, layout, buffer type and memory layout, so a block can be read without walking it one tensor at a time. |
 
-`top_ops`, `op_breakdown`, `program_cache`, `zone_timings`, `zone_intervals`, `core_spread`
-and `diff_reports` read the performance CSVs; the operation tools — `find_operations`,
+`top_ops`, `op_breakdown`, `program_cache`, `zone_timings`, `zone_intervals`, `core_spread`,
+`hw_utilisation`, `stall_breakdown` and `diff_reports` read the performance CSVs; the operation tools — `find_operations`,
 `operation_detail`, `memory_profile`, `tensor_flow`, `operation_provenance`,
 `op_configurations`, `errors`, `dram_fallbacks`, `l1_peak`, `late_deallocations` and
 `subgraph_between` — read the memory report's SQLite database; `critical_path` and
@@ -144,13 +146,15 @@ reads (`timer_id`, `zone name`, `run host ID`, `PCIe slot`, `RISC processor type
 `core_x`, `core_y` and `time[cycles since reset]`), and has at least one data row.
 `zone_intervals` is listed only when `zone_timings` is, the device log marks zone starts
 and ends in a `type` or `zone phase` column, and its first line names a positive
-`CHIP_FREQ[MHz]`. The six tools that read the performance CSV's rows, `top_ops`,
-`op_breakdown`, `program_cache`, `core_spread`, `critical_path` and `source_lines`, are
-listed only when it can be reported on, and when it cannot, `performance_csv_problem` says
-why (`empty`, `no data rows`, `missing columns: …`, that it cannot be read or decoded, or
-the parse error reading its signposts gave). `program_cache` also needs the `PROGRAM HASH`
-and `PROGRAM CACHE HIT` columns, `core_spread` needs `zone_intervals` as well,
-`critical_path` the graph, as above, and `source_lines` the memory report's
+`CHIP_FREQ[MHz]`. The eight tools that read the performance CSV's rows, `top_ops`,
+`op_breakdown`, `program_cache`, `core_spread`, `critical_path`, `source_lines`,
+`hw_utilisation` and `stall_breakdown`, are listed only when it can be reported on, and
+when it cannot, `performance_csv_problem` says why (`empty`, `no data rows`,
+`missing columns: …`, that it cannot be read or decoded, or the parse error reading its
+signposts gave). `program_cache` also needs the `PROGRAM HASH` and `PROGRAM CACHE HIT`
+columns, `hw_utilisation` a hardware counter column, `stall_breakdown` a thread's stall
+rate, which the `instrn` counter group writes, `core_spread` needs `zone_intervals` as
+well, `critical_path` the graph, as above, and `source_lines` the memory report's
 `stack_traces`. Each database tool is checked against the tables it actually reads, so a
 truncated capture that holds `operations` but not `buffers` is reported as answering
 `find_operations` and nothing else, rather than advertising every tool and failing most of
@@ -172,7 +176,7 @@ first call, which refuses one that is not a readable tt-npe trace.
   on this page counts that way. A range naming a signpost the report lacks is refused with
   the names this list holds. A CSV whose lines look sound but that pandas cannot tokenise
   when it reads the signposts, such as one with a quote left open, has its parse error in
-  `performance_csv_problem`, with those five tools listed as unanswerable; when it parses
+  `performance_csv_problem`, with those eight tools listed as unanswerable; when it parses
   but its signposts cannot be read, `signposts_problem` says why. Loading reads the
   signposts, so a handle answers from the CSV it was loaded on (or, if it was loaded before
   one was written, the first one a read finds): one rewritten or superseded after that is
@@ -394,9 +398,18 @@ any of these groups:
   came to what the hardware can do; DRAM and FLOPs follow `bound_analysis` above.
 - `noc`: NoC, multicast NoC, DRAM and Ethernet bandwidth utilisation, and the NPE
   congestion impact.
+- `counters`: tt-metal's hardware counters for the FPU, SFPU, MATH, packer, unpackers 0
+  and 1, L1 bandwidth and NoC rings 0 and 1, each as the average, minimum and maximum
+  across the cores that ran the operation's compute kernel (`hw_fpu_util_percent`,
+  `hw_fpu_util_min_percent`, `hw_fpu_util_max_percent` and so on), and the FPU, SFPU and
+  MATH averages over the full grid, idle cores included (`hw_grid_fpu_util_percent` and
+  so on). How busy each unit actually was, beside the perf model's `fpu_util_percent` in
+  `utilisation`, which is an estimate. See `hw_utilisation` below.
 - `riscs`: kernel time per RISC, and how long the compute kernel waited at the front and
-  back of its circular buffers. Which stage limits the operation: the readers and writers
-  on BRISC and NCRISC, or unpack, math and pack on the three TRISCs.
+  back of its circular buffers, summed over the operation's cores as tt-metal writes them
+  (`stall_breakdown`, on a capture with the `instrn` counter group, gives the average per
+  core). Which stage limits the operation: the
+  readers and writers on BRISC and NCRISC, or unpack, math and pack on the three TRISCs.
 - `cores`: available cores, the time from the first core's kernel start to the last's,
   and the per-core minimum, maximum and average kernel time. Launch skew and imbalance.
 - `dispatch`: the op-to-op gap, dispatch's command and GO-send wait times, and the metal
@@ -417,8 +430,10 @@ and keeps the first device's row for everything else, so `kernel_us` there is on
 device's time rather than the average. The web application's rows carry the fields
 tt-perf-report generates; the ones read straight from the CSV — the math fidelity, the
 per-core spread and launch skew, the circular-buffer waits, the dispatch waits, the
-kernels, the perf model's compute and bandwidth times and FPU utilisation, and the `noc`
-group — reach only these tools.
+kernels, the perf model's compute and bandwidth times and FPU utilisation, the `noc`
+group, and the counters' minimum and maximum — reach only these tools; of the `counters`
+group the application's rows carry each average and the full-grid averages, and only on a
+capture that has them.
 
 tt-metal's performance model leaves its ideal times at 1 ns for an operation it does not
 model, so a 1 ns ideal time reads as null rather than as a measured one, and so does an
@@ -428,13 +443,18 @@ placeholder would claim a million-fold gap.
 Many of these fields are empty unless the capture asked for them. A field that no row of
 the whole report carries, whatever range was read, is left out of the rows and named in
 `empty_in_report` instead, with what would fill it: `--collect-noc-traces` for the `noc`
+group, `--profiler-capture-perf-counters=<group>` for each `counters` field, naming the
 group, `--profile-dispatch-cores` for the dispatch wait times, a captured metal trace for
 the trace ids, and a performance model that computes them for the ideal times. A field
 whose column the report does not have at all is named as such, since no capture option
-fills it on the tt-metal that wrote the report. A field empty on some rows only is usually
-one those operations do not have, such as a block size on an operation that is not a
-matmul; the `noc` fields are filled only for the operations tt-metal matched to its NoC
-traces.
+fills it on the tt-metal that wrote the report, except a `counters` field: tt-metal writes
+a counter's column only when the capture asked for it, so a missing one names its group
+too. That group is one the device log's architecture has, so a Wormhole capture is never
+sent to Blackhole's `l1_2` to `l1_5`; without a device log, only a group every architecture
+has is named, unless the counter exists on Blackhole alone, which the hint then says. A
+field empty on some rows only is usually one those operations do not have, such as a block
+size on an operation that is not a matmul; the `noc` fields are filled only for the
+operations tt-metal matched to its NoC traces.
 
 **`flags` are the performance view's heuristic flags, with their evidence.** Asked for
 them, every row carries `flags`, a list in the order the performance view shows them and
@@ -517,6 +537,138 @@ columns cannot answer, and `load_report` says so. Each op code's first repeat mi
 named by its CSV row in `first_repeat_miss_perf_id`, and when the handle also holds a
 memory report, by `first_repeat_miss_operation_id` too, for `operation_provenance` to
 turn into a call site.
+
+**`hw_utilisation` reads tt-metal's hardware counters, which are measurements, not a
+model.** A capture made with `--profiler-capture-perf-counters=<groups>` (for example
+`fpu,pack,unpack,instrn,l1_0`, which fits one pass, or `all` with
+`--perf-counter-multipass`) has each core count how many cycles each unit was busy while
+the operation's compute kernel ran, and tt-metal writes every metric as its minimum,
+median, maximum and average across those cores: one figure per operation, not a time
+series. The visualizer finds those columns by the shape of their headers and groups their
+labels by unit — compute, unpack, pack, L1 ports, NoC ring, thread and instruction issue,
+and stalls, with a label it does not know under `other` — so a label tt-metal renames
+still shows.
+
+- Each of `units` is one unit's average across cores: FPU, SFPU and MATH (FPU or SFPU)
+  utilisation, packer utilisation, unpacker 0 and 1 busy, L1 bank-0 bandwidth, and NoC
+  rings 0 and 1. `weighted_avg_percent` weighs each operation's average by its device time,
+  over the operations that carry the counter; `ops_with_value` counts them and
+  `device_time_share_percent` says how much of the report's device time they took.
+  `top_ops` lists the 3 operations that kept the unit busy longest: `busy_us` is the
+  operation's device time times its average, the time an average core kept the unit busy.
+- An operation without a compute kernel, such as a concat or a slice, records no counters.
+  It is left out of every figure rather than read as 0, so `device_time_share_percent`
+  below 100 is that time, not a unit sitting idle.
+- A unit the capture lacks reads `state: not_captured` with a `fill_hint` naming the group
+  that fills it, or `not_on_architecture` where its architecture has no such counter. Its
+  `architecture` is the device log's, spelled as the `flags` evidence spells it
+  (`wormhole_b0`, `blackhole`), and null without one.
+- `full_grid` is tt-metal's FPU, SFPU and MATH utilisation divided across every compute
+  core of the grid, idle cores included, so it reads lower than the per-core average on an
+  operation that ran on part of the grid. Only a capture that profiled the host as well as
+  the device has it.
+- `capture_groups` says which `--profiler-capture-perf-counters` groups the capture
+  filled. Blackhole's `l1_2` to `l1_5` feed metrics that average over every L1 group
+  captured, so a capture holding `l1_0` or `l1_1` too can read `unknown` for them; on
+  Wormhole they read `not_on_architecture`.
+- `families` lists every counter label the capture holds by unit, and the ones not on
+  its architecture. Pass one as `label` to rank operations by it: `order: highest`, the
+  default, ranks a percentage by `busy_us`, and `order: lowest` by `idle_us`, the time an
+  average core left the unit idle, which finds the costly operations that left it idle. A
+  ratio, which can pass 1, has no busy time and ranks by its average with `weighted:
+  false`, as a percentage can too.
+
+Rows are merged across devices, so a multi-device operation's counters are those of the
+row tt-perf-report keeps: the slowest device's, or the first device's for an all-gather,
+reduce-scatter or all-reduce, as for the `include` groups above. The tool reads the whole report and takes
+no signpost range, and it is refused, naming the flag, for a capture with no counter
+columns. `top_ops` ranks by `hw_fpu_util`, `hw_sfpu_util` and `hw_math_util` too, highest
+first, where the `hw_` prefix keeps a hardware counter apart from the perf model's
+`fpu_util_percent`; an operation without the counter is not ranked, and a capture with none
+says what fills it.
+
+**`stall_breakdown` says where each thread of an operation's compute kernel stalled or
+waited, from two sources it keeps apart.** A Tensix core's compute kernel runs as three
+threads: `t0` unpacks, `t1` does the math and `t2` packs. Each thread's figures come under
+`hardware_counters` or `instrumentation`, so every figure says which it is:
+
+- `hardware_counters` are tt-metal's counters from the `instrn` group, each the average,
+  minimum and maximum across the cores that ran the kernel, as a share of the cycles the
+  counters ran on each core: `issue_rate` is the cycles the thread issued an instruction,
+  `stall_rate` the cycles its next instruction was blocked, and `waits` the named wait
+  conditions above 0, ranked by average, each with the `downstream` flag described below. A
+  wait that reads 0 on every core is named in `zero_waits` instead: tt-metal drives many of
+  them on no operation, such as the srcA and srcB valid and clear waits.
+  `math_pipeline_stalls`, on `t1`, are tt-llk's data-hazard and scoreboard stall rates,
+  which the `unpack` and `pack` groups fill, as shares of the cycles a math instruction was
+  ready rather than of the kernel.
+- `instrumentation` is tt-metal's sum zones around the two polls the counters cannot see,
+  written only with `--enable-sum-profiling`: `cb_wait_front` on the unpack core, waiting
+  for input tiles, and `cb_reserve_back` on the pack core, waiting for output space. Both
+  are RISC-V loops that issue no Tensix instruction, so a thread can wait in one for most
+  of the kernel with a stall rate near 0. tt-metal writes each as a sum over the
+  operation's cores (`sum_us`), not the average its profiling guide describes;
+  `per_core_us` divides it by the operation's `CORE COUNT` (`core_count`), so it reads low
+  where fewer cores ran the compute kernel, and `kernel_share_percent` is that over the
+  operation's kernel duration. `core_count` is null where the CSV's is not a positive whole
+  number, and both figures are then null too.
+
+It divides by the CSV's `CORE COUNT` rather than tt-perf-report's `cores`, which the other
+tools give. The two differ only on a DRAM-sharded matmul, for which tt-perf-report puts a
+fixed count of DRAM-interface workers per architecture in place of the profiler's, and the
+operation's Stalls tab, which divides by the same rule, reads the CSV row, which holds only
+the profiler's.
+
+The waits are not a split of the stall rate. tt-llk counts each one apart from it, so they
+overlap one another and the stall rate: they never add up to the stall rate, and one can
+read above it. `stall_overlap` is tt-llk's own measure, and a ratio rather than a
+percentage: the thread's waits summed over its cycles, so 0.79 means they add up to 79% of
+them, and it can pass 1. Semaphore Zero Wait T2, the packer waiting for math's result,
+reads high whenever math or a stage before it holds the pipeline up, so read the threads
+before it.
+
+Each operation's `stalled_percent` is the largest of its threads' stall rates and its CB
+poll shares, never their sum, since a core can poll a circular buffer while instructions
+it already issued stall. `stalled_us` estimates it as an average core's time: a CB poll's
+`per_core_us`, or a stall rate times the operation's per-core average kernel duration
+(`per_core_avg_us` in `cores`), since the counters count each core's own cycles, and null
+where the row has no such duration. Operations are ranked by `stalled_us`, and those with
+no figure come last. `stalled_thread` is the thread it came from, and `largest_wait` names
+the wait behind it, with its `source`: the CB poll itself, or that thread's named wait
+with the highest average, which is null when none reads above 0. Its `downstream` is true
+for a wait on an earlier stage, such as Semaphore Zero Wait T2: a symptom of what held the
+pipeline up before the thread, not its own cause. Each `waits` entry carries the same flag,
+so such a wait is marked wherever it is listed, not only as the largest.
+
+- With `perf_ids`, up to 25 performance row ids, it reads those operations; with
+  `op_code`, every call whose raw op code or tt-perf-report's op code matches, ignoring
+  case, ranked before `limit` cuts them; with neither, the `limit` costliest operations by
+  device time. `limit` is 10 unless asked, capped at 25, and `matched` counts what the
+  selection named before the cut.
+- `counters` and `cb_waits` each give their `state`: `filled`, `not_captured` with a
+  `fill_hint` naming what fills them, as a hardware counter's absence names one, or
+  `no_value` where the capture has them but the operation does not. An operation without a
+  compute kernel, such as a concat or a slice, has no counters (`counters` reads
+  `no_value`). tt-metal writes the previous operation's CB sums on its row again, so they
+  are ignored (`cb_waits` reads `ignored`) rather than read.
+- `capture_groups` says which of the `instrn`, `unpack` and `pack` groups the capture
+  filled, as `hw_utilisation`'s does, and `sum_profiling` whether it had sum profiling,
+  with a `fill_hint` naming `--profiler-capture-perf-counters=instrn,unpack,pack,fpu`,
+  whose `fpu` is only for utilization, not the stalls, and `--enable-sum-profiling`
+  when it lacks any. A capture without sum profiling is still answered: each compute
+  operation's `cb_waits` reads `not_captured`, and a caveat says a stall rate near 0 does
+  not mean it did not wait. A capture without the `instrn` group is refused, naming both
+  flags, so one with sum profiling but no hardware counters is out of scope: the tool does
+  not read its CB waits alone, and the application offers an operation's Counters popover
+  only for a capture with counters. `wait_labels_absent` lists the named waits a capture
+  with the `instrn` group lacks, which only an architecture without them, such as Quasar,
+  does; Quasar's fourth thread and its stall reasons are not read.
+
+As in `hw_utilisation`, rows are merged across devices, so a multi-device operation's
+figures are those of the row tt-perf-report keeps, and the tool reads the whole report,
+with no signpost range. `sum_profiling` alone is read from the CSV itself, every device's
+rows, as the operation's Stalls tab reads it, so a CB wait on a row the merge drops still
+counts.
 
 **`op_breakdown` says where the time went, grouped as the performance view's stacked table
 groups it**, which is tt-perf-report's stacked report. `group_by: op`, the default, takes the

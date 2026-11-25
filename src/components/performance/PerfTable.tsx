@@ -26,6 +26,7 @@ import { getRepeatCacheOutcome } from '../../functions/enrichPerfRowData';
 import { formatPercentage, formatSize } from '../../functions/math';
 import { formatCell, isHostOp } from '../../functions/perfFunctions';
 import { getEligiblePerfColumns, getFooterColumns, getVisiblePerfColumns } from '../../functions/perfTableColumns';
+import { getHardwareCounterKeys } from '../../functions/hardwareCounters';
 import { useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList } from '../../hooks/useAPI';
 import useSortTable from '../../hooks/useSortTable';
 import { OperationDescription } from '../../model/APIData';
@@ -52,6 +53,7 @@ interface PerformanceTableProps {
     reportFolderName: string | null;
     maxCores: number;
     hasL1PressureData?: boolean;
+    showHardwareCounters?: boolean;
     isLoading?: boolean;
     // Identifies which comparison dataset holds the active profiler report's rows. The
     // tensor-drawer trigger only renders on those rows, since op-id sync from
@@ -60,6 +62,8 @@ interface PerformanceTableProps {
     // and triggers render on the primary rows.
     activeReportComparisonIndex?: number | null;
 }
+
+const NO_HARDWARE_COUNTER_KEYS: ReadonlySet<ColumnKeys> = new Set();
 
 const PerformanceTable = ({
     data,
@@ -70,6 +74,7 @@ const PerformanceTable = ({
     reportFolderName,
     maxCores,
     hasL1PressureData = false,
+    showHardwareCounters = false,
     isLoading = false,
     activeReportComparisonIndex = null,
 }: PerformanceTableProps) => {
@@ -139,6 +144,11 @@ const PerformanceTable = ({
         [data, comparisonData],
     );
 
+    const hardwareCounterKeys = useMemo(
+        () => (showHardwareCounters ? getHardwareCounterKeys(rowsForColumnEligibility) : NO_HARDWARE_COUNTER_KEYS),
+        [showHardwareCounters, rowsForColumnEligibility],
+    );
+
     const eligibleColumns = useMemo(
         () =>
             getEligiblePerfColumns({
@@ -152,8 +162,16 @@ const PerformanceTable = ({
                 hasMultipleAvailableCoreBudgets:
                     new Set(rowsForColumnEligibility.map((row) => row.available_cores).filter((value) => value != null))
                         .size > 1,
+                hardwareCounterKeys,
             }),
-        [opIdsMap.length, hasL1PressureData, hiliteHighDispatch, npeManifest, rowsForColumnEligibility],
+        [
+            opIdsMap.length,
+            hasL1PressureData,
+            hiliteHighDispatch,
+            npeManifest,
+            rowsForColumnEligibility,
+            hardwareCounterKeys,
+        ],
     );
 
     const visibleColumns = useMemo(
@@ -399,7 +417,7 @@ const PerformanceTable = ({
                                                             'align-right': h.key === ColumnKeys.MathFidelity,
                                                         })}
                                                     >
-                                                        {comparisonKeys.includes(h.key) &&
+                                                        {comparisonKeys.has(h.key) &&
                                                             subRow &&
                                                             formatCell(
                                                                 subRow,

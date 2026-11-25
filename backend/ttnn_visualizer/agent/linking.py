@@ -766,7 +766,11 @@ def operation_detail(
         result.update(
             tools.device_time_header(link.report_device_time_total if rows else None)
         )
-        result.update(perf_detail.summary(groups, empty))
+        result.update(
+            perf_detail.summary(
+                groups, empty, tools.counters_architecture(registry, handle, groups)
+            )
+        )
         flagged = perf_flags.flagged_rows(
             rows, flag_inputs, key=("operation", link.rank, int(operation_id))
         )
