@@ -9,8 +9,10 @@ from http import HTTPStatus
 from pathlib import Path
 from typing import Optional
 from unittest.mock import patch
+from urllib.parse import unquote
 
 import pytest
+from ttnn_visualizer.decorators import ACTIVE_MEMORY_REPORT_HEADER
 from ttnn_visualizer.enums import (
     ConnectionTestStates,
     HostKeyIssue,
@@ -751,6 +753,62 @@ def test_remote_sync_fingerprints_the_profiler_copy_it_wrote(app, client, tmp_pa
     assert body["syncedName"] == "bert"
     assert body["runFingerprint"] == profiler_run_fingerprint(synced_dir)
     assert body["runFingerprint"] != profiler_run_fingerprint(profiler_root / "other")
+
+
+@pytest.mark.parametrize("multihost", [False, True], ids=["single-host", "multihost"])
+def test_a_synced_remote_profiler_is_active_under_the_name_the_client_holds(
+    app, client, tmp_path, multihost
+):
+    """The client throws away any memory-report answer that names another report than
+    the folder's `syncedName` (#2375), so `/remote/use` must activate the profiler under
+    that same name, or every read of it would be refused. Rank qualification is for
+    performance reports only: a profiler keeps its plain name on a multihost connection,
+    as its listing names it."""
+    app.config["SERVER_MODE"] = False
+    app.config["REMOTE_DATA_DIRECTORY"] = str(tmp_path)
+    instance = {"instanceId": "test-remote-profiler-name"}
+    connection = {**_remote_connection_payload(), "multihostPerformance": multihost}
+    # A trailing space the local folder name drops, so the name is not just the basename
+    folder = {
+        "reportName": "bert",
+        "remotePath": "/remote/ttrun/rank1/reports/bert ",
+        "lastModified": 1,
+    }
+    profiler_root = (
+        tmp_path / "remote.example.com" / app.config["PROFILER_DIRECTORY_NAME"]
+    )
+
+    def _sync(*_args, **_kwargs):
+        report_dir = profiler_root / "bert"
+        report_dir.mkdir(parents=True)
+        (report_dir / "db.sqlite").write_text("x")
+        return SyncMethod.SFTP
+
+    with patch("ttnn_visualizer.views.sync_remote_profiler_folders", side_effect=_sync):
+        synced = client.post(
+            "/api/remote/sync",
+            query_string=instance,
+            json={"connection": connection, "profiler": folder},
+        )
+
+    assert synced.status_code == HTTPStatus.OK, synced.get_data(as_text=True)
+    synced_name = synced.get_json()["syncedName"]
+    assert synced_name == "bert"
+    assert synced_name == folder_segment_from_remote_path(folder["remotePath"])
+
+    used = client.post(
+        "/api/remote/use",
+        query_string=instance,
+        json={
+            "connection": connection,
+            "profiler": {**folder, "syncedName": synced_name},
+        },
+    )
+    assert used.status_code == HTTPStatus.OK, used.get_data(as_text=True)
+
+    response = client.get("/api/instance", query_string=instance)
+
+    assert unquote(response.headers[ACTIVE_MEMORY_REPORT_HEADER]) == synced_name
 
 
 def test_remote_sync_fingerprints_the_rank_folder_it_wrote(app, client, tmp_path):

@@ -8,17 +8,20 @@
  * sees the parsing come from the real query. #2107
  */
 
-import { cleanup, renderHook, waitFor } from '@testing-library/react';
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Provider, createStore } from 'jotai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useOperationsList } from '../src/hooks/useAPI';
+import { OPERATIONS_QUERY_KEY, useOperationsList } from '../src/hooks/useAPI';
 import { activeProfilerReportAtom } from '../src/store/app';
 import axiosInstance from '../src/libs/axiosInstance';
 import Endpoints from '../src/definitions/Endpoints';
+import { ACTIVE_MEMORY_REPORT_HEADER } from '../src/definitions/ReportHeaders';
+import { isReportChangedError } from '../src/functions/memoryReportRequest';
 import parseMemoryConfig from '../src/functions/parseMemoryConfig';
 import { OperationDescription } from '../src/model/APIData';
+import { ReportFolder } from '../src/definitions/Reports';
 import { makeMemoryConfigArgument, makeOperation, makeTensorRepr } from './helpers/operationDescription';
 
 vi.mock('../src/libs/axiosInstance', () => ({
@@ -38,18 +41,20 @@ const RAW_ARGUMENTS = [
     { name: '1', value: '1, -1, 144' },
 ] as OperationDescription['arguments'];
 
-const renderOperationsList = () => {
+const renderOperationsList = (activeReport: ReportFolder = ACTIVE_REPORT) => {
     const store = createStore();
-    store.set(activeProfilerReportAtom, ACTIVE_REPORT);
+    store.set(activeProfilerReportAtom, activeReport);
     const queryClient = new QueryClient();
 
-    return renderHook(() => useOperationsList(), {
+    const rendered = renderHook(() => useOperationsList(), {
         wrapper: ({ children }: { children: ReactNode }) => (
             <QueryClientProvider client={queryClient}>
                 <Provider store={store}>{children}</Provider>
             </QueryClientProvider>
         ),
     });
+
+    return { ...rendered, store, queryClient };
 };
 
 beforeEach(() => {
@@ -77,5 +82,77 @@ describe('useOperationsList', () => {
             null,
             null,
         ]);
+    });
+
+    describe('across a report switch (#2375)', () => {
+        const OTHER_REPORT = { path: 'otherPath', reportName: 'other' };
+        const operationsFor = (report: typeof ACTIVE_REPORT) => ({
+            data: [makeOperation({ name: report.reportName, stack_trace: '' })],
+            headers: { [ACTIVE_MEMORY_REPORT_HEADER]: report.path },
+        });
+
+        it('throws away operations the server answered for another report rather than caching them', async () => {
+            vi.mocked(axiosInstance.get).mockResolvedValue(operationsFor(OTHER_REPORT));
+            const { result, queryClient } = renderOperationsList();
+
+            await waitFor(() => expect(result.current.isError).toBe(true));
+
+            expect(isReportChangedError(result.current.error)).toBe(true);
+            expect(queryClient.getQueryData([OPERATIONS_QUERY_KEY, ACTIVE_REPORT.path])).toBeUndefined();
+        });
+
+        it('reads the first report afresh when it is chosen again after its read was answered for the next', async () => {
+            // The first report's read is still in flight when the next one is chosen
+            let answerFirstRead: (response: ReturnType<typeof operationsFor>) => void = () => {};
+            vi.mocked(axiosInstance.get).mockImplementationOnce(
+                () =>
+                    new Promise((resolve) => {
+                        answerFirstRead = resolve;
+                    }),
+            );
+            vi.mocked(axiosInstance.get).mockResolvedValue(operationsFor(OTHER_REPORT));
+            const { result, store, queryClient } = renderOperationsList();
+
+            act(() => store.set(activeProfilerReportAtom, OTHER_REPORT));
+            await waitFor(() => expect(result.current.data?.[0].name).toBe(OTHER_REPORT.reportName));
+
+            // ...and the server, by then holding the next report, answers it for that one
+            act(() => answerFirstRead(operationsFor(OTHER_REPORT)));
+            await waitFor(() =>
+                expect(queryClient.getQueryState([OPERATIONS_QUERY_KEY, ACTIVE_REPORT.path])?.status).toBe('error'),
+            );
+            expect(queryClient.getQueryData([OPERATIONS_QUERY_KEY, ACTIVE_REPORT.path])).toBeUndefined();
+
+            vi.mocked(axiosInstance.get).mockResolvedValue(operationsFor(ACTIVE_REPORT));
+            act(() => store.set(activeProfilerReportAtom, ACTIVE_REPORT));
+
+            await waitFor(() => expect(result.current.data?.[0].name).toBe(ACTIVE_REPORT.reportName));
+            expect(axiosInstance.get).toHaveBeenCalledTimes(3);
+        });
+    });
+
+    describe('for a freshly picked remote report (#2375)', () => {
+        // `path` is the remote path until a reload, and the server names the report by the
+        // local folder it synced to, which need not be that path's basename
+        const REMOTE_REPORT = { path: '/remote/profiler/reports/bert ', reportName: 'bert', syncedName: 'bert' };
+        const answeredFor = (name: string) => ({
+            data: [makeOperation({ stack_trace: '' })],
+            headers: { [ACTIVE_MEMORY_REPORT_HEADER]: name },
+        });
+
+        it('accepts an answer naming its synced folder', async () => {
+            vi.mocked(axiosInstance.get).mockResolvedValue(answeredFor(REMOTE_REPORT.syncedName));
+            const { result } = renderOperationsList(REMOTE_REPORT);
+
+            await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        });
+
+        it('refuses an answer naming the basename of its remote path', async () => {
+            vi.mocked(axiosInstance.get).mockResolvedValue(answeredFor('bert '));
+            const { result } = renderOperationsList(REMOTE_REPORT);
+
+            await waitFor(() => expect(result.current.isError).toBe(true));
+            expect(isReportChangedError(result.current.error)).toBe(true);
+        });
     });
 });
