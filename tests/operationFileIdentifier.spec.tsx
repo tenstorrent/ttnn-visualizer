@@ -8,17 +8,16 @@
  * spec sees the label come from a real trace through the real queries. #2367
  */
 
-import { cleanup, renderHook, waitFor } from '@testing-library/react';
-import type { ReactNode } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Provider, createStore } from 'jotai';
+import { cleanup, waitFor } from '@testing-library/react';
+import { createStore } from 'jotai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useOperationDetails, useOperationsList } from '../src/hooks/useAPI';
 import { activeProfilerReportAtom } from '../src/store/app';
 import axiosInstance from '../src/libs/axiosInstance';
 import Endpoints from '../src/definitions/Endpoints';
 import { defaultOperation } from '../src/model/APIData';
-import { makeOperation } from './helpers/operationDescription';
+import { makeOperation, makeTensor } from './helpers/operationDescription';
+import { renderHookWithStore } from './helpers/renderHookWithStore';
 
 vi.mock('../src/libs/axiosInstance', () => ({
     default: {
@@ -35,7 +34,9 @@ const QUOTED_FRAME_TRACE = `    raise ValueError('File "/m/quoted.py", line 3, i
 const mockResponses = (listStackTrace: string, detailsStackTrace: string | null) => {
     vi.mocked(axiosInstance.get).mockImplementation((url) => {
         if (String(url) === Endpoints.OPERATIONS_LIST) {
-            return Promise.resolve({ data: [makeOperation({ id: OPERATION_ID, stack_trace: listStackTrace })] });
+            return Promise.resolve({
+                data: [makeOperation({ id: OPERATION_ID, stack_trace: listStackTrace, outputs: [makeTensor()] })],
+            });
         }
 
         if (String(url) === `${Endpoints.OPERATIONS_LIST}/${OPERATION_ID}`) {
@@ -51,15 +52,8 @@ const mockResponses = (listStackTrace: string, detailsStackTrace: string | null)
 const renderWithProviders = <T,>(hook: () => T) => {
     const store = createStore();
     store.set(activeProfilerReportAtom, { path: 'testPath', reportName: 'test' });
-    const queryClient = new QueryClient();
 
-    return renderHook(hook, {
-        wrapper: ({ children }: { children: ReactNode }) => (
-            <QueryClientProvider client={queryClient}>
-                <Provider store={store}>{children}</Provider>
-            </QueryClientProvider>
-        ),
-    });
+    return renderHookWithStore(hook, store);
 };
 
 beforeEach(() => {
@@ -80,16 +74,30 @@ describe('useOperationsList operationFileIdentifier', () => {
 
         expect(result.current.data?.[0].operationFileIdentifier).toBe(expected);
     });
+
+    // Output tensors read the label while `fetchOperations` builds them, before it returns the
+    // operation, so the label must be set on the operation first.
+    it("puts the label in each output tensor's operation identifier", async () => {
+        mockResponses(CALL_SITE_TRACE, null);
+        const { result } = renderWithProviders(() => useOperationsList());
+
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+        expect(result.current.data?.[0].outputs[0].operationIdentifier).toBe(`${OPERATION_ID} ttnn.add resnet.py:135`);
+    });
 });
 
 describe('useOperationDetails operationFileIdentifier', () => {
-    it("labels the details response's call site", async () => {
-        mockResponses('', CALL_SITE_TRACE);
+    it.each([
+        ['the call site', CALL_SITE_TRACE, 'resnet.py:135'],
+        ['the real frame after a quoted one', QUOTED_FRAME_TRACE, 'real.py:7'],
+    ])('labels %s', async (_case, stackTrace, expected) => {
+        mockResponses('', stackTrace);
         const { result } = renderWithProviders(() => useOperationDetails(OPERATION_ID));
 
         await waitFor(() => expect(result.current.operationDetails.isSuccess).toBe(true));
 
-        expect(result.current.operationDetails.data?.operationFileIdentifier).toBe('resnet.py:135');
+        expect(result.current.operationDetails.data?.operationFileIdentifier).toBe(expected);
     });
 
     it('is empty when the endpoint sends no trace', async () => {

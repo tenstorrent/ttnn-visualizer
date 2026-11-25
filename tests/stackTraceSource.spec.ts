@@ -252,6 +252,7 @@ describe('getOperationFileIdentifier', () => {
             'real.py:7',
         ],
         ['a path with a quote in it', '  File "/m/we"ird.py", line 20, in f', ''],
+        ['a root-level path', '  File "/run.py", line 5, in f\n  File "/app/b.py", line 9, in g', 'run.py:5'],
         ['an empty path', '  File "", line 3, in f', ''],
         ['a CRLF trace', MULTI_FRAME_TRACE.replace(/\n/g, '\r\n'), 'resnet.py:135'],
     ])('names the frame the Source button opens for %s', (_case, stackTrace, expected) => {
