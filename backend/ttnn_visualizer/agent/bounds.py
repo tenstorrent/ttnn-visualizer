@@ -111,7 +111,7 @@ def parsed_offset(offset: Optional[int]) -> int:
         raise ValueError(f"offset must be a whole number, not {echoed(offset)}")
     try:
         start = int(offset)
-    except (TypeError, ValueError, OverflowError):
+    except (TypeError, ValueError):
         raise ValueError(
             f"offset must be a whole number, not {echoed(offset)}"
         ) from None

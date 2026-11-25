@@ -29,7 +29,8 @@ MAX_LISTED_OPERATION_IDS = 20
 PAGING = (
     "The groups are a page of the ranking: pass next_offset as offset for the next, "
     "so every call site can be reached. rest sums only the groups after the page, so "
-    "the shares add up to 100 across every page rather than within one."
+    "the first page's shares and rest's add up to 100; a later page's fall short by "
+    "the groups before it, which are in neither the page nor rest."
 )
 
 SOURCE_LINES_NOTE = (

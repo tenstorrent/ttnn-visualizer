@@ -553,15 +553,11 @@ class TestSourceLines:
         # Paged against the window's groups, not the whole report's.
         assert result["group_count"] == window["group_count"]
         assert result["groups"] == window["groups"][1:2]
-        later = window["groups"][2:]
-        assert result["next_offset"] == (2 if later else None)
-        if later:
-            assert result["rest"]["group_count"] == len(later)
-            assert result["rest"]["device_time"] == sum(
-                group["device_time"] for group in later
-            )
-        else:
-            assert "rest" not in result
+        # The window has 3 groups, so one is left after the page, and rest is it.
+        assert window["group_count"] == 3
+        assert result["next_offset"] == 2
+        assert result["rest"]["group_count"] == 1
+        assert result["rest"]["device_time"] == window["groups"][2]["device_time"]
 
     def test_a_page_starts_at_the_top_unless_given_an_offset(self, traced):
         registry, handle = traced()

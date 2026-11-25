@@ -692,8 +692,9 @@ of its linked memory report operation's stack trace — the `ttnn.<op>` call in 
 code, which `operation_provenance` gives as the call site — keyed by full path and line,
 so two files that share a name stay apart. Device time is summed per line, as
 tt-perf-report's `Device_Time_Sum_us` sums it, so each group's `device_time_share_percent`
-is of `device_time_total`, the rows read, and the shares add up to 100, to rounding; the
-graph view weighs an operation by its slowest row instead, so its numbers can differ.
+is of `device_time_total`, the rows read, and the shares add up to 100 across every
+group, to rounding; the graph view weighs an operation by its slowest row instead, so its
+numbers can differ.
 Every row but a signpost adds to `row_count`, and only a positive device time adds to
 `device_time`. Each group names its `top_op_codes`, the 3 raw op codes with the most
 device time, and the first 20 of its `operation_ids`, with `operation_count` for all of
@@ -716,7 +717,8 @@ page of the ranking by device time from `offset`, 0 unless given, which the answ
 with how many it `returned`; `next_offset` starts the next page and is null on the last,
 so every call site can be reached, and an `offset` past the end returns none. `limit`
 caps the groups at 25 a page, and `rest` sums only the groups after the page, so the
-shares add up to 100 across every page rather than within one. Over a
+first page's shares and `rest`'s add up to 100, while a later page's fall short by the
+groups before it, which are in neither the page nor `rest`. Over a
 range, the rows and shares are the window's, the unlinked group's `unlinked_by_reason`
 included, while `operation_link` carries `scope: whole_report`, as `top_ops`'s does, since
 its `matched_rows` counts the whole report. The tool refuses a handle whose two reports
