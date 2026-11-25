@@ -3,25 +3,25 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { TypedPerfTableRow } from '../model/PerfTable';
+import getDeviceTimeNs from './getDeviceTimeNs';
 import isUnmodelledIdealTime from './isUnmodelledIdealTime';
 import isValidNumber from './isValidNumber';
 
 // Mirrored as `core_utilisation` in `backend/ttnn_visualizer/agent/perf_flags.py`.
 function getCoreUtilization(row: TypedPerfTableRow, maxCores: number): number | null {
     const ideal = row.pm_ideal_ns ?? null;
-    const kernelDuration = row.device_time ?? null;
+    const kernelDurationNs = getDeviceTimeNs(row);
     const coreCount = row.cores ?? null;
 
     if (
         isUnmodelledIdealTime(ideal) ||
         !isValidNumber(ideal) ||
-        !isValidNumber(kernelDuration) ||
+        !isValidNumber(kernelDurationNs) ||
         !isValidNumber(coreCount)
     ) {
         return null;
     }
 
-    const kernelDurationNs = kernelDuration * 1000;
     const availableCoreCount = row.available_cores ?? maxCores;
     const utilization = (ideal / kernelDurationNs) * (availableCoreCount / coreCount);
 

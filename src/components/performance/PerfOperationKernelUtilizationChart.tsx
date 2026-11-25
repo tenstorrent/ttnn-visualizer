@@ -14,6 +14,7 @@ import {
 } from '../../definitions/PlotConfigurations';
 import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
 import { getAxisUpperRange } from '../../functions/perfFunctions';
+import getDeviceTimeNs from '../../functions/getDeviceTimeNs';
 import {
     buildUtilisationTraces,
     getOperationHoverTemplate,
@@ -22,7 +23,7 @@ import {
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom, mergeDevicesAtom } from '../../store/app';
 import { getPrimaryDataColours } from '../../definitions/PerformancePlotColours';
 import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
-import { getMaxValue } from '../../functions/numericExtent';
+import { getMaxFiniteValue } from '../../functions/numericExtent';
 
 interface PerfOperationKernelUtilizationChartProps {
     datasets?: TypedPerfTableRow[][];
@@ -43,7 +44,7 @@ function PerfOperationKernelUtilizationChart({
         () =>
             datasets.map((data, dataIndex) => ({
                 ...getReportTraceFields(data, dataIndex, { reportName, comparisonReportList }),
-                y: data.map((row) => row.device_time),
+                y: data.map(getDeviceTimeNs),
                 type: 'bar',
                 hovertemplate: getOperationHoverTemplate('Duration: %{y} ns'),
                 marker: {
@@ -58,7 +59,7 @@ function PerfOperationKernelUtilizationChart({
         [datasets, maxCores, reportName, comparisonReportList],
     );
 
-    const maxYValue = getMaxValue(chartDataDuration.flatMap((data) => (data.y as number[]) ?? []));
+    const maxYValue = Math.max(0, getMaxFiniteValue(datasets.flatMap((data) => data.map(getDeviceTimeNs))));
 
     const configuration: PlotConfiguration = {
         margin: {
