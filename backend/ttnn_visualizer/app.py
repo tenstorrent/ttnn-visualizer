@@ -25,6 +25,7 @@ from dotenv import load_dotenv
 from flask import Flask, abort, jsonify
 from flask_cors import CORS
 from ttnn_visualizer.database_migrations import run_alembic_migrations
+from ttnn_visualizer.decorators import ensure_instance_owner
 from ttnn_visualizer.event_logging import (
     RUN_ID_ENV_VAR,
     compact_if_needed,
@@ -237,10 +238,10 @@ def create_app(settings_override=None):
             if path.startswith("static/"):
                 abort(404)  # Pass control to Flask's static view
 
-            if is_flag_enabled(app.config["SERVER_MODE"]) and is_recording_enabled(
-                server_mode=True
-            ):
-                ensure_event_log_id()
+            if is_flag_enabled(app.config["SERVER_MODE"]):
+                ensure_instance_owner()
+                if is_recording_enabled(server_mode=True):
+                    ensure_event_log_id()
 
             js = _serialize_spa_js_config(_build_spa_client_config(app))
 
