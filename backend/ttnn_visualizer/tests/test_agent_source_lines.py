@@ -536,6 +536,32 @@ class TestSourceLines:
         assert [group["device_time_share_percent"] for group in result["groups"]] == [
             tools.share_percent(time, 17.5) for time in (7.0, 1.5)
         ]
+        # A last page cut short by the ranking's end, not by the limit.
+        assert (result["returned"], result["next_offset"]) == (2, None)
+        assert "rest" not in result
+
+    def test_a_page_of_a_signpost_range_pages_the_window(self, traced):
+        registry, handle = traced()
+        window = linking.source_lines_by_call_site(
+            registry, handle, start_signpost="signpost-start"
+        )
+
+        result = linking.source_lines_by_call_site(
+            registry, handle, start_signpost="signpost-start", limit=1, offset=1
+        )
+
+        # Paged against the window's groups, not the whole report's.
+        assert result["group_count"] == window["group_count"]
+        assert result["groups"] == window["groups"][1:2]
+        later = window["groups"][2:]
+        assert result["next_offset"] == (2 if later else None)
+        if later:
+            assert result["rest"]["group_count"] == len(later)
+            assert result["rest"]["device_time"] == sum(
+                group["device_time"] for group in later
+            )
+        else:
+            assert "rest" not in result
 
     def test_a_page_starts_at_the_top_unless_given_an_offset(self, traced):
         registry, handle = traced()
@@ -560,7 +586,12 @@ class TestSourceLines:
 
     @pytest.mark.parametrize(
         "offset, message",
-        [(-1, "offset must be 0 or more"), ("two", "offset must be a whole number")],
+        [
+            (-1, "offset must be 0 or more"),
+            ("two", "offset must be a whole number"),
+            (1.5, "offset must be a whole number"),
+            (True, "offset must be a whole number"),
+        ],
     )
     def test_a_bad_offset_is_refused_before_the_report_is_read(
         self, traced, offset, message
@@ -774,3 +805,11 @@ class TestSourceLines:
         assert "{operation_id}" in result["app_link_template"]
         assert result["note"] == source_lines.SOURCE_LINES_NOTE
         assert (result["offset"], result["next_offset"]) == (1, 2)
+
+    def test_the_server_offers_offset_and_describes_paging(self, traced):
+        registry, _ = traced()
+
+        tool = server._tool_table(registry)["source_lines"]
+
+        assert tool["schema"]["properties"]["offset"]["type"] == "integer"
+        assert source_lines.PAGING in tool["description"]

@@ -51,6 +51,7 @@ from ttnn_visualizer.agent.bounds import (
     GraphTooLargeError,
     bounded,
     ensure_graph_readable,
+    page_of,
     parsed_offset,
 )
 from ttnn_visualizer.agent.captured_graph import UnreadableGraphError, parse_graph
@@ -1037,19 +1038,16 @@ def source_lines_by_call_site(
     def share(device_time: float) -> Optional[float]:
         return tools.share_percent(device_time, device_time_total)
 
-    # An offset past the end starts at the end, so the page is empty and says where.
-    start = min(requested_start, len(groups))
-    shown = groups[start : start + count]
-    end = start + len(shown)
+    start, shown, next_offset = page_of(groups, requested_start, count)
     # Only the groups after the page: those before it were an earlier page's.
-    rest = groups[end:]
+    rest = groups[start + len(shown) :]
     result: Dict[str, object] = {
         "handle": handle,
         "row_count": len(rows),
         "group_count": len(groups),
         "offset": start,
         "returned": len(shown),
-        "next_offset": end if end < len(groups) else None,
+        "next_offset": next_offset,
         "device_time_unit": tools.DEVICE_TIME_UNIT,
         "device_time_total": report_diff.as_answered(device_time_total),
         "groups": [

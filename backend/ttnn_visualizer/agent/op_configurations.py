@@ -27,6 +27,7 @@ from ttnn_visualizer.agent.bounds import (
     cut_operation_name,
     cut_text,
     echoed,
+    page_of,
     parsed_offset,
     short_digest,
 )
@@ -590,10 +591,9 @@ def _listing(
         ((op, count) for op, count in read.left_out.items() if needle in op.lower()),
         key=lambda pair: (-pair[1], pair[0]),
     )
-    # An offset past the end starts at the end, so the page is empty and says where.
-    start = min(parsed_offset(offset), len(timed))
-    listed = timed[start : start + bounded(limit, MAX_LISTED_CONFIGURATIONS)]
-    end = start + len(listed)
+    start, listed, next_offset = page_of(
+        timed, parsed_offset(offset), bounded(limit, MAX_LISTED_CONFIGURATIONS)
+    )
     return {
         **cut_text("name_contains", name_contains or None, MAX_OPERATION_NAME_CHARS),
         "calls": calls,
@@ -601,7 +601,7 @@ def _listing(
         "op_count": len({entry.configuration.op for entry in timed}),
         "offset": start,
         "returned": len(listed),
-        "next_offset": end if end < len(timed) else None,
+        "next_offset": next_offset,
         "configurations": [
             _configuration_fields(
                 entry,
