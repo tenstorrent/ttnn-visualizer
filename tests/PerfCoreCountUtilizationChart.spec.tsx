@@ -12,8 +12,8 @@ import { PERF_CHART_LABELS, PerfChartId } from '../src/definitions/PerformanceCh
 import { TypedPerfTableRow } from '../src/model/PerfTable';
 import { OpType } from '../src/definitions/Performance';
 import {
+    CORE_COUNT_AXIS_HOVER_FORMAT,
     CORE_COUNT_AXIS_TICK_FORMAT,
-    NS_AXIS_HOVER_FORMAT,
     PERF_CHART_WIDE_LEFT_MARGIN,
 } from '../src/definitions/PlotConfigurations';
 import { TestProviders } from './helpers/TestProviders';
@@ -53,7 +53,7 @@ describe('PerfCoreCountUtilizationChart', () => {
         expect(plotLayout?.margin).toEqual(PERF_CHART_WIDE_LEFT_MARGIN);
         expect(plotLayout?.yaxis?.title?.text).toBe('Core Count');
         expect(plotLayout?.yaxis?.tickformat).toBe(CORE_COUNT_AXIS_TICK_FORMAT);
-        expect(plotLayout?.yaxis?.hoverformat).toBe(NS_AXIS_HOVER_FORMAT);
+        expect(plotLayout?.yaxis?.hoverformat).toBe(CORE_COUNT_AXIS_HOVER_FORMAT);
         expect(plotLayout?.yaxis?.range).toEqual([0, 64]);
         expect(plotLayout?.showlegend).toBe(true);
         expect(container.querySelector('.chart-container.legend-instructions')).toBeInTheDocument();
