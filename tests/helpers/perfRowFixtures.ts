@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { PerfTableRow } from '../../src/model/PerfTable';
+import { PerfTableRow, TypedPerfTableRow } from '../../src/model/PerfTable';
 import { OpType } from '../../src/definitions/Performance';
 
 // A raw row as delivered to the frontend: the numeric columns arrive as strings (matching the
@@ -41,3 +41,18 @@ export const makeRawPerfRow = (overrides: Partial<PerfTableRow> = {}): PerfTable
         cache_hit: null,
         ...overrides,
     }) as PerfTableRow;
+
+// A typed row with only the fields the perf charts read; specs override what they assert on.
+export const makeTypedPerfRow = (overrides: Partial<TypedPerfTableRow> = {}): TypedPerfTableRow =>
+    ({
+        op_type: OpType.DEVICE_OP,
+        op_code: 'Matmul',
+        raw_op_code: 'Matmul',
+        cores: 16,
+        device_time: 1_000,
+        advice: [],
+        bound: null,
+        isFirstHashOccurrence: true,
+        id: 1,
+        ...overrides,
+    }) as unknown as TypedPerfTableRow;

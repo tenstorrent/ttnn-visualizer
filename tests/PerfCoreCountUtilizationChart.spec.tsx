@@ -9,26 +9,13 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { getPlotInstances, resetPlotPropsCapture } from './mocks/plotComponent';
 import PerfCoreCountUtilizationChart from '../src/components/performance/PerfCoreCountUtilizationChart';
 import { PERF_CHART_LABELS, PerfChartId } from '../src/definitions/PerformanceCharts';
-import { TypedPerfTableRow } from '../src/model/PerfTable';
-import { OpType } from '../src/definitions/Performance';
 import {
     CORE_COUNT_AXIS_HOVER_FORMAT,
     CORE_COUNT_AXIS_TICK_FORMAT,
     PERF_CHART_WIDE_LEFT_MARGIN,
 } from '../src/definitions/PlotConfigurations';
 import { TestProviders } from './helpers/TestProviders';
-
-const row = (cores: number): TypedPerfTableRow =>
-    ({
-        op_type: OpType.DEVICE_OP,
-        op_code: 'Matmul',
-        raw_op_code: 'Matmul',
-        cores,
-        advice: [],
-        bound: null,
-        isFirstHashOccurrence: true,
-        id: 1,
-    }) as unknown as TypedPerfTableRow;
+import { makeTypedPerfRow } from './helpers/perfRowFixtures';
 
 afterEach(() => {
     cleanup();
@@ -40,7 +27,7 @@ describe('PerfCoreCountUtilizationChart', () => {
         const { container } = render(
             <TestProviders>
                 <PerfCoreCountUtilizationChart
-                    datasets={[[row(8), row(16)]]}
+                    datasets={[[makeTypedPerfRow({ cores: 8 }), makeTypedPerfRow({ cores: 16 })]]}
                     maxCores={64}
                     chartId={PerfChartId.MatmulCoreCountUtilization}
                 />
