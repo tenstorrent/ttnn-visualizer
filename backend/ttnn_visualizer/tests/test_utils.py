@@ -709,6 +709,22 @@ def test_get_npe_path_takes_the_newest_of_uploads_sharing_a_name(app, npe_direct
 
 
 @pytest.mark.parametrize(
+    "newest", ["trace.zst", "trace.zst.json", "trace.zst.npeviz.zst"]
+)
+def test_get_npe_path_weighs_a_whole_name_upload_with_the_others(
+    app, npe_directory, newest
+):
+    """`trace.zst` is a whole-name upload, and the name of the other two as well."""
+    for file_name in ("trace.zst", "trace.zst.json", "trace.zst.npeviz.zst"):
+        path = npe_directory / file_name
+        path.write_bytes(b"{}")
+        mtime = 2_000_000 if file_name == newest else 1_000_000
+        os.utime(path, (mtime, mtime))
+
+    assert get_npe_path("trace.zst", app) == str(npe_directory / newest)
+
+
+@pytest.mark.parametrize(
     "name",
     [
         pytest.param("missing", id="nothing-uploaded"),
@@ -719,6 +735,8 @@ def test_get_npe_path_takes_the_newest_of_uploads_sharing_a_name(app, npe_direct
         pytest.param("../npe-reports/trace", id="not-a-plain-file-name"),
         pytest.param("x" * 300, id="too-long-for-the-filesystem"),
         pytest.param(7, id="not-a-string"),
+        pytest.param("..", id="dot-dot"),
+        pytest.param("tr\x00ace", id="nul-byte"),
     ],
 )
 def test_get_npe_path_is_none_without_an_upload_of_the_name(app, npe_directory, name):
@@ -728,6 +746,19 @@ def test_get_npe_path_is_none_without_an_upload_of_the_name(app, npe_directory, 
     (npe_directory / "folder.json").mkdir()
 
     assert get_npe_path(name, app) is None
+
+
+def test_get_npe_path_is_none_when_an_upload_goes_away_mid_lookup(
+    app, npe_directory, monkeypatch
+):
+    (npe_directory / "trace.json").write_bytes(b"{}")
+
+    def removed(path):
+        raise FileNotFoundError(path)
+
+    monkeypatch.setattr(os.path, "getmtime", removed)
+
+    assert get_npe_path("trace", app) is None
 
 
 def test_get_npe_path_resolves_no_name_in_server_mode(app, npe_directory):

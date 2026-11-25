@@ -1090,8 +1090,16 @@ def get_available_reports(current_app):
     return reports
 
 
-# What `extract_uploaded_name` drops from an NPE upload's file name to name the report.
-UPLOAD_NAME_SUFFIXES = (".json", ".npeviz.zst")
+# What the NPE upload accepts (`create_npe_files`), and what `extract_uploaded_name`
+# drops from a file's name to name the report. A file with any other accepted
+# extension keeps its whole name.
+NPE_UPLOAD_EXTENSIONS = (".json", ".zst", ".npeviz")
+NPE_UPLOAD_NAME_SUFFIXES = (".json", ".npeviz.zst")
+_NPE_WHOLE_NAME_EXTENSIONS = tuple(
+    extension
+    for extension in NPE_UPLOAD_EXTENSIONS
+    if extension not in NPE_UPLOAD_NAME_SUFFIXES
+)
 
 
 def get_npe_path(npe_name, current_app, **_kwargs):
@@ -1103,12 +1111,11 @@ def get_npe_path(npe_name, current_app, **_kwargs):
     if not isinstance(npe_name, str) or Path(npe_name).name != npe_name:
         return None
 
-    # Files an upload saves under this name. A `.zst` or `.npeviz` file whose name the
-    # upload doesn't strip keeps it whole; nothing else in the folder, such as an
+    # Files an upload saves under this name; nothing else in the folder, such as an
     # index sidecar, is an upload.
-    suffixes = list(UPLOAD_NAME_SUFFIXES)
-    stripped_on_upload = npe_name.endswith(UPLOAD_NAME_SUFFIXES)
-    if npe_name.endswith((".zst", ".npeviz")) and not stripped_on_upload:
+    suffixes = list(NPE_UPLOAD_NAME_SUFFIXES)
+    stripped_on_upload = npe_name.endswith(NPE_UPLOAD_NAME_SUFFIXES)
+    if npe_name.endswith(_NPE_WHOLE_NAME_EXTENSIONS) and not stripped_on_upload:
         suffixes.append("")
 
     npe_directory = (
@@ -1121,7 +1128,11 @@ def get_npe_path(npe_name, current_app, **_kwargs):
     if not uploads:
         return None
     # `trace.json` and `trace.npeviz.zst` share a name; the newest was uploaded last.
-    return str(max(uploads, key=os.path.getmtime))
+    try:
+        return str(max(uploads, key=os.path.getmtime))
+    except OSError:
+        # Removed after the check above.
+        return None
 
 
 def get_mlir_path(mlir_name, current_app, remote_connection=None, **_kwargs):

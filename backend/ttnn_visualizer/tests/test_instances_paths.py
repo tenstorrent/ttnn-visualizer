@@ -136,24 +136,26 @@ def test_mlir_path_remains_a_file_when_switching_unrelated_report(app):
         assert instance.mlir_path != expected_dir
 
 
+# Every report left out, as `update_existing_instance` and `create_new_instance` take it.
+_NO_REPORT_CHANGES = {
+    "profiler_name": None,
+    "profiler_location": None,
+    "performance_name": None,
+    "performance_location": None,
+    "npe_name": None,
+    "npe_location": None,
+    "mlir_name": None,
+    "mlir_location": None,
+    "remote_connection": None,
+    "remote_profiler_folder": None,
+    "remote_performance_folder": None,
+    "clear_remote": False,
+}
+
+
 def _update_existing(instance, **changes):
     """`update_existing_instance` with every report left out unless named."""
-    arguments = {
-        "profiler_name": None,
-        "profiler_location": None,
-        "performance_name": None,
-        "performance_location": None,
-        "npe_name": None,
-        "npe_location": None,
-        "mlir_name": None,
-        "mlir_location": None,
-        "remote_connection": None,
-        "remote_profiler_folder": None,
-        "remote_performance_folder": None,
-        "clear_remote": False,
-    }
-    arguments.update(changes)
-    update_existing_instance(instance, **arguments)
+    update_existing_instance(instance, **{**_NO_REPORT_CHANGES, **changes})
 
 
 def _npe_uploads(app, *file_names):
@@ -252,6 +254,22 @@ def test_an_update_naming_an_npe_report_with_no_upload_keeps_the_name(app, serve
         assert instance.active_report[KEY_NPE_NAME] == "missing"
 
 
+def test_a_hosted_update_naming_the_current_npe_report_leaves_no_file(app):
+    """Hosted, no name resolves, the current report's own included."""
+    app.config["SERVER_MODE"] = True
+    (uploaded,) = _npe_uploads(app, "1795540000_trace.json")
+
+    with app.app_context():
+        instance = _instance_with_npe_upload("trace", uploaded)
+
+        _update_existing(
+            instance, npe_name="trace", npe_location=ReportLocation.LOCAL.value
+        )
+
+        assert instance.npe_path is None
+        assert instance.active_report[KEY_NPE_NAME] == "trace"
+
+
 @pytest.mark.parametrize(
     ("server_mode", "resolves"),
     [
@@ -269,18 +287,11 @@ def test_a_new_instance_named_after_an_npe_report_takes_its_newest_upload(
     with app.app_context():
         instance = create_new_instance(
             "test-instance-new-npe",
-            profiler_name=None,
-            profiler_location=None,
-            performance_name=None,
-            performance_location=None,
-            npe_name="trace",
-            npe_location=ReportLocation.LOCAL.value,
-            mlir_name=None,
-            mlir_location=None,
-            remote_connection=None,
-            remote_profiler_folder=None,
-            remote_performance_folder=None,
-            clear_remote=False,
+            **{
+                **_NO_REPORT_CHANGES,
+                "npe_name": "trace",
+                "npe_location": ReportLocation.LOCAL.value,
+            },
         )
 
         assert instance.npe_path == (str(newer) if resolves else None)

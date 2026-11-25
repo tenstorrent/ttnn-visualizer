@@ -243,11 +243,13 @@ def test_window_forbidden_under_server_mode(client, make_npe_instance, app):
     assert resp.status_code == 403
 
 
-def _upload_npe(client, instance_id: str, payload: bytes) -> None:
+def _upload_npe(
+    client, instance_id: str, payload: bytes, file_name: str = "trace.json"
+) -> None:
     response = client.post(
         f"{API}/local/upload/npe",
         query_string={"instanceId": instance_id},
-        data={"files": [(BytesIO(payload), "trace.json")]},
+        data={"files": [(BytesIO(payload), file_name)]},
         content_type="multipart/form-data",
     )
     assert response.get_json()["status"] == ConnectionTestStates.OK.value
@@ -291,17 +293,20 @@ def _upload_performance_report(client, instance_id: str) -> str:
     return Path(_stored_instance(client, instance_id).performance_path).name
 
 
-def _select(client, instance_id: str, kind: str, name: str) -> None:
-    """Select a report the way the report pickers do, naming no NPE report."""
-    response = client.put(
+def _put_active_report(client, instance_id: str, active_report: dict):
+    return client.put(
         f"{API}/instance",
         query_string={"instanceId": instance_id},
-        json={
-            "active_report": {
-                f"{kind}_name": name,
-                f"{kind}_location": ReportLocation.LOCAL.value,
-            }
-        },
+        json={"active_report": active_report},
+    )
+
+
+def _select(client, instance_id: str, kind: str, name: str) -> None:
+    """Select a report the way the report pickers do, naming no NPE report."""
+    response = _put_active_report(
+        client,
+        instance_id,
+        {f"{kind}_name": name, f"{kind}_location": ReportLocation.LOCAL.value},
     )
     assert response.status_code == 200, response.get_data(as_text=True)
 
@@ -364,30 +369,43 @@ def test_an_uploaded_npe_report_stays_readable_when_another_report_changes(
         assert window.status_code == 200
 
 
-def _put_npe_report(client, instance_id: str, active_report: dict):
-    return client.put(
-        f"{API}/instance",
-        query_string={"instanceId": instance_id},
-        json={"active_report": active_report},
-    )
-
-
 def test_an_explicit_npe_path_wins_over_the_npe_name(app, client):
     app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
     instance_id = "pytest-npe-explicit-path"
     payload = orjson.dumps(_make_npe_object(n_timesteps=2))
     _upload_npe(client, instance_id, payload)
-    uploaded = _stored_instance(client, instance_id).npe_path
+    first = _stored_instance(client, instance_id).npe_path
+    other = orjson.dumps(_make_npe_object(n_timesteps=3))
+    _upload_npe(client, instance_id, other, file_name="other.json")
 
-    response = _put_npe_report(
-        client, instance_id, {"npe_name": "no-such-upload", "npe_path": uploaded}
+    response = _put_active_report(
+        client, instance_id, {"npe_name": "other", "npe_path": first}
     )
 
     assert response.status_code == 200
-    assert _stored_instance(client, instance_id).npe_path == uploaded
+    assert _stored_instance(client, instance_id).npe_path == first
     npe = client.get(f"{API}/npe", query_string={"instanceId": instance_id})
     assert npe.status_code == 200
     assert npe.get_data() == payload
+
+
+@pytest.mark.parametrize(
+    "file_name", ["trace.json", "trace.npeviz.zst", "trace.zst", "trace.npeviz"]
+)
+def test_naming_an_npe_upload_finds_the_file_it_saved(app, client, file_name):
+    """The folder and name the upload writes are the ones `get_npe_path` reads."""
+    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    instance_id = "pytest-npe-named"
+    _upload_npe(client, instance_id, b"{}", file_name=file_name)
+    uploaded = _stored_instance(client, instance_id)
+    assert Path(uploaded.npe_path).name == file_name
+
+    response = _put_active_report(
+        client, instance_id, {"npe_name": uploaded.active_report["npe_name"]}
+    )
+
+    assert response.status_code == 200
+    assert _stored_instance(client, instance_id).npe_path == uploaded.npe_path
 
 
 @pytest.mark.parametrize("server_mode", [False, True], ids=["local", "server-mode"])
@@ -397,7 +415,7 @@ def test_an_empty_npe_name_clears_the_npe_report(app, client, server_mode):
     instance_id = "pytest-npe-cleared"
     _upload_npe(client, instance_id, orjson.dumps(_make_npe_object(n_timesteps=2)))
 
-    response = _put_npe_report(client, instance_id, {"npe_name": ""})
+    response = _put_active_report(client, instance_id, {"npe_name": ""})
 
     assert response.status_code == 200
     instance = _stored_instance(client, instance_id)

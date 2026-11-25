@@ -14,12 +14,12 @@ from pathlib import Path
 
 from flask import current_app
 from ttnn_visualizer.exceptions import DataFormatError
-from ttnn_visualizer.utils import UPLOAD_NAME_SUFFIXES
+from ttnn_visualizer.utils import NPE_UPLOAD_NAME_SUFFIXES
 
 logger = logging.getLogger(__name__)
 
 _UPLOAD_NAME_SUFFIX = re.compile(
-    "(" + "|".join(re.escape(suffix) for suffix in UPLOAD_NAME_SUFFIXES) + ")$"
+    "(" + "|".join(re.escape(suffix) for suffix in NPE_UPLOAD_NAME_SUFFIXES) + ")$"
 )
 
 

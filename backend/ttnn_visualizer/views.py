@@ -157,6 +157,7 @@ from ttnn_visualizer.stack_trace_source import (
     stack_source_response,
 )
 from ttnn_visualizer.utils import (
+    NPE_UPLOAD_EXTENSIONS,
     PERFORMANCE_OPS_PERF_PREFIX,
     PERFORMANCE_REPORT_REQUIRED_FILES,
     create_path_resolver,
@@ -1671,11 +1672,7 @@ def create_npe_files():
     data_directory = current_app.config["LOCAL_DATA_DIRECTORY"]
 
     for file in files:
-        if (
-            not file.filename.endswith(".json")
-            and not file.filename.endswith(".zst")
-            and not file.filename.endswith(".npeviz")
-        ):
+        if not file.filename.endswith(NPE_UPLOAD_EXTENSIONS):
             return StatusMessage(
                 status=ConnectionTestStates.FAILED,
                 message="NPE requires a valid .json or .zst file",
