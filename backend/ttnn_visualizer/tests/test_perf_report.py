@@ -380,6 +380,51 @@ class TestPerfReportSignpostOpType(unittest.TestCase):
         self.assertEqual(op_types.get("Matmul"), "tt_dnn_device")
 
 
+class TestPerfReportIdealTime(unittest.TestCase):
+    """The view and the agent tools read exactly 1 ns as the perf model placeholder."""
+
+    def test_the_placeholder_and_a_modelled_time_pass_through_unchanged(self):
+        # tt-metal writes whole nanoseconds, so 2 is the nearest time its model reports.
+        raw_csv = "\n".join(
+            [
+                "OP TYPE,OP CODE,PM IDEAL [ns]",
+                "tt_dnn_device,Untilize,1",
+                "tt_dnn_device,Matmul,2",
+                "",
+            ]
+        )
+
+        def _fake_generate_perf_report(*args, **kwargs):
+            output_csv_path = args[8]
+
+            def row(row_id, op_code):
+                values = ["" for _ in REPORT_HEADER]
+                values[REPORT_HEADER.index("ID")] = row_id
+                values[REPORT_HEADER.index("Raw OP Code")] = op_code
+                return ",".join(values)
+
+            with open(
+                output_csv_path, "w", encoding="utf-8", newline=""
+            ) as output_file:
+                output_file.write(",".join(REPORT_HEADER) + "\n")
+                output_file.write(row("2", "Untilize") + "\n")
+                output_file.write(row("3", "Matmul") + "\n")
+
+        with (
+            _performance_instance(raw_csv) as instance,
+            mock.patch(
+                "ttnn_visualizer.csv_queries.perf_report.generate_perf_report",
+                side_effect=_fake_generate_perf_report,
+            ),
+        ):
+            report = OpsPerformanceReportQueries.generate_report(instance)["report"]
+
+        self.assertEqual(
+            {row["raw_op_code"]: row["pm_ideal_ns"] for row in report},
+            {"Untilize": "1", "Matmul": "2"},
+        )
+
+
 class TestPerfReportCsvLabels(unittest.TestCase):
     """The --csv writes some columns under a label carrying their unit.
 

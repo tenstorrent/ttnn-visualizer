@@ -472,7 +472,9 @@ already carries:
   ideal time over the device time, scaled by the cores the operation could have used over
   the cores it did. `roofline_modelled` is false when tt-perf-report has no roofline model
   for the operation (`bound_analysis` `none`), so the ideal time it is compared against is
-  less reliable, and null when the report does not say.
+  less reliable, and null when the report does not say. An operation whose ideal time is
+  tt-metal's 1 ns placeholder, described above, is never flagged, here or in the view: its
+  utilisation is unknown, not low.
 - `underutilised_cores`: the row's `cores` are fewer than a quarter of `core_capacity`,
   which is the row's own available cores (`core_capacity_from` `available_cores`) or, for a
   row without them, the device's (`max_cores`).
@@ -493,8 +495,9 @@ report or the signpost range for `top_ops`, every row of the operation for
 in the report that recorded a cache result missed, `flag_basis.caveat` carries the caveat
 `program_cache` gives: that is what a run with the program cache disabled records, so
 check whether it was before reading each recompute candidate as a program built again.
-`flag_basis.note` repeats the two ways the flags read the report differently from the
-view, below.
+`flag_basis.note` repeats the way the flags read the report differently from the view,
+below, and that a 1 ns placeholder ideal time is never flagged `low_utilisation`, so
+`flagged_rows` does not count those operations as low.
 
 `flag_basis.max_cores` is the device's core count, read where the web application reads it,
 through the same reader as `/api/performance/device-log/meta`: `Max Compute Cores` on the
@@ -505,14 +508,8 @@ of the report used (`report_rows`). A count of 0 falls back to Wormhole's
 (`fallback_default`). The rows that fallback reads are the whole report's even for a ranged
 read, since a window does not change the device, where the view reads the rows it shows.
 
-The flags read the report differently from the view in two deliberate ways. Over a
+The flags read the report differently from the view in one deliberate way: over a
 signpost range, first calls and the `report_rows` fallback read the whole report, as above.
-And the view reads tt-metal's 1 ns ideal-time placeholder, described above, as a modelled
-time, which against an operation's real duration gives a utilisation near zero, so it flags
-low utilisation on operations the model never modelled
-([#2162](https://github.com/tenstorrent/ttnn-visualizer/issues/2162)): across ten local and
-demo captures, 166 of its 239 low-utilisation flags. Here a 1 ns ideal time never flags
-`low_utilisation`. Every other flag those captures carry unranged is the view's.
 
 The view's other two flags are not in the list, because other tools answer them in more
 detail: an allocation failure is `errors`' (and `operation_detail`'s `error`), and a likely
