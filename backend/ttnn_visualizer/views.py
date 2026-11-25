@@ -2879,7 +2879,9 @@ def _hosted_instance_update_refusal(
         return "Report paths can't be set directly."
 
     for name_key in ("npe_name", "mlir_name"):
-        if active_report.get(name_key):
+        # Any value but omitted or cleared, falsy non-strings included: stored, those
+        # would fail validation on every later read of the instance.
+        if active_report.get(name_key) not in (None, ""):
             return f"{name_key} can't be set directly."
 
     base_paths = create_path_resolver(current_app)

@@ -4,11 +4,11 @@
 
 """A hosted session can only reach the reports it uploaded, plus the demos.
 
-Under `SERVER_MODE` every visitor shares one upload directory, and an instance's report
-paths are recomputed from its stored report names on every update. So a stored name
-that differs from the folder actually created, or a name a caller picks through
-`PUT /instance`, points the instance at whichever folder carries it, and the read
-endpoints then serve that folder to the caller.
+Under `SERVER_MODE` every visitor shares one upload directory, and a report an update
+names gets its path computed from that name. So a stored name that differs from the
+folder actually created, or a name a caller picks through `PUT /instance`, would point
+the instance at whichever folder carries it, and the read endpoints would then serve
+that folder to the caller. Reports an update or upload leaves out keep their paths.
 """
 
 import json
@@ -165,8 +165,31 @@ def test_hosted_profiler_upload_refuses_a_database_below_the_report_folder(
     )
 
     assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+    assert "db.sqlite must be at the top of its folder" in response.get_json()["error"]
     listing = attacker.get("/api/profiler", query_string={"instanceId": "attacker"})
     assert victim_folder not in [folder["path"] for folder in listing.get_json()]
+    # The refused upload's folder is gone, not left behind empty.
+    assert not list(_profiler_root(hosted_app).glob("*_mine"))
+
+
+def test_local_refused_reupload_keeps_the_existing_reports_files(app):
+    """A local re-upload writes into the existing folder; a refusal removes only its own parts."""
+    app.config["SERVER_MODE"] = False
+    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    report = _profiler_root(app) / "report"
+    report.mkdir(parents=True)
+    (report / "db.sqlite").write_bytes(b"existing")
+    (report / "config.json").write_bytes(b"{}")
+    client = app.test_client()
+
+    response = _upload_profiler(
+        client, "mine", [("nested/db.sqlite", b"sqlite")], folder_name="report"
+    )
+
+    assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+    assert (report / "db.sqlite").read_bytes() == b"existing"
+    assert (report / "config.json").exists()
+    assert not (report / "nested").exists()
 
 
 @pytest.mark.parametrize("malware_scanner", [None, "true"])
@@ -304,31 +327,82 @@ def test_hosted_instance_update_selects_a_demo(hosted_app):
     assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
 
 
+def _upload_own_profiler(client):
+    return _upload_profiler(
+        client, "mine", [("report/db.sqlite", b"sqlite")]
+    ).get_json()["path"]
+
+
+def _upload_own_performance(client):
+    response = _upload_performance(client, "mine", "perf_run")
+    assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+    # Its response carries no folder name; the instance stores the created one.
+    with client.application.app_context():
+        stored = InstanceTable.query.filter_by(instance_id="mine").first()
+        return stored.active_report["performance_name"]
+
+
+_OWN_REPORT_KINDS = pytest.mark.parametrize(
+    "upload, kind",
+    [(_upload_own_profiler, "profiler"), (_upload_own_performance, "performance")],
+    ids=["memory", "performance"],
+)
+
+
+@_OWN_REPORT_KINDS
+def test_hosted_listing_shows_an_own_report(hosted_app, upload, kind):
+    client = hosted_app.test_client()
+    folder = upload(client)
+
+    listing = client.get(f"/api/{kind}", query_string={"instanceId": "mine"})
+
+    assert listing.status_code == HTTPStatus.OK, listing.get_data(as_text=True)
+    assert folder in [report["path"] for report in listing.get_json()]
+
+
+@_OWN_REPORT_KINDS
+def test_hosted_instance_update_selects_an_own_report_of_each_kind(
+    hosted_app, upload, kind
+):
+    client = hosted_app.test_client()
+    folder = upload(client)
+    _put_instance(client, "mine", {f"{kind}_name": ""})
+
+    response = _put_instance(
+        client, "mine", {f"{kind}_name": folder, f"{kind}_location": "local"}
+    )
+
+    assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+    assert _stored_instance(hosted_app, "mine").active_report[f"{kind}_name"] == folder
+
+
+@_OWN_REPORT_KINDS
 def test_hosted_instance_update_reselects_its_report_once_the_upload_entry_is_gone(
-    hosted_app,
+    hosted_app, upload, kind
 ):
     """The instance's current report stays selectable after the session's FIFO drops it."""
     client = hosted_app.test_client()
-    folder = _upload_profiler(
-        client, "mine", [("report/db.sqlite", b"sqlite")]
-    ).get_json()["path"]
+    folder = upload(client)
     with client.session_transaction() as flask_session:
-        flask_session["profiler_paths"] = []
+        flask_session[f"{kind}_paths"] = []
 
     response = _put_instance(
-        client, "mine", {"profiler_name": folder, "profiler_location": "local"}
+        client, "mine", {f"{kind}_name": folder, f"{kind}_location": "local"}
     )
 
     assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
 
 
+@pytest.mark.parametrize(
+    "name_key", ["profiler_name", "performance_name", "npe_name", "mlir_name"]
+)
 @pytest.mark.parametrize("name", [0, False, [], {}, 7])
-def test_hosted_instance_update_refuses_a_name_that_is_not_a_string(hosted_app, name):
+def test_hosted_instance_update_refuses_a_name_that_is_not_a_string(
+    hosted_app, name_key, name
+):
     client = hosted_app.test_client()
 
-    response = _put_instance(
-        client, "mine", {"profiler_name": name, "profiler_location": "local"}
-    )
+    response = _put_instance(client, "mine", {name_key: name})
 
     assert response.status_code == HTTPStatus.FORBIDDEN
     assert client.get(
