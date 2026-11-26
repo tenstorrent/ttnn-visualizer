@@ -12,7 +12,17 @@ from dataclasses import dataclass
 from enum import Enum
 from fractions import Fraction
 from statistics import median
-from typing import Callable, Dict, FrozenSet, Hashable, List, Optional, Tuple, cast
+from typing import (
+    Callable,
+    Dict,
+    FrozenSet,
+    Hashable,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    cast,
+)
 
 from ttnn_visualizer.agent.bounds import cut_op_code, cut_text, echoed
 from ttnn_visualizer.cells import finite_number
@@ -181,25 +191,28 @@ class CaptureTotals:
 
 def capture_totals(
     rows: List[Dict],
-    fields: Dict[str, str],
+    metrics: Sequence[str],
+    value_of: Callable[[Dict, str], Optional[float]],
     key_of: Callable[[Dict], Optional[Hashable]],
     sub_devices: FrozenSet[str],
     degraded: bool = False,
 ) -> CaptureTotals:
-    """Sum each metric's `fields[metric]` by group: every row is a call of its group,
-    and only a row with a figure adds to the sum."""
-    by_metric: Dict[str, Dict[Hashable, GroupTotal]] = {metric: {} for metric in fields}
+    """Sum each metric, as `value_of` reads it from a row, by group: every row is a call
+    of its group, and only a row with a figure adds to the sum."""
+    by_metric: Dict[str, Dict[Hashable, GroupTotal]] = {
+        metric: {} for metric in metrics
+    }
     for row in rows:
         key = key_of(row)
         if key is None:
             continue
-        for metric, field in fields.items():
+        for metric in metrics:
             groups = by_metric[metric]
             group = groups.get(key)
             if group is None:
                 group = groups[key] = GroupTotal()
             group.count += 1
-            value = finite_number(row.get(field))
+            value = value_of(row, metric)
             if value is not None:
                 group.total += value
                 group.measured += 1

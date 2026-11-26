@@ -444,6 +444,20 @@ class TestGroupsOneReportLacks:
         assert result["delta_total"] == 5.0
         assert result["delta_total_percent"] == 25.0
 
+    def test_a_total_sums_each_cell_as_the_app_reads_it(self, tmp_path):
+        """`parseFloat`, as `metric_number` reads it: `1_0` is 1, not 10, and `1abc`
+        is 1, not unmeasured. #2440"""
+        result = _diff(
+            _registry(tmp_path),
+            {
+                "report-1": [_row(id="2", op_code="Matmul", device_time="1_0")],
+                "report-2": [_row(id="2", op_code="Matmul", device_time="1abc")],
+            },
+        )
+
+        assert result["device_time_total_before"] == 1.0
+        assert result["device_time_total_after"] == 1.0
+
     def test_equal_totals_move_by_zero_rather_than_float_noise(self, tmp_path):
         """Summed in another order these twelve figures differ by about 1e-14, which
         read as a delta of -0.0 and a percentage of -1.23e-14."""

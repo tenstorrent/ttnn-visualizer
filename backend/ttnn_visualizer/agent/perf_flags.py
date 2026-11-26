@@ -122,7 +122,9 @@ def _parse_nullable_integer(value: object) -> Optional[float]:
     return None if math.isnan(parsed) else float(parsed)
 
 
-def _parse_filled_float(value: object) -> Optional[float]:
+def parse_filled_float(value: object) -> Optional[float]:
+    """`value ? parseFloat(value) : null`, as `enrichRowData` reads `dram`, `flops` and
+    their percentages."""
     return js_parse_float(value) if js_truthy(value) else None
 
 
@@ -203,9 +205,9 @@ def typed_row(row: Dict, is_first_hash_occurrence: bool = True) -> FlagRow:
         device_time=js_parse_float(row.get("device_time")),
         cores=row_cores(row),
         available_cores=_parse_nullable_integer(row.get("available_cores")),
-        dram_percent=_parse_filled_float(row.get("dram_percent")),
-        flops_percent=_parse_filled_float(row.get("flops_percent")),
-        pm_ideal_ns=_parse_filled_float(row.get("pm_ideal_ns")),
+        dram_percent=parse_filled_float(row.get("dram_percent")),
+        flops_percent=parse_filled_float(row.get("flops_percent")),
+        pm_ideal_ns=parse_filled_float(row.get("pm_ideal_ns")),
         bound=row.get("bound"),
         bound_analysis=(
             BoundAnalysis(bound_analysis) if bound_analysis in _BOUND_ANALYSES else None
@@ -536,6 +538,7 @@ __all__ = [
     "flag_inputs",
     "flagged_rows",
     "heuristic_flags",
+    "parse_filled_float",
     "repeat_cache_outcome",
     "program_calls",
     "resolve_max_cores",
