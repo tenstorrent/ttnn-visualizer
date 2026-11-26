@@ -87,6 +87,12 @@ class Golden:
         assert text == committed, changed
 
     def check_spec_reads_it(self) -> None:
+        """The spec reads this golden, and its header names the module that writes it."""
+        spec = self.spec.read_text()
         assert re.search(
-            rf"from '\./data/{re.escape(self.path.name)}'", self.spec.read_text()
+            rf"from '\./data/{re.escape(self.path.name)}'", spec
         ), f"{self.spec.name} does not read {self.path.name}"
+        generator = Path(self.generator).name
+        assert re.search(
+            rf"\b{re.escape(generator)}\b", spec
+        ), f"{self.spec.name} does not name {generator}, which writes its golden"
