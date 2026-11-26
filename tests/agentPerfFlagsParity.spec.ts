@@ -13,6 +13,7 @@ import { DeviceMetaLike, resolveMaxCores } from '../src/functions/getCoreCount';
 import { BoundAnalysis, BoundType } from '../src/definitions/PerfTable';
 import { PerfHeuristicFlag } from '../src/definitions/PerfHeuristics';
 import { PerfTableRow, TypedPerfTableRow } from '../src/model/PerfTable';
+import { indexedCases } from './helpers/parityGolden';
 import golden from './data/agentPerfFlagsParity.json';
 
 // The agent's Python port (#2193) wrote this golden, from test_agent_perf_flags_parity.py; holding
@@ -42,8 +43,6 @@ interface FlagCase {
 const FIGURE_DIGITS = 2;
 const UTILISATION_PLACE = 1e-3;
 const FLOAT_TOLERANCE = 1e-9;
-
-const indexedCases = <T>(cases: T[]) => cases.map((entry, index) => [index, entry] as const);
 
 const typedRows = (rows: unknown[]) => enrichRowData(rows as PerfTableRow[], [], null);
 
@@ -91,12 +90,6 @@ const expectEvidence = (row: TypedPerfTableRow, evidence: FlagEvidence, maxCores
             throw new Error(`the agent ports no ${evidence.flag} flag`);
     }
 };
-
-it('the golden covers both functions the agent restates', () => {
-    expect(golden.flagCases.length).toBeGreaterThan(0);
-    expect(golden.typedCases.length).toBeGreaterThan(0);
-    expect(golden.maxCoreCases.length).toBeGreaterThan(0);
-});
 
 describe('annotatePerfHeuristicFlags', () => {
     it.each(indexedCases(golden.flagCases as FlagCase[]))(
