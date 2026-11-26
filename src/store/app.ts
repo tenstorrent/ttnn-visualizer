@@ -194,6 +194,10 @@ export const topNAnnotationModeAtom = atomWithStorage<TopNAnnotationMode>(
 export const topNAnnotationCountAtom = atomWithStorage<number>('topNAnnotationCount', DEFAULT_TOP_N_COUNT);
 
 // Performance route
+/**
+ * Folder ids of the comparison reports, from `getFolderReportId`: the same `?name=` value
+ * `activePerformanceReportFolderNameAtom` holds, never a display name.
+ */
 export const comparisonPerformanceReportListAtom = atom<string[] | null>(null);
 export const perfSelectedTabAtom = atom<TabId>(PerfTabIds.TABLE);
 export const isStackedViewAtom = atom(false);

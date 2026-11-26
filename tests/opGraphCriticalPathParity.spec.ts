@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { getKeptOperations } from '../src/components/operation-graph/opGraphBuilder';
 import { findCriticalPath } from '../src/components/operation-graph/opGraphCriticalPath';
 import type { OpGraphSourceOperation } from '../src/components/operation-graph/opGraphTypes';
+import { namedCases } from './helpers/parityGolden';
 import golden from './data/opGraphCriticalPathParity.json';
 
 // The agent's Python port (#2174) wrote this golden, from test_agent_critical_path_parity.py; holding
@@ -55,12 +56,8 @@ const toSourceOperations = ({ operations, edges }: KeptCase): OpGraphSourceOpera
         };
     });
 
-it('the golden holds cases', () => {
-    expect(golden.cases.length).toBeGreaterThan(0);
-});
-
 describe('findCriticalPath', () => {
-    it.each((golden.cases as ParityCase[]).map((entry) => [entry.name, entry] as const))(
+    it.each(namedCases(golden.cases as ParityCase[]))(
         '%s matches the agent',
         (_, { operation_ids: operationIds, edges, weights, expected }) => {
             const path = findCriticalPath(
@@ -83,12 +80,9 @@ describe('findCriticalPath', () => {
 });
 
 describe('getKeptOperations', () => {
-    it.each((golden.kept_cases as KeptCase[]).map((entry) => [entry.name, entry] as const))(
-        '%s matches the agent',
-        (_, entry) => {
-            const kept = getKeptOperations(toSourceOperations(entry), true).map((operation) => operation.id);
+    it.each(namedCases(golden.kept_cases as KeptCase[]))('%s matches the agent', (_, entry) => {
+        const kept = getKeptOperations(toSourceOperations(entry), true).map((operation) => operation.id);
 
-            expect(kept.sort((left, right) => left - right)).toEqual(entry.expected_kept);
-        },
-    );
+        expect(kept.sort((left, right) => left - right)).toEqual(entry.expected_kept);
+    });
 });

@@ -17,25 +17,13 @@ import { Buffer, Node, Operation, OperationDescription } from '../src/model/APID
 import { L1PeakDecomposition } from '../src/model/L1PeakDecomposition';
 import { OperationDetails } from '../src/model/OperationDetails';
 import { CBPressureSnapshot } from '../src/model/MemoryAllocations';
+import { indexedCases } from './helpers/parityGolden';
 import golden from './data/agentFailureParity.json';
 
 // The agent's Python ports (#2154) wrote this golden, from test_agent_failure_parity.py; holding
 // the app to it fails a change on either side. Regenerate with `pnpm run agent:parity-golden`.
 
 const byKey = <V>(entries: [number, V][]) => [...entries].sort(([left], [right]) => left - right);
-const indexedCases = <T>(cases: T[]) => cases.map((entry, index) => [index, entry] as const);
-
-it('the golden covers every function the agent restates', () => {
-    expect(golden.allocationFailures.length).toBeGreaterThan(0);
-    expect(golden.failedDeviceOperations.length).toBeGreaterThan(0);
-    expect(golden.dramFallbacks.length).toBeGreaterThan(0);
-    expect(golden.addressLifetimes.length).toBeGreaterThan(0);
-    expect(golden.l1Peak.length).toBeGreaterThan(0);
-    expect(golden.topOperations.length).toBeGreaterThan(0);
-    expect(golden.circularBuffers.length).toBeGreaterThan(0);
-    expect(golden.deviceOperationOrder.length).toBeGreaterThan(0);
-});
-
 describe('parseAllocationFailure and its diagnosis', () => {
     it.each(indexedCases(golden.allocationFailures))(
         'case %i matches the agent',

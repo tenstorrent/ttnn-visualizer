@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { enrichRowData } from '../src/functions/enrichPerfRowData';
 import { SourceLineGroupKind, SourceLineOperation, getSourceLineGroups } from '../src/functions/perfSourceLines';
 import { PerfTableRow } from '../src/model/PerfTable';
+import { indexedCases } from './helpers/parityGolden';
 import golden from './data/agentSourceLinesParity.json';
 
 // The agent's Python port (#2364) wrote this golden, from test_agent_source_lines_parity.py; holding
@@ -36,46 +37,45 @@ interface SourceLinesCase {
 // The agent rounds a share to three significant figures, so it is within half a unit of the third.
 const SHARE_RELATIVE_TOLERANCE = 5e-3;
 
-const cases = (golden.cases as SourceLinesCase[]).map((entry, index) => [index, entry] as const);
-
-it('the golden has cases', () => {
-    expect(cases.length).toBeGreaterThan(0);
-});
-
 describe('getSourceLineGroups', () => {
-    it.each(cases)('case %i matches the agent', (_, { rows, opIdsMap, stackTraces, groups }) => {
-        const operationById = new Map<number, SourceLineOperation>(
-            Object.entries(stackTraces).map(([id, trace]) => [
-                Number(id),
-                // The API sends null for an operation with no trace, which `stack_trace`'s type
-                // admits once #2368 lands.
-                { stack_trace: trace as SourceLineOperation['stack_trace'], stack_trace_source_file_id: null },
-            ]),
-        );
-        const typed = enrichRowData(rows as PerfTableRow[], opIdsMap, null);
-        const actual = getSourceLineGroups(typed, operationById, { mergeDevices: true });
+    it.each(indexedCases(golden.cases as SourceLinesCase[]))(
+        'case %i matches the agent',
+        (_, { rows, opIdsMap, stackTraces, groups }) => {
+            const operationById = new Map<number, SourceLineOperation>(
+                Object.entries(stackTraces).map(([id, trace]) => [
+                    Number(id),
+                    // The API sends null for an operation with no trace, which `stack_trace`'s type
+                    // admits once #2368 lands.
+                    { stack_trace: trace as SourceLineOperation['stack_trace'], stack_trace_source_file_id: null },
+                ]),
+            );
+            const typed = enrichRowData(rows as PerfTableRow[], opIdsMap, null);
+            const actual = getSourceLineGroups(typed, operationById, { mergeDevices: true });
 
-        expect(
-            actual.map((group) => ({
-                kind: group.kind,
-                file: group.filePath,
-                line: group.lineNumber,
-                device_time: group.deviceTimeUs,
-                row_count: group.rowCount,
-                top_op_codes: group.topOpCodes,
-                operation_ids: group.operationIds,
-            })),
-        ).toEqual(groups.map(({ share_percent: _share, ...group }) => group));
+            expect(
+                actual.map((group) => ({
+                    kind: group.kind,
+                    file: group.filePath,
+                    line: group.lineNumber,
+                    device_time: group.deviceTimeUs,
+                    row_count: group.rowCount,
+                    top_op_codes: group.topOpCodes,
+                    operation_ids: group.operationIds,
+                })),
+            ).toEqual(groups.map(({ share_percent: _share, ...group }) => group));
 
-        groups.forEach(({ share_percent: share }, index) => {
-            if (share !== undefined) {
-                expect(Math.abs(actual[index].percent - share)).toBeLessThanOrEqual(share * SHARE_RELATIVE_TOLERANCE);
+            groups.forEach(({ share_percent: share }, index) => {
+                if (share !== undefined) {
+                    expect(Math.abs(actual[index].percent - share)).toBeLessThanOrEqual(
+                        share * SHARE_RELATIVE_TOLERANCE,
+                    );
+                }
+            });
+
+            // Shares are of every group's time, so a total that left a group out shows here at once.
+            if (groups.every(({ share_percent: share }) => share !== undefined)) {
+                expect(actual.reduce((sum, group) => sum + group.percent, 0)).toBeCloseTo(100, 9);
             }
-        });
-
-        // Shares are of every group's time, so a total that left a group out shows here at once.
-        if (groups.every(({ share_percent: share }) => share !== undefined)) {
-            expect(actual.reduce((sum, group) => sum + group.percent, 0)).toBeCloseTo(100, 9);
-        }
-    });
+        },
+    );
 });
