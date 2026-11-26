@@ -85,6 +85,15 @@ describe('useOperationsList operationFileIdentifier', () => {
 
         expect(result.current.data?.[0].outputs[0].operationIdentifier).toBe(`${OPERATION_ID} ttnn.add resnet.py:135`);
     });
+
+    it('leaves no trailing space in the operation identifier when the trace has no frame', async () => {
+        mockResponses('', null);
+        const { result } = renderWithProviders(() => useOperationsList());
+
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+        expect(result.current.data?.[0].outputs[0].operationIdentifier).toBe(`${OPERATION_ID} ttnn.add`);
+    });
 });
 
 describe('useOperationDetails operationFileIdentifier', () => {

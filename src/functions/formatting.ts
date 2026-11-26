@@ -30,6 +30,13 @@ export const capitalizeString = (input: string) => {
 /** The last segment of a POSIX or Windows path: `/m/models/resnet.py` reads `resnet.py`. */
 export const getPathBasename = (path: string): string => path.split(/[\\/]/).pop() ?? path;
 
+/**
+ * `<label> (<file identifier>)`, or the label alone when the operation has no file identifier:
+ * `operationFileIdentifier` is `''` when its trace has no frame or its call site names no file.
+ */
+export const formatOperationLabel = (label: string, fileIdentifier: string | undefined): string =>
+    fileIdentifier ? `${label} (${fileIdentifier})` : label;
+
 export const stripEnum = (v: string) => {
     if (!v) {
         return v;

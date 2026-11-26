@@ -12,6 +12,7 @@ import { PERF_FOOTER_ALL_DEVICES_NOTE } from '../src/components/performance/Perf
 import { StackSourceOrigin } from '../src/definitions/StackTrace';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import {
+    SOURCE_LINE_NO_FILE_LABEL,
     SOURCE_LINE_NO_TRACE_LABEL,
     SOURCE_LINE_UNLINKED_LABEL,
     SourceLineGroup,
@@ -111,6 +112,16 @@ describe('SourceLinePerfTable', () => {
             expect.stringContaining('big.py:42'),
             expect.stringContaining('small.py:42'),
         ]);
+    });
+
+    it('labels a call site whose path names no file by its line', () => {
+        renderTable({ groups: [group({ key: 'no-file', basename: '', filePath: '/m/', lineNumber: 3 })] });
+        const label = `${SOURCE_LINE_NO_FILE_LABEL}:3`;
+
+        expect(getRows()[0]).toHaveTextContent(label);
+        expect(getRows()[0]).not.toHaveTextContent(/(^|\s):3/);
+        expect(screen.getByRole('button', { name: `Show operations for ${label}` })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: `View source for ${label}` })).toBeInTheDocument();
     });
 
     it('expands a line to links to its operations', () => {

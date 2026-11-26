@@ -220,7 +220,9 @@ const fetchOperations = async (reportId: string | null): Promise<OperationDescri
             const tensorWithMetadata = {
                 ...tensor,
                 producerOperation: operation,
-                operationIdentifier: `${operation.id} ${operation.name} ${operation.operationFileIdentifier}`,
+                operationIdentifier: [`${operation.id} ${operation.name}`, operation.operationFileIdentifier]
+                    .filter(Boolean)
+                    .join(' '),
             };
 
             tensorList.set(tensor.id, tensorWithMetadata);

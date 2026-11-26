@@ -15,6 +15,7 @@ import { ScrollLocations } from '../definitions/VirtualLists';
 import { SortingOptions } from '../definitions/SortingOptions';
 import { StackTraceLanguage } from '../definitions/StackTrace';
 import { formatSize } from '../functions/math';
+import { formatOperationLabel } from '../functions/formatting';
 import { useGetUniqueDeviceOperationsList, useOperationsList } from '../hooks/useAPI';
 import useRestoreScrollPosition from '../hooks/useRestoreScrollPosition';
 import useScrollShade from '../hooks/useScrollShade';
@@ -613,7 +614,7 @@ function getShowErrorsOnlyLabel(showErrorsOnly: boolean, hasOperationErrors: boo
 }
 
 function getOperationFilterName(operation: OperationDescription) {
-    return `${operation.id} ${operation.name} (${operation.operationFileIdentifier}) `;
+    return `${formatOperationLabel(`${operation.id} ${operation.name}`, operation.operationFileIdentifier)} `;
 }
 
 function isSortingModeActive(sorting: SortingOptions) {

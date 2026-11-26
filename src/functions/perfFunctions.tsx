@@ -13,6 +13,7 @@ import { isFlagEnabled } from './getServerConfig';
 import { MIN_TOTAL_PERCENT } from '../definitions/PerfHeuristics';
 import { OperationDescription } from '../model/APIData';
 import { formatMemorySize, formatPercentage, formatSize, toSecondsPretty } from './math';
+import { formatOperationLabel } from './formatting';
 import ROUTES from '../definitions/Routes';
 import HighlightedText from '../components/HighlightedText';
 import { HIGH_DISPATCH_THRESHOLD_US, OpType } from '../definitions/Performance';
@@ -702,7 +703,7 @@ export function evaluateFidelity(
 export function getOperationDetails(operations: OperationDescription[], id: number) {
     const matchingOp = operations?.find((op) => op.id === id);
 
-    return matchingOp ? `${matchingOp.name} (${matchingOp.operationFileIdentifier})` : '';
+    return matchingOp ? formatOperationLabel(matchingOp.name, matchingOp.operationFileIdentifier) : '';
 }
 
 export function getAxisUpperRange(arrays: Array<unknown[]>): number {

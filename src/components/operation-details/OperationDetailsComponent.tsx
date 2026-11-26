@@ -49,6 +49,7 @@ import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
 import { KEEPS_BUFFER_FOCUS_CLASS } from '../../definitions/BufferFocus';
 import MemoryPlotRenderer from './MemoryPlotRenderer';
 import { getMemoryAddress } from '../../functions/math';
+import { formatOperationLabel } from '../../functions/formatting';
 import {
     getOperationLateDeallocationAvailability,
     getOperationLateDeallocationCount,
@@ -98,6 +99,9 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
     useBufferFocusDismissal();
 
     const operation = operations?.find((op) => op.id === operationId);
+    const operationLabel = operation
+        ? formatOperationLabel(`${operationId} ${operation.name}`, operation.operationFileIdentifier)
+        : '';
     const {
         lateDeallocationsByOperation,
         status: lateDeallocationStatus,
@@ -354,7 +358,7 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
                                 <>
                                     {tensixIOVisualisationOpen && (
                                         <TensorVisualisationComponent
-                                            title={`${operationId} ${operation.name}  (${operation.operationFileIdentifier}) inputs/outputs`}
+                                            title={`${operationLabel} inputs/outputs`}
                                             operationId={operationId}
                                             address={inputOutputAddressList}
                                             bufferType={BufferType.L1}
@@ -366,7 +370,7 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
                                     )}
                                     {tensixFullVisualisationOpen && (
                                         <TensorVisualisationComponent
-                                            title={`${operationId} ${operation.name}  (${operation.operationFileIdentifier})  detailed memory report`}
+                                            title={`${operationLabel} detailed memory report`}
                                             operationId={operationId}
                                             bufferType={BufferType.L1}
                                             plotZoomRange={[zoomRangeStart, zoomRangeEnd]}

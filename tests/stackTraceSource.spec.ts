@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     extractOperationSourceData,
+    formatFrameLabel,
     getCallSiteFrame,
     getFrameSourceFileId,
     getOperationFileIdentifier,
@@ -208,6 +209,18 @@ describe('extractOperationSourceData', () => {
                 stack_trace_source_file_id: null,
             }),
         ).toBeNull();
+    });
+});
+
+describe('formatFrameLabel', () => {
+    it.each([
+        ['a POSIX path', '/m/models/model.py', 'model.py:3'],
+        ['a Windows path', 'C:\\m\\model.py', 'model.py:3'],
+        ['a bare file name', 'model.py', 'model.py:3'],
+        ['an empty path', '', ''],
+        ['a slash-terminated path', '/m/', ''],
+    ])('labels %s', (_case, file, expected) => {
+        expect(formatFrameLabel({ file, line: 3 })).toBe(expected);
     });
 });
 

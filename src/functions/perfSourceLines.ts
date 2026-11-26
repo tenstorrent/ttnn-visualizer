@@ -7,7 +7,7 @@ import { Operation } from '../model/APIData';
 import { TypedPerfTableRow } from '../model/PerfTable';
 import { isCountableDeviceTime } from './durationBuckets';
 import { getPathBasename } from './formatting';
-import { StackTraceFrame, getCallSiteFrame } from './stackTraceSource';
+import { StackTraceFrame, formatFrameLabel, getCallSiteFrame } from './stackTraceSource';
 
 export enum SourceLineGroupKind {
     LINE = 'line',
@@ -20,6 +20,8 @@ export enum SourceLineGroupKind {
 export const TOP_OP_CODE_COUNT = 3;
 export const SOURCE_LINE_UNLINKED_LABEL = 'No linked operation';
 export const SOURCE_LINE_NO_TRACE_LABEL = 'No source line in trace';
+// Prefixes the line of a call site whose path names no file, such as `File ""` or `File "/m/"`.
+export const SOURCE_LINE_NO_FILE_LABEL = 'No file name';
 
 // Cannot appear in a path, so no file name can make two keys collide.
 const KEY_SEPARATOR = '\u0000';
@@ -67,7 +69,13 @@ export const getSourceLineGroupLabel = (group: SourceLineGroup): string => {
         return SOURCE_LINE_NO_TRACE_LABEL;
     }
 
-    return `${group.basename}:${group.lineNumber}`;
+    // `LINE` groups always carry a call site, so `filePath` and `lineNumber` are set.
+    const lineNumber = group.lineNumber ?? 0;
+
+    return (
+        formatFrameLabel({ file: group.filePath ?? '', line: lineNumber }) ||
+        `${SOURCE_LINE_NO_FILE_LABEL}:${lineNumber}`
+    );
 };
 
 const getTopOpCodes = (deviceTimeByOpCode: Map<string, number>): string[] =>
@@ -220,8 +228,8 @@ export const countSourceLines = (groups: readonly SourceLineGroup[]): number =>
 
 /**
  * Whether a group matches the op-code search box, which under Source line searches the call
- * site's path, basename, `basename:line` and function. The two groups without a call site
- * match on their labels.
+ * site's path, basename, `basename:line` (`No file name:<line>` when the path names no file) and
+ * function. The two groups without a call site match on their labels.
  */
 export const isSourceLineGroupMatch = (group: SourceLineGroup, query: string): boolean => {
     const needle = normaliseSourceLineQuery(query).toLowerCase();

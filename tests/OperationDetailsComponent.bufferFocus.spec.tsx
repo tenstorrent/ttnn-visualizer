@@ -24,8 +24,11 @@ import {
 import { DrilldownTarget, EventLogEvent } from '../src/definitions/EventLogEvent';
 import type { PlotMouseEventCustom } from '../src/model/PlotData';
 
-const { recordEvent, stackTraceProps, plotProps } = vi.hoisted(() => ({
+const { recordEvent, stackTraceProps, plotProps, visualisationProps, consumer } = vi.hoisted(() => ({
     recordEvent: vi.fn(),
+    visualisationProps: [] as Record<string, unknown>[],
+    // The consumer's file identifier, which a spec can empty to read the titles without one.
+    consumer: { operationFileIdentifier: 'model.py:3' },
     stackTraceProps: [] as Record<string, unknown>[],
     // The latest props each plot was given: their clicks come from Plotly, which jsdom
     // cannot drive, so the spec calls the handlers the page passes down.
@@ -58,7 +61,12 @@ vi.mock('../src/hooks/useAPI', () => ({
     useOperationsList: () => ({
         data: [
             buildOperationDescription({ id: 0, name: 'producer', outputs: [inputTensor()] }),
-            buildOperationDescription({ id: OPERATION_ID, name: 'consumer', inputs: [inputTensor()] }),
+            buildOperationDescription({
+                id: OPERATION_ID,
+                name: 'consumer',
+                inputs: [inputTensor()],
+                operationFileIdentifier: consumer.operationFileIdentifier,
+            }),
         ],
     }),
     useGetL1StartMarker: () => 0,
@@ -123,7 +131,11 @@ vi.mock('../src/components/operation-details/DeviceOperationsFullRender', () => 
 vi.mock('../src/components/OperationArguments', () => ({ default: () => null }));
 vi.mock('../src/components/OperationDetailsNavigation', () => ({ default: () => null }));
 vi.mock('../src/components/tensor-sharding-visualization/TensorVisualisationComponent', () => ({
-    default: () => null,
+    default: (props: Record<string, unknown>) => {
+        visualisationProps.push(props);
+
+        return null;
+    },
 }));
 
 // The rail sits beside the page, as in `Layout`, so a click on it is one the page has to judge.
@@ -257,5 +269,35 @@ describe('OperationDetailsComponent buffer drill-down events', () => {
         callPlotHandler('l1', 'onBufferClick', plotClick('CBs Summary'));
 
         expect(recordEvent).not.toHaveBeenCalled();
+    });
+});
+
+describe('OperationDetailsComponent memory report titles (#2404)', () => {
+    afterEach(() => {
+        visualisationProps.length = 0;
+        consumer.operationFileIdentifier = 'model.py:3';
+    });
+
+    const openReport = (name: string) => {
+        renderPage([]);
+        fireEvent.click(screen.getByRole('button', { name }));
+
+        return visualisationProps.at(-1)?.title;
+    };
+
+    it.each([
+        ['All allocations per core', `${OPERATION_ID} consumer (model.py:3) detailed memory report`],
+        ['Input/Output allocations per core', `${OPERATION_ID} consumer (model.py:3) inputs/outputs`],
+    ])('titles the %s report with the file identifier', (name, title) => {
+        expect(openReport(name)).toBe(title);
+    });
+
+    it.each([
+        ['All allocations per core', `${OPERATION_ID} consumer detailed memory report`],
+        ['Input/Output allocations per core', `${OPERATION_ID} consumer inputs/outputs`],
+    ])('titles the %s report without brackets when the operation has no file identifier', (name, title) => {
+        consumer.operationFileIdentifier = '';
+
+        expect(openReport(name)).toBe(title);
     });
 });
