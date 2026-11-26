@@ -837,6 +837,18 @@ class TestPathFilter:
         assert result["group_count"] == 1
         assert result["path_contains"] == " /MODEL/A/ "
 
+    def test_it_matches_a_mixed_case_path_with_a_lower_case_filter(self, traced):
+        registry, handle = traced(
+            traces={**_TRACES, 3: _trace("/Model/B/Block.py", 10, "mlp")}
+        )
+
+        result = linking.source_lines_by_call_site(
+            registry, handle, path_contains="/model/b/"
+        )
+
+        # Lowered to match only: the answer keeps the path as the capture wrote it.
+        assert _by_location(result).keys() == {("/Model/B/Block.py", 10)}
+
     def test_the_shares_stay_of_every_row_read(self, traced):
         registry, handle = traced()
 

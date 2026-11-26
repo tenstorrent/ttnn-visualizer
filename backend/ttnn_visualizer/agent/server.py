@@ -1149,9 +1149,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                         "description": (
                             "Case-insensitive substring of a call site's full path, "
                             "e.g. 'models/demos/llama', to keep only the lines in "
-                            "one module or directory. The unlinked and no_trace "
-                            "groups, which have no path, are left out; the shares "
-                            "stay of every row read."
+                            "one module or directory."
                         ),
                     },
                     **_SIGNPOST_SCHEMAS,
