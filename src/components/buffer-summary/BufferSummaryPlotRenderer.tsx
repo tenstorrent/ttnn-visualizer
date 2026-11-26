@@ -27,7 +27,7 @@ import { DEFAULT_DEVICE_ID } from '../../definitions/Devices';
 import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 import { MEMORY_ZOOM_PADDING_RATIO } from '../../definitions/BufferSummary';
 import { getBufferAddressZoomRange, memoryZoomPaddingForRange } from '../../functions/bufferSummary';
-import { withOperationFileIdentifier } from '../../functions/formatting';
+import { formatOperationLabel } from '../../functions/formatting';
 import { useTopNAnnotations } from '../../hooks/useTopNAnnotations';
 import BufferSummaryVirtualizedList from './BufferSummaryVirtualizedList';
 
@@ -86,10 +86,7 @@ function BufferSummaryPlotRenderer({
 
     const getOperationTooltipContent = useCallback(
         (operation: BuffersByOperation) =>
-            withOperationFileIdentifier(
-                `${operation.id} ${operation.name}`,
-                operationFileIdentifierById.get(operation.id),
-            ),
+            formatOperationLabel(`${operation.id} ${operation.name}`, operationFileIdentifierById.get(operation.id)),
         [operationFileIdentifierById],
     );
 

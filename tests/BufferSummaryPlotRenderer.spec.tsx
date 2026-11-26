@@ -87,6 +87,22 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
+// The tooltip looks the identifier up by id, so an operation missing from the operations list
+// reads `undefined` and used to render as `(undefined)`. #2404
+describe('BufferSummaryPlotRenderer operation tooltip', () => {
+    it('appends the file identifier when the operations list has one', () => {
+        renderRenderer();
+
+        expect(getListProps().getOperationTooltipContent(operations[0])).toBe('1 op-1 (op-1-file)');
+    });
+
+    it('shows the label alone when the operations list has no identifier for the operation', () => {
+        renderRenderer();
+
+        expect(getListProps().getOperationTooltipContent(operations[1])).toBe('2 op-2');
+    });
+});
+
 // This is the only place the overlay hook meets the list, and both halves are
 // otherwise tested in isolation — so a prop swapped for its neighbour or dropped
 // entirely leaves the count reading zero, the toggle permanently disabled, and

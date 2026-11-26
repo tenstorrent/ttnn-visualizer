@@ -49,7 +49,7 @@ import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
 import { KEEPS_BUFFER_FOCUS_CLASS } from '../../definitions/BufferFocus';
 import MemoryPlotRenderer from './MemoryPlotRenderer';
 import { getMemoryAddress } from '../../functions/math';
-import { withOperationFileIdentifier } from '../../functions/formatting';
+import { formatOperationLabel } from '../../functions/formatting';
 import {
     getOperationLateDeallocationAvailability,
     getOperationLateDeallocationCount,
@@ -355,7 +355,7 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
                                 <>
                                     {tensixIOVisualisationOpen && (
                                         <TensorVisualisationComponent
-                                            title={`${withOperationFileIdentifier(`${operationId} ${operation.name}`, operation.operationFileIdentifier)} inputs/outputs`}
+                                            title={`${formatOperationLabel(`${operationId} ${operation.name}`, operation.operationFileIdentifier)} inputs/outputs`}
                                             operationId={operationId}
                                             address={inputOutputAddressList}
                                             bufferType={BufferType.L1}
@@ -367,7 +367,7 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
                                     )}
                                     {tensixFullVisualisationOpen && (
                                         <TensorVisualisationComponent
-                                            title={`${withOperationFileIdentifier(`${operationId} ${operation.name}`, operation.operationFileIdentifier)} detailed memory report`}
+                                            title={`${formatOperationLabel(`${operationId} ${operation.name}`, operation.operationFileIdentifier)} detailed memory report`}
                                             operationId={operationId}
                                             bufferType={BufferType.L1}
                                             plotZoomRange={[zoomRangeStart, zoomRangeEnd]}

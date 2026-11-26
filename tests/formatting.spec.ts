@@ -10,12 +10,12 @@ import {
     formatGridSize,
     formatGridSizes,
     formatNonZeroShareOfTotal,
+    formatOperationLabel,
     formatShareOfTotal,
     formatShortSha,
     getCoreCountLabel,
     getCoreCountText,
     stripGitRemoteSuffix,
-    withOperationFileIdentifier,
 } from '../src/functions/formatting';
 
 describe('formatShortSha', () => {
@@ -158,15 +158,15 @@ describe('describeBakedGrids', () => {
     });
 });
 
-describe('withOperationFileIdentifier', () => {
+describe('formatOperationLabel', () => {
     it('appends the file identifier in brackets', () => {
-        expect(withOperationFileIdentifier('12 ttnn.matmul', 'model.py:3')).toBe('12 ttnn.matmul (model.py:3)');
+        expect(formatOperationLabel('12 ttnn.matmul', 'model.py:3')).toBe('12 ttnn.matmul (model.py:3)');
     });
 
     it.each([
         ['empty', ''],
         ['missing', undefined],
     ])('returns the label alone when the identifier is %s', (_case, fileIdentifier) => {
-        expect(withOperationFileIdentifier('12 ttnn.matmul', fileIdentifier)).toBe('12 ttnn.matmul');
+        expect(formatOperationLabel('12 ttnn.matmul', fileIdentifier)).toBe('12 ttnn.matmul');
     });
 });

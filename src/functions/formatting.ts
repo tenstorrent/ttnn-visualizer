@@ -34,7 +34,7 @@ export const getPathBasename = (path: string): string => path.split(/[\\/]/).pop
  * `<label> (<file identifier>)`, or the label alone when the operation has no file identifier:
  * `operationFileIdentifier` is `''` when its trace has no frame or its call site names no file.
  */
-export const withOperationFileIdentifier = (label: string, fileIdentifier: string | undefined): string =>
+export const formatOperationLabel = (label: string, fileIdentifier: string | undefined): string =>
     fileIdentifier ? `${label} (${fileIdentifier})` : label;
 
 export const stripEnum = (v: string) => {
