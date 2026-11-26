@@ -4385,10 +4385,7 @@ class TestProjectRow:
         "cell", ["nan", "inf", "-inf", "Infinity", "-Infinity", "1e400"]
     )
     def test_a_non_finite_cell_is_null(self, cell):
-        projected = tools.project_row(_row(device_time=cell, cores=cell))
-
-        assert projected["device_time"] is None
-        assert projected["cores"] is None
+        assert tools.project_row(_row(device_time=cell))["device_time"] is None
 
     @pytest.mark.parametrize(
         ("cell", "expected"),
@@ -4410,6 +4407,15 @@ class TestProjectRow:
         `1_0` as 10 and reads a full-width one as 1. #2440"""
         assert tools.project_row(_row(**{metric: cell}), metric)[metric] == expected
 
+    @pytest.mark.parametrize(
+        "metric", ["device_time", "op_to_op_gap", "total_percent", "flops", "dram"]
+    )
+    @pytest.mark.parametrize("cell", ["Infinity", "-Infinity", "1e400"])
+    def test_a_metric_parse_float_reads_as_infinite_is_null(self, metric, cell):
+        """An infinity would reach the client as invalid JSON. `parseFloat` reads
+        Python's `inf` as NaN, so these are the cells that hold the check. #2440"""
+        assert tools.project_row(_row(**{metric: cell}), metric)[metric] is None
+
     @pytest.mark.parametrize("metric", ["flops", "dram"])
     def test_a_blank_flops_or_dram_is_null_and_a_zero_is_zero(self, metric):
         """`row.dram ? parseFloat(row.dram) : null`: only a blank cell is falsy."""
@@ -4418,7 +4424,16 @@ class TestProjectRow:
 
     @pytest.mark.parametrize(
         ("cell", "expected"),
-        [("1.5", 1.0), ("64abc", 64.0), ("1_0", 1.0), ("\uff11", None), ("", None)],
+        [
+            ("1.5", 1.0),
+            ("64abc", 64.0),
+            ("1_0", 1.0),
+            ("\uff11", None),
+            ("", None),
+            ("1e400", 1.0),
+            ("Infinity", None),
+            ("inf", None),
+        ],
     )
     def test_cores_are_reported_as_parse_int_reads_them(self, cell, expected):
         """`parseInt(row.cores, 10)`, so a fraction is cut, as the app shows it. #2440"""
