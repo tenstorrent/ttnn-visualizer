@@ -12,8 +12,9 @@ const NODE_MAX_WIDTH = 560;
 const NODE_HEIGHT = 32;
 const NODE_HEIGHT_WITH_FILE = 46;
 const BLOCK_NODE_HEIGHT = 58;
-// The device-operation badge, kept in step with `.op-graph-node-expander`.
-const EXPANDER_WIDTH = 32;
+// The device-operation badge, kept in step with `.op-graph-node-expander` and the
+// 12px icon in it.
+const EXPANDER_WIDTH = 37;
 // Pill chip (`▾ 336`) is wider than the device-op badge.
 const BLOCK_EXPANDER_WIDTH = 52;
 // Wide enough for an edge to carry its shape label between two ranks without
