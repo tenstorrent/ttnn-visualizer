@@ -93,6 +93,16 @@ def _add_traces(profiler_path: str, traces: Dict[int, object]) -> None:
         connection.close()
 
 
+def _run_sql(profiler_path: str, script: str) -> None:
+    """A table shape `_add_traces` does not write, as raw SQL."""
+    connection = sqlite3.connect(Path(profiler_path, "db.sqlite"))
+    try:
+        connection.executescript(script)
+        connection.commit()
+    finally:
+        connection.close()
+
+
 def _add_ranked_traces(
     profiler_path: str, traces_by_rank: Dict[int, Dict[int, str]]
 ) -> None:
@@ -664,15 +674,11 @@ class TestSourceLines:
     ):
         """Not with SQLite's `no such column`."""
         path = _write_profiler(tmp_path / "traced", _GRAPHS, operations=_OPERATIONS)
-        connection = sqlite3.connect(Path(path, "db.sqlite"))
-        try:
-            connection.executescript(
-                "CREATE TABLE stack_traces (operation_id int);"
-                "INSERT INTO stack_traces VALUES (2);"
-            )
-            connection.commit()
-        finally:
-            connection.close()
+        _run_sql(
+            path,
+            "CREATE TABLE stack_traces (operation_id int);"
+            "INSERT INTO stack_traces VALUES (2);",
+        )
         registry, handle, _ = linked(profiler_path=path, rows=_ROWS)
 
         with pytest.raises(ValueError, match="records no stack traces"):
