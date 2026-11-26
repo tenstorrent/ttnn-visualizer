@@ -9,7 +9,9 @@
 rows, their links and each operation's stack trace text, and writes its groups to a
 golden file; `tests/agentSourceLinesParity.spec.ts` asserts the app's function gives the
 same groups from the same inputs. The traces are text, read by `failures._call_site` as
-the tool reads them, so the golden holds frame 0's parse as well as the grouping.
+the tool reads them, so the golden holds frame 0's parse of the trace shapes
+`TestFrameParity` (`test_agent_operations.py`) shows both sides read alike, as well as
+the grouping. Rows span two devices, which the app merges and the port never keys by.
 
 Only inputs where the two sides are meant to agree: devices merged, paths that first
 differ letter against letter (code point and `localeCompare` order differ on case and
@@ -26,7 +28,6 @@ from ttnn_visualizer.agent import failures, source_lines, tools
 from ttnn_visualizer.agent.source_lines import SourceLineKind
 from ttnn_visualizer.csv_queries import SIGNPOST_OP_TYPE
 from ttnn_visualizer.tests.parity_golden import Golden
-from ttnn_visualizer.tests.test_agent_source_lines import _trace
 
 GOLDEN = Golden("agentSourceLinesParity")
 _SEED = 2370
@@ -40,6 +41,7 @@ _PATHS = [
 ]
 _OP_CODES = ("A", "B", "C", "D", "E", "F")
 _DEVICE_TIMES = ("", "0", "-1", "0.5", "1", "2.25", "10")
+_DEVICES = ("0", "1")
 
 
 # The cells either side reads to group a row; a report row has more, which neither reads.
@@ -50,6 +52,20 @@ _ROW_DEFAULTS: Dict[str, object] = {
     "device": "0",
     "device_time": "1",
 }
+
+
+def _trace(path: str, line: int, function: str = "forward") -> str:
+    """A two-frame CPython trace whose frame 0 is `path`:`line`.
+
+    Defined here rather than shared with `test_agent_source_lines.py`, so editing a
+    trace for another test cannot change this golden's inputs.
+    """
+    return (
+        f'  File "{path}", line {line}, in {function}\n'
+        "    x = ttnn.op(x)\n"
+        '  File "/harness/run.py", line 1, in <module>\n'
+        "    main()\n"
+    )
 
 
 def _rows(*overrides: Mapping[str, object]) -> List[Dict[str, object]]:
@@ -230,6 +246,46 @@ def _curated_cases() -> List[Dict]:
         )
     )
 
+    # Rows of one line on two devices are one group: the app merges devices, and the
+    # port has no device key.
+    rows = _rows(
+        {"device": "0", "device_time": "2"},
+        {"device": "1", "device_time": "3", "raw_op_code": "B"},
+        {"device": "1", "device_time": "4"},
+    )
+    cases.append(
+        _case(
+            rows,
+            _linked(rows, 1, 2, 3),
+            {
+                1: _trace("/m/attn/bloc.py", 7),
+                2: _trace("/m/attn/bloc.py", 7),
+                3: _trace("/m/norm/core.py", 2),
+            },
+        )
+    )
+
+    # Frame 0 in the trace shapes `TestFrameParity` shows both sides read alike: a
+    # header line, CRLF, blank lines, a partial frame line skipped, whitespace after the
+    # function, a path with a space, and a quote in the path, which is no frame at all.
+    rows = _rows(*[{"device_time": str(index + 1)} for index in range(7)])
+    cases.append(
+        _case(
+            rows,
+            _linked(rows, 1, 2, 3, 4, 5, 6, 7),
+            {
+                1: "Traceback (most recent call last):\n"
+                + _trace("/m/attn/head.py", 3),
+                2: '  File "/m/mlps/head.py", line 4, in f\r\n    x()\r\n',
+                3: '  File "/m/norm/head.py", line 5, in f\n    x = (\n\n  y()\n',
+                4: '  File "/m/partial.py"\n  File "/m/attn/core.py", line 6, in f\n',
+                5: '  File "/m/mlps/core.py", line 7, in forward  \t\n    x()\n',
+                6: _trace("/m/my dir/bloc.py", 8),
+                7: '  File "/m/we"ird.py", line 9, in f\n    x()\n',
+            },
+        )
+    )
+
     # No countable device time at all: no shares, every group still listed.
     rows = _rows({"device_time": ""}, {"device_time": "0"})
     cases.append(_case(rows, _linked(rows, 1, None), {1: _trace("/m/attn/bloc.py", 4)}))
@@ -254,6 +310,7 @@ def _random_case(rng: random.Random) -> Dict:
             {
                 "raw_op_code": rng.choice(_OP_CODES),
                 "device_time": rng.choice(_DEVICE_TIMES),
+                "device": rng.choice(_DEVICES),
             }
             for _ in range(rng.randint(5, 40))
         ]
@@ -287,6 +344,14 @@ def test_the_golden_covers_every_kind_and_both_share_states():
     }
     assert any("share_percent" in group for group in groups)
     assert any("share_percent" not in group for group in groups)
+
+
+def test_the_golden_covers_two_devices_and_signposts():
+    """Each is a rule a single-device, signpost-free golden would leave unheld."""
+    rows = [row for case in _generate_golden()["cases"] for row in case["rows"]]
+
+    assert {row["device"] for row in rows} == set(_DEVICES)
+    assert any(tools.is_signpost_row(row) for row in rows)
 
 
 def test_the_ts_spec_reads_this_golden():

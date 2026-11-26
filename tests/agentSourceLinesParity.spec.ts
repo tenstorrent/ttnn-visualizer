@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { enrichRowData } from '../src/functions/enrichPerfRowData';
-import { SourceLineOperation, getSourceLineGroups } from '../src/functions/perfSourceLines';
+import { SourceLineGroupKind, SourceLineOperation, getSourceLineGroups } from '../src/functions/perfSourceLines';
 import { PerfTableRow } from '../src/model/PerfTable';
 import golden from './data/agentSourceLinesParity.json';
 
@@ -13,7 +13,7 @@ import golden from './data/agentSourceLinesParity.json';
 
 // A group as the agent answers it; the app-only fields (basename, function, source file) are not held.
 interface GroupAnswer {
-    kind: string;
+    kind: SourceLineGroupKind;
     file: string | null;
     line: number | null;
     device_time: number;
@@ -71,5 +71,10 @@ describe('getSourceLineGroups', () => {
                 expect(Math.abs(actual[index].percent - share)).toBeLessThanOrEqual(share * SHARE_RELATIVE_TOLERANCE);
             }
         });
+
+        // Shares are of every group's time, so a total that left a group out shows here at once.
+        if (groups.every(({ share_percent: share }) => share !== undefined)) {
+            expect(actual.reduce((sum, group) => sum + group.percent, 0)).toBeCloseTo(100, 9);
+        }
     });
 });
