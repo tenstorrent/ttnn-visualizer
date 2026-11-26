@@ -480,6 +480,35 @@ describe('Performance route', () => {
         expect(notice).not.toHaveTextContent('report-c');
     });
 
+    it.each([
+        { source: 'a local pick', report: { path: 'report-b', reportName: 'report-b' } },
+        // A fresh remote pick holds the remote path; its folder id is the synced name.
+        {
+            source: 'a fresh remote pick',
+            report: { path: '/remote/reports/report-b', reportName: 'report-b', syncedName: 'report-b' },
+        },
+    ])('drops the active report from the comparisons when it is $source', ({ report }) => {
+        function ComparisonListProbe() {
+            const [comparisonReports] = useAtom(comparisonPerformanceReportListAtom);
+
+            return <span data-testid='comparison-list-probe'>{JSON.stringify(comparisonReports)}</span>;
+        }
+
+        render(
+            <TestProviders
+                initialAtomValues={[
+                    [activePerformanceReportAtom, report],
+                    [comparisonPerformanceReportListAtom, ['report-b', 'report-c']],
+                ]}
+            >
+                <Performance />
+                <ComparisonListProbe />
+            </TestProviders>,
+        );
+
+        expect(screen.getByTestId('comparison-list-probe')).toHaveTextContent('["report-c"]');
+    });
+
     it('shows no signpost notice when every report was narrowed', () => {
         (usePerformanceReport as Mock).mockReturnValue({
             data: { report: [DRAM_PERF_ROW], stacked_report: [], signposts: [], signpost_range_ignored: false },

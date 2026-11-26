@@ -299,14 +299,14 @@ export default function Performance() {
         resetPerfTableSessionState();
     }, [activePerformanceReport?.path, resetPerfTableSessionState]);
 
-    // Clear comparison report if users switches active perf report to the comparison report
+    // Drop the active report from the comparisons when the user switches to one of them
     useEffect(() => {
-        if (activePerformanceReport && comparisonReportList?.includes(activePerformanceReport?.path)) {
-            const filteredReports = comparisonReportList.filter((report) => report !== activePerformanceReport?.path);
+        if (activeReportFolderName && comparisonReportList?.includes(activeReportFolderName)) {
+            const filteredReports = comparisonReportList.filter((report) => report !== activeReportFolderName);
 
             setComparisonReportList(filteredReports.length === 0 ? null : filteredReports);
         }
-    }, [comparisonReportList, activePerformanceReport, setComparisonReportList]);
+    }, [comparisonReportList, activeReportFolderName, setComparisonReportList]);
 
     // If a comparison report is selected, clear the selected range as we don't currently support ranges for comparison
     useEffect(() => {

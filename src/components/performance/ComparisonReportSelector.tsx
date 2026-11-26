@@ -9,8 +9,9 @@ import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import LocalFolderPicker from '../report-selection/LocalFolderPicker';
 import { ReportFolder } from '../../definitions/Reports';
-import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
+import { activePerformanceReportFolderNameAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import { formatSyncedReportName } from '../../functions/reportRank';
+import { getFolderReportId } from '../../functions/reportLinks';
 import { recordPerfComparisonUsed } from '../../functions/surfaceEvents';
 import { TEST_IDS } from '../../definitions/TestIds';
 
@@ -30,8 +31,10 @@ const ComparisonReportSelector = ({
     className,
 }: ComparisonReportSelectorProps) => {
     const [comparisonReportList, setComparisonReportList] = useAtom(comparisonPerformanceReportListAtom);
-    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+    const activeReportId = useAtomValue(activePerformanceReportFolderNameAtom);
     const selectedReportName = comparisonReportList?.[reportIndex] || null;
+    // The reports chosen in the other selectors, so one report cannot fill two slots.
+    const otherSelectedReports = (comparisonReportList || []).filter((_reportId, index) => index !== reportIndex);
 
     return (
         <FormGroup
@@ -43,18 +46,26 @@ const ComparisonReportSelector = ({
             <div className='folder-selection'>
                 <LocalFolderPicker
                     items={folderList.filter((folder: ReportFolder) => {
-                        const selectedReports = (comparisonReportList || []).filter(
-                            (_reportName, index) => index !== reportIndex,
-                        );
+                        const reportId = getFolderReportId(folder);
 
-                        return folder.path !== activePerformanceReport?.path && !selectedReports.includes(folder.path);
+                        return (
+                            reportId !== null && reportId !== activeReportId && !otherSelectedReports.includes(reportId)
+                        );
                     })}
+                    // The picker marks the row whose `path` equals `value`. A listing row's `path`
+                    // is its folder name, which is the id stored here.
                     value={selectedReportName}
                     valueLabel={selectedReportName ? formatSyncedReportName(selectedReportName) : null}
                     handleSelect={(folder: ReportFolder) => {
-                        const isSameReport = comparisonReportList?.[reportIndex] === folder.reportName;
+                        const reportId = getFolderReportId(folder);
+
+                        if (reportId === null) {
+                            return;
+                        }
+
+                        const isSameReport = comparisonReportList?.[reportIndex] === reportId;
                         const updatedReports = [...(comparisonReportList || [])];
-                        updatedReports[reportIndex] = folder.reportName;
+                        updatedReports[reportIndex] = reportId;
 
                         setComparisonReportList(updatedReports);
 
