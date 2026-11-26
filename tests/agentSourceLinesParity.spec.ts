@@ -11,7 +11,8 @@ import golden from './data/agentSourceLinesParity.json';
 // The agent's Python port (#2364) wrote this golden, from test_agent_source_lines_parity.py; holding
 // the app to it fails a change on either side. Regenerate with `pnpm run agent:parity-golden`.
 
-// A group as the agent answers it; the app-only fields (basename, function, source file) are not held.
+// A group as the agent answers it. Basename and source file are app-only; function, which the
+// agent answers as `call_site.function`, is not held either, since the golden holds file and line.
 interface GroupAnswer {
     kind: SourceLineGroupKind;
     file: string | null;

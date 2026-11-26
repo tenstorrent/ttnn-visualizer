@@ -301,9 +301,20 @@ class TestSourceLines:
 
     @pytest.mark.parametrize(
         "trace",
-        [None, "no frame in this text", '  File "/m.py", line 0, in f\n'],
-        # Line 0 is the one case the app answers differently: it groups it as a line.
-        ids=["missing", "frameless", "line-zero-diverges-from-app"],
+        [
+            None,
+            "no frame in this text",
+            '  File "/m.py", line 0, in f\n',
+            '  File "/m.py", line 2147483648, in f\n',
+        ],
+        # Line 0 and lines from 2**31 are where the app answers differently: it groups
+        # them as a line.
+        ids=[
+            "missing",
+            "frameless",
+            "line-zero-diverges-from-app",
+            "line-2-31-diverges-from-app",
+        ],
     )
     def test_an_operation_without_a_readable_trace_is_its_own_group(
         self, traced, trace
