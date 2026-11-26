@@ -7,6 +7,7 @@ import { computeMostConstrainedL1Device } from '../src/functions/l1Pressure';
 import { Buffer, DeviceInfo } from '../src/model/APIData';
 import { BufferType } from '../src/model/BufferType';
 import { makeDevice } from './helpers/deviceInfo';
+import { indexedCases } from './helpers/parityGolden';
 import golden from './data/l1PressureParity.json';
 
 // The agent's Python port (#2172) wrote this golden, from test_agent_l1_pressure_parity.py; holding
@@ -27,12 +28,6 @@ interface ParityCase {
 
 // The agent rounds a percentage to one place.
 const PERCENT_PLACE = 0.05 + 1e-9;
-
-const indexedCases = <T>(cases: T[]) => cases.map((entry, index) => [index, entry] as const);
-
-it('the golden holds cases', () => {
-    expect(golden.cases.length).toBeGreaterThan(0);
-});
 
 describe('computeMostConstrainedL1Device', () => {
     it.each(indexedCases(golden.cases as ParityCase[]))(

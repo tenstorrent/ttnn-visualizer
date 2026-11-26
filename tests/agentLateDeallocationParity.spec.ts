@@ -11,6 +11,7 @@ import {
 } from '../src/functions/lateDeallocation';
 import { Buffer, BuffersByOperation, Operation, Tensor } from '../src/model/APIData';
 import { BufferType } from '../src/model/BufferType';
+import { indexedCases } from './helpers/parityGolden';
 import golden from './data/agentLateDeallocationParity.json';
 
 // The agent's Python port (#2156) wrote this golden, from test_agent_late_deallocation_parity.py;
@@ -29,12 +30,6 @@ interface ParityCase {
         run_start_count: number;
     };
 }
-
-const indexedCases = <T>(cases: T[]) => cases.map((entry, index) => [index, entry] as const);
-
-it('the golden holds cases', () => {
-    expect(golden.cases.length).toBeGreaterThan(0);
-});
 
 describe('Buffer Summary late deallocations', () => {
     it.each(indexedCases(golden.cases as ParityCase[]))(

@@ -10,13 +10,15 @@ import ComparisonReportSelector from '../src/components/performance/ComparisonRe
 import { ComparisonReportCountBucket, EventLogEvent, PerfChartLabel } from '../src/definitions/EventLogEvent';
 import { PerfChartId } from '../src/definitions/PerformanceCharts';
 import { ReportFolder } from '../src/definitions/Reports';
+import { getFolderReportId } from '../src/functions/reportLinks';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../src/store/app';
 import { AtomProviderInitialValues } from './helpers/atomProvider';
 import { TestProviders } from './helpers/TestProviders';
 
-const { recordEvent, activeSection } = vi.hoisted(() => ({
+const { recordEvent, activeSection, picker } = vi.hoisted(() => ({
     recordEvent: vi.fn(),
     activeSection: { id: null as string | null, sectionsInView: [] as string[] },
+    picker: { folder: null as ReportFolder | null },
 }));
 
 vi.mock('../src/functions/recordEvent', () => ({ default: recordEvent }));
@@ -41,13 +43,15 @@ vi.mock('../src/components/performance/PerfChartsIndex', () => ({ default: () =>
 vi.mock('../src/components/performance/PerfChartFilter', () => ({ default: () => null }));
 
 const PICKED_FOLDER: ReportFolder = { path: 'report-b', reportName: 'report-b' };
+// A row whose display name differs from its folder id, as a multihost rank's does.
+const RANKED_FOLDER: ReportFolder = { path: 'run_rank1', reportName: 'run' };
 
-// Stands in for the folder picker: one click selects a fixed folder through the real handler.
+// Stands in for the folder picker: one click selects the test's folder through the real handler.
 vi.mock('../src/components/report-selection/LocalFolderPicker', () => ({
     default: ({ handleSelect }: { handleSelect: (folder: ReportFolder) => void }) => (
         <button
             type='button'
-            onClick={() => handleSelect(PICKED_FOLDER)}
+            onClick={() => handleSelect(picker.folder!)}
         >
             Pick report
         </button>
@@ -91,6 +95,7 @@ function renderChartsTab() {
 
 beforeEach(() => {
     recordEvent.mockClear();
+    picker.folder = PICKED_FOLDER;
     activeSection.id = null;
     activeSection.sectionsInView = [];
 });
@@ -177,7 +182,7 @@ describe('ComparisonReportSelector usage events', () => {
         return render(
             <TestProviders initialAtomValues={initialAtomValues}>
                 <ComparisonReportSelector
-                    folderList={[PICKED_FOLDER]}
+                    folderList={[picker.folder!]}
                     reportIndex={reportIndex}
                     label='Compare'
                 />
@@ -210,8 +215,12 @@ describe('ComparisonReportSelector usage events', () => {
         expect(recordEvent).not.toHaveBeenCalled();
     });
 
-    it('records nothing when the report already in the slot is picked again', () => {
-        renderSelector([PICKED_FOLDER.reportName], 0);
+    it.each([
+        { folder: PICKED_FOLDER, shape: 'a plain folder' },
+        { folder: RANKED_FOLDER, shape: 'a folder whose display name differs from its id' },
+    ])('records nothing when the report already in the slot is picked again: $shape', ({ folder }) => {
+        picker.folder = folder;
+        renderSelector([getFolderReportId(folder)!], 0);
 
         fireEvent.click(screen.getByRole('button', { name: 'Pick report' }));
 
