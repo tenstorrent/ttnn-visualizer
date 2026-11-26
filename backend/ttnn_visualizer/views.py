@@ -115,7 +115,12 @@ from ttnn_visualizer.models import (
     sanitise_path_segment,
     sanitise_remote_host_segment,
 )
-from ttnn_visualizer.npe_index import ensure_index, read_summary, read_window
+from ttnn_visualizer.npe_index import (
+    ensure_index,
+    is_zstd_trace,
+    read_summary,
+    read_window,
+)
 from ttnn_visualizer.queries import DatabaseQueries
 from ttnn_visualizer.report_fingerprint import (
     performance_run_fingerprint,
@@ -1822,7 +1827,11 @@ def create_npe_files():
         if not file.filename.endswith(NPE_UPLOAD_EXTENSIONS):
             return StatusMessage(
                 status=ConnectionTestStates.FAILED,
-                message="NPE requires a valid .json or .zst file",
+                message=(
+                    "NPE requires a valid "
+                    f"{', '.join(NPE_UPLOAD_EXTENSIONS[:-1])} or "
+                    f"{NPE_UPLOAD_EXTENSIONS[-1]} file"
+                ),
             ).model_dump()
 
     npe_name = extract_uploaded_name(files)
@@ -3030,33 +3039,18 @@ def get_npe_data(instance: Instance):
         logger.error("NPE path is not set in the instance.")
         return response_not_found()
 
-    if instance.npe_path.endswith(".zst"):
-        compressed_path = Path(instance.npe_path)
-        uncompressed_path = None
-    elif instance.npe_path.endswith(".json") or instance.npe_path.endswith(".npeviz"):
-        compressed_path = None
-        uncompressed_path = Path(instance.npe_path)
-    else:
-        compressed_path = Path(instance.npe_path)
-        uncompressed_path = Path(instance.npe_path)
-
-    if not (compressed_path and compressed_path.exists()) and not (
-        uncompressed_path and uncompressed_path.exists()
-    ):
-        logger.error(
-            f"NPE file does not exist: {compressed_path} / {uncompressed_path}"
-        )
+    npe_path = Path(instance.npe_path)
+    if not npe_path.exists():
+        logger.error(f"NPE file does not exist: {npe_path}")
         return response_not_found()
 
     try:
-        if compressed_path and compressed_path.exists():
-            with open(compressed_path, "rb") as file:
-                compressed_data = file.read()
-                npe_data = zstd.uncompress(compressed_data)
+        # The rule `npe_index` reads the same file by, so /npe and the index agree.
+        if is_zstd_trace(npe_path):
+            with open(npe_path, "rb") as file:
+                npe_data = zstd.uncompress(file.read())
         else:
-            if uncompressed_path is None:
-                return response_not_found()
-            with open(uncompressed_path, "r") as file:
+            with open(npe_path, "r") as file:
                 npe_data = file.read()
     except Exception as e:
         logger.error(f"Error reading NPE file: {e}")

@@ -102,6 +102,21 @@ def _write_npe_zst(tmp_path: Path, obj: dict, name: str = "trace.npeviz.zst") ->
     return str(path)
 
 
+@pytest.mark.parametrize(
+    "name, compressed",
+    [
+        ("trace.npeviz.zst", True),
+        ("trace.zst", True),
+        (".zst", True),
+        ("trace.json", False),
+        ("trace.npeviz", False),
+        ("trace.zst.json", False),
+    ],
+)
+def test_is_zstd_trace_goes_by_the_name_ending(name, compressed):
+    assert npe_index.is_zstd_trace(Path(name)) is compressed
+
+
 def test_truncate_and_as_int_helpers():
     assert truncate(224.80001831054688) == pytest.approx(224.8)
     assert truncate(None) is None

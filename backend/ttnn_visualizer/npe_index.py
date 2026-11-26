@@ -166,8 +166,21 @@ def _build_guard(db_path: Path) -> Iterator[None]:
             os.close(fd)
 
 
+# The one ending read as zstd frames; every other trace, whatever its name, as JSON.
+ZSTD_TRACE_SUFFIX = ".zst"
+
+
+def is_zstd_trace(npe_path: Path) -> bool:
+    """Whether a trace file is read as zstd frames, by how its name ends, or as JSON.
+
+    By the name, not `Path.suffix`: a file named `.zst` has no suffix, but the upload
+    accepts it as compressed.
+    """
+    return npe_path.name.endswith(ZSTD_TRACE_SUFFIX)
+
+
 def load_npe_object(npe_path: Path) -> dict:
-    return parse_trace(npe_path.read_bytes(), npe_path.suffix == ".zst")
+    return parse_trace(npe_path.read_bytes(), is_zstd_trace(npe_path))
 
 
 def parse_trace(data: bytes, compressed: bool) -> dict:
@@ -209,7 +222,7 @@ def looks_like_trace(npe_path: Path) -> bool:
             head = source.read(TRACE_HEAD_BYTES)
     except OSError:
         return False
-    return starts_as_trace(head, npe_path.suffix == ".zst")
+    return starts_as_trace(head, is_zstd_trace(npe_path))
 
 
 def _declared_frame_size(source: BinaryIO) -> Tuple[Optional[int], bool]:
@@ -255,7 +268,7 @@ def trace_size(npe_path: Path) -> Optional[int]:
     size, or the sum of a `.zst`'s declared frame sizes, None where any frame
     declares none or the file is not zstd frames."""
     with npe_path.open("rb") as source:
-        if npe_path.suffix != ".zst":
+        if not is_zstd_trace(npe_path):
             return os.fstat(source.fileno()).st_size
         return declared_content_size(source)
 
