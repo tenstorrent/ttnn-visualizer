@@ -4,6 +4,7 @@
 
 import { Icon, IconName } from '@blueprintjs/core';
 import { type MouseEvent as ReactMouseEvent, memo } from 'react';
+import { EXPANDER_ICON_SIZE } from './opGraphTypes';
 
 interface OpGraphNodeExpanderProps {
     /** Title and accessible name; the two toggles word it differently. */
@@ -18,9 +19,9 @@ interface OpGraphNodeExpanderProps {
 /**
  * @description The count chip on a node that opens into something — device
  * operations, or a folded block's members. Presentational: the callers own the
- * wording, the glyph and the context toggle. They were otherwise identical down
- * to the comments, so a fix to the mousedown behaviour had to land twice or one
- * comment started lying.
+ * wording and the context toggle, and may replace the default chevron. They were
+ * otherwise identical down to the comments, so a fix to the mousedown behaviour
+ * had to land twice or one comment started lying.
  */
 const OpGraphNodeExpander = memo(({ action, count, isExpanded, onToggle, icon }: OpGraphNodeExpanderProps) => {
     // React Flow reads selection off `mousedown`, so without this the expander
@@ -48,7 +49,7 @@ const OpGraphNodeExpander = memo(({ action, count, isExpanded, onToggle, icon }:
             {icon ? (
                 <Icon
                     icon={icon}
-                    size={12}
+                    size={EXPANDER_ICON_SIZE}
                 />
             ) : (
                 // Down opens, up closes — a chevron that only reported the current

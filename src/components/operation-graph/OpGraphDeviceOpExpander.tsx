@@ -25,9 +25,8 @@ const OpGraphDeviceOpExpander = memo(({ operationId, count, isExpanded }: OpGrap
             count={count}
             isExpanded={isExpanded}
             onToggle={() => toggleExpansion(operationId)}
-            // The device-operation mark from the details view and the L1 plots. With
-            // the fold chevron, every operation that had device operations read as a
-            // folded block, even with all repeats unrolled. #2210
+            // A chevron would read as a folded block; the cube marks device
+            // operations, as in the details view and the L1 plots. #2210
             icon={isExpanded ? IconNames.CUBE_REMOVE : IconNames.CUBE_ADD}
         />
     );

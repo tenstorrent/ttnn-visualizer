@@ -71,6 +71,11 @@ const MIN_EXPANDABLE_DEVICE_OPERATIONS = 2;
 export const isExpandableOperation = (deviceOperationCount: number): boolean =>
     deviceOperationCount >= MIN_EXPANDABLE_DEVICE_OPERATIONS;
 
+// The device-operation badge's icon; `opGraphLayout` sizes the badge from it. Not
+// kept there, because importing the layout module into the badge pulls dagre into
+// the main bundle.
+export const EXPANDER_ICON_SIZE = 12;
+
 export interface OpGraphSourceOutput {
     /** Already run through `toReadableShape`, so the worker needs no formatters. */
     edgeLabel: string;

@@ -5,6 +5,8 @@
 import '@testing-library/jest-dom/vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { Classes } from '@blueprintjs/core';
+import { IconNames } from '@blueprintjs/icons';
 
 import OpGraphBlockExpander from '../src/components/operation-graph/OpGraphBlockExpander';
 import OpGraphDeviceOpExpander from '../src/components/operation-graph/OpGraphDeviceOpExpander';
@@ -52,7 +54,7 @@ describe('device-operation chip', () => {
         renderDeviceOpChip(false);
         const chip = screen.getByRole('button', { name: 'Show 7 device operations' });
 
-        expect(glyphOf(chip)).toBe('cube-add');
+        expect(glyphOf(chip)).toBe(IconNames.CUBE_ADD);
         expect(chip).not.toHaveTextContent(FOLD_CHEVRON);
         expect(chip).toHaveTextContent('7');
         expect(chip).toHaveAttribute('aria-expanded', 'false');
@@ -63,16 +65,17 @@ describe('device-operation chip', () => {
         renderDeviceOpChip(true);
         const chip = screen.getByRole('button', { name: 'Hide device operations' });
 
-        expect(glyphOf(chip)).toBe('cube-remove');
+        expect(glyphOf(chip)).toBe(IconNames.CUBE_REMOVE);
         expect(chip).not.toHaveTextContent(FOLD_CHEVRON);
         expect(chip).toHaveAttribute('aria-expanded', 'true');
+        expect(chip).toHaveAttribute('title', 'Hide device operations');
     });
 
     it('hides the icon from assistive technology, leaving the label to name the chip', () => {
         renderDeviceOpChip(false);
         const chip = screen.getByRole('button', { name: 'Show 7 device operations' });
 
-        expect(chip.querySelector('.bp6-icon')).toHaveAttribute('aria-hidden', 'true');
+        expect(chip.querySelector(`.${Classes.ICON}`)).toHaveAttribute('aria-hidden', 'true');
     });
 
     it('stays a native button that toggles its operation without selecting it', () => {
