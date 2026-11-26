@@ -14,13 +14,20 @@ frontend always sends `instanceId`), so we pin it here. The empty-instance
 contract intact.
 """
 
+import re
 from http import HTTPStatus
 from unittest.mock import Mock
 from urllib.parse import unquote
 
 import pytest
 from ttnn_visualizer.csv_queries import NPEQueries
-from ttnn_visualizer.decorators import ACTIVE_MEMORY_REPORT_HEADER
+from ttnn_visualizer.decorators import (
+    ACTIVE_MEMORY_REPORT_HEADER,
+    LOCAL_ONLY_REFUSAL,
+    is_local_only,
+    local_only,
+    with_instance,
+)
 from ttnn_visualizer.exceptions import (
     PerformanceReportNotLoadedException,
     ProfilerReportNotLoadedException,
@@ -212,3 +219,124 @@ def test_performance_route_returns_404_when_performance_not_loaded(
     assert response.get_json() == {
         "error": PerformanceReportNotLoadedException.DEFAULT_MESSAGE
     }
+
+
+def test_local_only_marks_the_view_it_returns():
+    def view():
+        return "ok"
+
+    assert is_local_only(local_only(view))
+    assert not is_local_only(view)
+
+
+def test_local_only_marker_keeps_its_literal_name():
+    """Tooling outside this repository reads the marker as `local_only`, so a
+    rename would leave it finding no gated routes without anything here failing."""
+
+    def view():
+        return "ok"
+
+    assert getattr(local_only(view), "local_only") is True
+
+
+def test_local_only_marker_survives_a_decorator_stacked_above():
+    """Views stack `@with_instance` over `@local_only`; the registered function must
+    still carry the marker, or the route audit below would find nothing to check."""
+
+    def view(instance):
+        return "ok"
+
+    assert is_local_only(with_instance(local_only(view)))
+
+
+# Every `@local_only` (rule, method), pinned in full and compared for equality. The
+# audit below finds routes by their marker, so on its own it cannot notice a route
+# that loses `@local_only` (it is no longer marked, so no longer checked) or loses the
+# marker under a decorator that skips `functools.wraps`. Either now fails here.
+# Gating or un-gating a route means editing this set, which is the point: it makes
+# a change to the SERVER_MODE boundary show up in review.
+GATED_ROUTES = {
+    ("/api/instance/local-paths", "POST"),
+    ("/api/mlir", "GET"),
+    ("/api/mlir/active", "POST"),
+    ("/api/npe/summary", "GET"),
+    ("/api/npe/window", "GET"),
+    ("/api/performance/<performance_name>", "DELETE"),
+    ("/api/profiler/<profiler_name>", "DELETE"),
+    ("/api/remote/host-key", "POST"),
+    ("/api/remote/host-key/trust", "POST"),
+    ("/api/remote/local-performance-reports", "POST"),
+    ("/api/remote/local-profiler-reports", "POST"),
+    ("/api/remote/mlir/test", "POST"),
+    ("/api/remote/mlir/upload", "POST"),
+    ("/api/remote/performance-reports", "POST"),
+    ("/api/remote/profiler-reports", "POST"),
+    ("/api/remote/ssh-config-hosts", "GET"),
+    ("/api/remote/sync", "POST"),
+    ("/api/remote/test", "POST"),
+    ("/api/remote/use", "POST"),
+}
+PATH_PARAMETER = re.compile(r"<[^>]*>")
+IGNORED_METHODS = {"HEAD", "OPTIONS"}
+
+
+def _local_only_routes(app):
+    return [
+        (rule.rule, method)
+        for rule in app.url_map.iter_rules()
+        if is_local_only(app.view_functions[rule.endpoint])
+        for method in sorted((rule.methods or set()) - IGNORED_METHODS)
+    ]
+
+
+def test_the_marked_routes_are_exactly_the_gated_set(app):
+    """Fails on a route gated, un-gated or dropped from the marker without
+    `GATED_ROUTES` being updated to match."""
+    assert set(_local_only_routes(app)) == GATED_ROUTES
+
+
+def _refused_by_local_only(response):
+    return response.status_code == HTTPStatus.FORBIDDEN and response.get_json() == {
+        "error": LOCAL_ONLY_REFUSAL
+    }
+
+
+def test_every_local_only_route_refuses_under_server_mode(app, client):
+    """The `app` fixture runs in the hosted posture, where each gated route must
+    answer 403 before reading its body or path parameters. The routes come from
+    the URL map; `test_the_marked_routes_are_exactly_the_gated_set` pins that
+    list, so this one can't pass on a route that silently dropped out of it.
+
+    The refusal text is checked as well as the status, because `@with_instance`
+    sits above `@local_only` on some of these routes and answers its own 403 for
+    an instance another session owns: a 403 from anything other than `@local_only`
+    must not count."""
+    assert app.config["SERVER_MODE"]
+
+    not_refused = []
+    for rule, method in _local_only_routes(app):
+        path = PATH_PARAMETER.sub("local-only-audit", rule)
+        response = client.open(
+            path, method=method, query_string={"instanceId": INSTANCE_ID}
+        )
+        if not _refused_by_local_only(response):
+            # Status and error only: a gated route's body can hold local details,
+            # such as the runner's SSH host aliases, that don't belong in CI logs.
+            body = response.get_json(silent=True)
+            error = body.get("error") if isinstance(body, dict) else None
+            not_refused.append(f"{method} {rule} -> {response.status_code} {error!r}")
+
+    assert not_refused == []
+
+
+def test_the_audit_does_not_count_an_ownership_refusal(app):
+    """A 403 from `@with_instance` for another session's instance must not pass
+    for the `@local_only` refusal, or the audit above could not tell them apart."""
+    owner, other = app.test_client(), app.test_client()
+    query = {"instanceId": INSTANCE_ID}
+
+    assert _refused_by_local_only(owner.get("/api/npe/summary", query_string=query))
+
+    response = other.get("/api/npe/summary", query_string=query)
+    assert response.status_code == HTTPStatus.FORBIDDEN
+    assert not _refused_by_local_only(response)
