@@ -21,7 +21,7 @@ import zstd
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.extensions import db
 from ttnn_visualizer.models import InstanceTable, ReportLocation
-from ttnn_visualizer.npe_index import get_index_path, is_zstd_trace
+from ttnn_visualizer.npe_index import get_index_path
 from ttnn_visualizer.utils import NPE_UPLOAD_EXTENSIONS
 
 API = "/api"
@@ -417,7 +417,8 @@ def test_every_accepted_npe_extension_uploads_names_and_serves(app, client, exte
     instance_id = "pytest-npe-every-extension"
     file_name = f"trace{extension}"
     payload = orjson.dumps(_make_npe_object(n_timesteps=2))
-    stored = zstd.compress(payload) if is_zstd_trace(Path(file_name)) else payload
+    # Its own literal, not `is_zstd_trace`: the predicate is what is under test.
+    stored = zstd.compress(payload) if extension == ".zst" else payload
     _upload_npe(client, instance_id, stored, file_name=file_name)
     uploaded = _stored_instance(client, instance_id)
 
@@ -430,6 +431,52 @@ def test_every_accepted_npe_extension_uploads_names_and_serves(app, client, exte
     npe = client.get(f"{API}/npe", query_string={"instanceId": instance_id})
     assert npe.status_code == 200
     assert npe.get_data() == payload
+
+
+def test_an_npe_upload_named_only_by_its_extension_is_read_compressed(app, client):
+    """A file named `.zst` passes the upload check but has no `Path.suffix`; it is
+    still read as zstd frames."""
+    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    instance_id = "pytest-npe-bare-zst"
+    payload = orjson.dumps(_make_npe_object(n_timesteps=2))
+    _upload_npe(client, instance_id, zstd.compress(payload), file_name=".zst")
+    uploaded = _stored_instance(client, instance_id)
+
+    response = _put_active_report(
+        client, instance_id, {"npe_name": uploaded.active_report["npe_name"]}
+    )
+
+    assert response.status_code == 200
+    npe = client.get(f"{API}/npe", query_string={"instanceId": instance_id})
+    assert npe.status_code == 200
+    assert npe.get_data() == payload
+
+
+@pytest.mark.parametrize(
+    "file_name, compressed",
+    [("trace.npeviz.zst", True), (".zst", True), ("trace.json", False)],
+)
+def test_the_performance_npe_timeline_reads_each_trace_format(
+    app, client, file_name, compressed
+):
+    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    instance_id = "pytest-npe-timeline"
+    _upload_performance_report(client, instance_id)
+    npe_folder = Path(_stored_instance(client, instance_id).performance_path, "npe_viz")
+    npe_folder.mkdir(exist_ok=True)
+    timeline = _make_npe_object(n_timesteps=2)
+    payload = orjson.dumps(timeline)
+    (npe_folder / file_name).write_bytes(
+        zstd.compress(payload) if compressed else payload
+    )
+
+    response = client.get(
+        f"{API}/performance/npe/timeline",
+        query_string={"instanceId": instance_id, "filename": file_name},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json() == timeline
 
 
 def test_a_refused_npe_upload_names_every_accepted_extension(client):

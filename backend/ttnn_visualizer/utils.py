@@ -18,6 +18,8 @@ from pathlib import Path
 from timeit import default_timer
 from typing import Any, Callable, Dict, Iterable, List, Optional, Pattern, Tuple
 
+from ttnn_visualizer.npe_index import ZSTD_TRACE_SUFFIX
+
 logger = logging.getLogger(__name__)
 
 LAST_SYNCED_FILE_NAME = ".last-synced"
@@ -1093,7 +1095,7 @@ def get_available_reports(current_app):
 # What the NPE upload accepts (`create_npe_files`), and what `extract_uploaded_name`
 # drops from a file's name to name the report. A file with any other accepted
 # extension keeps its whole name.
-NPE_UPLOAD_EXTENSIONS = (".json", ".zst", ".npeviz")
+NPE_UPLOAD_EXTENSIONS = (".json", ZSTD_TRACE_SUFFIX, ".npeviz")
 NPE_UPLOAD_NAME_SUFFIXES = (".json", ".npeviz.zst")
 _NPE_WHOLE_NAME_EXTENSIONS = tuple(
     extension

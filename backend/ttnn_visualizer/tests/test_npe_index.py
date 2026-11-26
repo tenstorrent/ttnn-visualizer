@@ -107,12 +107,13 @@ def _write_npe_zst(tmp_path: Path, obj: dict, name: str = "trace.npeviz.zst") ->
     [
         ("trace.npeviz.zst", True),
         ("trace.zst", True),
+        (".zst", True),
         ("trace.json", False),
         ("trace.npeviz", False),
         ("trace.zst.json", False),
     ],
 )
-def test_is_zstd_trace_goes_by_the_last_suffix(name, compressed):
+def test_is_zstd_trace_goes_by_the_name_ending(name, compressed):
     assert npe_index.is_zstd_trace(Path(name)) is compressed
 
 

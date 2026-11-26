@@ -166,13 +166,17 @@ def _build_guard(db_path: Path) -> Iterator[None]:
             os.close(fd)
 
 
-# The one suffix read as zstd frames; every other trace, whatever its name, as JSON.
+# The one ending read as zstd frames; every other trace, whatever its name, as JSON.
 ZSTD_TRACE_SUFFIX = ".zst"
 
 
 def is_zstd_trace(npe_path: Path) -> bool:
-    """Whether a trace file is read as zstd frames, by its suffix, or as JSON."""
-    return npe_path.suffix == ZSTD_TRACE_SUFFIX
+    """Whether a trace file is read as zstd frames, by how its name ends, or as JSON.
+
+    By the name, not `Path.suffix`: a file named `.zst` has no suffix, but the upload
+    accepts it as compressed.
+    """
+    return npe_path.name.endswith(ZSTD_TRACE_SUFFIX)
 
 
 def load_npe_object(npe_path: Path) -> dict:
