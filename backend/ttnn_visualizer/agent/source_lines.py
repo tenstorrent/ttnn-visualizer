@@ -5,7 +5,8 @@
 """Performance rows rolled up by the model-code line that launched them. #2359
 
 A port of `getSourceLineGroups` in `src/functions/perfSourceLines.ts`, the stacked
-table's Source line grouping; mirror a change there. The rows are the canonical
+table's Source line grouping; mirror a change there, then `pnpm run agent:parity-golden`
+(#2370). The rows are the canonical
 report's, whose devices are merged, so there is no per-device key. Each row's
 operation and each operation's call site come in from `linking`, which owns the join,
 so this module reads neither report.

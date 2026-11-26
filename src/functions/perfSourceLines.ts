@@ -99,8 +99,9 @@ const getTopOpCodes = (deviceTimeByOpCode: Map<string, number>): string[] =>
  * tt-perf-report orders its stacked CSV, so each device's shares read in order.
  *
  * Mirrored as `source_line_groups` in `backend/ttnn_visualizer/agent/source_lines.py`, behind
- * the `source_lines` MCP tool (#2364). No golden holds the two together yet (#2370), so mirror a
- * change to either side by hand. The tool answers the same question, but differs from this view:
+ * the `source_lines` MCP tool (#2364), and held to it by the `agentSourceLinesParity` golden (#2370):
+ * mirror a change to either side, then `pnpm run agent:parity-golden`. The tool answers the same
+ * question, but differs from this view:
  * - Range: this covers the rows it is given, which `PerfReport` takes from the range slider;
  *   the tool reads the whole report or a signpost range.
  * - No call site: both decline when no trace names a Python frame. `PerfReport` checks every
