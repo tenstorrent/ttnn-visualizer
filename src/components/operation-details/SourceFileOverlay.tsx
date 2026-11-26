@@ -217,15 +217,17 @@ function SourceFileOverlay({
                                 revision that produced the trace.
                             </Callout>
                         ) : null}
-                        <code
-                            ref={setCodeEl}
-                            className={`language-${language} code-output`}
-                            // HTML tags are escaped by hljs
-                            // eslint-disable-next-line react/no-danger
-                            dangerouslySetInnerHTML={{
-                                __html: fileWithHighlights,
-                            }}
-                        />
+                        <pre className='source-file-code'>
+                            <code
+                                ref={setCodeEl}
+                                className={`language-${language} code-output`}
+                                // HTML tags are escaped by hljs
+                                // eslint-disable-next-line react/no-danger
+                                dangerouslySetInnerHTML={{
+                                    __html: fileWithHighlights,
+                                }}
+                            />
+                        </pre>
                     </div>
                 ) : null}
             </>

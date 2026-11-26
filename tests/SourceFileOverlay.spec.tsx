@@ -6,9 +6,11 @@ import '@testing-library/jest-dom/vitest';
 import { Classes } from '@blueprintjs/core';
 import { cleanup, fireEvent, render } from '@testing-library/react';
 import { ComponentProps } from 'react';
-import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Mock, afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import SourceFileOverlay from '../src/components/operation-details/SourceFileOverlay';
+import StackTrace from '../src/components/operation-details/StackTrace';
 import { StackTraceLanguage } from '../src/definitions/StackTrace';
+import { getCompiledStylesheet } from './helpers/compiledStylesheets';
 import { TestProviders } from './helpers/TestProviders';
 
 vi.mock('../src/hooks/useRemote', () => ({
@@ -22,6 +24,38 @@ vi.mock('../src/hooks/useAPI.tsx', async (importOriginal) => {
 
 const FILE_CONTENTS = Array.from({ length: 40 }, (_, index) => `value_${index + 1} = ${index + 1}`).join('\n');
 const LINE_NUMBER = 30;
+
+// Indented with spaces, and in its second function with a tab.
+const INDENTED_FILE = [
+    'def move(value, device):',
+    '    if value is None:',
+    '        return value',
+    '',
+    'def copy(value):',
+    '\treturn value',
+].join('\n');
+
+// What a line holds after its number, without the newline that ends it.
+const getLineCode = (line: Element): string =>
+    [...line.childNodes]
+        .filter((node) => !(node instanceof Element && node.classList.contains('line-number')))
+        .map((node) => node.textContent)
+        .join('')
+        .replace(/\n$/, '');
+
+// jsdom computes `white-space` and `overflow-wrap` only where a rule sets them, its own `<pre>`
+// rule included, and never inherits them, so they are read from the nearest element that sets them.
+const getInheritedStyle = (element: Element, property: string): string => {
+    for (let current: Element | null = element; current; current = current.parentElement) {
+        const value = getComputedStyle(current).getPropertyValue(property);
+
+        if (value) {
+            return value;
+        }
+    }
+
+    return '';
+};
 
 const renderOverlay = (props: Partial<ComponentProps<typeof SourceFileOverlay>> = {}) =>
     render(
@@ -166,5 +200,48 @@ describe('SourceFileOverlay', () => {
         fireEvent.click(document.querySelector('[data-icon="locate"]')!.closest('button')!);
 
         expect(getScrolledLineNumbers()).toEqual([`${LINE_NUMBER}`]);
+    });
+
+    it('keeps the indentation of every line, in spaces or tabs', () => {
+        renderOverlay({ fileContents: INDENTED_FILE, lineNumber: 3 });
+        const lines = [...document.querySelectorAll('.ttnn-line')];
+
+        expect(lines.map(getLineCode)).toEqual(INDENTED_FILE.split('\n'));
+        // jsdom lays nothing out, so whether the indentation shows is read from the white-space
+        // each line inherits: under `normal`, the browser collapses it.
+        lines.forEach((line) => expect(getInheritedStyle(line, 'white-space')).toBe('pre'));
+    });
+
+    describe('with its stylesheet', () => {
+        const stylesheet = document.createElement('style');
+
+        beforeAll(() => {
+            stylesheet.textContent = getCompiledStylesheet('src/scss/components/StackTrace.scss');
+            document.head.append(stylesheet);
+        });
+
+        afterAll(() => stylesheet.remove());
+
+        it('wraps a long line at the edge, breaking a token too long for a line', () => {
+            renderOverlay();
+            const code = document.querySelector('.code-output')!;
+
+            expect(getComputedStyle(code).getPropertyValue('text-wrap')).toBe('wrap');
+            expect(getInheritedStyle(code, 'overflow-wrap')).toBe('anywhere');
+        });
+
+        it("leaves the stack trace's balanced wrap as it was", () => {
+            render(
+                <StackTrace
+                    stackTrace={'  File "/m/model.py", line 3, in move\n    return value'}
+                    language={StackTraceLanguage.PYTHON}
+                    hideSourceButton
+                />,
+            );
+            const code = document.querySelector('.code-output')!;
+
+            expect(getComputedStyle(code).getPropertyValue('text-wrap')).toBe('balance');
+            expect(getInheritedStyle(code, 'overflow-wrap')).toBe('');
+        });
     });
 });

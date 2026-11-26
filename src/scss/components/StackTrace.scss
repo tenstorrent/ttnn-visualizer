@@ -77,6 +77,17 @@ $container-border-width: 1px;
         text-wrap: balance;
     }
 
+    // Long lines in the source viewer wrap at the edge: scrolling sideways would take the line
+    // numbers along, and balancing breaks a line midway, even inside a string.
+    .source-file-code {
+        margin: 0;
+        overflow-wrap: anywhere;
+
+        .code-output {
+            text-wrap: wrap;
+        }
+    }
+
     // A frame's `"<file>", line <n>`, a button so it is reachable with Tab and opens with
     // Enter, drawn as a link inside the trace's monospace text.
     .stack-trace-frame-link {
