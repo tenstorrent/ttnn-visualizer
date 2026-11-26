@@ -142,7 +142,8 @@ def _curated_cases() -> List[Dict]:
     """Each rule once, since a random case rarely lands on a tie or an edge."""
     cases = []
 
-    # Two operations sharing frame 0 merge; an operation with two rows is listed once.
+    # Two operations sharing frame 0 merge; an operation with two rows is listed once,
+    # in the order the rows first name them, which is not numeric order: [8, 7].
     rows = _rows(
         {"device_time": "2"},
         {"device_time": "3", "raw_op_code": "B"},
@@ -151,7 +152,7 @@ def _curated_cases() -> List[Dict]:
     cases.append(
         _case(
             rows,
-            _linked(rows, 7, 8, 7),
+            _linked(rows, 8, 7, 8),
             {7: _trace("/m/attn/bloc.py", 12), 8: _trace("/m/attn/bloc.py", 12)},
         )
     )
