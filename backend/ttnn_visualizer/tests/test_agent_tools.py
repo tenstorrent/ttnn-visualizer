@@ -1454,7 +1454,11 @@ class TestTopOps:
         assert result["returned"] == MAX_LIMIT
         assert result["op_count"] == 500
 
-    @pytest.mark.parametrize("cell", ["nan", "inf", "-inf"])
+    # Python's spellings, which `parseFloat` reads as NaN, and JavaScript's, which it
+    # reads as infinite: device time is read the one way and other metrics the other.
+    @pytest.mark.parametrize(
+        "cell", ["nan", "inf", "-inf", "Infinity", "-Infinity", "1e400"]
+    )
     def test_a_non_finite_metric_is_left_out_of_the_ranking_and_the_total(
         self, tmp_path, cell
     ):
@@ -4355,7 +4359,11 @@ class TestProjectRow:
         assert projected["bound_analysis"] == "none"
         assert projected["op_category"] == "Other"
 
-    @pytest.mark.parametrize("cell", ["nan", "inf", "-inf"])
+    # Python's spellings, which `parseFloat` reads as NaN, and JavaScript's, which it
+    # reads as infinite: device time is read the one way and other metrics the other.
+    @pytest.mark.parametrize(
+        "cell", ["nan", "inf", "-inf", "Infinity", "-Infinity", "1e400"]
+    )
     def test_a_non_finite_cell_is_null(self, cell):
         projected = tools.project_row(_row(device_time=cell, cores=cell))
 

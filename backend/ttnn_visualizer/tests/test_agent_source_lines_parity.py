@@ -44,7 +44,7 @@ _DEVICE_TIMES = ("", "0", "-1", "0.5", "1", "2.25", "10")
 _DEVICES = ("0", "1")
 # Device time cells `parseFloat` and Python's `float` read differently: `float` refuses
 # `1abc` and `1e`, reads `1_0` as 10, and reads the full-width one as 1. #2428
-_PARSE_FLOAT_ONLY_CELLS = ("1abc", "1_0", "1e", "\uff11")
+_CELLS_READ_DIFFERENTLY = ("1abc", "1_0", "1e", "\uff11")
 
 
 # The cells either side reads to group a row; a report row has more, which neither reads.
@@ -291,7 +291,7 @@ def _curated_cases() -> List[Dict]:
     rows = _rows(
         *[
             {"device_time": cell, "raw_op_code": op_code}
-            for cell, op_code in zip(_PARSE_FLOAT_ONLY_CELLS, "ABAA")
+            for cell, op_code in zip(_CELLS_READ_DIFFERENTLY, "ABAA")
         ],
         {"device_time": "2"},
     )
@@ -372,7 +372,7 @@ def test_the_golden_covers_cells_parse_float_reads_differently():
     hold; a golden of plain decimals would pass with Python's `float`. #2428"""
     rows = [row for case in _generate_golden()["cases"] for row in case["rows"]]
 
-    assert set(_PARSE_FLOAT_ONLY_CELLS) <= {row["device_time"] for row in rows}
+    assert set(_CELLS_READ_DIFFERENTLY) <= {row["device_time"] for row in rows}
 
 
 def test_the_ts_spec_reads_this_golden():
