@@ -457,10 +457,10 @@ class DatabaseQueries:
 
         ``LIKE`` with a ``%…%`` pattern is already case-insensitive for ASCII;
         ``lower()`` on both sides says so rather than relying on it. Returns
-        ``[]`` when the table is absent, which is a fact about the capture
-        rather than an error.
+        ``[]`` when the table or its trace column is absent, which is a fact
+        about the capture rather than an error.
         """
-        if not self._check_table_exists("stack_traces"):
+        if not self._stack_traces_hold_traces():
             return []
         filters = self.merge_rank_filter("stack_traces", {}, rank)
         # Escaped, because the caller passes a substring and `LIKE` reads a pattern.
@@ -481,6 +481,13 @@ class DatabaseQueries:
         rows = self.query_runner.execute_query(query, params)
         return [int(row[0]) for row in rows if row[0] is not None]
 
+    def _stack_traces_hold_traces(self) -> bool:
+        # A table without the column holds no trace, as `query_stack_traces` reads
+        # it, and SQL that names the column would fail with `no such column`.
+        return self._check_table_exists("stack_traces") and (
+            "stack_trace" in self._get_table_columns("stack_traces")
+        )
+
     def report_records_stack_traces(self) -> bool:
         """Whether this capture holds any stack trace at all.
 
@@ -489,7 +496,7 @@ class DatabaseQueries:
         ``EXISTS`` rather than a count: the question is only whether the table has
         a row, and the column is the largest text in the report.
         """
-        if not self._check_table_exists("stack_traces"):
+        if not self._stack_traces_hold_traces():
             return False
         rows = self.query_runner.execute_query(
             "SELECT EXISTS(SELECT 1 FROM stack_traces WHERE stack_trace IS NOT NULL)"

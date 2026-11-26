@@ -659,6 +659,25 @@ class TestSourceLines:
         with pytest.raises(ValueError, match="records no stack traces"):
             linking.source_lines_by_call_site(registry, handle)
 
+    def test_it_refuses_a_table_without_the_trace_column_the_same_way(
+        self, linked, tmp_path
+    ):
+        """Not with SQLite's `no such column`."""
+        path = _write_profiler(tmp_path / "traced", _GRAPHS, operations=_OPERATIONS)
+        connection = sqlite3.connect(Path(path, "db.sqlite"))
+        try:
+            connection.executescript(
+                "CREATE TABLE stack_traces (operation_id int);"
+                "INSERT INTO stack_traces VALUES (2);"
+            )
+            connection.commit()
+        finally:
+            connection.close()
+        registry, handle, _ = linked(profiler_path=path, rows=_ROWS)
+
+        with pytest.raises(ValueError, match="records no stack traces"):
+            linking.source_lines_by_call_site(registry, handle)
+
     @pytest.mark.parametrize(
         "trace",
         ["#0 0x7f00 in tt::tt_metal::Program::compile()\n", ""],

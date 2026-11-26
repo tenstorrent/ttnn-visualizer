@@ -1608,17 +1608,19 @@ class TestOperationProvenance:
     def test_a_stack_traces_table_without_the_trace_column_reads_as_no_call_site(
         self, loaded
     ):
-        """The missing column reads as a NULL trace. #2429"""
-        sql = _REPORT_SQL + """
-        CREATE TABLE operation_arguments (operation_id int, name text, value text);
+        """The missing column reads as a NULL trace, and the arguments still answer.
+        #2429"""
+        sql = _PROVENANCE_SQL + """
+        DROP TABLE stack_traces;
         CREATE TABLE stack_traces (operation_id int);
-        INSERT INTO stack_traces VALUES (1);
+        INSERT INTO stack_traces VALUES (2);
         """
         registry, handle = loaded(sql, name="prov-no-column")
 
-        result = agent_operations.operation_provenance(registry, handle, 1)
+        result = agent_operations.operation_provenance(registry, handle, 2)
 
         assert (result["call_site"], result["chain_length"]) == (None, 0)
+        assert result["argument_count"] == 4
         assert "recorded no stack trace" in result["caveat"]
 
     def test_a_trace_with_no_readable_frame_says_so_differently(self, loaded):
@@ -1973,6 +1975,21 @@ INSERT INTO operation_arguments VALUES (1, 'dim', '-1', 0), (1, 'dim', '-2', 1);
 
         result = agent_operations.find_operations(
             registry, handle, called_from="run_downsample_if_req"
+        )
+
+        assert result["match_count"] == 0
+        assert "records no stack traces" in result["caveat"]
+
+    def test_a_table_without_the_trace_column_says_the_same_thing(self, loaded):
+        """A third shape of the same fact, and not SQLite's `no such column`."""
+        sql = _REPORT_SQL + (
+            "CREATE TABLE stack_traces (operation_id int);"
+            "INSERT INTO stack_traces VALUES (1);"
+        )
+        registry, handle = loaded(sql, name="notracecolumn")
+
+        result = agent_operations.find_operations(
+            registry, handle, called_from="model.py"
         )
 
         assert result["match_count"] == 0

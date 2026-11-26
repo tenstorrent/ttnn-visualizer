@@ -52,6 +52,7 @@ CREATE TABLE errors (
     stack_trace text, timestamp text
 );
 """
+_ERRORS_WITHOUT_TRACE = _ERRORS.replace("stack_trace text, ", "")
 _ARGUMENTS = (
     "CREATE TABLE operation_arguments (operation_id int, name text, value text);"
 )
@@ -471,14 +472,9 @@ class TestErrors:
                 id="null-value",
             ),
             pytest.param(
-                """
-                DROP TABLE errors;
-                CREATE TABLE errors (
-                    operation_id int, operation_name text, error_type text,
-                    error_message text, timestamp text
-                );
-                INSERT INTO errors VALUES (1, 'ttnn.add', 'TT_THROW', 'boom', '');
-                """,
+                "DROP TABLE errors;"
+                + _ERRORS_WITHOUT_TRACE
+                + "INSERT INTO errors VALUES (1, 'ttnn.add', 'TT_THROW', 'boom', '');",
                 id="no-column",
             ),
         ],
