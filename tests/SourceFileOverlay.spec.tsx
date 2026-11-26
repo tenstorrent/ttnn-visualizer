@@ -206,20 +206,33 @@ describe('SourceFileOverlay', () => {
         renderOverlay({ fileContents: INDENTED_FILE, lineNumber: 3 });
         const lines = [...document.querySelectorAll('.ttnn-line')];
 
+        // The text keeps its whitespace on dev too: only the white-space check guards the fix.
         expect(lines.map(getLineCode)).toEqual(INDENTED_FILE.split('\n'));
         // jsdom lays nothing out, so whether the indentation shows is read from the white-space
         // each line inherits: under `normal`, the browser collapses it.
         lines.forEach((line) => expect(getInheritedStyle(line, 'white-space')).toBe('pre'));
     });
 
-    it('shows markup in the file as text, without injecting it or splitting a line', () => {
-        const markupFile = ['x = "<img src=x onerror=alert(1)>"', '<div class="ttnn-line"><b>boom</b>'].join('\n');
-        renderOverlay({ fileContents: markupFile, lineNumber: 1 });
+    it('keeps the line numbers and indentation of a string that spans lines', () => {
+        const docstringFile = ['def f():', '    """doc', '        indented', '    """'].join('\n');
+        renderOverlay({ fileContents: docstringFile, lineNumber: 3 });
+        const lines = [...document.querySelectorAll('.ttnn-line')];
 
-        expect(document.querySelector('.code-output img')).toBeNull();
-        expect(document.querySelector('.code-output b')).toBeNull();
-        expect([...document.querySelectorAll('.ttnn-line')].map(getLineCode)).toEqual(markupFile.split('\n'));
+        expect(lines.map((line) => line.querySelector('.line-number')?.textContent)).toEqual(['1', '2', '3', '4']);
+        expect(lines.map(getLineCode)).toEqual(docstringFile.split('\n'));
     });
+
+    it.each([StackTraceLanguage.PYTHON, StackTraceLanguage.CPP])(
+        'shows markup in a %s file as text, without injecting it or splitting a line',
+        (language) => {
+            const markupFile = ['x = "<img src=x onerror=alert(1)>"', '<div class="ttnn-line"><b>boom</b>'].join('\n');
+            renderOverlay({ fileContents: markupFile, lineNumber: 1, language });
+
+            expect(document.querySelector('.code-output img')).toBeNull();
+            expect(document.querySelector('.code-output b')).toBeNull();
+            expect([...document.querySelectorAll('.ttnn-line')].map(getLineCode)).toEqual(markupFile.split('\n'));
+        },
+    );
 
     describe('with its stylesheet', () => {
         const stylesheet = document.createElement('style');
@@ -231,11 +244,15 @@ describe('SourceFileOverlay', () => {
 
         afterAll(() => stylesheet.remove());
 
-        it('wraps a long line at the edge, breaking a token too long for a line', () => {
-            renderOverlay();
+        it('sets the source viewer to keep whitespace, wrap at the edge and break long tokens', () => {
+            renderOverlay({ fileContents: INDENTED_FILE, lineNumber: 3 });
             const code = document.querySelector('.code-output')!;
 
-            expect(getComputedStyle(code).getPropertyValue('text-wrap')).toBe('wrap');
+            // `pre-line` would collapse the indentation, and `pre` would keep a long line on one row.
+            [...document.querySelectorAll('.ttnn-line')].forEach((line) =>
+                expect(getInheritedStyle(line, 'white-space')).toMatch(/^(pre-wrap|break-spaces)$/),
+            );
+            expect(['', 'wrap']).toContain(getInheritedStyle(code, 'text-wrap'));
             expect(getInheritedStyle(code, 'overflow-wrap')).toBe('anywhere');
         });
 
@@ -250,6 +267,7 @@ describe('SourceFileOverlay', () => {
             const code = document.querySelector('.code-output')!;
 
             expect(getComputedStyle(code).getPropertyValue('text-wrap')).toBe('balance');
+            expect(getInheritedStyle(code, 'white-space')).toBe('pre');
             expect(getInheritedStyle(code, 'overflow-wrap')).toBe('');
         });
     });
