@@ -56,6 +56,12 @@ describe('getOperationLink', () => {
         expect(link).toHaveTextContent('(matmul.cpp)');
     });
 
+    it('leaves out the brackets when the operation has no file identifier', () => {
+        renderLink(getOperationLink(12, [makeOperation({ id: 12, name: 'reshape', operationFileIdentifier: '' })]));
+
+        expect(screen.getByRole('link')).toHaveTextContent(/^12 reshape$/);
+    });
+
     it('returns null when the operation id is not found', () => {
         expect(getOperationLink(999, operations)).toBeNull();
     });
