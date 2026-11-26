@@ -258,7 +258,8 @@ class SourceFile(SerializeableDataclass):
 @dataclasses.dataclass
 class StackTrace(SerializeableDataclass):
     operation_id: int
-    stack_trace: str
+    # The default is also what a report without the column reads.
+    stack_trace: Optional[str] = None
     source_file_id: Optional[int] = None
     rank: int = 0
 
@@ -269,8 +270,10 @@ class ErrorRecord(SerializeableDataclass):
     operation_name: str
     error_type: str
     error_message: str
-    stack_trace: str
-    timestamp: str
+    # The default is also what a report without the column reads.
+    stack_trace: Optional[str] = None
+    # Defaulted only because `stack_trace` is; a report without the column reads `''`.
+    timestamp: str = ""
     rank: int = 0
 
     def to_nested_dict(self) -> dict:

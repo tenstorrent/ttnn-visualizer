@@ -169,7 +169,7 @@ export const defaultOperation: OperationDetailsData = {
     buffers: [],
     buffersSummary: [],
     l1_sizes: [],
-    stack_trace: '',
+    stack_trace: null,
     stack_trace_source_file_id: null,
     device_operations: [],
     operationFileIdentifier: '',

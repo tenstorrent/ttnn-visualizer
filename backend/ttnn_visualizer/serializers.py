@@ -348,7 +348,7 @@ def serialize_operation(
         "id": id,
         "l1_sizes": l1_sizes,
         "device_operations": device_operations_data,
-        "stack_trace": stack_trace.stack_trace if stack_trace else "",
+        "stack_trace": stack_trace.stack_trace if stack_trace else None,
         "stack_trace_source_file_id": (
             stack_trace.source_file_id
             if stack_trace and stack_trace.source_file_id is not None
