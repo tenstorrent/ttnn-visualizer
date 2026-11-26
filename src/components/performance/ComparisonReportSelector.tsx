@@ -32,7 +32,7 @@ const ComparisonReportSelector = ({
 }: ComparisonReportSelectorProps) => {
     const [comparisonReportList, setComparisonReportList] = useAtom(comparisonPerformanceReportListAtom);
     const activeReportId = useAtomValue(activePerformanceReportFolderNameAtom);
-    const selectedReportName = comparisonReportList?.[reportIndex] || null;
+    const selectedReportId = comparisonReportList?.[reportIndex] || null;
     // The reports chosen in the other selectors, so one report cannot fill two slots.
     const otherSelectedReports = (comparisonReportList || []).filter((_reportId, index) => index !== reportIndex);
 
@@ -54,8 +54,8 @@ const ComparisonReportSelector = ({
                     })}
                     // The picker marks the row whose `path` equals `value`. A listing row's `path`
                     // is its folder name, which is the id stored here.
-                    value={selectedReportName}
-                    valueLabel={selectedReportName ? formatSyncedReportName(selectedReportName) : null}
+                    value={selectedReportId}
+                    valueLabel={selectedReportId ? formatSyncedReportName(selectedReportId) : null}
                     handleSelect={(folder: ReportFolder) => {
                         const reportId = getFolderReportId(folder);
 
@@ -87,8 +87,8 @@ const ComparisonReportSelector = ({
 
                         setComparisonReportList(updatedReports?.length === 0 ? null : updatedReports);
                     }}
-                    disabled={!selectedReportName}
-                    aria-label={selectedReportName ? `Remove report` : 'No report selected'}
+                    disabled={!selectedReportId}
+                    aria-label={selectedReportId ? `Remove report` : 'No report selected'}
                 />
             </div>
         </FormGroup>

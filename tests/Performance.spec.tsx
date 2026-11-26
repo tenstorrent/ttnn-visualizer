@@ -481,13 +481,21 @@ describe('Performance route', () => {
     });
 
     it.each([
-        { source: 'a local pick', report: { path: 'report-b', reportName: 'report-b' } },
-        // A fresh remote pick holds the remote path; its folder id is the synced name.
+        {
+            source: 'a local pick',
+            report: { path: 'report-b', reportName: 'report-b' },
+            comparisons: ['report-b', 'report-c'],
+            remaining: ['report-c'],
+        },
+        // A fresh remote pick holds the remote path; its folder id is the synced name. On a
+        // multihost rank the display name has no rank, so it names a different report.
         {
             source: 'a fresh remote pick',
-            report: { path: '/remote/reports/report-b', reportName: 'report-b', syncedName: 'report-b' },
+            report: { path: '/remote/reports/run', reportName: 'run', syncedName: 'run_rank1' },
+            comparisons: ['run_rank1', 'run'],
+            remaining: ['run'],
         },
-    ])('drops the active report from the comparisons when it is $source', ({ report }) => {
+    ])('drops the active report from the comparisons when it is $source', ({ report, comparisons, remaining }) => {
         function ComparisonListProbe() {
             const [comparisonReports] = useAtom(comparisonPerformanceReportListAtom);
 
@@ -498,7 +506,7 @@ describe('Performance route', () => {
             <TestProviders
                 initialAtomValues={[
                     [activePerformanceReportAtom, report],
-                    [comparisonPerformanceReportListAtom, ['report-b', 'report-c']],
+                    [comparisonPerformanceReportListAtom, comparisons],
                 ]}
             >
                 <Performance />
@@ -506,7 +514,7 @@ describe('Performance route', () => {
             </TestProviders>,
         );
 
-        expect(screen.getByTestId('comparison-list-probe')).toHaveTextContent('["report-c"]');
+        expect(screen.getByTestId('comparison-list-probe')).toHaveTextContent(JSON.stringify(remaining));
     });
 
     it('shows no signpost notice when every report was narrowed', () => {

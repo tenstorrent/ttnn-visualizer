@@ -87,11 +87,16 @@ describe('ComparisonReportSelector', () => {
     });
 
     it('does not offer the active report after a fresh remote pick, which holds the remote path', () => {
+        // A multihost rank: the folder id is the synced name, and the display name has no rank.
         renderSelector({
-            activeReport: { path: '/remote/reports/report-a', reportName: 'report-a', syncedName: 'report-a' },
+            activeReport: { path: '/remote/reports/run', reportName: 'run', syncedName: 'run_rank1' },
+            folderList: [
+                { path: 'run_rank1', reportName: 'run_rank1' },
+                { path: 'run', reportName: 'run' },
+            ],
         });
 
-        expect(offeredReports()).toEqual(['report-b', 'report-c']);
+        expect(offeredReports()).toEqual(['run']);
     });
 
     it('does not offer a report already chosen in another selector', () => {
