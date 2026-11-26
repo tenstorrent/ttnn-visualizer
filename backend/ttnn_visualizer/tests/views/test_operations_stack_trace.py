@@ -69,6 +69,15 @@ def test_an_operation_without_a_trace_reads_null_from_both_endpoints(
     assert detail["stack_trace"] is None
 
 
+def test_an_operation_trace_stored_empty_is_sent_as_it_is(client, make_report):
+    instance_id = make_report(_OPERATION + "INSERT INTO stack_traces VALUES (1, '');")
+
+    listed, detail = _list_and_detail(client, instance_id)
+
+    assert listed["stack_trace"] == ""
+    assert detail["stack_trace"] == ""
+
+
 @pytest.mark.parametrize(
     "schema_sql, error_sql",
     [
