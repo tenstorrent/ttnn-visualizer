@@ -73,8 +73,18 @@ $container-border-width: 1px;
         padding: 6px 0;
     }
 
-    .code-output {
+    // Only the stack trace balances its lines: in the source viewer, balance breaks a line midway,
+    // even inside a string.
+    .formatted-code .code-output {
         text-wrap: balance;
+    }
+
+    // Long lines in the source viewer wrap at the edge: scrolling sideways would take the line
+    // numbers along.
+    .source-file-code {
+        margin: 0;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
     }
 
     // A frame's `"<file>", line <n>`, a button so it is reachable with Tab and opens with
