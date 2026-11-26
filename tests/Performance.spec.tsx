@@ -45,6 +45,7 @@ import {
     SIGNPOST_RANGE_IGNORED_TITLE,
 } from '../src/definitions/Performance';
 import { TestProviders } from './helpers/TestProviders';
+import { COMPARISON_LIST_PROBE_TEST_ID, ComparisonListProbe } from './helpers/ComparisonListProbe';
 import { makeAllocationFailure } from './helpers/allocationFailure';
 import { useAllocationFailures } from '../src/hooks/useAllocationFailures';
 import { AllocationFailure } from '../src/model/AllocationFailure';
@@ -478,6 +479,74 @@ describe('Performance route', () => {
         expect(notice).toHaveTextContent(SIGNPOST_RANGE_IGNORED_TITLE);
         expect(notice).toHaveTextContent(`report-b ${SIGNPOST_RANGE_IGNORED_REASON}`);
         expect(notice).not.toHaveTextContent('report-c');
+    });
+
+    it.each([
+        {
+            source: 'a local pick',
+            report: { path: 'report-b', reportName: 'report-b' },
+            comparisons: ['report-b', 'report-c'],
+            remaining: ['report-c'],
+        },
+        // A fresh remote pick holds the remote path; its folder id is the synced name. On a
+        // multihost rank the display name has no rank, so it names a different report.
+        {
+            source: 'a fresh remote pick',
+            report: { path: '/remote/reports/run', reportName: 'run', syncedName: 'run_rank1' },
+            comparisons: ['run_rank1', 'run'],
+            remaining: ['run'],
+        },
+    ])('drops the active report from the comparisons when it is $source', ({ report, comparisons, remaining }) => {
+        render(
+            <TestProviders
+                initialAtomValues={[
+                    [activePerformanceReportAtom, report],
+                    [comparisonPerformanceReportListAtom, comparisons],
+                ]}
+            >
+                <Performance />
+                <ComparisonListProbe />
+            </TestProviders>,
+        );
+
+        expect(screen.getByTestId(COMPARISON_LIST_PROBE_TEST_ID)).toHaveTextContent(JSON.stringify(remaining));
+    });
+
+    it('drops a comparison when the user switches the active report to it', () => {
+        const remotePick = { path: '/remote/reports/run', reportName: 'run', syncedName: 'run_rank1' };
+
+        function SwitchToRemotePick() {
+            const setReport = useSetAtom(activePerformanceReportAtom);
+
+            return (
+                <button
+                    type='button'
+                    onClick={() => setReport(remotePick)}
+                >
+                    Switch to the remote pick
+                </button>
+            );
+        }
+
+        render(
+            <TestProviders
+                initialAtomValues={[
+                    [activePerformanceReportAtom, REPORT_A],
+                    [comparisonPerformanceReportListAtom, ['run_rank1', 'run']],
+                ]}
+            >
+                <Performance />
+                <SwitchToRemotePick />
+                <ComparisonListProbe />
+            </TestProviders>,
+        );
+
+        const probe = screen.getByTestId(COMPARISON_LIST_PROBE_TEST_ID);
+        expect(probe).toHaveTextContent('["run_rank1","run"]');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Switch to the remote pick' }));
+
+        expect(probe).toHaveTextContent('["run"]');
     });
 
     it('shows no signpost notice when every report was narrowed', () => {
