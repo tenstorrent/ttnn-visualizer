@@ -1605,6 +1605,22 @@ class TestOperationProvenance:
         assert result["call_site"] is None
         assert "recorded no stack trace" in result["caveat"]
 
+    def test_a_stack_traces_table_without_the_trace_column_reads_as_no_call_site(
+        self, loaded
+    ):
+        """The missing column reads as a NULL trace. #2429"""
+        sql = _REPORT_SQL + """
+        CREATE TABLE operation_arguments (operation_id int, name text, value text);
+        CREATE TABLE stack_traces (operation_id int);
+        INSERT INTO stack_traces VALUES (1);
+        """
+        registry, handle = loaded(sql, name="prov-no-column")
+
+        result = agent_operations.operation_provenance(registry, handle, 1)
+
+        assert (result["call_site"], result["chain_length"]) == (None, 0)
+        assert "recorded no stack trace" in result["caveat"]
+
     def test_a_trace_with_no_readable_frame_says_so_differently(self, loaded):
         """Two different absences. A missing row is a capture that records no call
         sites; a row that yields no frame is a trace this parser cannot read, and

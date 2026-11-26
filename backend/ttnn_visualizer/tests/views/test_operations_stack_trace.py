@@ -33,6 +33,14 @@ CREATE TABLE errors (
 """
 
 
+def _error_row(*trailing_values):
+    """Operation 1's error, ending with the trace and timestamp values its table has."""
+    values = ", ".join(
+        ["1", "'ttnn.add'", "'RuntimeError'", "'boom'", *trailing_values]
+    )
+    return f"INSERT INTO errors VALUES ({values});"
+
+
 def _get(client, url, instance_id):
     response = client.get(url, query_string={"instanceId": instance_id})
     assert response.status_code == HTTPStatus.OK
@@ -83,12 +91,12 @@ def test_an_operation_trace_stored_empty_is_sent_as_it_is(client, make_report):
     [
         pytest.param(
             SCHEMA_V2,
-            "INSERT INTO errors VALUES (1, 'ttnn.add', 'RuntimeError', 'boom', NULL, 't');",
+            _error_row("NULL", "'t'"),
             id="null-value",
         ),
         pytest.param(
             SCHEMA_V2 + _ERRORS_WITHOUT.format(kept="timestamp text"),
-            "INSERT INTO errors VALUES (1, 'ttnn.add', 'RuntimeError', 'boom', 't');",
+            _error_row("'t'"),
             id="no-column",
         ),
     ],
@@ -109,10 +117,7 @@ def test_an_error_without_a_trace_reads_null_wherever_it_is_served(
 
 def test_an_error_trace_stored_empty_is_sent_as_it_is(client, make_report):
     """tt-metal writes ``''`` for every error it has no trace for."""
-    instance_id = make_report(
-        _OPERATION
-        + "INSERT INTO errors VALUES (1, 'ttnn.add', 'RuntimeError', 'boom', '', 't');"
-    )
+    instance_id = make_report(_OPERATION + _error_row("''", "'t'"))
 
     listed, detail = _list_and_detail(client, instance_id)
     (error,) = _get(client, "/api/errors", instance_id)
@@ -126,8 +131,7 @@ def test_an_errors_table_without_a_timestamp_still_reads_an_empty_one(
     client, make_report
 ):
     instance_id = make_report(
-        _OPERATION
-        + "INSERT INTO errors VALUES (1, 'ttnn.add', 'RuntimeError', 'boom', 'trace');",
+        _OPERATION + _error_row("'trace'"),
         schema_sql=SCHEMA_V2 + _ERRORS_WITHOUT.format(kept="stack_trace text"),
     )
 
