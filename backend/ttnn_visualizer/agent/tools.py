@@ -55,6 +55,7 @@ from ttnn_visualizer.agent.handles import (
     read_once,
     without_performance_csv,
 )
+from ttnn_visualizer.agent.js_values import js_is_finite, js_parse_float
 from ttnn_visualizer.cells import finite_number, whole_number
 from ttnn_visualizer.csv_queries import (
     L1_ZONE_MARKER_CAPACITY,
@@ -159,11 +160,14 @@ ADDITIVE_METRICS = frozenset({"device_time", "op_to_op_gap", "total_percent"})
 def countable_device_time(row: Dict) -> Optional[float]:
     """A row's device time, or None where it is blank, non-finite or not positive.
 
-    `isCountableDeviceTime` in `src/functions/durationBuckets.ts`, which the app
-    counts a share's device time with; mirror a change there.
+    The cell read with `parseFloat`, as `enrichRowData` in
+    `src/functions/enrichPerfRowData.ts` reads it, then `isCountableDeviceTime` in
+    `src/functions/durationBuckets.ts`, which the app counts a share's device time
+    with; mirror a change to either. So `"1abc"` counts as 1, as it does in the app,
+    where Python's `float` would refuse it. #2428
     """
-    value = finite_number(row.get("device_time"))
-    return value if value is not None and value > 0 else None
+    value = js_parse_float(row.get("device_time"))
+    return value if js_is_finite(value) and value > 0 else None
 
 
 def _rounded(value: Optional[float]) -> Optional[float]:
@@ -1475,16 +1479,7 @@ def _spread_rows(
 ) -> List[Dict]:
     """The one row asked for, or the costliest device ops by device time."""
     if perf_id is None:
-        candidates = [
-            row
-            for row in rows
-            if _spannable(row) and finite_number(row.get("device_time")) is not None
-        ]
-        return sorted(
-            candidates,
-            key=lambda row: finite_number(row.get("device_time")) or 0.0,
-            reverse=True,
-        )[: bounded(limit, MAX_DETAILED_LIMIT)]
+        return costliest_rows(rows, _spannable)[: bounded(limit, MAX_DETAILED_LIMIT)]
 
     (row,) = perf_rows(rows, [perf_id])
     if not _spannable(row):

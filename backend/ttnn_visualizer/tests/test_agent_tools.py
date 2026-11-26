@@ -4348,11 +4348,29 @@ class TestProjectRow:
 
 
 class TestCountableDeviceTime:
-    """Restates `isCountableDeviceTime`'s cases (`tests/durationBuckets.spec.ts`):
-    a share counted any other way would disagree with the app's."""
+    """Restates `isCountableDeviceTime`'s cases (`tests/durationBuckets.spec.ts`), on
+    the cell as `enrichRowData` reads it with `parseFloat`: a share counted any other
+    way would disagree with the app's."""
 
     @pytest.mark.parametrize(
-        "device_time", ["", None, "0", 0, "-5", "nan", "inf", "-inf", "1e400", True]
+        "device_time",
+        [
+            "",
+            None,
+            "0",
+            0,
+            "-5",
+            "nan",
+            "inf",
+            "-inf",
+            "1e400",
+            "Infinity",
+            True,
+            "abc",
+            "0x10",
+            # A full-width one, which Python's `float` reads as 1 and `parseFloat` refuses.
+            "\uff11",
+        ],
     )
     def test_a_blank_non_finite_or_non_positive_time_counts_for_nothing(
         self, device_time
@@ -4363,6 +4381,15 @@ class TestCountableDeviceTime:
         ("device_time", "expected"), [("0.5", 0.5), ("12345", 12345.0), (3, 3.0)]
     )
     def test_a_positive_finite_time_counts(self, device_time, expected):
+        assert tools.countable_device_time({"device_time": device_time}) == expected
+
+    @pytest.mark.parametrize(
+        ("device_time", "expected"),
+        [("1abc", 1.0), ("1_0", 1.0), ("1e", 1.0), (" 2", 2.0), ("2.5ms", 2.5)],
+    )
+    def test_a_cell_counts_as_parse_float_reads_it(self, device_time, expected):
+        """Its leading decimal, where Python's `float` refuses the cell or reads
+        `1_0` as 10. #2428"""
         assert tools.countable_device_time({"device_time": device_time}) == expected
 
     def test_a_row_without_the_column_counts_for_nothing(self):

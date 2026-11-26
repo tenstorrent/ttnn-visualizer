@@ -42,6 +42,9 @@ _PATHS = [
 _OP_CODES = ("A", "B", "C", "D", "E", "F")
 _DEVICE_TIMES = ("", "0", "-1", "0.5", "1", "2.25", "10")
 _DEVICES = ("0", "1")
+# Device time cells `parseFloat` and Python's `float` read differently; the last is a
+# full-width one.
+_PARSE_FLOAT_ONLY_CELLS = ("1abc", "1_0", "\uff11")
 
 
 # The cells either side reads to group a row; a report row has more, which neither reads.
@@ -287,6 +290,24 @@ def _curated_cases() -> List[Dict]:
         )
     )
 
+    # Cells `parseFloat` reads by their leading decimal, where Python's `float` refuses
+    # `1abc` and `1e`, reads `1_0` as 10 and reads a full-width one as 1. Read either way,
+    # the two lines' sums and their order differ. #2428
+    rows = _rows(
+        {"device_time": "1abc"},
+        {"device_time": "1_0", "raw_op_code": "B"},
+        {"device_time": "1e"},
+        {"device_time": "\uff11"},
+        {"device_time": "2"},
+    )
+    cases.append(
+        _case(
+            rows,
+            _linked(rows, 1, 1, 2, 2, 2),
+            {1: _trace("/m/attn/bloc.py", 4), 2: _trace("/m/mlps/head.py", 9)},
+        )
+    )
+
     # No countable device time at all: no shares, every group still listed.
     rows = _rows({"device_time": ""}, {"device_time": "0"})
     cases.append(_case(rows, _linked(rows, 1, None), {1: _trace("/m/attn/bloc.py", 4)}))
@@ -353,6 +374,14 @@ def test_the_golden_covers_two_devices_and_signposts():
 
     assert {row["device"] for row in rows} == set(_DEVICES)
     assert any(tools.is_signpost_row(row) for row in rows)
+
+
+def test_the_golden_covers_cells_parse_float_reads_differently():
+    """`countable_device_time` reads a cell as the app's `parseFloat` does, which these
+    hold; a golden of plain decimals would pass with Python's `float`. #2428"""
+    rows = [row for case in _generate_golden()["cases"] for row in case["rows"]]
+
+    assert set(_PARSE_FLOAT_ONLY_CELLS) <= {row["device_time"] for row in rows}
 
 
 def test_the_ts_spec_reads_this_golden():
