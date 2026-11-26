@@ -6,12 +6,14 @@ import { describe, expect, it } from 'vitest';
 import { OpType } from '../src/definitions/Performance';
 import { getPathBasename } from '../src/functions/formatting';
 import {
+    SOURCE_LINE_NO_FILE_LABEL,
     SOURCE_LINE_NO_TRACE_LABEL,
     SOURCE_LINE_UNLINKED_LABEL,
     SourceLineGroupKind,
     SourceLineOperation,
     TOP_OP_CODE_COUNT,
     countSourceLines,
+    getSourceLineGroupLabel,
     getSourceLineGroups,
     isSourceLineGroupMatch,
 } from '../src/functions/perfSourceLines';
@@ -253,6 +255,34 @@ describe('getSourceLineGroups', () => {
     });
 });
 
+describe('getSourceLineGroupLabel', () => {
+    const groupFor = (file: string, line: number) =>
+        getSourceLineGroups([perfRow({ op: 1 })], operations([[1, trace(file, line)]]), MERGED)[0];
+
+    it('labels a line by its basename and line number', () => {
+        expect(getSourceLineGroupLabel(groupFor('/m/model.py', 42))).toBe('model.py:42');
+    });
+
+    it.each([
+        ['an empty path', ''],
+        ['a slash-terminated path', '/m/'],
+    ])('labels a call site with %s as having no file name', (_case, file) => {
+        const group = groupFor(file, 3);
+
+        expect(group).toMatchObject({ kind: SourceLineGroupKind.LINE, filePath: file, basename: '', lineNumber: 3 });
+        expect(getSourceLineGroupLabel(group)).toBe(`${SOURCE_LINE_NO_FILE_LABEL}:3`);
+    });
+
+    it('labels the groups without a call site', () => {
+        expect(getSourceLineGroupLabel(getSourceLineGroups([perfRow({})], new Map(), MERGED)[0])).toBe(
+            SOURCE_LINE_UNLINKED_LABEL,
+        );
+        expect(getSourceLineGroupLabel(getSourceLineGroups([perfRow({ op: 1 })], new Map(), MERGED)[0])).toBe(
+            SOURCE_LINE_NO_TRACE_LABEL,
+        );
+    });
+});
+
 describe('isSourceLineGroupMatch', () => {
     const [lineGroup] = getSourceLineGroups(
         [perfRow({ op: 1 })],
@@ -281,6 +311,14 @@ describe('isSourceLineGroupMatch', () => {
         expect(isSourceLineGroupMatch(unlinkedGroup, SOURCE_LINE_UNLINKED_LABEL.slice(0, 9))).toBe(true);
         expect(isSourceLineGroupMatch(noTraceGroup, SOURCE_LINE_NO_TRACE_LABEL)).toBe(true);
         expect(isSourceLineGroupMatch(noTraceGroup, 'resnet')).toBe(false);
+    });
+
+    it('matches a call site with no file name on its label', () => {
+        const [noFileGroup] = getSourceLineGroups([perfRow({ op: 1 })], operations([[1, trace('', 3)]]), MERGED);
+
+        expect(isSourceLineGroupMatch(noFileGroup, 'no file')).toBe(true);
+        expect(isSourceLineGroupMatch(noFileGroup, ':3')).toBe(true);
+        expect(isSourceLineGroupMatch(noFileGroup, ':4')).toBe(false);
     });
 });
 
