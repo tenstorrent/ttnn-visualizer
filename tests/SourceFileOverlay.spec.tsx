@@ -212,6 +212,15 @@ describe('SourceFileOverlay', () => {
         lines.forEach((line) => expect(getInheritedStyle(line, 'white-space')).toBe('pre'));
     });
 
+    it('shows markup in the file as text, without injecting it or splitting a line', () => {
+        const markupFile = ['x = "<img src=x onerror=alert(1)>"', '<div class="ttnn-line"><b>boom</b>'].join('\n');
+        renderOverlay({ fileContents: markupFile, lineNumber: 1 });
+
+        expect(document.querySelector('.code-output img')).toBeNull();
+        expect(document.querySelector('.code-output b')).toBeNull();
+        expect([...document.querySelectorAll('.ttnn-line')].map(getLineCode)).toEqual(markupFile.split('\n'));
+    });
+
     describe('with its stylesheet', () => {
         const stylesheet = document.createElement('style');
 
