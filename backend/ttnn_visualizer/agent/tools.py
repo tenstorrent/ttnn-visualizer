@@ -157,17 +157,31 @@ DEFAULT_METRIC = "device_time"
 ADDITIVE_METRICS = frozenset({"device_time", "op_to_op_gap", "total_percent"})
 
 
+def metric_number(row: Dict, metric: str = DEFAULT_METRIC) -> Optional[float]:
+    """A row's metric, unrounded, or None where it is blank, unreadable or not finite.
+
+    Device time is read with `parseFloat`, as `enrichRowData` in
+    `src/functions/enrichPerfRowData.ts` reads it, so a row ranks and reports the
+    number `countable_device_time` counts in a share: `"1abc"` is 1 and `"1_0"` is 1,
+    where Python's `float` refuses the one and reads 10 for the other; mirror a change
+    there. The other metrics are still read with Python's `float`. #2428
+    """
+    cell = row.get(SORTABLE_METRICS[metric])
+    if metric != "device_time":
+        return finite_number(cell)
+    value = js_parse_float(cell)
+    return value if js_is_finite(value) else None
+
+
 def countable_device_time(row: Dict) -> Optional[float]:
     """A row's device time, or None where it is blank, non-finite or not positive.
 
-    The cell read with `parseFloat`, as `enrichRowData` in
-    `src/functions/enrichPerfRowData.ts` reads it, then `isCountableDeviceTime` in
+    `metric_number`'s read of the cell, then `isCountableDeviceTime` in
     `src/functions/durationBuckets.ts`, which the app counts a share's device time
-    with; mirror a change to either. So `"1abc"` counts as 1, as it does in the app,
-    where Python's `float` would refuse it. #2428
+    with; mirror a change there.
     """
-    value = js_parse_float(row.get("device_time"))
-    return value if js_is_finite(value) and value > 0 else None
+    value = metric_number(row, "device_time")
+    return value if value is not None and value > 0 else None
 
 
 def _rounded(value: Optional[float]) -> Optional[float]:
@@ -724,7 +738,7 @@ def project_row(row: Dict, metric: str = DEFAULT_METRIC) -> Dict[str, object]:
 
 def metric_value(row: Dict, metric: str = DEFAULT_METRIC) -> Optional[float]:
     """A row's metric as `project_row` gives it."""
-    return _rounded(finite_number(row.get(SORTABLE_METRICS[metric])))
+    return _rounded(metric_number(row, metric))
 
 
 def raw_op_code(row: Dict) -> str:
@@ -822,15 +836,13 @@ def top_ops(
     signposts = SignpostRange.of(start_signpost, end_signpost)
     report = canonical_report(registry, handle, signposts)
     rows = report.get("report", [])
-    field = SORTABLE_METRICS[by]
+    valued = [
+        (value, row) for row in rows if (value := metric_number(row, by)) is not None
+    ]
+    valued.sort(key=lambda entry: entry[0], reverse=True)
+    ranked = [row for _, row in valued[:count]]
 
-    ranked = sorted(
-        (row for row in rows if finite_number(row.get(field)) is not None),
-        key=lambda row: finite_number(row.get(field)) or 0.0,
-        reverse=True,
-    )[:count]
-
-    total: float = sum(finite_number(row.get(field)) or 0.0 for row in rows)
+    total: float = sum(value for value, _ in valued)
     empty = empty_detail_fields(registry, handle, groups)
     flag_inputs = read_flag_inputs(registry, handle, groups)
     ignored = bool(report.get("signpost_range_ignored"))
@@ -2475,6 +2487,7 @@ __all__ = [
     "diff_reports",
     "empty_detail_fields",
     "is_signpost_row",
+    "metric_number",
     "metric_value",
     "op_breakdown",
     "partitioned_caveat",

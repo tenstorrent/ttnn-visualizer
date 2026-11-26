@@ -1470,6 +1470,28 @@ class TestTopOps:
         assert result["device_time_total"] == 5.0
         json.dumps(result, allow_nan=False)
 
+    def test_device_time_ranks_and_totals_as_parse_float_reads_it(self, tmp_path):
+        """As `countable_device_time` counts it, so a row's rank, its reported time and
+        its share agree: `1_0` is 1, not 10, and `1abc` is 1, not left out. #2428"""
+        registry = self._registry(tmp_path)
+        rows = [
+            _row(id="a", device_time="1_0"),
+            _row(id="b", device_time="3"),
+            _row(id="c", device_time="1abc"),
+            _row(id="d", device_time="abc"),
+        ]
+        with patch.object(
+            tools, "_generate_canonical_report", return_value=_perf_report(rows)
+        ):
+            result = tools.top_ops(registry, "report-1")
+
+        assert [(op["id"], op["device_time"]) for op in result["ops"]] == [
+            ("b", 3.0),
+            ("a", 1.0),
+            ("c", 1.0),
+        ]
+        assert result["device_time_total"] == 5.0
+
     def test_it_ranks_by_the_requested_metric(self, tmp_path):
         registry = self._registry(tmp_path)
         rows = [
@@ -4340,6 +4362,15 @@ class TestProjectRow:
         assert projected["device_time"] is None
         assert projected["cores"] is None
 
+    @pytest.mark.parametrize(
+        ("cell", "expected"),
+        [("1abc", 1.0), ("1_0", 1.0), ("0", 0.0), ("-2", -2.0), ("\uff11", None)],
+    )
+    def test_device_time_is_reported_as_parse_float_reads_it(self, cell, expected):
+        """The number a share counts, so a row ranked by it never reports another; a
+        time that is not positive is still reported, though no share counts it. #2428"""
+        assert tools.project_row(_row(device_time=cell))["device_time"] == expected
+
     def test_a_row_without_the_columns_reports_them_as_null(self):
         projected = tools.project_row(_row())
 
@@ -4367,12 +4398,13 @@ class TestCountableDeviceTime:
             "Infinity",
             True,
             "abc",
+            # `parseFloat` stops at the x, so this is 0.
             "0x10",
             # A full-width one, which Python's `float` reads as 1 and `parseFloat` refuses.
             "\uff11",
         ],
     )
-    def test_a_blank_non_finite_or_non_positive_time_counts_for_nothing(
+    def test_a_blank_unreadable_non_finite_or_non_positive_time_counts_for_nothing(
         self, device_time
     ):
         assert tools.countable_device_time({"device_time": device_time}) is None
@@ -4385,7 +4417,15 @@ class TestCountableDeviceTime:
 
     @pytest.mark.parametrize(
         ("device_time", "expected"),
-        [("1abc", 1.0), ("1_0", 1.0), ("1e", 1.0), (" 2", 2.0), ("2.5ms", 2.5)],
+        [
+            ("1abc", 1.0),
+            ("1_0", 1.0),
+            ("1e", 1.0),
+            (" 2", 2.0),
+            ("2.5ms", 2.5),
+            ("+2", 2.0),
+            (".5x", 0.5),
+        ],
     )
     def test_a_cell_counts_as_parse_float_reads_it(self, device_time, expected):
         """Its leading decimal, where Python's `float` refuses the cell or reads

@@ -42,9 +42,9 @@ _PATHS = [
 _OP_CODES = ("A", "B", "C", "D", "E", "F")
 _DEVICE_TIMES = ("", "0", "-1", "0.5", "1", "2.25", "10")
 _DEVICES = ("0", "1")
-# Device time cells `parseFloat` and Python's `float` read differently; the last is a
-# full-width one.
-_PARSE_FLOAT_ONLY_CELLS = ("1abc", "1_0", "\uff11")
+# Device time cells `parseFloat` and Python's `float` read differently: `float` refuses
+# `1abc` and `1e`, reads `1_0` as 10, and reads the full-width one as 1. #2428
+_PARSE_FLOAT_ONLY_CELLS = ("1abc", "1_0", "1e", "\uff11")
 
 
 # The cells either side reads to group a row; a report row has more, which neither reads.
@@ -290,14 +290,13 @@ def _curated_cases() -> List[Dict]:
         )
     )
 
-    # Cells `parseFloat` reads by their leading decimal, where Python's `float` refuses
-    # `1abc` and `1e`, reads `1_0` as 10 and reads a full-width one as 1. Read either way,
-    # the two lines' sums and their order differ. #2428
+    # The cells `parseFloat` and `float` read differently, then a plain one: read either
+    # way, the two lines' sums and their order differ.
     rows = _rows(
-        {"device_time": "1abc"},
-        {"device_time": "1_0", "raw_op_code": "B"},
-        {"device_time": "1e"},
-        {"device_time": "\uff11"},
+        *[
+            {"device_time": cell, "raw_op_code": op_code}
+            for cell, op_code in zip(_PARSE_FLOAT_ONLY_CELLS, "ABAA")
+        ],
         {"device_time": "2"},
     )
     cases.append(

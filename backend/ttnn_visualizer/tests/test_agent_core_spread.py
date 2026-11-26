@@ -864,19 +864,7 @@ class TestRanking:
         assert result["returned"] == 1
         assert result["ops"][0]["id"] == "1"
 
-    def test_a_row_without_device_time_is_not_ranked_but_can_be_named(self, tmp_path):
-        perf_rows = [
-            _op(perf_id="1", device_time="1"),
-            _op(perf_id="2", call_count=RUN + 1, device_time=""),
-        ]
-
-        ranked = _spread(tmp_path, THREE_CORES, perf_rows)
-        named = _spread(tmp_path, THREE_CORES, perf_rows, perf_id="2")
-
-        assert [op["id"] for op in ranked["ops"]] == ["1"]
-        assert [op["id"] for op in named["ops"]] == ["2"]
-
-    @pytest.mark.parametrize("device_time", ["0", "-1"])
+    @pytest.mark.parametrize("device_time", ["", "0", "-1"])
     def test_a_row_without_positive_device_time_is_not_ranked_but_can_be_named(
         self, tmp_path, device_time
     ):
@@ -893,7 +881,8 @@ class TestRanking:
         assert [op["id"] for op in named["ops"]] == ["2"]
 
     def test_device_time_is_ranked_as_parse_float_reads_it(self, tmp_path):
-        """`5abc` is 5, as the app reads it, so it outranks 3. #2428"""
+        """`5abc` is 5, as the app reads it, so it outranks 3 and reports the 5 it
+        ranked by. #2428"""
         perf_rows = [
             _op(perf_id="1", device_time="3"),
             _op(perf_id="2", call_count=RUN + 1, device_time="5abc"),
@@ -901,7 +890,10 @@ class TestRanking:
 
         result = _spread(tmp_path, THREE_CORES, perf_rows)
 
-        assert [op["id"] for op in result["ops"]] == ["2", "1"]
+        assert [(op["id"], op["device_time"]) for op in result["ops"]] == [
+            ("2", 5.0),
+            ("1", 3.0),
+        ]
 
     def test_without_a_perf_id_it_ranks_device_ops_by_device_time(self, tmp_path):
         perf_rows = [
