@@ -17,7 +17,11 @@ from typing import Callable, List, NamedTuple, NoReturn, Optional
 import yaml
 from flask import current_app
 from ttnn_visualizer.decorators import remote_exception_handler
-from ttnn_visualizer.enums import ConnectionTestStates, SyncMethod
+from ttnn_visualizer.enums import (
+    ConnectionTestStates,
+    RemoteConnectionFailureReason,
+    SyncMethod,
+)
 from ttnn_visualizer.exceptions import (
     AuthenticationException,
     HostKeyVerificationException,
@@ -1119,6 +1123,10 @@ class RemoteReportPathOutcome(NamedTuple):
     report_count: int = 0
     error_message: Optional[str] = None
     error_detail: Optional[str] = None
+    # The failure's class: ``REPORT_PATH_FAILED`` where the search knows the path is the
+    # problem, or a connection reason such as a transport error mid-search. ``None`` for a
+    # failure nobody classified, which the client counts as ``other``.
+    error_reason: Optional[RemoteConnectionFailureReason] = None
 
 
 class RemoteReportSearchResults(NamedTuple):
@@ -1173,6 +1181,7 @@ def _search_report_path(
             root_state=RemoteSearchRootState.UNKNOWN,
             error_message=err.message,
             error_detail=err.detail,
+            error_reason=err.reason,
         )
 
     return RemoteReportPathOutcome(
@@ -1458,6 +1467,7 @@ def find_folders_by_files(
                 message=error_msg,
                 status=ConnectionTestStates.FAILED,
                 detail=stderr.strip() or None,
+                reason=RemoteConnectionFailureReason.REPORT_PATH_FAILED,
             )
         else:
             logger.error(f"Error finding folders: {stderr}")

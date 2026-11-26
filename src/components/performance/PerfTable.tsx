@@ -26,8 +26,9 @@ import { getRepeatCacheOutcome } from '../../functions/enrichPerfRowData';
 import { formatPercentage, formatSize } from '../../functions/math';
 import { formatCell, isHostOp } from '../../functions/perfFunctions';
 import { getEligiblePerfColumns, getFooterColumns, getVisiblePerfColumns } from '../../functions/perfTableColumns';
+import { getHardwareCounterKeys } from '../../functions/hardwareCounters';
 import { useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList } from '../../hooks/useAPI';
-import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
+import useSortTable from '../../hooks/useSortTable';
 import { OperationDescription } from '../../model/APIData';
 import { hiddenPerfTableColumnsAtom, hideHostOpsAtom, mergeDevicesAtom, selectedPerfRowIdAtom } from '../../store/app';
 import PerfBoundAnalysisCoverage from './PerfBoundAnalysisCoverage';
@@ -36,8 +37,11 @@ import PerfDeviceArchitecture from './PerfDeviceArchitecture';
 import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
 import PerfTableFrame from './PerfTableFrame';
 import PerfTableSkeleton from './PerfTableSkeleton';
+import SortableHeaderLabel from './SortableHeaderLabel';
 import PerfTensorDrawer from './PerfTensorDrawer';
 import PerfTableToolbar from './PerfTableToolbar';
+import { recordDrilldownOpened } from '../../functions/surfaceEvents';
+import { DrilldownTarget } from '../../definitions/EventLogEvent';
 
 interface PerformanceTableProps {
     data: TypedPerfTableRow[];
@@ -49,6 +53,7 @@ interface PerformanceTableProps {
     reportFolderName: string | null;
     maxCores: number;
     hasL1PressureData?: boolean;
+    showHardwareCounters?: boolean;
     isLoading?: boolean;
     // Identifies which comparison dataset holds the active profiler report's rows. The
     // tensor-drawer trigger only renders on those rows, since op-id sync from
@@ -57,6 +62,8 @@ interface PerformanceTableProps {
     // and triggers render on the primary rows.
     activeReportComparisonIndex?: number | null;
 }
+
+const NO_HARDWARE_COUNTER_KEYS: ReadonlySet<ColumnKeys> = new Set();
 
 const PerformanceTable = ({
     data,
@@ -67,6 +74,7 @@ const PerformanceTable = ({
     reportFolderName,
     maxCores,
     hasL1PressureData = false,
+    showHardwareCounters = false,
     isLoading = false,
     activeReportComparisonIndex = null,
 }: PerformanceTableProps) => {
@@ -136,6 +144,11 @@ const PerformanceTable = ({
         [data, comparisonData],
     );
 
+    const hardwareCounterKeys = useMemo(
+        () => (showHardwareCounters ? getHardwareCounterKeys(rowsForColumnEligibility) : NO_HARDWARE_COUNTER_KEYS),
+        [showHardwareCounters, rowsForColumnEligibility],
+    );
+
     const eligibleColumns = useMemo(
         () =>
             getEligiblePerfColumns({
@@ -149,8 +162,16 @@ const PerformanceTable = ({
                 hasMultipleAvailableCoreBudgets:
                     new Set(rowsForColumnEligibility.map((row) => row.available_cores).filter((value) => value != null))
                         .size > 1,
+                hardwareCounterKeys,
             }),
-        [opIdsMap.length, hasL1PressureData, hiliteHighDispatch, npeManifest, rowsForColumnEligibility],
+        [
+            opIdsMap.length,
+            hasL1PressureData,
+            hiliteHighDispatch,
+            npeManifest,
+            rowsForColumnEligibility,
+            hardwareCounterKeys,
+        ],
     );
 
     const visibleColumns = useMemo(
@@ -218,7 +239,14 @@ const PerformanceTable = ({
                         size={Size.SMALL}
                         aria-label={`View tensor details for ${row.raw_op_code}`}
                         data-testid={TEST_IDS.PERF_TENSOR_DRAWER_OPEN_BUTTON}
-                        onClick={() => setSelectedPerfRowId(row.id)}
+                        onClick={() => {
+                            // The selected row's drawer is already open, so a re-click opens nothing.
+                            if (row.id !== selectedPerfRowId) {
+                                recordDrilldownOpened(DrilldownTarget.TENSOR_DETAILS);
+                            }
+
+                            setSelectedPerfRowId(row.id);
+                        }}
                     />
                 </span>
             </Tooltip>
@@ -292,51 +320,19 @@ const PerformanceTable = ({
                             aria-label='Tensor details'
                         />
                         {visibleColumns.map((h) => {
-                            const targetSortDirection =
-                                // eslint-disable-next-line no-nested-ternary
-                                sortingColumn === h.key
-                                    ? sortDirection === SortingDirection.ASC
-                                        ? SortingDirection.DESC
-                                        : SortingDirection.ASC
-                                    : sortDirection;
-
                             return (
                                 <th
                                     key={h.key}
                                     className='cell-header'
                                 >
-                                    {h.sortable ? (
-                                        <Button
-                                            onClick={() => changeSorting(h.key)(targetSortDirection)}
-                                            variant={ButtonVariant.MINIMAL}
-                                            size={Size.SMALL}
-                                        >
-                                            <span className='header-label'>{h.name}</span>
-
-                                            {sortingColumn === h.key ? (
-                                                <Icon
-                                                    className={classNames(
-                                                        {
-                                                            'is-active': sortingColumn === h.key,
-                                                        },
-                                                        'sort-icon',
-                                                    )}
-                                                    icon={
-                                                        sortDirection === SortingDirection.ASC
-                                                            ? IconNames.CARET_UP
-                                                            : IconNames.CARET_DOWN
-                                                    }
-                                                />
-                                            ) : (
-                                                <Icon
-                                                    className={classNames('sort-icon')}
-                                                    icon={IconNames.CARET_DOWN}
-                                                />
-                                            )}
-                                        </Button>
-                                    ) : (
-                                        <span className='header-label no-button'>{h.name}</span>
-                                    )}
+                                    <SortableHeaderLabel
+                                        columnKey={h.key}
+                                        label={h.name}
+                                        sortable={h.sortable}
+                                        sortingColumn={sortingColumn}
+                                        sortDirection={sortDirection}
+                                        onSort={changeSorting}
+                                    />
 
                                     {/* TODO: May want this in the near future */}
                                     {/* {h?.filterable && (
@@ -421,7 +417,7 @@ const PerformanceTable = ({
                                                             'align-right': h.key === ColumnKeys.MathFidelity,
                                                         })}
                                                     >
-                                                        {comparisonKeys.includes(h.key) &&
+                                                        {comparisonKeys.has(h.key) &&
                                                             subRow &&
                                                             formatCell(
                                                                 subRow,

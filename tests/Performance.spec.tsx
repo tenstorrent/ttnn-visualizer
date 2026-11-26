@@ -386,6 +386,36 @@ describe('Performance route', () => {
         expect(lastProps?.comparisonMaxCores).toEqual([130]);
     });
 
+    it.each([
+        { holder: 'the primary report alone', primary: true, comparison: false, expected: true },
+        { holder: 'a comparison report alone', primary: false, comparison: true, expected: true },
+        { holder: 'neither report', primary: false, comparison: false, expected: false },
+    ])('reads hardware counters as $expected when $holder has them', ({ primary, comparison, expected }) => {
+        (usePerformanceReport as Mock).mockReturnValue({
+            data: { report: [DRAM_PERF_ROW], stacked_report: [], signposts: [], has_hardware_counters: primary },
+            isLoading: false,
+            error: null,
+        });
+        (usePerformanceComparisonReport as Mock).mockReturnValue({
+            data: [{ report: [{ ...DRAM_PERF_ROW, id: '2' }], stacked_report: [], has_hardware_counters: comparison }],
+        });
+        (usePerformanceRange as Mock).mockReturnValue([1, 2]);
+        (usePerfMetas as Mock).mockReturnValue([null]);
+
+        render(
+            <TestProviders
+                initialAtomValues={[
+                    [activePerformanceReportAtom, REPORT_A],
+                    [selectedPerformanceRangeAtom, [1, 2]],
+                ]}
+            >
+                <Performance />
+            </TestProviders>,
+        );
+
+        expect(perfReportProps.mock.calls.at(-1)?.[0]?.hasHardwareCounters).toBe(expected);
+    });
+
     it('announces each comparison report that could not be loaded, keeping the rest', () => {
         (usePerformanceReport as Mock).mockReturnValue({
             data: { report: [DRAM_PERF_ROW], stacked_report: [], signposts: [] },
@@ -655,6 +685,27 @@ describe('Performance route', () => {
         );
 
         expect(useAllocationFailures).toHaveBeenCalledWith(perfTableOpIdsMap);
+    });
+
+    // Source line judges availability on the whole report's links, not the range's rows.
+    it.each([
+        { opIds: [], expected: false },
+        { opIds: [{ perfId: '9', opId: 7 }], expected: true },
+    ])('passes hasLinkedOperations as $expected from the table lookup', ({ opIds, expected }) => {
+        (usePerformanceReport as Mock).mockReturnValue({
+            data: { report: [DRAM_PERF_ROW], stacked_report: [], signposts: [] },
+            isLoading: false,
+            error: null,
+        });
+        (useOpToPerfIdForPerfTable as Mock).mockReturnValue(opIds);
+
+        render(
+            <TestProviders initialAtomValues={[[activePerformanceReportAtom, REPORT_A]]}>
+                <Performance />
+            </TestProviders>,
+        );
+
+        expect(perfReportProps.mock.calls.at(-1)?.[0].hasLinkedOperations).toBe(expected);
     });
 
     // Both hooks are mocked, so only this ties the retry signal to the failures the route parsed.

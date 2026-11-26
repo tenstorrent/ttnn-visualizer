@@ -14,7 +14,8 @@ $bp-large: 1300px;
 $bp-medium: 1100px;
 
 // Colours
-// Dark button backgrounds, shared by the Blueprint configuration and components drawn to match it
+// Dark button backgrounds and the minimal button hover, shared by the default button overrides in _blueprintjs.scss
+// and components drawn to match
 $dark-button-background-base: $tt-grey-2;
 $tt-dark-minimal-button-background-color-hover: color.adjust($dark-button-background-base, $lightness: 5%);
 
@@ -36,6 +37,10 @@ $z-index-4-popover: 15;
 
 // Component-specific variables
 $active-transfer-width: 380px;
+
+// The inline meter bars, L1 usage and hardware counter utilization, drawn alike.
+$meter-bar-height: 10px;
+$meter-bar-radius: 2px;
 
 // Device-operation memory legend columns. Definite widths, because the cells are
 // `nowrap` and each row is its own grid — a share-based track takes its minimum
@@ -81,8 +86,9 @@ $data-padding-bottom: 20px;
 $perf-report-padding: 1rem;
 $perf-report-background: $tt-black;
 
-// Where React Flow docks its bottom-left panel. Both graph views lay their own
-// bottom-left chrome out from it, so it is owned here rather than copied into each.
+// Where both graph views dock their bottom-left React Flow panel, in place of
+// React Flow's own `left: 0`. Each lays its bottom-left chrome out from it, so it
+// is owned here rather than copied into each.
 $reactflow-panel-origin-left: 12px;
 
 // Width the connection dialogs' results block must stay inside: the Blueprint dialog

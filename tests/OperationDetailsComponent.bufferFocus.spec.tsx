@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import OperationDetailsComponent from '../src/components/operation-details/OperationDetailsComponent';
 import SideNavigation from '../src/components/SideNavigation';
@@ -21,6 +21,18 @@ import {
     buildOperationDetailsData,
     buildTensor,
 } from './helpers/operationDetailsFixtures';
+import { DrilldownTarget, EventLogEvent } from '../src/definitions/EventLogEvent';
+import type { PlotMouseEventCustom } from '../src/model/PlotData';
+
+const { recordEvent, stackTraceProps, plotProps } = vi.hoisted(() => ({
+    recordEvent: vi.fn(),
+    stackTraceProps: [] as Record<string, unknown>[],
+    // The latest props each plot was given: their clicks come from Plotly, which jsdom
+    // cannot drive, so the spec calls the handlers the page passes down.
+    plotProps: {} as Partial<Record<'l1' | 'dram', Record<string, (...args: never[]) => void>>>,
+}));
+
+vi.mock('../src/functions/recordEvent', () => ({ default: recordEvent }));
 
 const ADDRESS = 0x4000;
 const OPERATION_ID = 1;
@@ -59,6 +71,7 @@ vi.mock('../src/hooks/useAPI', () => ({
                 inputs: [inputTensor()],
                 buffers: inputBuffers(),
                 buffersSummary: summariseOperationBuffers(inputBuffers()),
+                stack_trace: 'frame 0\nframe 1',
             }),
             isLoading: false,
             status: 'success',
@@ -82,14 +95,36 @@ vi.mock('../src/functions/createToastNotification', async () => {
 });
 
 // The tensor list stays real: its tensor control is the button that starts the focus.
-vi.mock('../src/components/operation-details/L1Plots', () => ({ default: () => null }));
-vi.mock('../src/components/operation-details/DRAMPlots', () => ({ default: () => null }));
+vi.mock('../src/components/operation-details/L1Plots', () => ({
+    default: (props: Record<string, (...args: never[]) => void>) => {
+        plotProps.l1 = props;
+
+        return null;
+    },
+}));
+vi.mock('../src/components/operation-details/DRAMPlots', () => ({
+    default: (props: Record<string, (...args: never[]) => void>) => {
+        plotProps.dram = props;
+
+        return null;
+    },
+}));
 vi.mock('../src/components/operation-details/MemoryPlotRenderer', () => ({ default: () => null }));
-vi.mock('../src/components/operation-details/StackTrace', () => ({ default: () => null }));
+// Captures its props: the page's trace is the one most stack-trace drill-downs come from.
+vi.mock('../src/components/operation-details/StackTrace', () => ({
+    default: (props: Record<string, unknown>) => {
+        stackTraceProps.push(props);
+
+        return null;
+    },
+}));
 vi.mock('../src/components/operation-details/DeviceOperationsGraphComponent', () => ({ default: () => null }));
 vi.mock('../src/components/operation-details/DeviceOperationsFullRender', () => ({ default: () => null }));
 vi.mock('../src/components/OperationArguments', () => ({ default: () => null }));
 vi.mock('../src/components/OperationDetailsNavigation', () => ({ default: () => null }));
+vi.mock('../src/components/tensor-sharding-visualization/TensorVisualisationComponent', () => ({
+    default: () => null,
+}));
 
 // The rail sits beside the page, as in `Layout`, so a click on it is one the page has to judge.
 const renderPage = (focus: AtomProviderInitialValues = BUFFER_FOCUS) =>
@@ -151,5 +186,76 @@ describe('OperationDetailsComponent and a focused buffer (#2042)', () => {
         pressAndRelease(screen.getByRole('heading', { name: `Tensor ${TENSOR_ID}` }));
 
         expect(getBufferFocusProbe()).toHaveTextContent('focused');
+    });
+});
+
+describe('OperationDetailsComponent tensor drill-down event', () => {
+    it('records opening the allocation per core of an L1 tensor', () => {
+        renderPage([]);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Tensor allocation per core' }));
+
+        expect(recordEvent).toHaveBeenCalledExactlyOnceWith({
+            event: EventLogEvent.DRILLDOWN_OPENED,
+            details: { drilldown_target: DrilldownTarget.TENSOR_DETAILS },
+        });
+    });
+
+    it("marks the operation's stack trace as one whose expansion records a drill-down", () => {
+        stackTraceProps.length = 0;
+        renderPage([]);
+
+        expect(stackTraceProps.at(-1)).toMatchObject({ stackTrace: 'frame 0\nframe 1', recordsExpansion: true });
+    });
+});
+
+describe('OperationDetailsComponent buffer drill-down events', () => {
+    const BUFFER_DETAILS = {
+        event: EventLogEvent.DRILLDOWN_OPENED,
+        details: { drilldown_target: DrilldownTarget.BUFFER_DETAILS },
+    };
+
+    const plotClick = (hovertemplate = '') =>
+        ({
+            points: [{ data: { hovertemplate, memoryData: { address: ADDRESS, tensor: inputTensor() } } }],
+        }) as unknown as PlotMouseEventCustom;
+
+    // Through a cast: each prop is a handler of its own signature.
+    const callPlotHandler = (plot: 'l1' | 'dram', handler: string, ...args: unknown[]) =>
+        act(() => (plotProps[plot]![handler] as (...handlerArgs: unknown[]) => void)(...args));
+
+    const showDram = () => fireEvent.click(screen.getByRole('button', { name: 'DRAM' }));
+
+    it('records one for a click on a tensor', () => {
+        renderPage([]);
+
+        pressAndRelease(screen.getByRole('button', { name: new RegExp(`Tensor ID: ${TENSOR_ID}`) }));
+
+        expect(recordEvent).toHaveBeenCalledExactlyOnceWith(BUFFER_DETAILS);
+    });
+
+    it.each<[string, 'l1' | 'dram', string, () => unknown[]]>([
+        ['an L1 buffer', 'l1', 'onBufferClick', () => [plotClick()]],
+        ['an L1 legend entry', 'l1', 'onLegendClick', () => [ADDRESS, TENSOR_ID]],
+        ['a DRAM buffer', 'dram', 'onDramBufferClick', () => [plotClick()]],
+        ['a DRAM delta', 'dram', 'onDramDeltaClick', () => [plotClick()]],
+        ['a DRAM legend entry', 'dram', 'onLegendClick', () => [ADDRESS, TENSOR_ID]],
+    ])('records one for a click on %s', (_case, plot, handler, args) => {
+        renderPage([]);
+        if (plot === 'dram') {
+            showDram();
+        }
+
+        callPlotHandler(plot, handler, ...args());
+
+        expect(recordEvent).toHaveBeenCalledExactlyOnceWith(BUFFER_DETAILS);
+    });
+
+    it('records nothing for a click on the circular-buffer summary, which focuses nothing', () => {
+        renderPage([]);
+
+        callPlotHandler('l1', 'onBufferClick', plotClick('CBs Summary'));
+
+        expect(recordEvent).not.toHaveBeenCalled();
     });
 });

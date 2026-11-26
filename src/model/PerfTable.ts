@@ -67,6 +67,19 @@ export interface PerfTableRow {
     // included, as tt-perf-report's merge grouped them (#2177). Absent when the row
     // stands only for itself.
     device_row_ids?: number[];
+    // Absent unless the report has the counter's column, so a report without them is unchanged (#2330).
+    hw_fpu_util?: number | null;
+    hw_sfpu_util?: number | null;
+    hw_math_util?: number | null;
+    hw_packer_util?: number | null;
+    hw_unpacker0_busy?: number | null;
+    hw_unpacker1_busy?: number | null;
+    hw_l1_bandwidth_util?: number | null;
+    hw_noc_ring0_util?: number | null;
+    hw_noc_ring1_util?: number | null;
+    hw_grid_fpu_util?: number | null;
+    hw_grid_sfpu_util?: number | null;
+    hw_grid_math_util?: number | null;
 }
 
 export interface TypedPerfTableRow extends Omit<
@@ -135,6 +148,8 @@ export interface TypedPerfTableRow extends Omit<
     dram_fallback: DramFallback | null;
     heuristicFlags?: PerfHeuristicFlag[];
     heuristicFlagDetails?: Partial<Record<PerfHeuristicFlag, string>>;
+    // Set where the low-utilisation check reads the row, but its ideal time is the perf model's placeholder.
+    hasUtilisationUnknownNote?: boolean;
 }
 
 /** Per-operation data from the linked memory report, keyed by its operation id. */

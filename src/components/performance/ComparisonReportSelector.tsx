@@ -11,6 +11,7 @@ import LocalFolderPicker from '../report-selection/LocalFolderPicker';
 import { ReportFolder } from '../../definitions/Reports';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import { formatSyncedReportName } from '../../functions/reportRank';
+import { recordPerfComparisonUsed } from '../../functions/surfaceEvents';
 import { TEST_IDS } from '../../definitions/TestIds';
 
 interface ComparisonReportSelectorProps {
@@ -51,10 +52,18 @@ const ComparisonReportSelector = ({
                     value={selectedReportName}
                     valueLabel={selectedReportName ? formatSyncedReportName(selectedReportName) : null}
                     handleSelect={(folder: ReportFolder) => {
+                        const isSameReport = comparisonReportList?.[reportIndex] === folder.reportName;
                         const updatedReports = [...(comparisonReportList || [])];
                         updatedReports[reportIndex] = folder.reportName;
 
                         setComparisonReportList(updatedReports);
+
+                        // Re-picking the report already in this slot changes nothing. The list
+                        // has no gaps: the only empty slot is the one after the last report, and
+                        // removing a report closes its slot up.
+                        if (!isSameReport) {
+                            recordPerfComparisonUsed(updatedReports.length);
+                        }
                     }}
                 />
 

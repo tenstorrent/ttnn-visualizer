@@ -6,7 +6,11 @@ from http import HTTPStatus
 from typing import TYPE_CHECKING, Optional
 
 from flask import jsonify
-from ttnn_visualizer.enums import ConnectionTestStates, HostKeyIssue
+from ttnn_visualizer.enums import (
+    ConnectionTestStates,
+    HostKeyIssue,
+    RemoteConnectionFailureReason,
+)
 
 if TYPE_CHECKING:
     # Only for the annotation: importing models at runtime would make every module
@@ -19,12 +23,16 @@ def error_response(
     message: Optional[str] = None,
     detail: Optional[str] = None,
     sync_method: Optional[str] = None,
+    reason: Optional[str] = None,
 ):
     payload = {"error": message or status.phrase}
     if detail:
         payload["detail"] = detail
     if sync_method:
         payload["syncMethod"] = sync_method
+    if reason:
+        # A stable code the frontend can match, where `error` is for people.
+        payload["reason"] = reason
     return jsonify(payload), status
 
 
@@ -48,8 +56,12 @@ def response_internal_server_error(
     return error_response(HTTPStatus.INTERNAL_SERVER_ERROR, message, detail)
 
 
-def response_forbidden(message: Optional[str] = None, detail: Optional[str] = None):
-    return error_response(HTTPStatus.FORBIDDEN, message, detail)
+def response_forbidden(
+    message: Optional[str] = None,
+    detail: Optional[str] = None,
+    reason: Optional[str] = None,
+):
+    return error_response(HTTPStatus.FORBIDDEN, message, detail, reason=reason)
 
 
 class RemoteConnectionException(Exception):
@@ -60,12 +72,16 @@ class RemoteConnectionException(Exception):
         http_status_code: Optional[HTTPStatus] = None,
         detail: Optional[str] = None,
         sync_method: Optional[str] = None,
+        reason: Optional[RemoteConnectionFailureReason] = None,
     ):
         super().__init__(message)
         self.message = message
         self.status = status
         self.detail = detail
         self._http_status_code = http_status_code
+        # The failure's class for a connection test's status line, so a reader never
+        # has to parse ``message``. ``None`` when it fits no class.
+        self.reason = reason
         # Transport actually used for the failed run, when known (sftp/scp).
         # Lets callers report the real method instead of re-reading the
         # process-global fallback cache, which can be stale for this run.
@@ -114,6 +130,7 @@ class AuthenticationFailedException(RemoteConnectionException):
             status=status,
             http_status_code=HTTPStatus.UNPROCESSABLE_ENTITY,  # 422
             detail=detail,
+            reason=RemoteConnectionFailureReason.AUTH_FAILED,
         )
 
 
@@ -138,8 +155,59 @@ class HostKeyVerificationFailedException(RemoteConnectionException):
             status=status,
             http_status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
             detail=detail,
+            reason=RemoteConnectionFailureReason.HOST_KEY_REJECTED,
         )
         self.host_key = host_key
+
+
+class UnreachableHostException(RemoteConnectionException):
+    """The host could not be reached: refused, unresolvable or timed out, or a connection
+    that was established and then lost.
+
+    A class of its own so every place that raises it carries ``UNREACHABLE``; passed by
+    hand at each raise site, a new one could leave it out and the test would read
+    ``other``.
+    """
+
+    def __init__(
+        self,
+        message,
+        status: ConnectionTestStates = ConnectionTestStates.FAILED,
+        detail: Optional[str] = None,
+    ):
+        super().__init__(
+            message=message,
+            status=status,
+            detail=detail,
+            reason=RemoteConnectionFailureReason.UNREACHABLE,
+        )
+
+    @classmethod
+    def for_host(
+        cls, host: str, detail: Optional[str] = None
+    ) -> "UnreachableHostException":
+        """The advice for a host that refused every connection attempt."""
+        return cls(
+            message=(
+                f"Unable to establish SSH connection to {host}. "
+                "Please check the hostname, port, and network connectivity. "
+                "Ensure SSH key-based authentication is properly configured."
+            ),
+            detail=detail,
+        )
+
+    @classmethod
+    def for_dropped_connection(
+        cls, host: str, detail: Optional[str] = None
+    ) -> "UnreachableHostException":
+        """The advice for a connection that was established and then lost."""
+        return cls(
+            message=(
+                f"The SSH connection to {host} was lost. "
+                "Please check network connectivity and try again."
+            ),
+            detail=detail,
+        )
 
 
 class InvalidRequestPayload(Exception):
@@ -251,6 +319,17 @@ class HostKeyVerificationException(SSHException):
 
 class NoValidConnectionsError(SSHException):
     """Raised when SSH connection cannot be established"""
+
+    pass
+
+
+class ConnectionDroppedError(NoValidConnectionsError):
+    """Raised when an established SSH connection is lost partway through a command.
+
+    A subclass so every handler that treats an unreachable host as such still does;
+    one of its own so the advice can say the connection dropped rather than that the
+    host refused every attempt.
+    """
 
     pass
 

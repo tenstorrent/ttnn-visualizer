@@ -2,12 +2,13 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { JSX, useEffect, useMemo, useState } from 'react';
+import { Dispatch, JSX, SetStateAction, useCallback, useEffect, useMemo, useState } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
 import {
     Button,
     ButtonGroup,
     ButtonVariant,
+    Callout,
     FormGroup,
     Intent,
     MenuItem,
@@ -27,6 +28,9 @@ import { ColumnKeys, Columns } from '../../definitions/PerfTable';
 import { TypedPerfTableRow } from '../../model/PerfTable';
 import { Signpost } from '../../model/Signpost';
 import { calcHighDispatchOps } from '../../functions/perfFunctions';
+import { recordPerfTableOptionToggled } from '../../functions/surfaceEvents';
+import { FilterSurface, PerfTableOption } from '../../definitions/EventLogEvent';
+import useRecordFilterUsed from '../../hooks/useRecordFilterUsed';
 import SearchField from '../SearchField';
 import PerfTable from './PerfTable';
 import {
@@ -49,6 +53,7 @@ import {
 import 'styles/components/PerfReport.scss';
 import StackedPerformanceTable from './StackedPerfTable';
 import {
+    STACKED_GROUP_BY_LABELS,
     StackedColumnKeys,
     StackedGroupBy,
     StackedTableFilter,
@@ -60,7 +65,6 @@ import HighlightedText from '../HighlightedText';
 import PerfReportRowCount from './PerfReportRowCount';
 import MultiSelectField from '../MultiSelectField';
 import { BufferType, BufferTypeLabel } from '../../model/BufferType';
-import { capitalizeString } from '../../functions/formatting';
 import { formatSyncedReportName } from '../../functions/reportRank';
 import { DeviceOperationLayoutTypes } from '../../model/APIData';
 import usePerfReportFiltering from './usePerfReportFiltering';
@@ -68,6 +72,15 @@ import AllocationFailureSummary from './AllocationFailureSummary';
 import isSignpostOutsideRange from '../../functions/isSignpostOutsideRange';
 import { SignpostSelectType } from '../../definitions/Performance';
 import { AllocationFailureListing } from '../../model/AllocationFailure';
+import { getHardwareCountersSwitchHint, hasHardwareCounterColumns } from '../../functions/hardwareCounters';
+import { HARDWARE_COUNTERS_SWITCH_LABEL } from '../../definitions/HardwareCounters';
+import { useOperationsList } from '../../hooks/useAPI';
+import indexFirstById from '../../functions/indexFirstById';
+import { SourceLineGroup, getSourceLineGroups, isSourceLineGroupMatch } from '../../functions/perfSourceLines';
+import { TEST_IDS } from '../../definitions/TestIds';
+import SourceLinePerfTable from './SourceLinePerfTable';
+import { getCallSiteFrame } from '../../functions/stackTraceSource';
+import { sumStackedDeviceTime } from '../../functions/stackedPerfFunctions';
 
 interface PerformanceReportProps {
     data?: TypedPerfTableRow[];
@@ -81,11 +94,31 @@ interface PerformanceReportProps {
     maxCores: number;
     comparisonMaxCores?: number[];
     allocationFailureListings?: AllocationFailureListing[];
+    // From the reports' envelopes: a capture of other counter groups has none of the table's columns.
+    hasHardwareCounters?: boolean;
+    /**
+     * Whether any row of the whole report links to a memory-report operation. `data` holds only
+     * the range slider's rows, which can all be unlinked while the report is linked.
+     */
+    hasLinkedOperations: boolean;
 }
 
 const EMPTY_ALLOCATION_FAILURE_LISTINGS: AllocationFailureListing[] = [];
 const INITIAL_TAB_ID = 'perf-table-0'; // `perf-table-${index}`
-const STACKED_GROUP_BY = [StackedGroupBy.CATEGORY, StackedGroupBy.MEMORY, StackedGroupBy.OP];
+const STACKED_GROUP_BY = [
+    StackedGroupBy.CATEGORY,
+    StackedGroupBy.MEMORY,
+    StackedGroupBy.OP,
+    StackedGroupBy.SOURCE_LINE,
+];
+const EMPTY_SOURCE_LINE_GROUPS: SourceLineGroup[] = [];
+const SOURCE_LINE_UNLINKED = 'Needs a memory report linked to this performance report';
+const SOURCE_LINE_NO_TRACES = 'No stack trace in the linked memory report names a Python frame';
+const SOURCE_LINE_RANGE_NOTE = 'Source line also follows the range slider, which the other groupings ignore';
+const SOURCE_LINE_COMPARISON_NOTE =
+    "Source lines come from the active memory report's stack traces, so they are shown for the active performance report only.";
+const OP_CODE_FILTER_PLACEHOLDER = 'Filter by operation name';
+const SOURCE_LINE_FILTER_PLACEHOLDER = 'Filter by file or function';
 
 /**
  * Drops selections the current data can no longer offer, preserving the array identity when
@@ -127,6 +160,8 @@ const PerformanceReport = ({
     maxCores,
     comparisonMaxCores = [],
     allocationFailureListings = EMPTY_ALLOCATION_FAILURE_LISTINGS,
+    hasHardwareCounters = false,
+    hasLinkedOperations,
 }: PerformanceReportProps) => {
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const activeReportFolderName = useAtomValue(activePerformanceReportFolderNameAtom);
@@ -149,8 +184,28 @@ const PerformanceReport = ({
     // const [isMultiDevice, _setIsMultiDevice] = useState<boolean>(false);
     const [provideMatmulAdvice, setProvideMatmulAdvice] = useState(false);
     const [hiliteHighDispatch, setHiliteHighDispatch] = useState(false);
+    const [showHardwareCounters, setShowHardwareCounters] = useState(false);
     const [selectedTabId, setSelectedTabId] = useState<TabId>(INITIAL_TAB_ID);
     const [useNormalisedData, setUseNormalisedData] = useState(true);
+    const recordOpCodeFilterUsed = useRecordFilterUsed(FilterSurface.PERF_OP_CODE);
+
+    // Works out the list a click leaves, so removing the last code counts as no filter. The
+    // setter still gets the update as given, so a functional one applies to the latest list.
+    // So a functional update runs twice, which is harmless while MultiSelectField's is pure.
+    const handleRawOpCodeFilterChange = useCallback(
+        (update: SetStateAction<TypedPerfTableRow['raw_op_code'][]>) => {
+            const next = typeof update === 'function' ? update(activeRawOpCodeFilterList) : update;
+
+            setActiveRawOpCodeFilterList(update);
+            recordOpCodeFilterUsed(next.length > 0);
+        },
+        [activeRawOpCodeFilterList, setActiveRawOpCodeFilterList, recordOpCodeFilterUsed],
+    );
+
+    const toggleTableOption = (setOption: Dispatch<SetStateAction<boolean>>, option: PerfTableOption) => () => {
+        setOption((isOn) => !isOn);
+        recordPerfTableOptionToggled(option);
+    };
     const filterableColumnKeys = useMemo(
         () => Columns.filter((column) => column.filterable).map((column) => column.key),
         [],
@@ -165,10 +220,18 @@ const PerformanceReport = ({
         Object.fromEntries(filterableStackedColumnKeys.map((key) => [key, ''])) as StackedTableFilter,
     );
 
+    const hasCounterColumns = useMemo(
+        () =>
+            hasHardwareCounters &&
+            (hasHardwareCounterColumns(data ?? []) || (comparisonData ?? []).some(hasHardwareCounterColumns)),
+        [hasHardwareCounters, data, comparisonData],
+    );
+    const isShowingHardwareCounters = showHardwareCounters && hasCounterColumns;
     const isSignpostsDisabled = !signposts || signposts.length === 0;
     const isTableLoading = isLoading || isComparisonLoading;
     const comparisonIndex = (activeComparisonReportList ?? []).findIndex((value) => value === selectedTabId);
     const isGroupedByMemory = stackedGroupBy === StackedGroupBy.MEMORY;
+    const isSourceLineShown = isStackedView && stackedGroupBy === StackedGroupBy.SOURCE_LINE;
     const filterScopeHelperText =
         activeComparisonReportList?.length &&
         'Comparison rows are filtered together with the active report to maintain row data alignment';
@@ -264,6 +327,50 @@ const PerformanceReport = ({
         [filteredComparisonStackedRowsList, comparisonIndex],
     );
 
+    // Footer shares are of the unfiltered rows' device time.
+    const stackedTotalDeviceTimeUs = useMemo(() => sumStackedDeviceTime(stackedData), [stackedData]);
+    const comparisonStackedTotalDeviceTimeUs = useMemo(
+        () => sumStackedDeviceTime(comparisonStackedData[comparisonIndex]),
+        [comparisonStackedData, comparisonIndex],
+    );
+
+    const { data: operations, isLoading: isLoadingOperations } = useOperationsList();
+    // Judged on the whole report rather than the range: `some` stops at the first call site, so
+    // only a report with no traces parses every operation.
+    const sourceLineUnavailableReason = useMemo(() => {
+        if (!hasLinkedOperations) {
+            return SOURCE_LINE_UNLINKED;
+        }
+
+        return operations?.some((operation) => getCallSiteFrame(operation.stack_trace) !== null)
+            ? null
+            : SOURCE_LINE_NO_TRACES;
+    }, [hasLinkedOperations, operations]);
+    const isSourceLineAvailable = sourceLineUnavailableReason === null;
+    const operationById = useMemo(() => indexFirstById(operations, (operation) => operation.id), [operations]);
+    // Rolled up from `data`, never `filteredRows`: the Standard view's buffer type, layout, math
+    // fidelity and duration filters stay set while Stacked hides them, and the raw op code list
+    // cannot apply to a line that mixes op codes.
+    const sourceLineGroups = useMemo(
+        () =>
+            // Unlinked or traceless, every row would sit in one group without a line, which says
+            // less than the table's explanation of why there are no lines.
+            isSourceLineShown && isSourceLineAvailable
+                ? getSourceLineGroups(data ?? [], operationById, { mergeDevices })
+                : EMPTY_SOURCE_LINE_GROUPS,
+        [isSourceLineShown, isSourceLineAvailable, data, operationById, mergeDevices],
+    );
+    const sourceLineTotalDeviceTimeUs = useMemo(
+        () => sourceLineGroups.reduce((total, group) => total + group.deviceTimeUs, 0),
+        [sourceLineGroups],
+    );
+    const sourceLineFilterQuery = stackedFilters?.[StackedColumnKeys.OpCode] ?? '';
+    // Filtered after grouping, so each line's percentage stays a share of the whole range.
+    const filteredSourceLineGroups = useMemo(
+        () => sourceLineGroups.filter((group) => isSourceLineGroupMatch(group, sourceLineFilterQuery)),
+        [sourceLineGroups, sourceLineFilterQuery],
+    );
+
     const updateColumnFilter = (_key: ColumnKeys.OpCode | StackedColumnKeys.OpCode, value: string) => {
         // Only OpCode filter is shared between standard and stacked views
         setFilters((prevFilters) => ({
@@ -314,6 +421,9 @@ const PerformanceReport = ({
             processedData = isStackedView
                 ? comparisonStackedData[comparisonIndex]
                 : processedComparisonRows[comparisonIndex];
+        } else if (isSourceLineShown) {
+            filteredData = filteredSourceLineGroups;
+            processedData = sourceLineGroups;
         } else {
             filteredData = isStackedView ? filteredStackedRows : filteredRows;
             processedData = isStackedView ? stackedData : processedRows;
@@ -328,9 +438,12 @@ const PerformanceReport = ({
         isInitialTab,
         comparisonIndex,
         isStackedView,
+        isSourceLineShown,
         filteredRows,
         processedRows,
         filteredStackedRows,
+        filteredSourceLineGroups,
+        sourceLineGroups,
         comparisonData,
         stackedData,
         comparisonStackedData,
@@ -376,6 +489,102 @@ const PerformanceReport = ({
         setActiveOpCategoryFilterList,
         setActiveDurationBucketFilterList,
     ]);
+
+    const renderActivePanel = () => {
+        if (isSourceLineShown) {
+            return (
+                <SourceLinePerfTable
+                    groups={filteredSourceLineGroups}
+                    operationById={operationById}
+                    filterQuery={sourceLineFilterQuery}
+                    reportFolderName={activeReportFolderName}
+                    maxCores={maxCores}
+                    isLoading={isTableLoading || isLoadingOperations}
+                    emptyReason={sourceLineUnavailableReason}
+                    totalDeviceTimeUs={sourceLineTotalDeviceTimeUs}
+                />
+            );
+        }
+
+        if (isStackedView) {
+            return (
+                <StackedPerformanceTable
+                    stackedData={filteredStackedRows}
+                    totalDeviceTimeUs={stackedTotalDeviceTimeUs}
+                    filters={filters}
+                    stackedComparisonData={filteredComparisonStackedRowsList}
+                    reportFolderName={activeReportFolderName}
+                    maxCores={maxCores}
+                    isLoading={isTableLoading}
+                />
+            );
+        }
+
+        return (
+            <PerfTable
+                data={filteredRows}
+                comparisonData={filteredComparisonRowsList}
+                filters={filters}
+                provideMatmulAdvice={provideMatmulAdvice}
+                hiliteHighDispatch={hiliteHighDispatch}
+                reportFolderName={activeReportFolderName}
+                hasL1PressureData={hasL1PressureData}
+                showHardwareCounters={isShowingHardwareCounters}
+                maxCores={maxCores}
+                isLoading={isTableLoading}
+            />
+        );
+    };
+
+    const renderComparisonPanel = (report: string, index: number) => {
+        if (isSourceLineShown) {
+            return (
+                <Callout
+                    intent={Intent.PRIMARY}
+                    icon={IconNames.INFO_SIGN}
+                    data-testid={TEST_IDS.PERF_SOURCE_LINE_COMPARISON_NOTICE}
+                    compact
+                >
+                    {SOURCE_LINE_COMPARISON_NOTE}
+                </Callout>
+            );
+        }
+
+        if (isStackedView) {
+            return (
+                <StackedPerformanceTable
+                    stackedData={comparisonIndex > -1 ? filteredComparisonStackedRows : filteredStackedRows}
+                    totalDeviceTimeUs={
+                        comparisonIndex > -1 ? comparisonStackedTotalDeviceTimeUs : stackedTotalDeviceTimeUs
+                    }
+                    stackedComparisonData={[
+                        filteredStackedRows,
+                        ...filteredComparisonStackedRowsList.filter((_, i) => i !== comparisonIndex),
+                    ]}
+                    filters={filters}
+                    reportFolderName={report}
+                    maxCores={comparisonMaxCores[index] ?? maxCores}
+                    isLoading={isTableLoading}
+                />
+            );
+        }
+
+        return (
+            <PerfTable
+                data={filteredComparisonRows}
+                comparisonData={comparisonTabComparisonRows}
+                filters={filters}
+                provideMatmulAdvice={provideMatmulAdvice}
+                hiliteHighDispatch={hiliteHighDispatch}
+                reportFolderName={report}
+                hasL1PressureData={hasL1PressureData}
+                showHardwareCounters={isShowingHardwareCounters}
+                maxCores={comparisonMaxCores[index] ?? maxCores}
+                activeReportComparisonIndex={0}
+                isLoading={isTableLoading}
+            />
+        );
+    };
 
     return (
         <>
@@ -511,14 +720,14 @@ const PerformanceReport = ({
                         <ButtonGroup className='switch-group'>
                             <Switch
                                 label='Hide host ops'
-                                onChange={() => setHideHostOps(!hideHostOps)}
+                                onChange={toggleTableOption(setHideHostOps, PerfTableOption.HIDE_HOST_OPS)}
                                 checked={hideHostOps}
                                 className='option-switch'
                             />
 
                             <Switch
                                 label='Merge device rows'
-                                onChange={() => setMergeDevices(!mergeDevices)}
+                                onChange={toggleTableOption(setMergeDevices, PerfTableOption.MERGE_DEVICES)}
                                 checked={mergeDevices}
                                 className='option-switch'
                             />
@@ -529,7 +738,7 @@ const PerformanceReport = ({
                             >
                                 <Switch
                                     label='Tracing mode'
-                                    onChange={() => setTracingMode(!tracingMode)}
+                                    onChange={toggleTableOption(setTracingMode, PerfTableOption.TRACING_MODE)}
                                     checked={tracingMode}
                                     className='option-switch'
                                 />
@@ -540,16 +749,22 @@ const PerformanceReport = ({
                         <FormGroup
                             subLabel='Stacked data grouping'
                             className='form-group'
+                            helperText={isSourceLineShown ? SOURCE_LINE_RANGE_NOTE : undefined}
                         >
                             <ButtonGroup className='select-group'>
                                 <Select<StackedGroupBy>
                                     activeItem={stackedGroupBy}
                                     items={STACKED_GROUP_BY}
-                                    itemRenderer={(item, itemProps) => renderStackedGroupBy(item, itemProps)}
+                                    itemDisabled={(item) =>
+                                        item === StackedGroupBy.SOURCE_LINE && !isSourceLineAvailable
+                                    }
+                                    itemRenderer={(item, itemProps) =>
+                                        renderStackedGroupBy(item, itemProps, sourceLineUnavailableReason)
+                                    }
                                     onItemSelect={(value) => setStackedGroupBy(value)}
                                 >
                                     <Button
-                                        text={capitalizeString(stackedGroupBy)}
+                                        text={STACKED_GROUP_BY_LABELS[stackedGroupBy]}
                                         endIcon={IconNames.CARET_DOWN}
                                     />
                                 </Select>
@@ -565,8 +780,13 @@ const PerformanceReport = ({
                     >
                         <ButtonGroup className='select-group'>
                             <SearchField
-                                onQueryChanged={(value) => updateColumnFilter(ColumnKeys.OpCode, value)}
-                                placeholder='Filter by operation name'
+                                onQueryChanged={(value) => {
+                                    updateColumnFilter(ColumnKeys.OpCode, value);
+                                    recordOpCodeFilterUsed(value !== '');
+                                }}
+                                placeholder={
+                                    isSourceLineShown ? SOURCE_LINE_FILTER_PLACEHOLDER : OP_CODE_FILTER_PLACEHOLDER
+                                }
                                 searchQuery={filters?.op_code || ''}
                             />
 
@@ -575,7 +795,8 @@ const PerformanceReport = ({
                                 options={rawOpCodeOptions}
                                 placeholder='Select Op Codes...'
                                 values={activeRawOpCodeFilterList}
-                                updateHandler={setActiveRawOpCodeFilterList}
+                                updateHandler={handleRawOpCodeFilterChange}
+                                disabled={isSourceLineShown}
                             />
                         </ButtonGroup>
                     </FormGroup>
@@ -639,7 +860,7 @@ const PerformanceReport = ({
                             <ButtonGroup className='switch-group'>
                                 <Switch
                                     label='Matmul optimization analysis'
-                                    onChange={() => setProvideMatmulAdvice(!provideMatmulAdvice)}
+                                    onChange={toggleTableOption(setProvideMatmulAdvice, PerfTableOption.MATMUL_ADVICE)}
                                     checked={provideMatmulAdvice}
                                     className='option-switch'
                                     disabled={isStackedView}
@@ -647,11 +868,31 @@ const PerformanceReport = ({
 
                                 <Switch
                                     label='Highlight high dispatch ops'
-                                    onChange={() => setHiliteHighDispatch(!hiliteHighDispatch)}
+                                    onChange={toggleTableOption(
+                                        setHiliteHighDispatch,
+                                        PerfTableOption.HIGHLIGHT_HIGH_DISPATCH,
+                                    )}
                                     checked={hiliteHighDispatch}
                                     className='option-switch'
                                     disabled={isStackedView}
                                 />
+
+                                <Tooltip
+                                    content={getHardwareCountersSwitchHint(hasHardwareCounters, hasCounterColumns)}
+                                    position={Position.TOP}
+                                >
+                                    <Switch
+                                        label={HARDWARE_COUNTERS_SWITCH_LABEL}
+                                        onChange={toggleTableOption(
+                                            setShowHardwareCounters,
+                                            PerfTableOption.HARDWARE_COUNTERS,
+                                        )}
+                                        checked={isShowingHardwareCounters}
+                                        className='option-switch'
+                                        disabled={!hasCounterColumns || isStackedView}
+                                        data-testid={TEST_IDS.PERF_HARDWARE_COUNTERS_SWITCH}
+                                    />
+                                </Tooltip>
 
                                 <Tooltip
                                     content='Tries to match up operations between the performance reports'
@@ -660,7 +901,10 @@ const PerformanceReport = ({
                                     <Switch
                                         label='Normalise data'
                                         disabled={!activeComparisonReportList || isStackedView}
-                                        onChange={() => setUseNormalisedData(!useNormalisedData)}
+                                        onChange={toggleTableOption(
+                                            setUseNormalisedData,
+                                            PerfTableOption.NORMALISE_DATA,
+                                        )}
                                         checked={useNormalisedData}
                                         className='option-switch'
                                     />
@@ -690,30 +934,7 @@ const PerformanceReport = ({
                                 : 'Loading...'
                         }
                         icon={IconNames.TH_LIST}
-                        panel={
-                            isStackedView ? (
-                                <StackedPerformanceTable
-                                    stackedData={filteredStackedRows}
-                                    filters={filters}
-                                    stackedComparisonData={filteredComparisonStackedRowsList}
-                                    reportFolderName={activeReportFolderName}
-                                    maxCores={maxCores}
-                                    isLoading={isTableLoading}
-                                />
-                            ) : (
-                                <PerfTable
-                                    data={filteredRows}
-                                    comparisonData={filteredComparisonRowsList}
-                                    filters={filters}
-                                    provideMatmulAdvice={provideMatmulAdvice}
-                                    hiliteHighDispatch={hiliteHighDispatch}
-                                    reportFolderName={activeReportFolderName}
-                                    hasL1PressureData={hasL1PressureData}
-                                    maxCores={maxCores}
-                                    isLoading={isTableLoading}
-                                />
-                            )
-                        }
+                        panel={renderActivePanel()}
                     />
 
                     {activeComparisonReportList?.map((report, index) => (
@@ -734,38 +955,7 @@ const PerformanceReport = ({
                                     report
                                 )
                             }
-                            panel={
-                                isStackedView ? (
-                                    <StackedPerformanceTable
-                                        stackedData={
-                                            comparisonIndex > -1 ? filteredComparisonStackedRows : filteredStackedRows
-                                        }
-                                        stackedComparisonData={[
-                                            filteredStackedRows,
-                                            ...filteredComparisonStackedRowsList.filter(
-                                                (_, i) => i !== comparisonIndex,
-                                            ),
-                                        ]}
-                                        filters={filters}
-                                        reportFolderName={report}
-                                        maxCores={comparisonMaxCores[index] ?? maxCores}
-                                        isLoading={isTableLoading}
-                                    />
-                                ) : (
-                                    <PerfTable
-                                        data={filteredComparisonRows}
-                                        comparisonData={comparisonTabComparisonRows}
-                                        filters={filters}
-                                        provideMatmulAdvice={provideMatmulAdvice}
-                                        hiliteHighDispatch={hiliteHighDispatch}
-                                        reportFolderName={report}
-                                        hasL1PressureData={hasL1PressureData}
-                                        maxCores={comparisonMaxCores[index] ?? maxCores}
-                                        activeReportComparisonIndex={0}
-                                        isLoading={isTableLoading}
-                                    />
-                                )
-                            }
+                            panel={renderComparisonPanel(report, index)}
                         />
                     ))}
                 </Tabs>
@@ -820,16 +1010,24 @@ const filterSignpost: ItemPredicate<Signpost> = (query, signpost) => {
 };
 
 interface RenderStackedGroupByProps<T> {
-    (item: T, itemProps: ItemRendererProps): JSX.Element | null;
+    (item: T, itemProps: ItemRendererProps, sourceLineUnavailableReason: string | null): JSX.Element | null;
 }
 
 const renderStackedGroupBy: RenderStackedGroupByProps<StackedGroupBy> = (
     value,
     { handleClick, handleFocus, modifiers, query, id },
+    sourceLineUnavailableReason,
 ) => {
     if (!modifiers.matchesPredicate) {
         return null;
     }
+
+    const text = (
+        <HighlightedText
+            text={STACKED_GROUP_BY_LABELS[value]}
+            filter={query}
+        />
+    );
 
     return (
         <MenuItem
@@ -840,10 +1038,16 @@ const renderStackedGroupBy: RenderStackedGroupByProps<StackedGroupBy> = (
             onFocus={handleFocus}
             roleStructure='listoption'
             text={
-                <HighlightedText
-                    text={capitalizeString(value)}
-                    filter={query}
-                />
+                modifiers.disabled && value === StackedGroupBy.SOURCE_LINE ? (
+                    <Tooltip
+                        content={sourceLineUnavailableReason ?? undefined}
+                        position={PopoverPosition.RIGHT}
+                    >
+                        {text}
+                    </Tooltip>
+                ) : (
+                    text
+                )
             }
         />
     );

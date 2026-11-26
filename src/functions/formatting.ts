@@ -27,6 +27,9 @@ export const capitalizeString = (input: string) => {
     return input.charAt(0).toUpperCase() + input.slice(1).toLowerCase();
 };
 
+/** The last segment of a POSIX or Windows path: `/m/models/resnet.py` reads `resnet.py`. */
+export const getPathBasename = (path: string): string => path.split(/[\\/]/).pop() ?? path;
+
 export const stripEnum = (v: string) => {
     if (!v) {
         return v;

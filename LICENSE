@@ -94,6 +94,7 @@ The following separate and independent dependencies are utilized by this project
 - @testing-library/dom - MIT - https://github.com/testing-library/dom-testing-library/blob/main/LICENSE
 - @testing-library/jest-dom - MIT - https://github.com/testing-library/jest-dom/blob/main/LICENSE
 - @testing-library/react - MIT - https://github.com/testing-library/react-testing-library/blob/main/LICENSE
+- @types/d3-format - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/LICENSE
 - @types/dagre - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/LICENSE
 - @types/node - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/LICENSE
 - @types/plotly.js - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/LICENSE
@@ -109,6 +110,7 @@ The following separate and independent dependencies are utilized by this project
 - axios - MIT - https://github.com/axios/axios/blob/v1.x/LICENSE
 - classnames - MIT - https://github.com/JedWatson/classnames/blob/main/LICENSE
 - css-select - BSD‑2-Clause - https://github.com/fb55/css-select/blob/master/LICENSE
+- d3-format - BSD-3-Clause - https://github.com/d3/d3-format/blob/v1.4.5/LICENSE
 - dom-serializer - MIT - https://github.com/cheeriojs/dom-serializer/blob/master/LICENSE
 - eslint - MIT - https://github.com/eslint/eslint/blob/main/LICENSE
 - eslint-config-airbnb-base - MIT - https://github.com/airbnb/javascript/blob/master/packages/eslint-config-airbnb-base/LICENSE.md

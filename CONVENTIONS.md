@@ -276,19 +276,25 @@ In component stylesheets, prefer styling classes we own (for example wrapper or 
 
 This keeps styles resilient to Blueprint markup changes and avoids cross-component side effects.
 
-### Blueprint theming layers
+### Blueprint theming
 
-Blueprint 6.7+ draws most dark-theme colours from `--bp-*` design tokens and ignores many of the Sass variables we configure, so keeping the app's look on 6.21 takes three layers, emitted in this order:
+Blueprint 6.7+ draws most colours from its `--bp-*` design tokens and derives the other shades from them with `oklch(from …)` and `color-mix(…)`. `src/scss/_blueprintjs.scss` themes it in this order:
 
-1. **Configuration** — the `@use '@blueprintjs/core/src/blueprint.scss' with (…)` block in `src/scss/_blueprintjs.scss`. Change a colour here first when Blueprint still reads the variable.
-2. **Parity** — `src/scss/_blueprintjs-parity.scss` restores Blueprint 6.6's dark-theme rules where 6.21 stopped reading the configuration. It copies 6.6's selectors and rule order so specificity is unchanged, and `tests/blueprintParityStyles.spec.ts` pins a sample of its 6.6 values. Keep it a faithful copy: don't put app-specific changes here.
-3. **App deviations** — the rules at the end of `src/scss/_blueprintjs.scss`, after the parity layer, for anything the app deliberately does differently from Blueprint.
+1. **Configuration** — the `@use '@blueprintjs/core/src/blueprint.scss' with (…)` block. It sets what Blueprint still reads from Sass (switch and checkbox colours, progress bars, links, intent text and icons, the navbar, dark elevation shadows) and a few of Blueprint's token-era colour maps where the derived colour is wrong for our palette: minimal and outlined button text and tints, and tags. A configured map replaces Blueprint's whole map, so restate every intent.
+2. **Tokens** — `--bp-intent-*` from our palette, declared on `:root`, and dark `--bp-surface-*` / `--bp-typography-*` overrides on `.bp6-dark`. Each goes on the selector Blueprint declares it on: an intent token set only on `.bp6-dark` would leave the `:root` tokens Blueprint derives from it unchanged, and a dark token set on `:root` loses to Blueprint's `.bp6-dark` declaration. Both blocks follow the `@use`, so they also beat Blueprint's `@supports` redeclarations.
+3. **App deviations** — selector overrides at the end of the file, each with the reason it is needed.
 
-The Blueprint packages are pinned to `~` ranges and upgraded together. On a minor bump, re-check the parity layer against the new release (the spec's version check fails until you do), and update the version noted in its header. #2252 tracks replacing the parity layer with theming through the design tokens.
+Prefer a token to a map, and a map to a selector. The primary token is `$tt-purple-shade`, which solid buttons and tags need; text and outlines that need the light `$tt-purple` get it from the configured maps.
+
+Since the 6.21 upgrade, Blueprint derives many shades with relative colour syntax and no fallback (inputs, tags, cards, sections, form helper text and more), so the app needs Firefox 128+, Chrome 119+ or Safari 16.4+. Nothing in the toolchain enforces this: Vite's CSS target follows `build.target` (`es2022`) rather than `browserslist`, so a build succeeds and older browsers render those colours wrongly.
+
+One override is not a public token: `--bp6-button-warning-rest`, Blueprint's private warning button fill, which it marks as temporary. It is the most likely to break on an upgrade; the spec fails if Blueprint stops reading it.
+
+The Blueprint packages are pinned to `~` ranges and upgraded together. On a minor bump, compare `/styleguide` before and after, re-check the overrides, and update the version in `tests/blueprintThemeStyles.spec.ts`, which pins the token values and overrides and fails until you do.
 
 ### Stylesheet imports go through the `styles/` alias
 
-The `styles/` alias is wired up in three places that must stay in sync — `tsconfig.json`, `vite.config.ts`, and `vitest.config.ts`. Relative paths still resolve, but they drift when files move and look noisy in long import blocks.
+The `styles/` alias is wired up in four places that must stay in sync — `tsconfig.json`, `vite.config.ts`, `vitest.config.ts`, and the Sass importer in `tests/helpers/compiledStylesheets.ts`. Relative paths still resolve, but they drift when files move and look noisy in long import blocks.
 
 `src/components/SearchField.tsx`
 
@@ -1272,6 +1278,8 @@ if not files:
 Without the guard, downstream `files[0]` indexing or empty-collection iteration falls over silently or with an opaque error.
 
 > **Note:** the rules above cover **single-file** uploads (NPE, MLIR, future single-blob endpoints). **Folder-upload** branches (profiler/performance report trees) deliberately preserve subpath structure and use a different fix shape — a resolved-path containment check inside `construct_dest_path` that rejects any candidate whose resolved path lands outside the per-report folder (raising `DataFormatError`, which the view handlers map to 422). Don't extend the `.name` collapse pattern into the folder branch; rely on the containment check.
+>
+> The per-report folder is itself client-controlled (the `folderName` form field, or the leading segment of the first filename), so containment within it proves nothing on its own. `validate_files` refuses any folder name that is not a single plain segment, and `construct_dest_path` also requires the resolved report folder to sit directly under the server-chosen upload directory. Before both checks existed, `folderName=../..` let an unauthenticated upload overwrite the app database (ITSEC-561). A new folder-upload handler must go through `validate_files` and `construct_dest_path`, not compose its own path from the folder name.
 
 ---
 

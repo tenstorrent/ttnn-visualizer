@@ -23,14 +23,17 @@ from typing import (
     Tuple,
 )
 
-from ttnn_visualizer.agent.cells import finite_number, whole_number
+from ttnn_visualizer import hardware_counters
+from ttnn_visualizer.cells import finite_number, whole_number
 from ttnn_visualizer.csv_queries import PROGRAM_CACHE_HIT_COLUMN, PROGRAM_HASH_COLUMN
+from ttnn_visualizer.device_architecture import DeviceArchitecture
 
 
 class DetailGroup(str, Enum):
     CONFIG = "config"
     UTILISATION = "utilisation"
     NOC = "noc"
+    COUNTERS = "counters"
     RISCS = "riscs"
     CORES = "cores"
     DISPATCH = "dispatch"
@@ -68,7 +71,10 @@ _UNMODELLED_NS = 1.0
 
 
 def is_unmodelled(nanoseconds: object) -> bool:
-    return _number(nanoseconds) == _UNMODELLED_NS
+    """Exactly 1 ns, as `isUnmodelledIdealTime` (`src/functions/isUnmodelledIdealTime.ts`)
+    reads an ideal time; it also nulls the perf model's compute and bandwidth fields here.
+    """
+    return finite_number(nanoseconds) == _UNMODELLED_NS
 
 
 _FIDELITY = re.compile(r"(LoFi|HiFi[234])$")
@@ -118,14 +124,20 @@ class _Field(NamedTuple):
     model_column: Optional[str] = None
     # What a capture must ask for to fill it; unset, every capture with the column does.
     filled_by: Optional[str] = None
+    # tt-metal writes the column only when the capture asks for it, so a missing one is
+    # filled the same way as an empty one.
+    capture_column: bool = False
+    # A hardware counter's label, whose groups depend on the device's architecture.
+    counter_label: Optional[str] = None
 
     def value(self, row: Dict) -> object:
         if self.model_column and is_unmodelled(row.get(self.model_column)):
             return None
         return self.read(row.get(self.column))
 
-    @property
-    def fill_hint(self) -> str:
+    def fill_hint(self, architecture: DeviceArchitecture) -> str:
+        if self.counter_label is not None:
+            return hardware_counters.label_fill_hint(self.counter_label, architecture)
         if self.model_column:
             return _MODELLED
         return self.filled_by or _EMPTY_ON_EVERY_ROW
@@ -178,6 +190,29 @@ _FIELDS: Dict[DetailGroup, Tuple[_Field, ...]] = {
             "npe_cong_impact",
             _number,
             filled_by=_NOC_TRACES,
+        ),
+    ),
+    DetailGroup.COUNTERS: (
+        *(
+            _Field(
+                f"{unit.row_key}{suffix}_percent",
+                f"{unit.row_key}{suffix}",
+                _number,
+                capture_column=True,
+                counter_label=unit.label,
+            )
+            for unit in hardware_counters.HEADLINE_UNITS
+            for _, suffix in hardware_counters.ROW_KEY_STATS
+        ),
+        *(
+            _Field(
+                f"{grid.row_key}_percent",
+                grid.row_key,
+                _number,
+                filled_by=hardware_counters.GRID_FILL_HINT,
+                capture_column=True,
+            )
+            for grid in hardware_counters.FULL_GRID_UNITS
         ),
     ),
     DetailGroup.RISCS: (
@@ -252,9 +287,12 @@ DETAIL_NOTE = (
     "all-reduce, where tt-perf-report averages the device time and keeps the first "
     "device's row for everything else, so kernel_us there is one device's. Times are "
     "microseconds. The perf model's figures are null where tt-metal left its 1 ns "
-    "placeholder, and math_fidelity is null for an op that has none. A field no row "
-    "of the whole report carries, whatever range was read, is left out of the rows "
-    "and named in empty_in_report with what would fill it."
+    "placeholder, and math_fidelity is null for an op that has none. The counters "
+    "fields are hardware counters: the average, minimum and maximum over the cores "
+    "that ran the op's compute kernel, and the grid fields over every core of the "
+    "grid, idle ones included; an op without a compute kernel has none. A field no "
+    "row of the whole report carries, whatever range was read, is left out of the "
+    "rows and named in empty_in_report with what would fill it."
 )
 
 
@@ -330,11 +368,18 @@ def empty_fields(
 
 
 def empty_in_report(
-    empty: EmptyFields, groups: Sequence[DetailGroup]
+    empty: EmptyFields,
+    groups: Sequence[DetailGroup],
+    architecture: DeviceArchitecture = DeviceArchitecture.UNKNOWN,
 ) -> Dict[str, str]:
-    """The included fields `empty_fields` found, each with what would fill it."""
+    """The included fields `empty_fields` found, each with what would fill it on the
+    device's architecture."""
     return {
-        field.name: _NOT_A_COLUMN if empty[field.name] else field.fill_hint
+        field.name: (
+            _NOT_A_COLUMN
+            if empty[field.name] and not field.capture_column
+            else field.fill_hint(architecture)
+        )
         for field in _fields_of(groups)
         if field.name in empty
     }
@@ -345,13 +390,17 @@ def has_fields(groups: Sequence[DetailGroup]) -> bool:
     return any(_FIELDS[group] for group in groups)
 
 
-def summary(groups: Sequence[DetailGroup], empty: EmptyFields) -> Dict[str, object]:
+def summary(
+    groups: Sequence[DetailGroup],
+    empty: EmptyFields,
+    architecture: DeviceArchitecture = DeviceArchitecture.UNKNOWN,
+) -> Dict[str, object]:
     """What an answer with detail fields says about them."""
     if not has_fields(groups):
         return {}
     return {
         "included": [group.value for group in groups],
-        "empty_in_report": empty_in_report(empty, groups),
+        "empty_in_report": empty_in_report(empty, groups, architecture),
         "detail_note": DETAIL_NOTE,
     }
 

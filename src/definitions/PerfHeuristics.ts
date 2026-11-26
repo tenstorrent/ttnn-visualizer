@@ -91,3 +91,11 @@ export const PERF_HEURISTIC_FLAG_DEFINITIONS: Record<PerfHeuristicFlag, PerfHeur
         source: PerfHeuristicFlagSource.MEMORY_REPORT_INFERRED,
     },
 };
+
+// Shown with the flags but without an intent: the low-utilisation check could not be made, which is not a finding.
+export const UTILISATION_UNKNOWN_NOTE = {
+    label: 'Utilisation unknown',
+    shortLabel: 'Util unknown',
+    description: "Core utilisation measures the op's time against the ideal time from tt-metal's performance model.",
+    detail: "Not modelled: the performance model reports its 1 ns placeholder as this op's ideal time, so its utilisation is unknown rather than low.",
+} as const;

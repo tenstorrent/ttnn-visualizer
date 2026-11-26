@@ -35,7 +35,7 @@ from typing import (
     cast,
 )
 
-from ttnn_visualizer import npe_index
+from ttnn_visualizer import hardware_counters, npe_index, pipeline_stalls
 from ttnn_visualizer.csv_queries import (
     PROGRAM_CACHE_HIT_COLUMN,
     PROGRAM_HASH_COLUMN,
@@ -62,8 +62,8 @@ class CacheVariant(str, Enum):
     OPERATION_LINK = "operation_link"
     # Which signposts the performance CSV holds, read without generating a report.
     SIGNPOSTS = "signposts"
-    # The performance CSV the handle's first read came from, so a later read can
-    # tell whether it is still reading the same capture.
+    # The performance CSV `tools._pin_source` pins, so a later read can tell whether it
+    # is still reading the same capture.
     SOURCE = "source"
     # Each CSV row's tensor signature, which `diff_reports` matches on when asked.
     OP_SIGNATURES = "op_signatures"
@@ -82,6 +82,11 @@ class CacheVariant(str, Enum):
     L1_PEAK = "l1_peak"
     # Every device op's per-core spread, from one read of the device log.
     CORE_SPREAD = "core_spread"
+    # The device log's per-zone totals, which `zone_timings` gives.
+    ZONE_TIMINGS = "zone_timings"
+    # Every zone's intervals from one read of the device log, which `zone_intervals`
+    # answers each zone from.
+    ZONE_INTERVALS = "zone_intervals"
     # Buffer Summary's late deallocations by rank and buffer type.
     LATE_DEALLOCATIONS = "late_deallocations"
     # A tt-npe trace's link demand, summed per link and burst from one read.
@@ -91,6 +96,16 @@ class CacheVariant(str, Enum):
     # The operation graph by rank, which `critical_path` and `subgraph_between` read
     # whole and an agent reading a model block by block asks for again and again.
     OP_GRAPH = "op_graph"
+    # Every call grouped into its configuration by rank, which `op_configurations` lists.
+    OP_CONFIGURATIONS = "op_configurations"
+    # Every hardware counter column by CSV position, which `hw_utilisation` ranks and
+    # `stall_breakdown` reads.
+    HARDWARE_COUNTERS = "hardware_counters"
+    # Frame 0 of every linked operation's stack trace by rank, which `source_lines`
+    # files each performance row under.
+    CALL_SITES = "call_sites"
+    # Whether any op of the capture's CSV has a CB wait, which `stall_breakdown` reads.
+    SUM_PROFILING = "sum_profiling"
 
 
 # Snapshots narrowed by a scope -- a signpost range -- kept at once, across every
@@ -129,7 +144,8 @@ class UnkeptSnapshot(Exception):
     """Raised by a builder that learns only as it builds that no handle may keep it.
 
     Totals read from a report generated with swallowed errors are one: the handle may
-    drop or evict that report, and its next read would then disagree with them.
+    drop or evict that report, and its next read would then disagree with them. A
+    source pin that found no CSV yet is another; see `tools._pin_source`.
     """
 
     def __init__(self, snapshot: object):
@@ -352,6 +368,8 @@ TOOL_TABLES: Dict[str, frozenset] = {
     # where `query_stack_traces` now guards like its neighbours rather than letting
     # SQLite's `no such table` reach the agent. #2021
     "operation_provenance": frozenset({"operations", "operation_arguments"}),
+    # The performance report is optional: without a link the configurations carry no time.
+    "op_configurations": frozenset({"operations", "operation_arguments"}),
     # The errors table is optional: a report that predates it is answered with a caveat.
     "errors": frozenset({"operations"}),
     # `buffers` as the app needs it: `/api/operations` joins it for a tensor's size.
@@ -385,6 +403,8 @@ TOOL_TABLES: Dict[str, frozenset] = {
 
 # The graph, and the captured graphs the link aligns to weigh it.
 _CRITICAL_PATH_TABLES = TOOL_TABLES["subgraph_between"] | {"captured_graph"}
+# The captured graphs the link aligns, and the stack traces each linked row is filed by.
+_SOURCE_LINES_TABLES = frozenset({"operations", "captured_graph", "stack_traces"})
 
 
 def read_only_connection(db_file: Path) -> sqlite3.Connection:
@@ -710,6 +730,22 @@ def _answerable_device_log_columns(instance: Instance) -> Optional[frozenset]:
     return columns if problem is None else None
 
 
+# The tools that cannot answer without the performance CSV, which `_inventory` lists
+# only for a CSV tt-perf-report can read; `operation_detail` answers without its rows.
+PERF_CSV_TOOLS = frozenset(
+    {
+        "top_ops",
+        "op_breakdown",
+        "program_cache",
+        "core_spread",
+        "critical_path",
+        "hw_utilisation",
+        "source_lines",
+        "stall_breakdown",
+    }
+)
+
+
 def _inventory(instance: Instance, perf_csv: Optional[Path]) -> Dict[str, object]:
     """What this report can actually answer.
 
@@ -727,13 +763,21 @@ def _inventory(instance: Instance, perf_csv: Optional[Path]) -> Dict[str, object
     # These tools run tt-perf-report, which needs its key columns and a data row.
     perf_csv_problem = _perf_csv_problem(perf_csv)
     perf_ready = perf_csv is not None and perf_csv_problem is None
-    record("top_ops", perf_ready)
-    record("op_breakdown", perf_ready)
+
+    def record_perf(name: str, also: bool = True) -> None:
+        # `without_performance_csv` moves only these, so no CSV gate goes unnamed.
+        assert name in PERF_CSV_TOOLS, f"{name} is gated on the CSV but not named"
+        record(name, perf_ready and also)
+
+    record_perf("top_ops")
+    record_perf("op_breakdown")
     # Older captures carry neither column, and every count would then be zero.
-    record(
-        "program_cache",
-        perf_ready and {PROGRAM_HASH_COLUMN, PROGRAM_CACHE_HIT_COLUMN} <= perf_columns,
+    record_perf(
+        "program_cache", {PROGRAM_HASH_COLUMN, PROGRAM_CACHE_HIT_COLUMN} <= perf_columns
     )
+    counter_header = hardware_counters.discover(perf_columns)
+    record_perf("hw_utilisation", counter_header.has_counters)
+    record_perf("stall_breakdown", pipeline_stalls.has_thread_counters(counter_header))
 
     profiler_path = instance.profiler_path
     device_log_columns = _answerable_device_log_columns(instance)
@@ -746,7 +790,7 @@ def _inventory(instance: Instance, perf_csv: Optional[Path]) -> Dict[str, object
     )
     record("zone_intervals", zones_timed)
     # Joins a perf row to its zones, so it needs the performance CSV as well.
-    record("core_spread", perf_ready and zones_timed)
+    record_perf("core_spread", zones_timed)
 
     # Per tool, against the tables it reads. A partial capture can answer
     # `find_operations` and none of the rest, and saying so is the whole point
@@ -756,7 +800,8 @@ def _inventory(instance: Instance, perf_csv: Optional[Path]) -> Dict[str, object
         record(tool_name, required <= tables)
     # Weighs the graph by the linked rows' device time, so it needs the graph's
     # tables, the captured graphs the link aligns, and a CSV to align them with.
-    record("critical_path", perf_ready and _CRITICAL_PATH_TABLES <= tables)
+    record_perf("critical_path", _CRITICAL_PATH_TABLES <= tables)
+    record_perf("source_lines", _SOURCE_LINES_TABLES <= tables)
 
     # Only its first bytes here; the first call reads it whole and refuses it then.
     record(
@@ -779,6 +824,23 @@ def _inventory(instance: Instance, perf_csv: Optional[Path]) -> Dict[str, object
         # stays unexposed is page-level (`buffer_pages`), which is millions of rows
         # on an ordinary capture and needs a different shape than a tool response.
         "data_present_without_tools": [],
+    }
+
+
+def without_performance_csv(
+    loaded: Dict[str, object], problem: str
+) -> Dict[str, object]:
+    """`load_report`'s answer for a CSV that passes `_inventory`'s line scan but does
+    not parse: why, and the tools that need it unanswerable. #2198"""
+    kept: List[str] = []
+    moved: List[str] = []
+    for name in cast(List[str], loaded["answerable"]):
+        (moved if name in PERF_CSV_TOOLS else kept).append(name)
+    return {
+        **loaded,
+        "answerable": kept,
+        "unanswerable": [*cast(List[str], loaded["unanswerable"]), *moved],
+        "performance_csv_problem": problem,
     }
 
 
@@ -812,6 +874,9 @@ def load_report(
     ``memory_report_path`` is the preferred name for the memory report directory;
     ``profiler_path`` is its former name, still accepted. Each new argument goes after
     the ones before it, so positional callers keep binding what they did.
+
+    The answerable list is final only after ``tools.with_signposts``, which moves
+    ``PERF_CSV_TOOLS`` to unanswerable for a CSV pandas cannot parse.
     """
     memory_label, memory_path = _memory_report_argument(
         memory_report_path, profiler_path
@@ -846,9 +911,11 @@ def load_report(
 
 __all__ = [
     "OpsPerformanceQueries",
+    "PERF_CSV_TOOLS",
     "ReportRegistry",
     "UnknownHandleError",
     "load_report",
     "perf_csv_columns",
     "read_once",
+    "without_performance_csv",
 ]

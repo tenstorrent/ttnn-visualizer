@@ -3,8 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { formatDuration } from './formatting';
-
-const MICROSECONDS_TO_NANOSECONDS = 1_000;
+import { NS_PER_US } from './math';
 
 /**
  * Formats a half-open duration bucket [minUs, maxUs) for axis labels and hovers.
@@ -12,11 +11,11 @@ const MICROSECONDS_TO_NANOSECONDS = 1_000;
  */
 export function formatDurationBucketRange(minUs: number, maxUs: number): string {
     if (minUs <= 0) {
-        return `< ${formatDuration(maxUs * MICROSECONDS_TO_NANOSECONDS)}`;
+        return `< ${formatDuration(maxUs * NS_PER_US)}`;
     }
 
-    const minNs = minUs * MICROSECONDS_TO_NANOSECONDS;
-    const maxNs = maxUs * MICROSECONDS_TO_NANOSECONDS;
+    const minNs = minUs * NS_PER_US;
+    const maxNs = maxUs * NS_PER_US;
 
     return `${formatDuration(minNs)} – ${formatDuration(maxNs)}`;
 }

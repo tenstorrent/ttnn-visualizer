@@ -159,11 +159,13 @@ export const getNsAxisConfig = (titleText: string, overrides?: Partial<AxisConfi
 
 /** Integer ticks without thousands separators — intentional for core counts (unlike ns `,d`). */
 export const CORE_COUNT_AXIS_TICK_FORMAT = 'd';
+/** Exact counts on hover: the ns hover format keeps two significant digits, so 108 cores would read 110. */
+export const CORE_COUNT_AXIS_HOVER_FORMAT = 'd';
 
 export const getCoreCountAxisConfig = (maxCores: number, overrides?: Partial<AxisConfig>): AxisConfig => ({
     title: { text: 'Core Count' },
     tickformat: CORE_COUNT_AXIS_TICK_FORMAT,
-    hoverformat: NS_AXIS_HOVER_FORMAT,
+    hoverformat: CORE_COUNT_AXIS_HOVER_FORMAT,
     range: [0, maxCores],
     ...overrides,
 });

@@ -4,6 +4,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router';
+import { useAtomValue } from 'jotai';
 import { Helmet } from 'react-helmet-async';
 import { Theme, ToastContainer, ToastPosition } from 'react-toastify';
 import 'styles/components/ToastOverrides.scss';
@@ -13,7 +14,12 @@ import ServerModeBanner from './ServerModeBanner';
 import { BounceIn } from './toastTransition';
 import ROUTES from '../definitions/Routes';
 import FooterInfobar from './FooterInfobar';
+import ChromeErrorBoundary from './ChromeErrorBoundary';
+import FooterFallback from './FooterFallback';
+import { activePerformanceReportAtom, activeProfilerReportAtom } from '../store/app';
+import { getFolderReportId } from '../functions/reportLinks';
 import ReportLinkRecorder from './ReportLinkRecorder';
+import ReportLoadRecorder from './ReportLoadRecorder';
 import ClusterRenderer from './cluster/ClusterRenderer';
 import { ModalAwareOutlet } from '../libs/ModalAwareOutlet';
 import FeedbackButton from './FeedbackButton';
@@ -26,6 +32,23 @@ import { isModalOpen } from '../functions/modalRoute';
 import { clearReportLinkError, getReportLinkError } from '../libs/openReportFromLink';
 import { createToast } from '../functions/createToastNotification';
 import { ToastType } from '../definitions/ToastType';
+
+// Reads the report atoms here rather than in `Layout`, so a report switch re-renders only the footer
+function BoundedFooterInfobar() {
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+    // Switching either report retries a footer that failed to render
+    const resetKey = `${getFolderReportId(activeProfilerReport) ?? ''}|${getFolderReportId(activePerformanceReport) ?? ''}`;
+
+    return (
+        <ChromeErrorBoundary
+            resetKey={resetKey}
+            fallback={(retry) => <FooterFallback retry={retry} />}
+        >
+            <FooterInfobar />
+        </ChromeErrorBoundary>
+    );
+}
 
 function Layout() {
     const location = useLocation();
@@ -79,9 +102,11 @@ function Layout() {
                 </main>
             </div>
 
-            <FooterInfobar />
+            <BoundedFooterInfobar />
 
             <ReportLinkRecorder />
+
+            <ReportLoadRecorder />
 
             <FeedbackButton />
 

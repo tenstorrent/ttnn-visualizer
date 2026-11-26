@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 from ttnn_visualizer.stack_trace_source import _validate_stack_trace_raw_path
 
@@ -75,8 +75,8 @@ def report_source_file_available(
     """
     Lightweight availability probe used by ``GET /api/remote/stack-trace/test``.
 
-    Avoids loading ``source_files.contents`` (which can be large) by asking the
-    DB only for the stored ``path``. The same path validation that gates
+    Returns only the stored ``path``, not ``source_files.contents``, though SQLite
+    still reads the contents to check that they are non-empty. The same path validation that gates
     ``read_report_source_file`` applies here so unsafe stored paths report as
     unavailable instead of being approved for a read that would later fail.
     """
@@ -113,3 +113,19 @@ def read_report_source_file(
     if validated_path is None:
         return None
     return source_file.contents, validated_path
+
+
+def list_report_source_files(db: "DatabaseQueries") -> List[Dict[str, object]]:
+    """
+    Every source file the report can serve, as ``{"id", "path"}``, for
+    ``GET /api/source-files``.
+
+    The frontend links a stack trace frame only when its file is listed, so this
+    applies the same rules as ``report_source_file_available``: a row whose
+    stored path fails validation is left out, as a probe would call it unavailable.
+    """
+    return [
+        {"id": source_file_id, "path": validated_path}
+        for source_file_id, path in db.query_source_file_index()
+        if (validated_path := _validated_report_source_path(path)) is not None
+    ]

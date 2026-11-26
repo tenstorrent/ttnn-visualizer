@@ -39,6 +39,8 @@ import ReportLinkRecorder from '../src/components/ReportLinkRecorder';
 import { ReportLinksProbe } from './helpers/ReportLinksProbe';
 import { createReportLink, getProbedReportLinks } from './helpers/reportLinkFixtures';
 import createMockFile, { MOCK_FOLDER } from './helpers/createMockFile';
+import { PendingReportLoadsProbe } from './helpers/PendingReportLoadsProbe';
+import { getProbedPendingReportLoads } from './helpers/pendingReportLoads';
 import { ReportKind, ReportLoadFailureReason, ReportSource } from '../src/definitions/EventLogEvent';
 
 const WAIT_FOR_OPTIONS = { timeout: 1000 };
@@ -53,6 +55,13 @@ const waitForPickerOptions = () => screen.findAllByTestId(TEST_IDS.FOLDER_PICKER
 // until then each row is a second button carrying the selected report's name.
 const waitForPickerClosed = () =>
     waitFor(() => expect(screen.queryAllByTestId(TEST_IDS.FOLDER_PICKER_ROW)).toHaveLength(0), WAIT_FOR_OPTIONS);
+
+// A choice only marks its load as pending; `useReportLoadSettlement` records it once the data
+// settles (#2343), so the selector itself must record no `report_loaded`.
+const expectPendingLoad = (kind: ReportKind, path: string, source: ReportSource) => {
+    expect(getProbedPendingReportLoads()).toEqual({ [kind]: { path, source } });
+    expect(recordReportLoaded).not.toHaveBeenCalled();
+};
 
 // Data is mutated in the mock of useLocal - eventually this should be set per test as needed
 const mockPerfFolderList: ReportFolder[] = [...mockPerformanceReportFolders];
@@ -297,6 +306,7 @@ it('updates the instance when a profiler report is selected and creates toast me
     render(
         <TestProviders>
             <LocalFolderSelector />
+            <PendingReportLoadsProbe />
         </TestProviders>,
     );
 
@@ -316,14 +326,14 @@ it('updates the instance when a profiler report is selected and creates toast me
 
     expect(getAllButtonsWithText(reportName)).toHaveLength(1);
     expect(getAllButtonsWithText(SELECT_REPORT_TEXT)).toHaveLength(1);
-    expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.PROFILER, ReportSource.LOCAL_TT_METAL);
-    expect(recordReportLoaded).toHaveBeenCalledTimes(1);
+    expectPendingLoad(ReportKind.PROFILER, mockProfilerFolderList[0].path, ReportSource.LOCAL_TT_METAL);
 });
 
 it('updates the instance when a performance report is selected and creates toast message', async () => {
     render(
         <TestProviders>
             <LocalFolderSelector />
+            <PendingReportLoadsProbe />
         </TestProviders>,
     );
 
@@ -343,8 +353,7 @@ it('updates the instance when a performance report is selected and creates toast
 
     expect(getAllButtonsWithText(path)).toHaveLength(1);
     expect(getAllButtonsWithText(SELECT_REPORT_TEXT)).toHaveLength(1);
-    expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.PERFORMANCE, ReportSource.LOCAL_TT_METAL);
-    expect(recordReportLoaded).toHaveBeenCalledTimes(1);
+    expectPendingLoad(ReportKind.PERFORMANCE, path, ReportSource.LOCAL_TT_METAL);
 });
 
 describe('under SERVER_MODE', () => {
@@ -367,6 +376,7 @@ describe('under SERVER_MODE', () => {
         render(
             <TestProviders>
                 <LocalFolderSelector />
+                <PendingReportLoadsProbe />
             </TestProviders>,
         );
 
@@ -384,6 +394,7 @@ describe('under SERVER_MODE', () => {
         render(
             <TestProviders>
                 <LocalFolderSelector />
+                <PendingReportLoadsProbe />
             </TestProviders>,
         );
 
@@ -400,29 +411,25 @@ describe('under SERVER_MODE', () => {
     it('records a demo profiler pick as demo', async () => {
         await selectProfiler(DEMO_PROFILER_FOLDER.reportName);
 
-        expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.PROFILER, ReportSource.DEMO);
-        expect(recordReportLoaded).toHaveBeenCalledTimes(1);
+        expectPendingLoad(ReportKind.PROFILER, DEMO_PROFILER_FOLDER.path, ReportSource.DEMO);
     });
 
     it('records a demo performance pick as demo', async () => {
         await selectPerformance(DEMO_PERFORMANCE_FOLDER.path);
 
-        expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.PERFORMANCE, ReportSource.DEMO);
-        expect(recordReportLoaded).toHaveBeenCalledTimes(1);
+        expectPendingLoad(ReportKind.PERFORMANCE, DEMO_PERFORMANCE_FOLDER.path, ReportSource.DEMO);
     });
 
     it("records reselecting the session's own profiler upload as upload", async () => {
         await selectProfiler(mockProfilerFolderList[0].reportName);
 
-        expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.PROFILER, ReportSource.UPLOAD);
-        expect(recordReportLoaded).toHaveBeenCalledTimes(1);
+        expectPendingLoad(ReportKind.PROFILER, mockProfilerFolderList[0].path, ReportSource.UPLOAD);
     });
 
     it("records reselecting the session's own performance upload as upload", async () => {
         await selectPerformance(mockPerformanceReportFolders[0].path);
 
-        expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.PERFORMANCE, ReportSource.UPLOAD);
-        expect(recordReportLoaded).toHaveBeenCalledTimes(1);
+        expectPendingLoad(ReportKind.PERFORMANCE, mockPerformanceReportFolders[0].path, ReportSource.UPLOAD);
     });
 });
 
@@ -431,6 +438,7 @@ it('records a failed profiler selection without reporting a successful load', as
     render(
         <TestProviders>
             <LocalFolderSelector />
+            <PendingReportLoadsProbe />
         </TestProviders>,
     );
 
@@ -444,6 +452,8 @@ it('records a failed profiler selection without reporting a successful load', as
     );
     expect(recordReportLoadFailed).toHaveBeenCalledTimes(1);
     expect(recordReportLoaded).not.toHaveBeenCalled();
+    // Nothing left for the settle to record a second outcome against
+    expect(getProbedPendingReportLoads()).toEqual({});
     await waitFor(
         () => expect(screen.getByText(MEMORY_REPORT_LOAD_FAILED_TOAST_TITLE)).not.toBeNull(),
         WAIT_FOR_OPTIONS,
@@ -569,6 +579,7 @@ it('handles valid memory report upload', async () => {
     render(
         <TestProviders>
             <LocalFolderSelector />
+            <PendingReportLoadsProbe />
         </TestProviders>,
     );
 
@@ -593,8 +604,7 @@ it('handles valid memory report upload', async () => {
     const { reportName } = mockProfilerFolderList[0];
     expect(getAllButtonsWithText(reportName)).toHaveLength(1);
     expect(getAllButtonsWithText(SELECT_REPORT_TEXT)).toHaveLength(1);
-    expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.PROFILER, ReportSource.UPLOAD);
-    expect(recordReportLoaded).toHaveBeenCalledTimes(1);
+    expectPendingLoad(ReportKind.PROFILER, mockProfilerFolderList[0].path, ReportSource.UPLOAD);
 });
 
 it('does not record a successful profiler upload when the payload status is failed', async () => {
@@ -678,6 +688,7 @@ it('handles valid performance report upload', async () => {
     render(
         <TestProviders>
             <LocalFolderSelector />
+            <PendingReportLoadsProbe />
         </TestProviders>,
     );
 
@@ -710,8 +721,7 @@ it('handles valid performance report upload', async () => {
 
     expect(getAllButtonsWithText(MOCK_FOLDER)).toHaveLength(1);
     expect(getAllButtonsWithText(SELECT_REPORT_TEXT)).toHaveLength(1);
-    expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.PERFORMANCE, ReportSource.UPLOAD);
-    expect(recordReportLoaded).toHaveBeenCalledTimes(1);
+    expectPendingLoad(ReportKind.PERFORMANCE, MOCK_FOLDER, ReportSource.UPLOAD);
 });
 
 it('handles valid performance report upload without tracy', async () => {

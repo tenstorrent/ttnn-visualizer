@@ -14,7 +14,7 @@ It lives in pytest rather than vitest because Python can introspect
 toolchain the frontend suite does not have. Parsing TypeScript with a regex is honest here
 only because the file it reads is a flat set of string-valued enums with no computation in
 it; a test that started failing to find members would fail loudly rather than pass hollowly
-(see :func:`_enum_values`).
+(see :func:`typescript_enum_values`).
 """
 
 import json
@@ -32,12 +32,20 @@ from ttnn_visualizer.event_logging import (
     EVENT_FIELD,
     MAX_EVENT_LOG_BATCH_EVENTS,
     SERVER_EVENT_DETAIL_FIELDS,
+    ComparisonReportCountBucket,
+    DrilldownTarget,
     EventLogEvent,
     EventLogView,
+    FilterSurface,
+    NpeMode,
+    PerfChartLabel,
+    PerfTableOption,
+    RemoteConnectionTestResult,
     ReportKind,
     ReportLoadFailureReason,
     ReportSource,
 )
+from ttnn_visualizer.tests.frontend_parity import typescript_enum_values
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 _DEFINITIONS = _REPOSITORY_ROOT / "src" / "definitions" / "EventLogEvent.ts"
@@ -64,7 +72,19 @@ _PAIRED_ENUMS: Dict[str, Type[Enum]] = {
     "ReportSource": ReportSource,
     "ReportLoadFailureReason": ReportLoadFailureReason,
     "EventLogView": EventLogView,
+    "PerfChartLabel": PerfChartLabel,
+    "PerfTableOption": PerfTableOption,
+    "ComparisonReportCountBucket": ComparisonReportCountBucket,
+    "NpeMode": NpeMode,
+    "DrilldownTarget": DrilldownTarget,
+    "FilterSurface": FilterSurface,
+    "RemoteConnectionTestResult": RemoteConnectionTestResult,
 }
+
+# How a payload branch spells an event that carries no details. A bare `{}` type is what
+# `@typescript-eslint/no-empty-object-type` rejects, so the TS copy says it this way, and
+# it posts as `details: {}`.
+_EMPTY_DETAILS_TYPE = "Record<string, never>"
 
 
 def _read(path: Path) -> str:
@@ -93,44 +113,28 @@ def _require_match(
     return match
 
 
-def _enum_values(source: str, name: str) -> Set[str]:
-    """The string values of one TS enum, or a failure rather than an empty set.
-
-    An empty result would silently satisfy every comparison below against an enum that had
-    also been emptied, so a body that does not parse is an error in its own right.
-    """
-    body = _require_match(
-        rf"export enum {name} {{(.*?)^}}",
-        source,
-        re.DOTALL | re.MULTILINE,
-        f"No `export enum {name}` in {_DEFINITIONS.name}",
-    )
-
-    values = set(re.findall(r"=\s*'([^']+)'", body.group(1)))
-
-    if not values:
-        raise AssertionError(
-            f"`export enum {name}` in {_DEFINITIONS.name} declares no members"
-        )
-
-    return values
-
-
 def _payload_detail_keys(source: str, event: EventLogEvent) -> Set[str]:
-    """The keys of the `details` object in the `EventLogEventPayload` branch for one event."""
+    """The keys of the `details` object in the `EventLogEventPayload` branch for one event.
+
+    A branch typed ``details: Record<string, never>`` declares no keys.
+    """
     branch = _require_match(
-        rf"event:\s*EventLogEvent\.{event.name};\s*\n?\s*details:\s*{{(.*?)}}",
+        rf"event:\s*EventLogEvent\.{event.name};\s*\n?\s*details:\s*"
+        rf"(?:{{(.*?)}}|{re.escape(_EMPTY_DETAILS_TYPE)})",
         source,
         re.DOTALL,
         f"No EventLogEventPayload branch for {event.name}",
     )
+
+    if branch.group(1) is None:
+        return set()
 
     return set(re.findall(r"(\w+)\s*:", branch.group(1)))
 
 
 @pytest.mark.parametrize("name, enumeration", sorted(_PAIRED_ENUMS.items()))
 def test_every_enum_matches_its_typescript_copy(name, enumeration):
-    values = _enum_values(_read(_DEFINITIONS), name)
+    values = typescript_enum_values(_DEFINITIONS, name)
 
     assert values == {member.value for member in enumeration}, (
         f"{name} has diverged from event_logging.py. The client would emit events this endpoint "

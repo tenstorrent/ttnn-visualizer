@@ -10,14 +10,20 @@ renders only the transfers active at one timestep (~tens of them). This builds a
 timestep-keyed SQLite index once, so the frontend can fetch just the visible
 window (~135 KB) instead of the whole payload.
 
-The build parses the whole object in memory (matches the current read path); a
-streaming parse to bound peak RSS is a follow-up for the multi-user hosted path.
+The build parses the whole object in memory. The agent's `noc_congestion` reads a
+trace a timestep at a time (`streamed_link_demand`); a build reading the same way would
+bound its peak RSS on the multi-user hosted path, once its walk of the JSON is split
+from the link-demand rules it applies. `trace_link_demand`, the same read of a parsed
+trace, is the reference the tests hold the streamed read to.
 """
 
 import contextlib
+import json
 import logging
 import os
+import re
 import sqlite3
+import sys
 import tempfile
 import threading
 from pathlib import Path
@@ -28,8 +34,10 @@ from typing import (
     Iterator,
     List,
     NamedTuple,
+    NoReturn,
     Optional,
     Tuple,
+    cast,
 )
 
 import orjson
@@ -53,7 +61,9 @@ INDEX_SUFFIX = ".npeidx.sqlite"
 # Bump when the schema or build logic changes so stale caches are rebuilt.
 # 5: carries `soc_descriptor` in meta, so a report-supplied SoC descriptor
 #    survives the windowed path as well as the whole-file one. #1776
-INDEX_VERSION = 5
+# 6: carries `has_fabric_events` in meta, so the windowed event filter is decided
+#    for the whole trace rather than per window. #2356
+INDEX_VERSION = 6
 
 _TRANSFER_INSERT_BATCH = 5000
 
@@ -163,7 +173,8 @@ def load_npe_object(npe_path: Path) -> dict:
 def parse_trace(data: bytes, compressed: bool) -> dict:
     """A trace's bytes as `load_npe_object` reads them: zstd frames, or JSON."""
     if compressed:
-        # Rebound, so the compressed bytes are freed before the parse.
+        # Rebound, so the compressed bytes are freed before the parse; from Python 3.11
+        # only, as 3.10 keeps the caller's reference to them until the call returns.
         data = zstd.uncompress(data)
     return orjson.loads(data)
 
@@ -391,7 +402,13 @@ def _write_index(
 
         batch = []
         skipped_no_id = 0
+        has_fabric_events = False
         for transfer in transfers:
+            # A truthy `fabric_event_type`, the rule the frontend's whole-file check
+            # also applies. Checked before the no-id skip so the flag describes the
+            # trace the whole-file path sees.
+            if transfer.get("fabric_event_type"):
+                has_fabric_events = True
             tid = _transfer_id(transfer)
             if tid is None:
                 # A transfer with no id can't be resolved (active_transfers are id
@@ -412,6 +429,12 @@ def _write_index(
             )
         if skipped_no_id:
             logger.warning(f"NPE index: skipped {skipped_no_id} transfer(s) with no id")
+        # Stored rather than derived on read: a windowed client only ever holds
+        # one window's transfers, so it cannot tell for itself. #2356
+        conn.execute(
+            "INSERT INTO meta (key, value) VALUES (?, ?)",
+            ("has_fabric_events", orjson.dumps(has_fabric_events)),
+        )
 
         timestep_rows = []
         for t, step in enumerate(timesteps):
@@ -499,7 +522,7 @@ class LinkDemand(NamedTuple):
 
 def _transfer_count(transfers: object) -> int:
     """Transfers as `_write_index` stores them: one row per id, none without one."""
-    if not isinstance(transfers, list):
+    if not isinstance(transfers, (list, _Elements)):
         return 0
     ids = set()
     spelled: List[object] = []
@@ -544,7 +567,7 @@ def indexed_link_demand(npe_path: Path) -> Iterator[Optional[LinkDemand]]:
         common_info = orjson.loads(meta["common_info"])
         (transfers,) = conn.execute("SELECT count(*) FROM transfer").fetchone()
         yield LinkDemand(
-            common_info if isinstance(common_info, dict) else {},
+            _common_info_of(common_info),
             transfers,
             (
                 (start, end, orjson.loads(link_demand))
@@ -558,22 +581,246 @@ def indexed_link_demand(npe_path: Path) -> Iterator[Optional[LinkDemand]]:
         conn.close()
 
 
+_NOT_A_TRACE = "it holds no timestep_data list, so it is not a tt-npe trace"
+
+
+def _common_info_of(value: object) -> dict:
+    """A trace's `common_info` as every read keeps it: an object, else empty."""
+    return value if isinstance(value, dict) else {}
+
+
+def _step_row(step: object) -> Tuple[Any, Any, Any]:
+    """A timestep as a read of the trace hands it on: empty where it is not an object."""
+    return _step_cells(step) if isinstance(step, dict) else (None, None, [])
+
+
 def trace_link_demand(trace: object) -> LinkDemand:
-    """A parsed trace's link demand, read as `_write_index` would store it."""
+    """A parsed trace's link demand, read as `_write_index` would store it: the
+    reference `StreamedLinkDemand` is tested against."""
     if not isinstance(trace, dict) or not isinstance(trace.get("timestep_data"), list):
-        raise ValueError("it holds no timestep_data list, so it is not a tt-npe trace")
+        raise ValueError(_NOT_A_TRACE)
     steps = trace["timestep_data"]
-    common_info = trace.get("common_info")
     return LinkDemand(
-        common_info if isinstance(common_info, dict) else {},
+        _common_info_of(trace.get("common_info")),
         _transfer_count(trace.get("noc_transfers")),
-        (
-            _step_cells(step) if isinstance(step, dict) else (None, None, [])
-            for step in steps
-        ),
+        (_step_row(step) for step in steps),
         truncated=False,
         unreadable_timesteps=sum(1 for step in steps if not isinstance(step, dict)),
     )
+
+
+def trace_text(data: bytes) -> str:
+    """A trace's JSON, one character a byte, for `streamed_link_demand` to scan: a
+    character past Latin-1 anywhere would make the whole text two or four bytes a
+    character, and orjson checks the UTF-8 itself."""
+    return data.decode("latin-1")
+
+
+_JSON_SPACE = re.compile(r"[ \t\n\r]*")
+# Finds where a value ends; orjson then reads it, so each value reads as `parse_trace`
+# would read it, and a refusal falls where its refusal would.
+_VALUE_END = json.JSONDecoder()
+# orjson reads arrays and objects nested this deep and refuses deeper; so does the
+# streamed read, whatever its caller's stack, so every read of a trace agrees.
+MAX_JSON_DEPTH = 1024
+# Before Python 3.12 the stdlib scanner's recursion counts against the interpreter's
+# limit, part of which the caller's own frames have used.
+RECURSION_HEADROOM = MAX_JSON_DEPTH + 64
+# orjson 3.13 and later, then the locked 3.11 and earlier.
+_ORJSON_TOO_DEEP = ("depth limit exceeded", "array and object recursion depth exceeded")
+
+
+class NestsTooDeep(ValueError):
+    """Arrays and objects nested past `MAX_JSON_DEPTH`, which the whole parse refuses."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            f"it nests more than {MAX_JSON_DEPTH:,} arrays and objects deep"
+        )
+
+
+class StreamedLinkDemand:
+    """`trace_link_demand` of a trace's text, read a timestep at a time rather than
+    parsed whole, so the read never holds the parsed trace. #2275"""
+
+    truncated = False
+
+    def __init__(self, text: str) -> None:
+        self._common_info: dict = {}
+        self._transfer_count = 0
+        self._unreadable_timesteps = 0
+        self._read_through = False
+        self.timesteps: Iterator[Tuple[Any, Any, Any]] = self._walk(text)
+
+    @property
+    def common_info(self) -> dict:
+        return self._final(self._common_info)
+
+    @property
+    def transfer_count(self) -> int:
+        return self._final(self._transfer_count)
+
+    @property
+    def unreadable_timesteps(self) -> int:
+        return self._final(self._unreadable_timesteps)
+
+    def _final(self, field: Any) -> Any:
+        # Read before the timesteps, a field would be its default, not the trace's.
+        if not self._read_through:
+            raise RuntimeError("read the timesteps through before the other fields")
+        return field
+
+    def _walk(self, text: str) -> Iterator[Tuple[Any, Any, Any]]:
+        at = _space(text, 0)
+        if not text.startswith("{", at):
+            # Read through first: what the whole parse cannot read is refused as such.
+            _at_end(text, _past_value(text, at, 0))
+            raise ValueError(_NOT_A_TRACE)
+        at = _space(text, at + 1)
+        steps_read = False
+        while not text.startswith("}", at):
+            key, at = _key(text, at)
+            if key == "timestep_data" and steps_read:
+                # orjson keeps the last of two, and the first has already been read.
+                raise ValueError("it names timestep_data twice")
+            if text.startswith("[", at):
+                values = _Elements(text, at, 1)
+                steps_read = steps_read or key == "timestep_data"
+                yield from self._array(key, values)
+                at = values.end
+            else:
+                value, at = _value(text, at, 1)
+                self._take(key, value)
+            at = _after_member(text, at, "}")
+        _at_end(text, at + 1)
+        if not steps_read:
+            raise ValueError(_NOT_A_TRACE)
+        self._read_through = True
+
+    def _array(self, key: str, values: "_Elements") -> Iterator[Tuple[Any, Any, Any]]:
+        """A member whose value is an array, its elements read one at a time."""
+        if key == "noc_transfers":
+            self._transfer_count = _transfer_count(values)
+            return
+        if key == "common_info":
+            # The last of two is the one kept, as orjson keeps it.
+            self._common_info = {}
+        for value in values:
+            if key != "timestep_data":
+                continue
+            if not isinstance(value, dict):
+                self._unreadable_timesteps += 1
+            yield _step_row(value)
+
+    def _take(self, key: str, value: object) -> None:
+        """A member whose value is not an array."""
+        if key == "common_info":
+            self._common_info = _common_info_of(value)
+        elif key == "noc_transfers":
+            self._transfer_count = _transfer_count(value)
+
+
+class _Elements:
+    """Each element of the array at `at`, inside `depth` arrays and objects, read by
+    orjson; `end` is past it once read."""
+
+    def __init__(self, text: str, at: int, depth: int) -> None:
+        self.text, self.at, self.end, self.depth = text, at, at, depth
+
+    def __iter__(self) -> Iterator[object]:
+        text = self.text
+        at = _space(text, self.at + 1)
+        if text.startswith("]", at):
+            self.end = at + 1
+            return
+        while True:
+            value, at = _value(text, at, self.depth + 1)
+            yield value
+            at = _after_member(text, at, "]")
+            if text.startswith("]", at):
+                self.end = at + 1
+                return
+
+
+def _space(text: str, at: int) -> int:
+    return cast(re.Match, _JSON_SPACE.match(text, at)).end()
+
+
+def _value(text: str, at: int, depth: int) -> Tuple[object, int]:
+    """orjson's read of the value at `at`, inside `depth` arrays and objects, and where
+    it ends."""
+    limit = sys.getrecursionlimit()
+    sys.setrecursionlimit(limit + RECURSION_HEADROOM)
+    try:
+        # Only the end: the scanner's object is let go before orjson builds its own.
+        end = _VALUE_END.raw_decode(text, at)[1]
+    except RecursionError:
+        raise NestsTooDeep() from None
+    finally:
+        sys.setrecursionlimit(limit)
+    # Wrapped as deep as it sits, so orjson's depth limit is the whole parse's.
+    wrapped = b"[" * depth + text[at:end].encode("latin-1") + b"]" * depth
+    try:
+        value = orjson.loads(wrapped)
+    except orjson.JSONDecodeError as error:
+        if error.msg in _ORJSON_TOO_DEEP:
+            raise NestsTooDeep() from None
+        # Where in the trace, as the whole parse would say, not where in the value.
+        raise json.JSONDecodeError(error.msg, text, at + error.pos - depth) from None
+    for _ in range(depth):
+        value = cast(list, value)[0]
+    return value, end
+
+
+def _past_value(text: str, at: int, depth: int) -> int:
+    """Past the value at `at`, read as `_value` reads it, an array an element at a time."""
+    if text.startswith("[", at):
+        values = _Elements(text, at, depth)
+        for _ in values:
+            pass
+        return values.end
+    return _value(text, at, depth)[1]
+
+
+def _at_end(text: str, at: int) -> None:
+    """Refuse anything but whitespace from `at` on, as the whole parse does."""
+    end = _space(text, at)
+    if end < len(text):
+        _refuse(text, end, "Extra data")
+
+
+def _key(text: str, at: int) -> Tuple[str, int]:
+    """The member name at `at` as orjson reads it, and where its value starts."""
+    if not text.startswith('"', at):
+        _refuse(text, at, "Expecting property name enclosed in double quotes")
+    key, at = _value(text, at, 1)
+    at = _space(text, at)
+    if not text.startswith(":", at):
+        _refuse(text, at, "Expecting ':' delimiter")
+    return cast(str, key), _space(text, at + 1)
+
+
+def _after_member(text: str, at: int, close: str) -> int:
+    """Past the comma after a member, or at the bracket that closes its container."""
+    at = _space(text, at)
+    if text.startswith(",", at):
+        at = _space(text, at + 1)
+        if text.startswith(close, at):
+            _refuse(text, at, "Expecting a value after ','")
+        return at
+    if not text.startswith(close, at):
+        _refuse(text, at, f"Expecting ',' or '{close}'")
+    return at
+
+
+def _refuse(text: str, at: int, reason: str) -> NoReturn:
+    """A refusal of the JSON at `at`, where the whole parse would refuse it."""
+    raise json.JSONDecodeError(reason, text, at)
+
+
+def streamed_link_demand(text: str) -> StreamedLinkDemand:
+    """The link demand of a trace's text, read a timestep at a time."""
+    return StreamedLinkDemand(text)
 
 
 def ensure_index(npe_path: str) -> Path:
@@ -616,11 +863,12 @@ def read_summary(db_path: Path) -> dict:
 
     return {
         "common_info": orjson.loads(meta["common_info"]),
-        # `.get` rather than `[...]`: an index written before this key existed is
-        # still readable, and a rebuild is only triggered by INDEX_VERSION.
-        "soc_descriptor": orjson.loads(meta.get("soc_descriptor") or b"null"),
+        "soc_descriptor": orjson.loads(meta["soc_descriptor"]),
         "chips": orjson.loads(meta["chips"]),
         "zones": orjson.loads(meta["zones"]),
+        # Read strictly, like every meta key here: an index written before a key
+        # existed has an older INDEX_VERSION, so it is rebuilt before it is read.
+        "has_fabric_events": orjson.loads(meta["has_fabric_events"]),
         "n_timesteps": int(meta["n_timesteps"]),
         "timesteps": timesteps,
     }

@@ -10,6 +10,7 @@ neither an app nor a database session -- reaching for the fixture would test a
 coupling the tools deliberately do not have.
 """
 
+import json
 import re
 import sqlite3
 from pathlib import Path
@@ -115,6 +116,22 @@ INSERT INTO devices (
 
 # `SCHEMA_V2` stores `buffer_type` as an integer, so the name lookup is a real
 # schema rather than defensive coding: `BufferType.L1` is 1.
+# 20 and 21 share the smallest largest free block, the higher id 21 the fuller of them;
+# 22 has more room, and 2 and 3 more still.
+_L1_TIES_SQL = _REPORT_SQL + """
+INSERT INTO operations VALUES
+    (20, 'ttnn.emptier', 1.0),
+    (21, 'ttnn.fuller', 1.0),
+    (22, 'ttnn.roomier', 1.0);
+INSERT INTO buffers VALUES
+    (20, 0, 300000, 10000, 'L1', 0),
+    (20, 0, 700000, 10000, 'L1', 0),
+    (21, 0, 300000, 10000, 'L1', 0),
+    (21, 0, 400000, 100000, 'L1', 0),
+    (21, 0, 700000, 10000, 'L1', 0),
+    (22, 0, 300000, 10000, 'L1', 0);
+"""
+
 _INTEGER_BUFFER_TYPE_SQL = """
 CREATE TABLE operations (operation_id int UNIQUE, name text, duration float);
 CREATE TABLE buffers (
@@ -701,6 +718,39 @@ class TestMemoryProfile:
         assert "floor, not the peak" in description
         assert "circular buffers" in description
         assert "out-of-memory" in description
+        # What l1_pressure counts, before the call. #2232
+        assert "operations_at_top" in description
+
+    def test_every_text_naming_when_l1_pressure_is_null_names_each_condition(self):
+        """The docstring and both tool descriptions each list the conditions, so one
+        dropped or reworded in one of them must fail here. #2232"""
+        table = server._tool_table(ReportRegistry())
+        texts = {
+            "memory_profile docstring": agent_operations.memory_profile.__doc__ or "",
+            "memory_profile": table["memory_profile"]["description"],
+            "operation_detail": table["operation_detail"]["description"],
+        }
+        flat = {
+            where: " ".join(text.replace("`", "").split())
+            for where, text in texts.items()
+        }
+        everywhere = tuple(texts)
+        profile = ("memory_profile docstring", "memory_profile")
+        conditions = {
+            "with a caveat": everywhere,
+            "no device records": everywhere,
+            "cannot be attributed to the rank": everywhere,
+            "no buffers rows": ("operation_detail",),
+            "any buffer_type but L1": profile,
+            "holding no L1 buffers": profile,
+        }
+
+        assert [
+            (phrase, where)
+            for phrase, wheres in conditions.items()
+            for where in wheres
+            if phrase not in flat[where]
+        ] == []
 
     def test_no_figure_adds_one_memory_type_to_another(self, loaded):
         """`max_size_per_bank` is divided by the bank count of its own memory
@@ -1278,6 +1328,7 @@ class TestOperationDetail:
         # 13 holds 1,000 B near the top of L1: by high-water mark it would rank
         # first, by largest free block (1,360,000 B) it ranks third.
         assert order == [11, 10, 13, 2, 3, 12]
+        assert ranked["operations_at_top"] == 1
         # An operation whose L1 rows occupy nothing is still measured, as empty.
         assert ranked["operations"][-1]["allocated_bytes"] == 0
         assert ranked["operation_count"] == 6
@@ -1312,6 +1363,112 @@ class TestOperationDetail:
         assert "upper bound" in note
         assert "circular buffers" in note
         assert "smallest largest free block" in note
+        assert "`high_water_bytes` a floor" in note
+        assert "`free_segments` neither" in note
+        assert "not a peak" in note
+        assert "often equals `usable_bytes`" in note
+
+    def test_memory_profile_counts_the_operations_sharing_the_top(self, loaded):
+        """As `operations_at_peak`: a limit showing one of them is not all of them."""
+        registry, handle = loaded(_L1_TIES_SQL, name="l1-ties")
+
+        limited = agent_operations.memory_profile(registry, handle, limit=1)[
+            "l1_pressure"
+        ]
+
+        # 21 and 20 share the smallest largest free block; the fuller 21 ranks first
+        # though its id is the higher.
+        assert [row["operation_id"] for row in limited["operations"]] == [21]
+        assert limited["operations_at_top"] == 2
+        assert limited["operation_count"] == 5
+        full = agent_operations.memory_profile(registry, handle)["l1_pressure"]
+        first, second, third = full["operations"][:3]
+        assert second["operation_id"] == 20
+        assert first["largest_free_block"] == second["largest_free_block"]
+        assert first["fullness_pct"] > second["fullness_pct"]
+        assert third["largest_free_block"] > first["largest_free_block"]
+        assert (
+            agent_operations.memory_profile(registry, handle, buffer_type="L1")[
+                "l1_pressure"
+            ]["operations_at_top"]
+            == 2
+        )
+
+    def test_memory_profile_counts_every_operation_when_all_are_empty(self, loaded):
+        """L1 rows with no address occupy nothing, so every operation is measured as
+        empty and all of them share the top."""
+        sql = _REPORT_SQL + """
+        DELETE FROM buffers WHERE buffer_type = 'L1';
+        INSERT INTO operations VALUES (20, 'ttnn.unaddressed', 1.0);
+        INSERT INTO buffers VALUES
+            (2, 0, NULL, 8192, 'L1', 0),
+            (3, 0, NULL, 4096, 'L1', 0),
+            (20, 0, NULL, 2048, 'L1', 0);
+        """
+        registry, handle = loaded(sql, name="l1-all-empty")
+
+        ranked = agent_operations.memory_profile(registry, handle)["l1_pressure"]
+
+        assert ranked["operation_count"] == 3
+        assert ranked["operations_at_top"] == ranked["operation_count"]
+        assert [row["allocated_bytes"] for row in ranked["operations"]] == [0, 0, 0]
+
+    def test_memory_profile_counts_the_top_within_the_rank_asked_for(self, loaded):
+        """Rank 1's tie is not rank 0's: each rank is measured and counted alone."""
+        sql = _RANKED_REPORT_SQL + """
+        INSERT INTO operations VALUES (2, 'op_two_on_rank_one', 1.0, 1);
+        INSERT INTO buffers VALUES (2, 0, 100, 8192, 'L1', 0, 1);
+        """
+        registry, handle = loaded(sql, name="l1-ranked-ties")
+
+        counts = {
+            rank: (
+                ranked["operations_at_top"],
+                ranked["operation_count"],
+            )
+            for rank in (0, 1)
+            for ranked in [
+                agent_operations.memory_profile(registry, handle, rank=rank)[
+                    "l1_pressure"
+                ]
+            ]
+        }
+
+        assert counts == {0: (1, 1), 1: (2, 2)}
+
+    def test_operations_at_top_reaches_the_agent_through_the_tool(self, loaded):
+        registry, handle = loaded(_L1_TIES_SQL, name="l1-ties-dispatch")
+
+        response = server.handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": "memory_profile",
+                    "arguments": {"handle": handle, "limit": 1},
+                },
+            },
+            server._tool_table(registry),
+        )
+
+        answer = json.loads(response["result"]["content"][0]["text"])
+        assert answer["l1_pressure"]["operations_at_top"] == 2
+        assert answer["l1_pressure"]["returned"] == 1
+
+    def test_memory_profile_l1_pressure_is_none_for_a_report_without_l1(self, loaded):
+        """Nothing to rank, which is no fault of the report, so no caveat says so; asked
+        for L1 by name, the report is refused as holding none."""
+        registry, handle = loaded(
+            _REPORT_SQL + "DELETE FROM buffers WHERE buffer_type = 'L1';",
+            name="l1-none-held",
+        )
+
+        profile = agent_operations.memory_profile(registry, handle)
+        assert profile["l1_pressure"] is None
+        assert "caveat" not in profile or "l1_pressure" not in profile["caveat"]
+        with pytest.raises(ValueError, match="no L1 buffers in this report"):
+            agent_operations.memory_profile(registry, handle, buffer_type="L1")
 
     def test_memory_profile_l1_pressure_reads_integer_buffer_types(self, loaded):
         sql = _INTEGER_BUFFER_TYPE_SQL + """
@@ -1516,26 +1673,41 @@ class TestOperationProvenance:
 class TestFrameParity:
     """`parse_frames` against the rule `src/functions/stackTraceSource.ts` applies.
 
-    The frontend takes the first `File "..."` and the first `line N,` for the
-    operation details panel. The claim in `parse_frames`' comment is that the call
-    site here is that frame, so these pin where the two agree -- and, for the inputs
-    where the frontend's looser regexes would answer differently, which answer this
-    side gives. Three prose claims of parity with nothing enforcing them was the
-    worst of the available shapes. #2021
+    The frontend links every frame on the operation details panel and opens frame 0
+    from its Source button. The claim in `parse_frames`' comment is that the call
+    site here is that frame, so these pin that the two read the same frames from the
+    same traces, including the inputs the frontend's old unanchored regexes read
+    differently. Three prose claims of parity with nothing enforcing them was the
+    worst of the available shapes. The function name is held too, since the
+    Performance page's Source line grouping shows it beside the call site.
+    #2021, #2358, #2359
     """
 
-    # The frontend's two regexes, transcribed. Separate patterns over the whole
-    # trace, so its file and its line number need not come from the same frame.
-    _TS_FILE = re.compile(r'File "(.*)"')
-    _TS_LINE = re.compile(r"line (\d*),")
+    # `TRACE_FRAME_REGEX`, transcribed: JavaScript's `$` without the `m` flag is
+    # Python's `\Z`, and the frontend splits lines on CRLF, CR and LF before matching.
+    # `re.ASCII` because JavaScript's `\d` matches only ASCII digits, and the class in
+    # place of `.` because JavaScript's `.` also stops at U+2028 and U+2029.
+    _TS_FRAME = re.compile(
+        r'^([ \t]*File )"([^"]*)", line (\d+)(, in [^\r\n\u2028\u2029]*)\Z', re.ASCII
+    )
+    _TS_LINE_BREAK = re.compile(r"\r\n|\r|\n")
+    # `FRAME_FUNCTION_PREFIX`, which the frontend slices off the suffix before trimming.
+    _TS_FUNCTION_PREFIX = ", in "
 
     def _frontend(self, trace: str):
-        file_match = self._TS_FILE.search(trace)
-        line_match = self._TS_LINE.search(trace)
-        return (
-            file_match.group(1) if file_match else "",
-            int(line_match.group(1)) if line_match and line_match.group(1) else None,
-        )
+        frames = []
+        for text in self._TS_LINE_BREAK.split(trace):
+            match = self._TS_FRAME.match(text)
+            if match:
+                function = match.group(4)[len(self._TS_FUNCTION_PREFIX) :].strip()
+                frames.append((match.group(2), int(match.group(3)), function))
+        return frames
+
+    def _backend(self, trace: str):
+        return [
+            (frame["file"], frame["line"], frame["function"])
+            for frame in agent_operations.parse_frames(trace)
+        ]
 
     def test_they_agree_on_a_real_traceback(self):
         trace = (
@@ -1544,26 +1716,44 @@ class TestFrameParity:
             '  File "/m/tests/infra.py", line 317, in run\n'
             "    self.output = self.model(\n"
         )
-        call_site = agent_operations.parse_frames(trace)[0]
 
-        assert (call_site["file"], call_site["line"]) == self._frontend(trace)
+        assert self._backend(trace) == self._frontend(trace)
+        assert self._backend(trace)[0] == (
+            "/m/models/resnet.py",
+            135,
+            "run_downsample_if_req",
+        )
 
-    def test_a_frame_line_without_a_function_is_skipped_here(self):
-        """The frontend's `File "(.*)"` does not require `, line N, in fn`, so it
-        accepts a line this parser skips. Recorded rather than resolved: a line that
-        names no line number and no function is not a frame, and a call site of
-        `("/m/partial.py", None)` would be worse than none."""
+    def test_they_agree_on_a_crlf_traceback(self):
+        trace = (
+            '  File "/m/outer.py", line 1, in outer\r\n'
+            '  File "/m/inner.py", line 2, in inner\r\n'
+            "    x()\r\n"
+        )
+
+        assert self._backend(trace) == self._frontend(trace)
+        assert len(self._frontend(trace)) == 2
+
+    def test_both_skip_a_frame_line_without_a_function(self):
+        """A line that names no line number and no function is not a frame, and a
+        call site of `("/m/partial.py", None)` would be worse than none. The frontend
+        once accepted it, pairing its file with the next frame's line number."""
         trace = '  File "/m/partial.py"\n  File "/m/real.py", line 7, in fn\n    x()\n'
 
-        frames = agent_operations.parse_frames(trace)
+        assert (
+            self._backend(trace) == self._frontend(trace) == [("/m/real.py", 7, "fn")]
+        )
 
-        assert [frame["file"] for frame in frames] == ["/m/real.py"]
-        assert self._frontend(trace)[0] == "/m/partial.py"
+    def test_both_trim_whitespace_around_the_function_name(self):
+        trace = '  File "/m/a.py", line 3, in forward  \t\n    x()\n'
 
-    def test_a_quote_in_the_path_is_read_as_no_frame_at_all(self):
-        """The one divergence that matters. `File "(.*)"` is greedy, so the frontend
-        reports the path up to the last quote; `[^"]*` cannot span a quote, so this
-        anchored pattern matches nothing and reports no frame.
+        assert (
+            self._backend(trace) == self._frontend(trace) == [("/m/a.py", 3, "forward")]
+        )
+
+    def test_both_read_a_quote_in_the_path_as_no_frame_at_all(self):
+        """`[^"]*` cannot span a quote, so neither side reports a frame, where the
+        frontend's old greedy `File "(.*)"` reported the path up to the last quote.
 
         That is the honest outcome — a path this parser cannot delimit is not a
         location it should assert — but it has to reach the agent as "unknown",
@@ -1571,8 +1761,7 @@ class TestFrameParity:
         rather than the absence of a row."""
         trace = '  File "/m/we"ird.py", line 20, in f\n    x()\n'
 
-        assert agent_operations.parse_frames(trace) == []
-        assert self._frontend(trace) == ('/m/we"ird.py', 20)
+        assert self._backend(trace) == self._frontend(trace) == []
 
     def test_a_source_line_is_never_taken_from_another_frame(self):
         """Compact tracebacks put frames on adjacent lines. The window used to look
@@ -1592,6 +1781,30 @@ class TestFrameParity:
     def test_it_reads_nothing_out_of_a_non_python_trace(self):
         assert agent_operations.parse_frames("#0 0x7f in ttnn::run()") == []
         assert agent_operations.parse_frames("") == []
+
+    def test_the_transcription_reads_no_frame_where_javascript_reads_none(self):
+        """A plain Python copy of the pattern reads a frame from each of these lines,
+        where JavaScript reads none. This pins `_TS_FRAME` to JavaScript's reading.
+
+        `parse_frames` does read them, a known difference the agent README notes:
+        its `\\d` matches non-ASCII digits, which CPython never writes, and
+        `splitlines()` ends the line at U+2028, leaving the frame before it whole."""
+        arabic_indic_line = '  File "/m/a.py", line \u0663, in f\n'
+        line_separator = '  File "/m/a.py", line 3, in f\u2028x\n'
+
+        assert self._frontend(arabic_indic_line) == []
+        assert self._frontend(line_separator) == []
+        assert self._backend(arabic_indic_line) == [("/m/a.py", 3, "f")]
+        assert self._backend(line_separator) == [("/m/a.py", 3, "f")]
+
+    def test_a_separator_inside_the_path_is_a_frame_only_in_the_app(self):
+        """The other direction: JavaScript's `[^"]*` takes U+2028, while
+        `splitlines()` cuts the frame in two. CPython writes file names as they
+        are, so a module whose name holds one gives this trace."""
+        trace = '  File "/m/a\u2028b.py", line 3, in f\n'
+
+        assert self._frontend(trace) == [("/m/a\u2028b.py", 3, "f")]
+        assert self._backend(trace) == []
 
 
 class TestFindOperations:

@@ -14,12 +14,40 @@ from pathlib import Path
 
 from flask import current_app
 from ttnn_visualizer.exceptions import DataFormatError
+from ttnn_visualizer.utils import NPE_UPLOAD_NAME_SUFFIXES
 
 logger = logging.getLogger(__name__)
+
+_UPLOAD_NAME_SUFFIX = re.compile(
+    "(" + "|".join(re.escape(suffix) for suffix in NPE_UPLOAD_NAME_SUFFIXES) + ")$"
+)
+
+
+def _is_safe_folder_name(name):
+    """Whether *name* can only ever be a single directory directly under its parent.
+
+    The report folder name is client-controlled: either the ``folderName`` form field
+    or the leading segment of the first file's multipart filename. Anything that is
+    not one plain path segment lets an unauthenticated upload climb out of the upload
+    directory and overwrite arbitrary files, the app database included (ITSEC-561).
+    Backslashes are refused although POSIX treats them as ordinary characters, so the
+    rule does not depend on which platform the server runs on.
+    """
+    if not name or name in (".", ".."):
+        return False
+    return not any(char in name for char in ("/", "\\", "\0"))
 
 
 def validate_files(files, required_files, pattern=None, folder_name=None):
     """Validate uploaded files against required file names and an optional pattern."""
+    report_folder_name = resolve_parent_folder_name(files, folder_name)
+    if not _is_safe_folder_name(report_folder_name):
+        logger.warning(
+            "Refusing upload with an unsafe report folder name: %r",
+            report_folder_name,
+        )
+        return False
+
     found_files = set()
     leading_segments = set()
 
@@ -112,10 +140,9 @@ def extract_uploaded_name(files):
 
     # Strip directory components before stripping the extension so a crafted
     # multipart filename like `"../etc/passwd.json"` becomes `"passwd"`, not
-    # `"../etc/passwd"`. The resulting name is written to the DB and later
-    # rebuilt into a read path by `get_mlir_path` / `get_npe_path`; without
-    # `.name` here, write-side hardening alone wouldn't fix the read path.
-    return re.sub(r"\.(json|npeviz\.zst)$", "", Path(files[0].filename).name)
+    # `"../etc/passwd"`. The name is stored as the report's, and `get_npe_path`
+    # maps only a plain file name back to its upload.
+    return _UPLOAD_NAME_SUFFIX.sub("", Path(files[0].filename).name)
 
 
 def save_uploaded_files(
@@ -131,9 +158,15 @@ def save_uploaded_files(
     :param parent_folder_name: The name to use for the directory.
     """
     saved_paths = []
+    # One prefix for the whole upload: computed per file, a part saved after the clock
+    # ticks over (likely while the malware scanner works through the parts) would land
+    # in a sibling folder, splitting the report.
+    prefix = _upload_prefix()
 
     if current_app.config["MALWARE_SCANNER"]:
-        scanned_files = scan_uploaded_files(files, base_directory, parent_folder_name)
+        scanned_files = scan_uploaded_files(
+            files, base_directory, parent_folder_name, prefix=prefix
+        )
 
         for temp_path, dest_path in scanned_files:
             if not dest_path.parent.exists():
@@ -145,7 +178,9 @@ def save_uploaded_files(
             saved_paths.append(dest_path)
     else:
         for file in files:
-            dest_path = construct_dest_path(file, base_directory, parent_folder_name)
+            dest_path = construct_dest_path(
+                file, base_directory, parent_folder_name, prefix=prefix
+            )
             logger.info(f"Writing file to {dest_path}")
 
             # Create directory if it doesn't exist
@@ -165,7 +200,7 @@ def save_uploaded_files(
 
     # Update the modified time of the uploaded directory
     if parent_folder_name:
-        uploaded_dir = Path(base_directory) / parent_folder_name
+        uploaded_dir = Path(base_directory) / f"{prefix}{parent_folder_name}"
     else:
         uploaded_dir = Path(base_directory)
 
@@ -179,13 +214,18 @@ def scan_uploaded_files(
     files,
     target_directory,
     folder_name=None,
+    prefix=None,
 ):
     scanned_files = []
+    if prefix is None:
+        prefix = _upload_prefix()
 
     for file in files:
         _, temp_path = tempfile.mkstemp()
         file.save(temp_path)
-        dest_path = construct_dest_path(file, target_directory, folder_name)
+        dest_path = construct_dest_path(
+            file, target_directory, folder_name, prefix=prefix
+        )
 
         cmd_list = shlex.split(current_app.config["MALWARE_SCANNER"])
         cmd_list.append(temp_path)
@@ -211,10 +251,21 @@ def scan_uploaded_files(
     return scanned_files
 
 
-def construct_dest_path(file, target_directory, folder_name):
-    prefix = f"{int(time.time())}_" if current_app.config["SERVER_MODE"] else ""
+def _upload_prefix():
+    """The hosted upload folder prefix, the upload's second; empty locally.
+
+    It keeps same-name uploads apart only when they land in different seconds.
+    """
+    return f"{int(time.time())}_" if current_app.config["SERVER_MODE"] else ""
+
+
+def construct_dest_path(file, target_directory, folder_name, prefix=None):
+    if prefix is None:
+        prefix = _upload_prefix()
 
     if folder_name:
+        if not _is_safe_folder_name(folder_name):
+            raise DataFormatError(f"Unsafe report folder name {folder_name!r}")
         # Folder uploads legitimately carry sub-paths in `file.filename`
         # (e.g. `subdir/file.csv`) and `validate_files` / `os.utime` accounting
         # depend on that, so we can't just collapse to the basename the way
@@ -241,8 +292,21 @@ def construct_dest_path(file, target_directory, folder_name):
         # directory. `resolve(strict=False)` normalises `..` segments and (on
         # macOS) walks shared symlinks like `/tmp` -> `/private/tmp`, so the
         # comparison is symlink-stable.
+        #
+        # `report_root` is itself built from client input, so containment within
+        # it proves nothing on its own: the root must also sit directly under the
+        # server-chosen `target_directory`.
         resolved_dest = dest_path.resolve(strict=False)
         resolved_root = report_root.resolve(strict=False)
+        if resolved_root.parent != Path(target_directory).resolve(strict=False):
+            logger.warning(
+                "Report folder %r escapes upload directory %s",
+                folder_name,
+                target_directory,
+            )
+            raise DataFormatError(
+                f"Report folder {folder_name!r} escapes upload directory"
+            )
         if not (
             resolved_dest == resolved_root
             or resolved_dest.is_relative_to(resolved_root)

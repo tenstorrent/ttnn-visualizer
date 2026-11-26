@@ -27,6 +27,8 @@ import useRemoteConnection, {
     savedReportFoldersKey,
 } from '../src/hooks/useRemote';
 import { FileStatus } from '../src/model/APIData';
+import { RemoteConnection } from '../src/model/RemoteConnection';
+import { isConnectionTestPrecheckFailure } from '../src/functions/getConnectionTestPrecheckFailure';
 
 vi.mock('../src/libs/axiosInstance', () => ({
     default: {
@@ -190,6 +192,18 @@ describe('useRemoteConnection - stack source GETs', () => {
         expect(out.data).toBe('plain');
         expect(out.resolvedPath).toBeNull();
         expect(out.error).toBeNull();
+    });
+
+    it('keeps readRemoteFile and isSourceFileAvailable stable across renders', () => {
+        // A source viewer's read effect depends on them, so a new identity per render
+        // would read the file again on every render.
+        const { result, rerender } = renderHook(() => useRemoteConnection());
+        const { readRemoteFile, isSourceFileAvailable } = result.current;
+
+        rerender();
+
+        expect(result.current.readRemoteFile).toBe(readRemoteFile);
+        expect(result.current.isSourceFileAvailable).toBe(isSourceFileAvailable);
     });
 
     it('readRemoteFile returns the standard error shape when the GET fails', async () => {
@@ -625,5 +639,24 @@ describe('useRemoteConnection - savedConnectionList', () => {
         const { result } = renderHook(() => useRemoteConnection());
 
         expect(() => result.current.persistentState.savedConnectionList).not.toThrow();
+    });
+});
+
+describe('useRemoteConnection - testConnection prechecks', () => {
+    // The dialog recognises a form error by reference, so returning a copy here would
+    // record every form error as a test the server ran.
+    it.each<[string, Partial<RemoteConnection>]>([
+        ['no host', { host: '', port: 22, username: 'alice', profilerPath: '/reports' }],
+        ['no username', { host: 'work-box', port: 22, username: '', profilerPath: '/reports' }],
+        ['no paths', { host: 'work-box', port: 22, username: 'alice' }],
+    ])('answers %s with a form error the dialog recognises, without sending', async (_case, connection) => {
+        const axiosInstance = await import('../src/libs/axiosInstance');
+        const mockPost = vi.mocked(axiosInstance.default.post);
+        mockPost.mockClear();
+
+        const { result } = renderHook(() => useRemoteConnection());
+
+        expect(isConnectionTestPrecheckFailure(await result.current.testConnection(connection))).toBe(true);
+        expect(mockPost).not.toHaveBeenCalled();
     });
 });

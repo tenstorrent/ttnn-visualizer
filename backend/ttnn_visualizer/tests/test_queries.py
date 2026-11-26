@@ -266,6 +266,22 @@ class TestDatabaseQueries(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].name, "arg_name")
 
+    def test_iter_operation_arguments_streams_what_query_operation_arguments_returns(
+        self,
+    ):
+        self.connection.executemany(
+            "INSERT INTO operation_arguments VALUES (?, ?, ?)",
+            [(1, "a", "x"), (1, "b", None), (2, "a", "y")],
+        )
+        filters = {"operation_id": 1}
+
+        streamed = list(self.db_queries.iter_operation_arguments(filters=filters))
+
+        self.assertEqual(
+            streamed, list(self.db_queries.query_operation_arguments(filters=filters))
+        )
+        self.assertEqual(len(streamed), 2)
+
     def test_query_operations(self):
         self.connection.execute("INSERT INTO operations VALUES (1, 'op1', 2.0)")
         results = list(self.db_queries.query_operations(filters={"operation_id": 1}))

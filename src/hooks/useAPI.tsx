@@ -23,6 +23,8 @@ import {
     OperationDetailsData,
     ReportError,
     ReportMetadataResponse,
+    ReportSourceFiles,
+    SourceFileResponse,
     Tensor,
     defaultBuffer,
     defaultOperation,
@@ -41,15 +43,18 @@ import {
     PerformanceReportParams,
     getLinkedPerformanceReportParams,
     getPerformanceComparisonReportQueryKey,
+    getPerformanceCountersQueryKey,
     getPerformanceReportQueryKey,
+    toBackendStackedGroupBy,
 } from '../functions/performanceReportQueryKey';
+import { OperationHardwareCounters } from '../model/HardwareCounters';
 import { L1PressureResult } from '../model/L1Pressure';
 import { buildL1PressureResult } from '../functions/l1Pressure';
 import { StackedPerfRow } from '../definitions/StackedPerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
 import { getLinkableDeviceOperations } from '../functions/linkableDeviceOperations';
 import { normalizeBufferPagesResponse } from '../functions/normalizeBufferPagesResponse';
-import { filterByOperationRange } from '../functions/filterByOperationRange';
+import { filterByOperationRange, isInOperationRange } from '../functions/filterByOperationRange';
 import {
     activeMlirJsonAtom,
     activeNpeOpTraceAtom,
@@ -85,6 +90,7 @@ import { Signpost } from '../model/Signpost';
 import { TensorsByOperationByAddress } from '../model/BufferSummary';
 import { ActiveReportFingerprints, ActiveReportRuns } from '../model/ReportLinks';
 import { getFolderReportId, getReportId } from '../functions/reportLinks';
+import { fetchMemoryReportData, getMemoryReportRetry, isReportChangedError } from '../functions/memoryReportRequest';
 import { ReportLinkRole } from '../definitions/ReportLinks';
 import { L1_DEFAULT_MEMORY_SIZE } from '../definitions/L1MemorySize';
 import {
@@ -111,6 +117,8 @@ import { throwNpeClientAxiosError } from '../functions/throwNpeClientAxiosError'
 import validateNpeSummary from '../functions/validateNpeSummary';
 import validateNpeWindow from '../functions/validateNpeWindow';
 import { comparisonReportAxiosError } from '../functions/comparisonReportAxiosError';
+import { getPerformanceIdRange } from '../functions/numericExtent';
+import { getOperationFileIdentifier } from '../functions/stackTraceSource';
 
 const EMPTY_PERF_RETURN = { report: [], stacked_report: [], signposts: [] };
 
@@ -142,20 +150,6 @@ const updateDeviceOperationId = (nodes: unknown): void => {
     }
 };
 
-const parseFileOperationIdentifier = (stackTrace: string): string => {
-    if (!stackTrace) {
-        return '';
-    }
-    const regex = /File\s+"(?:.+\/)?([^/]+)",\s+line\s+(\d+)/;
-    const match = stackTrace.match(regex);
-
-    if (match) {
-        return `${match[1]}:${match[2]}`;
-    }
-
-    return '';
-};
-
 export const fetchInstance = async (): Promise<Instance | null> => {
     const response = await axiosInstance.get<Instance>(Endpoints.INSTANCE);
     return response?.data ?? null;
@@ -167,11 +161,12 @@ export const updateInstance = async (payload: Partial<Instance>): Promise<Instan
 };
 
 export const fetchBufferChunks = async (
+    reportId: string | null,
     operationId: number,
     address?: number | string,
     bufferType?: BufferType,
 ): Promise<BufferChunk[]> => {
-    const response = await axiosInstance.get<unknown[]>(Endpoints.BUFFER_PAGES, {
+    const data = await fetchMemoryReportData<unknown[]>(Endpoints.BUFFER_PAGES, reportId, {
         params: {
             operation_id: operationId,
             address,
@@ -179,16 +174,17 @@ export const fetchBufferChunks = async (
         },
     });
 
-    return normalizeBufferPagesResponse(response.data ?? []);
+    return normalizeBufferPagesResponse(data ?? []);
 };
 
-const fetchOperationDetails = async (id: number | null): Promise<OperationDetailsData> => {
+const fetchOperationDetails = async (reportId: string | null, id: number | null): Promise<OperationDetailsData> => {
     if (id === null) {
         return defaultOperation;
     }
 
-    const { data: operationDetails } = await axiosInstance.get<OperationDetailsData>(
+    const operationDetails = await fetchMemoryReportData<OperationDetailsData>(
         `${Endpoints.OPERATIONS_LIST}/${id}`,
+        reportId,
         {
             maxRedirects: 1,
         },
@@ -198,7 +194,7 @@ const fetchOperationDetails = async (id: number | null): Promise<OperationDetail
 
     return {
         ...operationDetails,
-        operationFileIdentifier: parseFileOperationIdentifier(operationDetails.stack_trace),
+        operationFileIdentifier: getOperationFileIdentifier(operationDetails.stack_trace),
     };
 };
 
@@ -212,14 +208,13 @@ const getDeviceOperationNameList = (operation: OperationDescription, nodeType: D
         .map((op) => (op.params as DeviceOperationParams).name);
 };
 
-const fetchOperations = async (): Promise<OperationDescription[]> => {
+const fetchOperations = async (reportId: string | null): Promise<OperationDescription[]> => {
     const tensorList: Map<number, Tensor> = new Map<number, Tensor>();
-    const response = await axiosInstance.get<OperationDescription[]>(Endpoints.OPERATIONS_LIST);
-    const operationList = response.data;
+    const operationList = await fetchMemoryReportData<OperationDescription[]>(Endpoints.OPERATIONS_LIST, reportId);
 
     return operationList.map((operation: OperationDescription) => {
         updateDeviceOperationId(operation.device_operations);
-        operation.operationFileIdentifier = parseFileOperationIdentifier(operation.stack_trace);
+        operation.operationFileIdentifier = getOperationFileIdentifier(operation.stack_trace);
 
         const outputs = operation.outputs.map((tensor) => {
             const tensorWithMetadata = {
@@ -247,7 +242,6 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
 
         return {
             ...operation,
-            operationFileIdentifier: parseFileOperationIdentifier(operation.stack_trace),
             outputs,
             inputs,
             arguments: argumentsWithParsedValues,
@@ -257,36 +251,36 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
     });
 };
 
-const fetchBuffersByOperation = async (bufferType: BufferType | null): Promise<BuffersByOperation[]> => {
+const fetchBuffersByOperation = async (
+    reportId: string | null,
+    bufferType: BufferType | null,
+): Promise<BuffersByOperation[]> => {
     const params = {
         buffer_type: bufferType,
     };
 
-    const { data: buffers } = await axiosInstance.get<BuffersByOperation[]>(Endpoints.OPERATION_BUFFERS, {
+    return fetchMemoryReportData<BuffersByOperation[]>(Endpoints.OPERATION_BUFFERS, reportId, {
         params,
     });
-
-    return buffers;
 };
 
-const fetchAllBuffers = async (bufferType: BufferType | null): Promise<Buffer[]> => {
+const fetchAllBuffers = async (reportId: string | null, bufferType: BufferType | null): Promise<Buffer[]> => {
     const params = {
         buffer_type: bufferType,
     };
 
-    const { data: buffers } = await axiosInstance.get<Buffer[]>(Endpoints.BUFFERS_LIST, {
+    return fetchMemoryReportData<Buffer[]>(Endpoints.BUFFERS_LIST, reportId, {
         params,
     });
-
-    return buffers;
 };
 
 const useGetAllBuffers = (bufferType: BufferType | null) => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
     return useQuery<Buffer[], AxiosError>({
-        queryFn: () => fetchAllBuffers(bufferType),
+        queryFn: () => fetchAllBuffers(getFolderReportId(activeProfilerReport), bufferType),
         queryKey: ['fetch-all-buffers', bufferType, activeProfilerReport?.path],
+        ...getMemoryReportRetry(3),
         staleTime: Infinity,
     });
 };
@@ -357,11 +351,8 @@ export const useGetL1Size = (): number => {
     }, [devices]);
 };
 
-export const fetchOperationBuffers = async (operationId: number) => {
-    const { data: buffers } = await axiosInstance.get(`${Endpoints.OPERATION_BUFFERS}/${operationId}`);
-
-    return buffers;
-};
+export const fetchOperationBuffers = async (reportId: string | null, operationId: number) =>
+    fetchMemoryReportData<BuffersByOperation>(`${Endpoints.OPERATION_BUFFERS}/${operationId}`, reportId);
 
 export const useOperationBuffers = (operationId: number) => {
     // Scope the cache by the active report's path. Operation ids reset per
@@ -371,8 +362,8 @@ export const useOperationBuffers = (operationId: number) => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
     return useQuery<BuffersByOperation, AxiosError>({
         queryKey: ['get-operation-buffers', operationId, activeProfilerReport?.path],
-        queryFn: () => fetchOperationBuffers(operationId),
-        retry: false,
+        queryFn: () => fetchOperationBuffers(getFolderReportId(activeProfilerReport), operationId),
+        ...getMemoryReportRetry(),
         staleTime: Infinity,
     });
 };
@@ -384,8 +375,8 @@ export const useOperationBuffers = (operationId: number) => {
 //     return meta;
 // };
 
-const fetchDevices = async (report: ReportFolder | RemoteFolder) => {
-    const { data: meta } = await axiosInstance.get<DeviceInfo[]>(Endpoints.DEVICES);
+const fetchDevices = async (reportId: string | null, report: ReportFolder | RemoteFolder) => {
+    const meta = await fetchMemoryReportData<DeviceInfo[]>(Endpoints.DEVICES, reportId);
 
     if (meta.length === 0) {
         createToastNotification(
@@ -405,6 +396,10 @@ export interface PerformanceReportResponse {
     // True when a signpost range was asked of a report holding no signposts: the
     // report is then whole rather than the window the range names.
     signpost_range_ignored?: boolean;
+    // Any hardware counter column, which the rows' headline keys miss for a capture of other groups only.
+    has_hardware_counters?: boolean;
+    // The devices the CSV names; a merged row on a report of several is one device's.
+    device_count?: number | null;
 }
 
 // Takes the params as one object rather than positionally: `hideHostOps`,
@@ -536,16 +531,21 @@ const fetchDeviceMeta = async (name: string | null) => {
     return data;
 };
 
-const fetchClusterDescription = async (): Promise<ClusterModel> => {
-    const { data } = await axiosInstance.get<ClusterModel>(Endpoints.CLUSTER_DESCRIPTOR);
+const fetchClusterDescription = async (reportId: string | null): Promise<ClusterModel> => {
+    const data = await fetchMemoryReportData<ClusterModel>(Endpoints.CLUSTER_DESCRIPTOR, reportId);
 
     try {
-        const { data: meshData } = await axiosInstance.get<MeshData>(Endpoints.MESH_DESCRIPTOR);
+        const meshData = await fetchMemoryReportData<MeshData>(Endpoints.MESH_DESCRIPTOR, reportId);
 
         if (meshData?.chips) {
             data.chips = meshData.chips;
         }
     } catch (err) {
+        // Another report's mesh must not be mistaken for this one having none
+        if (isReportChangedError(err)) {
+            throw err;
+        }
+
         // eslint-disable-next-line no-console
         console.error('mesh-descriptor not found', err);
     }
@@ -557,9 +557,9 @@ export const useGetClusterDescription = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
     return useQuery<ClusterModel | null, AxiosError>({
-        queryFn: () => fetchClusterDescription(),
+        queryFn: () => fetchClusterDescription(getFolderReportId(activeProfilerReport)),
         queryKey: ['get-cluster-description', activeProfilerReport?.path],
-        retry: false,
+        ...getMemoryReportRetry(),
         // The descriptor lives beside the memory report, so without one the request can
         // only 404. The navigation reads this to decide whether Topology is reachable and
         // is mounted before any report is chosen.
@@ -573,21 +573,24 @@ export const useGetClusterDescription = () => {
 // Guards against runaway probing if the backend stops signalling world end.
 const MAX_PROBE_RANKS = 32;
 
-const fetchClusterDescriptorForRank = async (rank: number): Promise<ClusterModel> => {
-    const { data } = await axiosInstance.get<ClusterModel>(Endpoints.CLUSTER_DESCRIPTOR, {
+const fetchClusterDescriptorForRank = async (reportId: string | null, rank: number): Promise<ClusterModel> =>
+    fetchMemoryReportData<ClusterModel>(Endpoints.CLUSTER_DESCRIPTOR, reportId, {
         params: { rank },
     });
-    return data;
-};
 
-const fetchMeshDescriptorForRank = async (rank: number): Promise<MeshData | null> => {
+const fetchMeshDescriptorForRank = async (reportId: string | null, rank: number): Promise<MeshData | null> => {
     try {
-        const { data } = await axiosInstance.get<MeshDescriptorResponse>(Endpoints.MESH_DESCRIPTOR, {
+        const data = await fetchMemoryReportData<MeshDescriptorResponse>(Endpoints.MESH_DESCRIPTOR, reportId, {
             params: { rank },
         });
         // Backend can return single-doc or `{ docs: [...] }` envelope.
         return pickMeshDocForRank(data, rank);
     } catch (err) {
+        // Another report's mesh must not be mistaken for this one having none
+        if (isReportChangedError(err)) {
+            throw err;
+        }
+
         // mesh-descriptor is optional in some reports
         // eslint-disable-next-line no-console
         console.warn(`mesh-descriptor for rank ${rank} not available`, err);
@@ -595,10 +598,10 @@ const fetchMeshDescriptorForRank = async (rank: number): Promise<MeshData | null
     }
 };
 
-const fetchRankSlice = async (rank: number): Promise<PerRankInput> => {
+const fetchRankSlice = async (reportId: string | null, rank: number): Promise<PerRankInput> => {
     const [descriptor, mesh] = await Promise.all([
-        fetchClusterDescriptorForRank(rank),
-        fetchMeshDescriptorForRank(rank),
+        fetchClusterDescriptorForRank(reportId, rank),
+        fetchMeshDescriptorForRank(reportId, rank),
     ]);
     // Mesh-descriptor wins; `descriptor.chips` is the fallback for galaxy
     // reports that don't ship a separate mesh file.
@@ -606,10 +609,10 @@ const fetchRankSlice = async (rank: number): Promise<PerRankInput> => {
     return { rank, descriptor, meshDescriptor: meshChips };
 };
 
-const fetchClusterTopology = async (): Promise<ClusterTopology> => {
+const fetchClusterTopology = async (reportId: string | null): Promise<ClusterTopology> => {
     // Rank 0 anchors detection (the backend serves either the legacy
     // single-host or the multi-host rank-tagged descriptor).
-    const rank0Slice = await fetchRankSlice(0);
+    const rank0Slice = await fetchRankSlice(reportId, 0);
 
     if (!looksLikeRankedDescriptor(rank0Slice.descriptor)) {
         return stitchClusterTopology([rank0Slice]);
@@ -621,7 +624,7 @@ const fetchClusterTopology = async (): Promise<ClusterTopology> => {
     for (let nextRank = 1; nextRank < MAX_PROBE_RANKS; nextRank += 1) {
         try {
             // eslint-disable-next-line no-await-in-loop
-            const slice = await fetchRankSlice(nextRank);
+            const slice = await fetchRankSlice(reportId, nextRank);
             perRankInputs.push(slice);
         } catch (err) {
             // Backend signals world end via 400 rank_out_of_range or
@@ -643,35 +646,38 @@ export const useGetClusterTopology = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
     return useQuery<ClusterTopology | null, AxiosError>({
-        queryFn: () => fetchClusterTopology(),
+        queryFn: () => fetchClusterTopology(getFolderReportId(activeProfilerReport)),
         queryKey: ['get-cluster-topology', activeProfilerReport?.path],
         initialData: null,
-        retry: false,
+        ...getMemoryReportRetry(),
     });
 };
+
+export const OPERATIONS_QUERY_KEY = 'get-operations';
 
 export const useOperationsList = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
     return useQuery<OperationDescription[], AxiosError>({
-        queryFn: () => (activeProfilerReport !== null ? fetchOperations() : Promise.resolve([])),
-        queryKey: ['get-operations', activeProfilerReport?.path],
-        retry: false,
+        queryFn: () =>
+            activeProfilerReport !== null
+                ? fetchOperations(getFolderReportId(activeProfilerReport))
+                : Promise.resolve([]),
+        queryKey: [OPERATIONS_QUERY_KEY, activeProfilerReport?.path],
+        ...getMemoryReportRetry(),
         staleTime: Infinity,
     });
 };
 
-const fetchReportErrors = async (): Promise<ReportError[]> => {
-    const { data } = await axiosInstance.get<ReportError[]>(Endpoints.ERRORS);
-    return data;
-};
+const fetchReportErrors = async (reportId: string | null): Promise<ReportError[]> =>
+    fetchMemoryReportData<ReportError[]>(Endpoints.ERRORS, reportId);
 
 export const useReportErrors = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
     return useQuery<ReportError[], AxiosError>({
-        queryFn: fetchReportErrors,
+        queryFn: () => fetchReportErrors(getFolderReportId(activeProfilerReport)),
         queryKey: ['get-report-errors', activeProfilerReport?.path],
         enabled: activeProfilerReport !== null,
-        retry: false,
+        ...getMemoryReportRetry(),
         staleTime: Infinity,
     });
 };
@@ -782,13 +788,13 @@ export const useOperationDetails = (operationId: number | null) => {
         [operations, operationId],
     );
 
-    const fetchDetails = useCallback(() => fetchOperationDetails(operationId), [operationId]);
+    const reportId = getFolderReportId(activeProfilerReport);
+    const fetchDetails = useCallback(() => fetchOperationDetails(reportId, operationId), [reportId, operationId]);
 
     const operationDetails = useQuery<OperationDetailsData, AxiosError>({
         queryFn: () => fetchDetails(),
         queryKey: ['get-operation-detail', operationId, activeProfilerReport?.path],
-        retry: 2,
-        retryDelay: (retryAttempt) => Math.min(retryAttempt * 100, 500),
+        ...getMemoryReportRetry(2, (retryAttempt) => Math.min(retryAttempt * 100, 500)),
         staleTime: Infinity,
     });
 
@@ -943,6 +949,19 @@ export const clearReportCaches = (queryClient: QueryClient) => {
     getDeviceOperationListPerfByOpId.reset();
 };
 
+/**
+ * Forgets what is cached of one memory report's operations and metadata, so the next read of
+ * either asks the server again. Both are keyed by folder path alone and never go stale, so a
+ * report chosen again would otherwise be answered from an earlier attempt: an error the server
+ * has since recovered from, or another location's report with the same folder name.
+ */
+export const resetMemoryReportReads = (queryClient: QueryClient, path: string) =>
+    Promise.all(
+        [OPERATIONS_QUERY_KEY, REPORT_METADATA_QUERY_KEY].map((key) =>
+            queryClient.resetQueries({ queryKey: [key, path], exact: true }),
+        ),
+    );
+
 export const useGetDeviceOperationListPerf = () => {
     const { data: operations } = useOperationsList();
     const deviceOperationOrderCandidates = getDeviceOperationOrderCandidates(operations);
@@ -984,16 +1003,7 @@ export const usePerformanceRange = (): NumberRange | null => {
     const activeReportFolderName = useAtomValue(activePerformanceReportFolderNameAtom);
     const { data: perfData } = usePerformanceReport(activeReportFolderName);
 
-    return useMemo(
-        () =>
-            perfData?.report?.length
-                ? [
-                      Math.min(...perfData.report.map((data) => parseInt(data.id, 10))),
-                      Math.max(...perfData.report.map((data) => parseInt(data.id, 10))),
-                  ]
-                : null,
-        [perfData],
-    );
+    return useMemo(() => getPerformanceIdRange(perfData?.report), [perfData]);
 };
 
 interface ReportMetadata {
@@ -1005,8 +1015,8 @@ interface ReportMetadata {
     worldSize: number;
 }
 
-export const fetchReportMetadata = async (): Promise<ReportMetadata> => {
-    const { data } = await axiosInstance.get<ReportMetadataResponse>(Endpoints.REPORT_METADATA);
+export const fetchReportMetadata = async (reportId: string | null): Promise<ReportMetadata> => {
+    const data = await fetchMemoryReportData<ReportMetadataResponse>(Endpoints.REPORT_METADATA, reportId);
     const parsedSchemaVersion = semverParse(data?.schema_version);
     const parsedDuration = Number(data?.total_duration_ns);
     // Single-host reports omit `world_size`; an absent or unparseable value is one rank.
@@ -1025,15 +1035,42 @@ export const fetchReportMetadata = async (): Promise<ReportMetadata> => {
     } as ReportMetadata;
 };
 
+export const REPORT_METADATA_QUERY_KEY = 'get-report-metadata';
+
 // The endpoint returns 422 on legacy reports that lack the table
 export const useReportMetadata = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
     return useQuery<ReportMetadata, AxiosError>({
-        queryKey: ['get-report-metadata', activeProfilerReport?.path],
-        queryFn: fetchReportMetadata,
+        queryKey: [REPORT_METADATA_QUERY_KEY, activeProfilerReport?.path],
+        queryFn: () => fetchReportMetadata(getFolderReportId(activeProfilerReport)),
         enabled: activeProfilerReport !== null,
-        retry: false,
+        ...getMemoryReportRetry(),
+        staleTime: Infinity,
+    });
+};
+
+export const fetchReportSourceFiles = async (reportId: string | null): Promise<ReportSourceFiles> => {
+    const data = await fetchMemoryReportData<SourceFileResponse[]>(Endpoints.SOURCE_FILES, reportId);
+
+    return {
+        ids: new Set<number>(data.map(({ id }) => id)),
+        paths: new Set<string>(data.map(({ path }) => path)),
+    };
+};
+
+/**
+ * The source files the memory report holds. Stack trace frames link only to these, which
+ * the viewer can read in either mode without probing each frame.
+ */
+export const useReportSourceFiles = () => {
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+
+    return useQuery<ReportSourceFiles, AxiosError>({
+        queryKey: ['get-report-source-files', activeProfilerReport?.path],
+        queryFn: () => fetchReportSourceFiles(getFolderReportId(activeProfilerReport)),
+        enabled: activeProfilerReport !== null,
+        ...getMemoryReportRetry(),
         staleTime: Infinity,
     });
 };
@@ -1107,13 +1144,14 @@ export const useBufferChunks = (operationId: number, address?: number | string, 
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
     return useQuery<BufferChunk[], AxiosError>({
         queryKey: ['get-buffer-chunks', operationId, address, bufferType, activeProfilerReport?.path],
-        queryFn: () => fetchBufferChunks(operationId, address, bufferType),
+        queryFn: () => fetchBufferChunks(getFolderReportId(activeProfilerReport), operationId, address, bufferType),
+        ...getMemoryReportRetry(3),
         staleTime: Infinity,
     });
 };
 
-export const fetchTensors = async (bufferType?: BufferType): Promise<Tensor[]> => {
-    const { data: tensorList } = await axiosInstance.get<Tensor[]>(Endpoints.TENSOR_LIST, {
+export const fetchTensors = async (reportId: string | null, bufferType?: BufferType): Promise<Tensor[]> => {
+    const tensorList = await fetchMemoryReportData<Tensor[]>(Endpoints.TENSOR_LIST, reportId, {
         maxRedirects: 1,
         params: bufferType !== undefined ? { buffer_type: bufferType } : undefined,
     });
@@ -1124,7 +1162,7 @@ export const fetchTensors = async (bufferType?: BufferType): Promise<Tensor[]> =
         return tensorList;
     }
 
-    const operationsList = await fetchOperations();
+    const operationsList = await fetchOperations(reportId);
 
     for (const tensor of tensorList) {
         if (tensor.producers.length > 0) {
@@ -1145,9 +1183,9 @@ export const useTensors = (bufferType?: BufferType) => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
     return useQuery<Tensor[], AxiosError>({
-        queryFn: () => fetchTensors(bufferType),
+        queryFn: () => fetchTensors(getFolderReportId(activeProfilerReport), bufferType),
         queryKey: ['get-tensors', activeProfilerReport?.path, bufferType ?? 'all'],
-        retry: false,
+        ...getMemoryReportRetry(),
         staleTime: Infinity,
     });
 };
@@ -1156,9 +1194,12 @@ export const useDevices = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
     return useQuery<DeviceInfo[], AxiosError>({
-        queryFn: () => (activeProfilerReport !== null ? fetchDevices(activeProfilerReport) : Promise.resolve([])),
+        queryFn: () =>
+            activeProfilerReport !== null
+                ? fetchDevices(getFolderReportId(activeProfilerReport), activeProfilerReport)
+                : Promise.resolve([]),
         queryKey: ['get-devices', activeProfilerReport?.path],
-        retry: false,
+        ...getMemoryReportRetry(),
         staleTime: Infinity,
     });
 };
@@ -1193,13 +1234,13 @@ export const useBuffers = (bufferType: BufferType | null, useRange?: boolean) =>
     const response = useQuery<BuffersByOperation[], AxiosError>({
         queryKey: ['fetch-all-buffers', bufferType, activeProfilerReport],
         enabled: activeProfilerReport !== null,
-        retry: false,
+        ...getMemoryReportRetry(),
         staleTime: Infinity,
         queryFn: async () => {
             if (activeProfilerReport === null) {
                 await Promise.resolve([]);
             }
-            const data = await fetchBuffersByOperation(bufferType);
+            const data = await fetchBuffersByOperation(getFolderReportId(activeProfilerReport), bufferType);
             // @ts-expect-error will happen with extra large data sets where we get a string instead of an array
             if (data === '' || !Array.isArray(data)) {
                 throw new AxiosError(
@@ -1306,7 +1347,7 @@ const useViewPerformanceReportParams = (): PerformanceReportParams => {
             hideHostOps,
             mergeDevices,
             tracingMode,
-            groupBy,
+            groupBy: toBackendStackedGroupBy(groupBy),
         }),
         [startSignpost, endSignpost, hideHostOps, mergeDevices, tracingMode, groupBy],
     );
@@ -1329,6 +1370,28 @@ const usePerformanceReportQuery = (name: string | null, params: PerformanceRepor
     });
 
     return response;
+};
+
+const fetchOperationHardwareCounters = async (name: string | null, perfId: number) => {
+    const { data } = await axiosInstance.get<OperationHardwareCounters>(`${Endpoints.PERFORMANCE_COUNTERS}/${perfId}`, {
+        params: { name },
+    });
+
+    return data;
+};
+
+/** @description One row of the active performance report's hardware counters, every label. */
+export const useOperationHardwareCounters = (perfId: number | null) => {
+    const name = useAtomValue(activePerformanceReportFolderNameAtom);
+    const location = useAtomValue(performanceReportLocationAtom);
+
+    return useQuery<OperationHardwareCounters, AxiosError>({
+        queryFn: () => fetchOperationHardwareCounters(name, perfId!),
+        queryKey: getPerformanceCountersQueryKey({ name, instanceId: getOrCreateInstanceId(), location, perfId }),
+        enabled: name !== null && perfId !== null,
+        retry: false,
+        staleTime: Infinity,
+    });
 };
 
 /**
@@ -1632,23 +1695,48 @@ export const usePerfFolderList = () => {
     });
 };
 
+// Shared by every operation outside the selected range; callers only read it.
+const NO_TENSORS_BY_ADDRESS: Map<number, Tensor> = new Map<number, Tensor>();
+
 export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = BufferType.L1) => {
-    const { data: buffersByOperation, status: buffersStatus } = useBuffers(bufferType, true);
+    // Every operation's buffers, so a buffer that left before the range still clears its address.
+    const { data: buffersByOperation, status: buffersStatus } = useBuffers(bufferType, false);
     const { data: operations, status: operationsStatus } = useOperationsList();
     const operationRange = useAtomValue(selectedOperationRangeAtom);
 
-    const uniqueBuffersByOperationList = useMemo(
+    const allUniqueBuffersByOperation = useMemo(
         () => (buffersByOperation ? getUniqueBuffersByOperation(buffersByOperation) : undefined),
         [buffersByOperation],
     );
 
-    const tensorsByOperationByAddress = useMemo(
+    const allTensorsByOperationByAddress = useMemo(
         (): TensorsByOperationByAddress =>
-            operations && uniqueBuffersByOperationList
-                ? buildTensorsByOperationByAddress(operations, uniqueBuffersByOperationList)
+            operations && allUniqueBuffersByOperation
+                ? buildTensorsByOperationByAddress(operations, allUniqueBuffersByOperation)
                 : new Map(),
-        [operations, uniqueBuffersByOperationList],
+        [operations, allUniqueBuffersByOperation],
     );
+
+    const uniqueBuffersByOperationList = useMemo(
+        () =>
+            allUniqueBuffersByOperation && operationRange
+                ? filterByOperationRange(allUniqueBuffersByOperation, operationRange)
+                : allUniqueBuffersByOperation,
+        [allUniqueBuffersByOperation, operationRange],
+    );
+
+    const tensorsByOperationByAddress = useMemo((): TensorsByOperationByAddress => {
+        if (!operationRange) {
+            return allTensorsByOperationByAddress;
+        }
+
+        return new Map(
+            Array.from(allTensorsByOperationByAddress, ([operationId, tensorsByAddress]) => [
+                operationId,
+                isInOperationRange(operationId, operationRange) ? tensorsByAddress : NO_TENSORS_BY_ADDRESS,
+            ]),
+        );
+    }, [allTensorsByOperationByAddress, operationRange]);
 
     // The map is empty until both queries settle, so callers need this to tell
     // "nothing here" from "not known yet".
@@ -1663,8 +1751,8 @@ export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = Buf
         tensorListByOperation: tensorsByOperationByAddress,
         uniqueBuffersByOperationList,
         status,
-        // `useBuffers(…, true)` drops operations outside this range, which then
-        // read as empty rather than as unchecked.
+        // Operations outside this range map to an empty `Map`, which reads as empty
+        // rather than as unchecked.
         operationRange,
     };
 };

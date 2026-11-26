@@ -14,7 +14,9 @@ It is a read-only surface over the same report readers the web application uses.
 no web server, opens no port, and writes nothing to a report. By default it appends usage
 events to `~/.ttnn-visualizer/usage/events.log` (tool name and outcome only). Set
 `USAGE_RECORDING_DISABLED=true` or create the marker file under that directory to opt out;
-see the [event logging](./event-logging.md) reference.
+see the [event logging](./event-logging.md) reference. When [aggregate
+collection](./event-logging.md#aggregate-collection) is opted in, the server pushes the same
+aggregate counters the app does, without the app being launched.
 
 ## Running it
 
@@ -58,9 +60,9 @@ Answers link to the same thing in the web application, for the reader to open:
 - `load_report` returns an `app_link` to the report.
 - `operation_detail` and `operation_provenance` return an `app_link` to the operation.
 - `find_operations`, `top_ops`, `program_cache`, `memory_profile`, `tensor_flow`,
-  `errors`, `dram_fallbacks`, `l1_peak`, `late_deallocations`, `critical_path` and
-  `subgraph_between` return one `app_link_template`, in which
-  `{operation_id}` takes any operation id the answer lists.
+  `errors`, `dram_fallbacks`, `l1_peak`, `late_deallocations`, `critical_path`,
+  `source_lines`, `subgraph_between` and `op_configurations` return one
+  `app_link_template`, in which `{operation_id}` takes any operation id the answer lists.
 
 A link names the report by its directories, and the visualizer opens them when the link is
 followed, as `ttnn-visualizer --memory-report-path` does: each followed link starts a new session
@@ -92,36 +94,41 @@ another rank's operation under the same id.
 | Tool | Answers |
 |---|---|
 | `load_report` | What this report contains, and which of the tools below apply to it: its signposts, architecture, device count and the tt-perf-report version. Takes a memory report directory, a performance directory, a tt-npe trace file, or any of them together. Returns a handle the others take. |
-| `top_ops` | The costliest operations by device time, op-to-op gap, total percentage, FLOPS, DRAM bandwidth or core count, over the whole report or a signpost range. Each row carries the memory report `operation_id` it links to, when the handle holds both reports — see below. `include` adds the fields that say why an operation took its time, and the performance view's heuristic flags. |
+| `top_ops` | The costliest operations by device time, op-to-op gap, total percentage, FLOPS, DRAM bandwidth or core count, or the busiest by a hardware counter's FPU, SFPU or MATH utilisation, over the whole report or a signpost range. Each row carries the memory report `operation_id` it links to, when the handle holds both reports — see below. `include` adds the fields that say why an operation took its time, and the performance view's heuristic flags. |
 | `op_breakdown` | Where the time went, per op or per op category, over the whole report or a signpost range: each group's count, and its device time and op-to-op gap with the share each is of the total. |
 | `program_cache` | Whether programs were built again rather than reused: per op code, its calls, distinct programs, and how many repeat calls hit or missed the program cache. |
 | `zone_timings` | Per-zone, per-RISC totals from `profile_log_device.csv` — firmware and kernel phases, as measured on device. |
 | `zone_intervals` | How long a zone that recurs within one kernel run takes from one start to the next — for a zone placed once per loop iteration, the iteration's steady-state time: the median, minimum and maximum interval per device and per core's RISC, never pooled across devices, and which runs filled the device profiler's L1 buffer. |
 | `core_spread` | How evenly one operation's kernel time fell across the cores that ran it, or the costliest operations': the minimum, median and maximum per-core span and per RISC, the imbalance between them, the slowest cores by coordinate, and how many cores recorded zones against the row's core count. |
+| `hw_utilisation` | How busy each Tensix unit was, from tt-metal's hardware counters: the FPU, SFPU, MATH, packer, unpackers 0 and 1, L1 bandwidth and NoC rings 0 and 1, each averaged over the report weighted by device time, with the operations that kept it busy longest; which counter groups the capture filled; and the operations ranked by any counter label. Needs a capture made with `--profiler-capture-perf-counters`. |
+| `stall_breakdown` | Why an operation's compute kernel was slow, per thread (unpack, math, pack): each thread's instruction issue rate, stall rate and named waits from tt-metal's hardware counters, beside the time the unpack and pack cores spent polling circular buffers, which the counters cannot see, from tt-metal's sum zones. For performance row ids, an op code or the costliest operations, ranked by an average core's stalled time, each naming its largest wait. Needs the `instrn` counter group, and `--enable-sum-profiling` for the circular-buffer waits. |
 | `diff_reports` | Per-operation-code deltas between two reports, largest movement first, over the whole reports or one signpost range in every capture: only moves past a noise threshold count as changes, operations one report lacks are listed apart, and repeated captures of either side are compared by their median. `match: signature` groups by raw op code and tensors instead. |
 | `find_operations` | Operations matching a name substring or a call-stack substring, with the ids `operation_detail` takes. |
-| `operation_detail` | One operation: its input and output tensors with shape, dtype, layout and memory config, what it had allocated, and the circular buffers each of its device operations allocated, with size per core, core range and device count, with its error and likely DRAM fallback when it has one, and its per-device `l1_pressure` (`fullness_pct`, `free_segments`, `largest_free_block`, `largest_free_pct`). With a linked performance report, also the performance rows it launched, their device time and share of the report's, and the operation's total and slowest row, with the same `include` as `top_ops`. |
-| `memory_profile` | Memory footprint per operation, keyed by buffer type and ranked within each, with each type's largest footprint, the device's L1 geometry, and `l1_pressure` ranking operations by smallest `largest_free_block` on the most constrained device. A floor rather than the peak — see below. |
+| `operation_detail` | One operation: its input and output tensors with shape, dtype, layout and memory config, what it had allocated, and the circular buffers each of its device operations allocated, with size per core, core range and device count, with its error and likely DRAM fallback when it has one, and `l1_pressure` on its most constrained device (`fullness_pct`, `free_segments`, `largest_free_block`, `largest_free_pct`). With a linked performance report, also the performance rows it launched, their device time and share of the report's, and the operation's total and slowest row, with the same `include` as `top_ops`. |
+| `memory_profile` | Memory footprint per operation, keyed by buffer type and ranked within each, with each type's largest footprint, the device's L1 geometry, and `l1_pressure` ranking operations by smallest `largest_free_block` on the most constrained device, with `operations_at_top` counting those that share the first row's `largest_free_block`. A floor rather than the peak — see below. |
 | `tensor_flow` | Which operation produced a tensor and which ones consumed it. |
 | `operation_provenance` | What one operation was called with, and where in the model code it came from. |
+| `op_configurations` | Each operation's distinct argument combinations, grouped as tt-metal's model tracer groups the calls behind its sweeps: how many calls used each and, with a linked performance report, their device time, and one configuration's arguments by its `config_digest` — for checking a sweep's coverage against a real run, or reproducing one configuration. |
 | `errors` | The errors the run recorded, including an operation that started and never completed: which operation, the device operations whose launch failed, and for an allocation failure its figures and why it did not fit. |
 | `dram_fallbacks` | Operations that likely fell back from L1 to DRAM, inferred from their memory config arguments and from retries after an L1 allocation failure. |
 | `l1_peak` | The run's L1 peak per bank, split into circular buffers, intra-operation tensors, persistent tensors and stale ones, with the operation holding it and the operations closest to it. |
 | `late_deallocations` | Tensors still allocated after their last use, by Buffer Summary's late-deallocation rule (L1, as the app shows it, or DRAM), grouped by the call site of that use: how many holds each has, how they ended, and the bytes per bank they held over the operations held. |
 | `noc_congestion` | How congested the NoC links were in a tt-npe trace: the trace's own run summary, the highest demand any single link reached and when, bursts of congested timesteps ranked by peak, and the links with the highest mean demand. |
 | `critical_path` | The longest chain of cumulative device time through the operation graph, source to sink, with each operation's device time, the chain's total and share of the report's, and how many of its operations have no device time. Needs a linked performance report. |
+| `source_lines` | Where in the model code the device time went: performance rows rolled up by the call site of their linked memory report operation, as the performance view's stacked table groups by Source line — each line's file, function, summed device time and share, row count, top op codes and operation ids, over the whole report or a signpost range, a page at a time. Needs a linked performance report and a capture that records stack traces. |
 | `subgraph_between` | The operations, tensor edges and tensors on every path from one operation to another, each tensor once with its shape, dtype, layout, buffer type and memory layout, so a block can be read without walking it one tensor at a time. |
 
-`top_ops`, `op_breakdown`, `program_cache`, `zone_timings`, `zone_intervals`, `core_spread`
-and `diff_reports` read the performance CSVs; the operation tools — `find_operations`,
-`operation_detail`, `memory_profile`, `tensor_flow`, `operation_provenance`, `errors`,
-`dram_fallbacks`, `l1_peak`, `late_deallocations` and `subgraph_between` — read the memory
-report's SQLite database; `critical_path` reads both, and is listed only when the
-performance CSV can be reported on and the database holds the graph's tables and its
-captured graphs; `noc_congestion` reads a tt-npe trace. `load_report` takes any of the
-three, since its whole job is saying which of the others apply. A capture can carry any of
-them, or — as far as these tools are concerned — none, which is what makes `load_report`'s
-answer worth reading first.
+`top_ops`, `op_breakdown`, `program_cache`, `zone_timings`, `zone_intervals`, `core_spread`,
+`hw_utilisation`, `stall_breakdown` and `diff_reports` read the performance CSVs; the operation tools — `find_operations`,
+`operation_detail`, `memory_profile`, `tensor_flow`, `operation_provenance`,
+`op_configurations`, `errors`, `dram_fallbacks`, `l1_peak`, `late_deallocations` and
+`subgraph_between` — read the memory report's SQLite database; `critical_path` and
+`source_lines` read both, and are listed only when the performance CSV can be reported on
+and the database holds the captured graphs, with the graph's tables for `critical_path` and
+the stack traces for `source_lines`; `noc_congestion` reads a tt-npe trace.
+`load_report` takes any of the three, since its whole job is saying which of the others
+apply. A capture can carry any of them, or — as far as these tools are concerned — none,
+which is what makes `load_report`'s answer worth reading first.
 
 `load_report` takes the memory report directory as `memory_report_path`. Its former name,
 `profiler_path`, is still accepted; a call passing both with different paths is refused.
@@ -132,42 +139,59 @@ names so existing clients go on working.
 
 Call `load_report` first. It reports what is answerable rather than making you discover it
 one failed call at a time, because the report kinds are independent: a performance-only
-capture has no operation graph and no tensor data, and a performance tool asked of a handle
-loaded without a `performance_path` is refused and says so. `zone_timings` is listed only when
-`profile_log_device.csv` decodes as UTF-8, has every column the tool reads (`timer_id`,
-`zone name`, `run host ID`, `PCIe slot`, `RISC processor type`, `core_x`, `core_y` and
-`time[cycles since reset]`), and has at least one data row. `zone_intervals` is listed only
-when `zone_timings` is, the device log marks zone starts and ends in a `type` or
-`zone phase` column, and its first line names a positive `CHIP_FREQ[MHz]`. `core_spread`
-is listed only when `zone_intervals` is and the performance CSV can be reported on.
-`top_ops`, `op_breakdown` and `program_cache` are listed only when the performance CSV can
-be reported on, and when it cannot, `performance_csv_problem` says why (`empty`,
-`no data rows`, `missing columns: …`, or that it cannot be read or decoded).
-Each database tool is checked against the tables it actually reads, so a truncated
-capture that holds `operations` but not `buffers` is reported as answering
-`find_operations` and nothing else, rather than advertising every tool and failing most
-of them. `noc_congestion` is listed when the handle's `npe_path` starts as a trace does, a
+capture has no operation graph and no tensor data, and a performance tool asked of a
+handle loaded without a `performance_path` is refused and says so. `zone_timings` is
+listed only when `profile_log_device.csv` decodes as UTF-8, has every column the tool
+reads (`timer_id`, `zone name`, `run host ID`, `PCIe slot`, `RISC processor type`,
+`core_x`, `core_y` and `time[cycles since reset]`), and has at least one data row.
+`zone_intervals` is listed only when `zone_timings` is, the device log marks zone starts
+and ends in a `type` or `zone phase` column, and its first line names a positive
+`CHIP_FREQ[MHz]`. The eight tools that read the performance CSV's rows, `top_ops`,
+`op_breakdown`, `program_cache`, `core_spread`, `critical_path`, `source_lines`,
+`hw_utilisation` and `stall_breakdown`, are listed only when it can be reported on, and
+when it cannot, `performance_csv_problem` says why (`empty`, `no data rows`,
+`missing columns: …`, that it cannot be read or decoded, or the parse error reading its
+signposts gave). `program_cache` also needs the `PROGRAM HASH` and `PROGRAM CACHE HIT`
+columns, `hw_utilisation` a hardware counter column, `stall_breakdown` a thread's stall
+rate, which the `instrn` counter group writes, `core_spread` needs `zone_intervals` as
+well, `critical_path` the graph, as above, and `source_lines` the memory report's
+`stack_traces`. Each database tool is checked against the tables it actually reads, so a
+truncated capture that holds `operations` but not `buffers` is reported as answering
+`find_operations` and nothing else, rather than advertising every tool and failing most of
+them. `noc_congestion` is listed when the handle's `npe_path` starts as a trace does, a
 zstd frame for `.zst` and a JSON object otherwise. The trace is only read whole on its
 first call, which refuses one that is not a readable tt-npe trace.
 
+(agent-load-report-capture)=
 `load_report` also says what the capture is:
 
 - `signposts` lists the names a signpost range can take, in the order tt-perf-report
   resolves them, with how often each occurs — one name bounds both ends of a range only if
   it occurs twice — and `signpost_count` counts them all, since the list stops at 20. Both
   are absent when the performance CSV cannot be reported on, and empty when it holds no
-  signposts. A name longer than 256 characters, which a range cannot take, is counted but
-  left out of the list, and `signposts_unlisted_too_long` says how many were. When the CSV
-  can be reported on but its signposts cannot be read, `signposts_problem` says why. Loading reads the signposts, so a handle answers from the
-  CSV it was loaded on: one rewritten or superseded after that is refused, and
-  `load_report` again gives a fresh handle.
+  signposts. A name longer than 256 bytes as an answer writes it, which a range cannot
+  take, is counted but left out of the list, and `signposts_unlisted_too_long` says how
+  many were. Bytes as an answer writes it means UTF-8 with JSON's escapes, so a four-byte
+  character counts four and a control character or a lone surrogate six; every *name* bound
+  on this page counts that way. A range naming a signpost the report lacks is refused with
+  the names this list holds. A CSV whose lines look sound but that pandas cannot tokenise
+  when it reads the signposts, such as one with a quote left open, has its parse error in
+  `performance_csv_problem`, with those eight tools listed as unanswerable; when it parses
+  but its signposts cannot be read, `signposts_problem` says why. Loading reads the
+  signposts, so a handle answers from the CSV it was loaded on (or, if it was loaded before
+  one was written, the first one a read finds): one rewritten or superseded after that is
+  refused, and `load_report` again gives a fresh handle.
 - `arch` and `device_count` are keyed by the file each was read from, since a handle's two
-  reports can come from different runs. `arch.device_log` is the device profiler log's
-  header, which `capture` also returns whole; `arch.cluster_descriptor` is what the `arch`
-  mapping in rank 0's `cluster_descriptor.yaml`, beside the memory report database, names — as
-  written, since older descriptors spell Wormhole `Wormhole` and newer ones
-  `wormhole_b0`, and joined with commas if its chips differ. The memory report database itself
-  records no architecture. `device_count.performance_csv` counts the devices the
+  reports can come from different runs. `arch.device_log` is the `ARCH` field of the device
+  profiler log's header. `capture` returns the header's fields, leaving out any whose name
+  or value runs past 64 characters, which tt-metal never writes, and any after the first 16
+  it keeps. An architecture name longer than 64 characters reads as none everywhere, and
+  so does the end of a longer field name such as `MY_ARCH`.
+  `arch.cluster_descriptor` is what the `arch` mapping in rank 0's
+  `cluster_descriptor.yaml`, beside the memory report database, names — as written, since
+  older descriptors spell Wormhole `Wormhole` and newer ones `wormhole_b0`, and joined
+  with commas if its chips differ. The memory report database itself records no
+  architecture. `device_count.performance_csv` counts the devices the
   performance CSV has rows for, which no other answer shows because rows are merged across
   devices; it is read with the signposts, so it is absent whenever they are.
   `device_count.profiler` counts the memory report database's devices, every rank's.
@@ -181,6 +205,18 @@ Five properties are deliberate, and worth knowing before you act on a number.
 **Every tool returns an aggregate or a bounded slice, never the table.** A performance
 report runs to tens of thousands of rows of about thirty-five fields. Limits are capped
 server-side, so asking for more returns the cap rather than the report.
+
+An op code longer than 256 characters is the capture's text, not tt-perf-report's; the
+longest a tool shows across 67 local captures is a signpost's, at 91. Every tool that
+shows one cuts it there: `top_ops`, `operation_detail` and `core_spread` rows, and
+`program_cache` and `diff_reports` entries. A cut one carries `op_code_full_length`, its
+length, and `op_code_digest`, a digest of the whole code, so two codes cut alike are told
+apart; groups are still kept by the whole code. `op_breakdown` cuts its `op` key the same
+way, with `op_full_length` and `op_digest`; an `op_category` is one of tt-perf-report's own
+names, so it is never cut. A refusal that quotes an op code cuts it too. A signpost name is
+the exception: past 256 characters it is counted rather than shown, both in `load_report`'s
+list and in the names a refusal of an unknown signpost lists, since a cut name could not be
+passed back as a range's bound.
 
 **No rows are hidden from you.** The web application's performance view hides host
 operations by default and can narrow to a signpost range. Those are display choices, and an
@@ -205,14 +241,14 @@ answer cut down — it is what the signposted run reports.
 A range the report cannot honour is refused rather than answered from other rows: a name
 the report does not hold (the refusal lists the names it does), one name for both bounds
 when it occurs only once, an end that falls before the start, or a name longer than 256
-characters. A report with no signposts at all is read whole, because tt-perf-report then
-uses the whole file rather than some other window, and the response's `projection` says so
-with `signpost_range_ignored`. Every ranged response's `projection` names the range, so a
-windowed answer cannot be taken for a whole-report one. `diff_reports` applies one range to
-every capture it compares, and refuses when only some of them hold signposts: a window
-compared against a whole report would show every row outside the window as a change. It
-checks the range against every capture before generating any, and a refusal names the
-report it is about.
+bytes as an answer writes it. A report with no signposts at all is read whole, because
+tt-perf-report then uses the whole file rather than some other window, and the response's
+`projection` says so with `signpost_range_ignored`. Every ranged response's `projection`
+names the range, so a windowed answer cannot be taken for a whole-report one.
+`diff_reports` applies one range to every capture it compares, and refuses when only some
+of them hold signposts: a window compared against a whole report would show every row
+outside the window as a change. It checks the range against every capture before
+generating any, and a refusal names the report it is about.
 
 One filter is applied, deliberately: per-device rows are **merged**, so an operation that
 ran on eight devices is one row rather than eight. That is the unit an operation is
@@ -362,9 +398,18 @@ any of these groups:
   came to what the hardware can do; DRAM and FLOPs follow `bound_analysis` above.
 - `noc`: NoC, multicast NoC, DRAM and Ethernet bandwidth utilisation, and the NPE
   congestion impact.
+- `counters`: tt-metal's hardware counters for the FPU, SFPU, MATH, packer, unpackers 0
+  and 1, L1 bandwidth and NoC rings 0 and 1, each as the average, minimum and maximum
+  across the cores that ran the operation's compute kernel (`hw_fpu_util_percent`,
+  `hw_fpu_util_min_percent`, `hw_fpu_util_max_percent` and so on), and the FPU, SFPU and
+  MATH averages over the full grid, idle cores included (`hw_grid_fpu_util_percent` and
+  so on). How busy each unit actually was, beside the perf model's `fpu_util_percent` in
+  `utilisation`, which is an estimate. See `hw_utilisation` below.
 - `riscs`: kernel time per RISC, and how long the compute kernel waited at the front and
-  back of its circular buffers. Which stage limits the operation: the readers and writers
-  on BRISC and NCRISC, or unpack, math and pack on the three TRISCs.
+  back of its circular buffers, summed over the operation's cores as tt-metal writes them
+  (`stall_breakdown`, on a capture with the `instrn` counter group, gives the average per
+  core). Which stage limits the operation: the
+  readers and writers on BRISC and NCRISC, or unpack, math and pack on the three TRISCs.
 - `cores`: available cores, the time from the first core's kernel start to the last's,
   and the per-core minimum, maximum and average kernel time. Launch skew and imbalance.
 - `dispatch`: the op-to-op gap, dispatch's command and GO-send wait times, and the metal
@@ -385,8 +430,10 @@ and keeps the first device's row for everything else, so `kernel_us` there is on
 device's time rather than the average. The web application's rows carry the fields
 tt-perf-report generates; the ones read straight from the CSV — the math fidelity, the
 per-core spread and launch skew, the circular-buffer waits, the dispatch waits, the
-kernels, the perf model's compute and bandwidth times and FPU utilisation, and the `noc`
-group — reach only these tools.
+kernels, the perf model's compute and bandwidth times and FPU utilisation, the `noc`
+group, and the counters' minimum and maximum — reach only these tools; of the `counters`
+group the application's rows carry each average and the full-grid averages, and only on a
+capture that has them.
 
 tt-metal's performance model leaves its ideal times at 1 ns for an operation it does not
 model, so a 1 ns ideal time reads as null rather than as a measured one, and so does an
@@ -396,13 +443,18 @@ placeholder would claim a million-fold gap.
 Many of these fields are empty unless the capture asked for them. A field that no row of
 the whole report carries, whatever range was read, is left out of the rows and named in
 `empty_in_report` instead, with what would fill it: `--collect-noc-traces` for the `noc`
+group, `--profiler-capture-perf-counters=<group>` for each `counters` field, naming the
 group, `--profile-dispatch-cores` for the dispatch wait times, a captured metal trace for
 the trace ids, and a performance model that computes them for the ideal times. A field
 whose column the report does not have at all is named as such, since no capture option
-fills it on the tt-metal that wrote the report. A field empty on some rows only is usually
-one those operations do not have, such as a block size on an operation that is not a
-matmul; the `noc` fields are filled only for the operations tt-metal matched to its NoC
-traces.
+fills it on the tt-metal that wrote the report, except a `counters` field: tt-metal writes
+a counter's column only when the capture asked for it, so a missing one names its group
+too. That group is one the device log's architecture has, so a Wormhole capture is never
+sent to Blackhole's `l1_2` to `l1_5`; without a device log, only a group every architecture
+has is named, unless the counter exists on Blackhole alone, which the hint then says. A
+field empty on some rows only is usually one those operations do not have, such as a block
+size on an operation that is not a matmul; the `noc` fields are filled only for the
+operations tt-metal matched to its NoC traces.
 
 **`flags` are the performance view's heuristic flags, with their evidence.** Asked for
 them, every row carries `flags`, a list in the order the performance view shows them and
@@ -420,7 +472,9 @@ already carries:
   ideal time over the device time, scaled by the cores the operation could have used over
   the cores it did. `roofline_modelled` is false when tt-perf-report has no roofline model
   for the operation (`bound_analysis` `none`), so the ideal time it is compared against is
-  less reliable, and null when the report does not say.
+  less reliable, and null when the report does not say. An operation whose ideal time is
+  tt-metal's 1 ns placeholder, described above, is never flagged, here or in the view: its
+  utilisation is unknown, not low.
 - `underutilised_cores`: the row's `cores` are fewer than a quarter of `core_capacity`,
   which is the row's own available cores (`core_capacity_from` `available_cores`) or, for a
   row without them, the device's (`max_cores`).
@@ -441,8 +495,9 @@ report or the signpost range for `top_ops`, every row of the operation for
 in the report that recorded a cache result missed, `flag_basis.caveat` carries the caveat
 `program_cache` gives: that is what a run with the program cache disabled records, so
 check whether it was before reading each recompute candidate as a program built again.
-`flag_basis.note` repeats the two ways the flags read the report differently from the
-view, below.
+`flag_basis.note` repeats the way the flags read the report differently from the view,
+below, and that a 1 ns placeholder ideal time is never flagged `low_utilisation`, so
+`flagged_rows` does not count those operations as low.
 
 `flag_basis.max_cores` is the device's core count, read where the web application reads it,
 through the same reader as `/api/performance/device-log/meta`: `Max Compute Cores` on the
@@ -453,14 +508,8 @@ of the report used (`report_rows`). A count of 0 falls back to Wormhole's
 (`fallback_default`). The rows that fallback reads are the whole report's even for a ranged
 read, since a window does not change the device, where the view reads the rows it shows.
 
-The flags read the report differently from the view in two deliberate ways. Over a
+The flags read the report differently from the view in one deliberate way: over a
 signpost range, first calls and the `report_rows` fallback read the whole report, as above.
-And the view reads tt-metal's 1 ns ideal-time placeholder, described above, as a modelled
-time, which against an operation's real duration gives a utilisation near zero, so it flags
-low utilisation on operations the model never modelled
-([#2162](https://github.com/tenstorrent/ttnn-visualizer/issues/2162)): across ten local and
-demo captures, 166 of its 239 low-utilisation flags. Here a 1 ns ideal time never flags
-`low_utilisation`. Every other flag those captures carry unranged is the view's.
 
 The view's other two flags are not in the list, because other tools answer them in more
 detail: an allocation failure is `errors`' (and `operation_detail`'s `error`), and a likely
@@ -486,6 +535,138 @@ named by its CSV row in `first_repeat_miss_perf_id`, and when the handle also ho
 memory report, by `first_repeat_miss_operation_id` too, for `operation_provenance` to
 turn into a call site.
 
+**`hw_utilisation` reads tt-metal's hardware counters, which are measurements, not a
+model.** A capture made with `--profiler-capture-perf-counters=<groups>` (for example
+`fpu,pack,unpack,instrn,l1_0`, which fits one pass, or `all` with
+`--perf-counter-multipass`) has each core count how many cycles each unit was busy while
+the operation's compute kernel ran, and tt-metal writes every metric as its minimum,
+median, maximum and average across those cores: one figure per operation, not a time
+series. The visualizer finds those columns by the shape of their headers and groups their
+labels by unit — compute, unpack, pack, L1 ports, NoC ring, thread and instruction issue,
+and stalls, with a label it does not know under `other` — so a label tt-metal renames
+still shows.
+
+- Each of `units` is one unit's average across cores: FPU, SFPU and MATH (FPU or SFPU)
+  utilisation, packer utilisation, unpacker 0 and 1 busy, L1 bank-0 bandwidth, and NoC
+  rings 0 and 1. `weighted_avg_percent` weighs each operation's average by its device time,
+  over the operations that carry the counter; `ops_with_value` counts them and
+  `device_time_share_percent` says how much of the report's device time they took.
+  `top_ops` lists the 3 operations that kept the unit busy longest: `busy_us` is the
+  operation's device time times its average, the time an average core kept the unit busy.
+- An operation without a compute kernel, such as a concat or a slice, records no counters.
+  It is left out of every figure rather than read as 0, so `device_time_share_percent`
+  below 100 is that time, not a unit sitting idle.
+- A unit the capture lacks reads `state: not_captured` with a `fill_hint` naming the group
+  that fills it, or `not_on_architecture` where its architecture has no such counter. Its
+  `architecture` is the device log's, spelled as the `flags` evidence spells it
+  (`wormhole_b0`, `blackhole`), and null without one.
+- `full_grid` is tt-metal's FPU, SFPU and MATH utilisation divided across every compute
+  core of the grid, idle cores included, so it reads lower than the per-core average on an
+  operation that ran on part of the grid. Only a capture that profiled the host as well as
+  the device has it.
+- `capture_groups` says which `--profiler-capture-perf-counters` groups the capture
+  filled. Blackhole's `l1_2` to `l1_5` feed metrics that average over every L1 group
+  captured, so a capture holding `l1_0` or `l1_1` too can read `unknown` for them; on
+  Wormhole they read `not_on_architecture`.
+- `families` lists every counter label the capture holds by unit, and the ones not on
+  its architecture. Pass one as `label` to rank operations by it: `order: highest`, the
+  default, ranks a percentage by `busy_us`, and `order: lowest` by `idle_us`, the time an
+  average core left the unit idle, which finds the costly operations that left it idle. A
+  ratio, which can pass 1, has no busy time and ranks by its average with `weighted:
+  false`, as a percentage can too.
+
+Rows are merged across devices, so a multi-device operation's counters are those of the
+row tt-perf-report keeps: the slowest device's, or the first device's for an all-gather,
+reduce-scatter or all-reduce, as for the `include` groups above. The tool reads the whole report and takes
+no signpost range, and it is refused, naming the flag, for a capture with no counter
+columns. `top_ops` ranks by `hw_fpu_util`, `hw_sfpu_util` and `hw_math_util` too, highest
+first, where the `hw_` prefix keeps a hardware counter apart from the perf model's
+`fpu_util_percent`; an operation without the counter is not ranked, and a capture with none
+says what fills it.
+
+**`stall_breakdown` says where each thread of an operation's compute kernel stalled or
+waited, from two sources it keeps apart.** A Tensix core's compute kernel runs as three
+threads: `t0` unpacks, `t1` does the math and `t2` packs. Each thread's figures come under
+`hardware_counters` or `instrumentation`, so every figure says which it is:
+
+- `hardware_counters` are tt-metal's counters from the `instrn` group, each the average,
+  minimum and maximum across the cores that ran the kernel, as a share of the cycles the
+  counters ran on each core: `issue_rate` is the cycles the thread issued an instruction,
+  `stall_rate` the cycles its next instruction was blocked, and `waits` the named wait
+  conditions above 0, ranked by average, each with the `downstream` flag described below. A
+  wait that reads 0 on every core is named in `zero_waits` instead: tt-metal drives many of
+  them on no operation, such as the srcA and srcB valid and clear waits.
+  `math_pipeline_stalls`, on `t1`, are tt-llk's data-hazard and scoreboard stall rates,
+  which the `unpack` and `pack` groups fill, as shares of the cycles a math instruction was
+  ready rather than of the kernel.
+- `instrumentation` is tt-metal's sum zones around the two polls the counters cannot see,
+  written only with `--enable-sum-profiling`: `cb_wait_front` on the unpack core, waiting
+  for input tiles, and `cb_reserve_back` on the pack core, waiting for output space. Both
+  are RISC-V loops that issue no Tensix instruction, so a thread can wait in one for most
+  of the kernel with a stall rate near 0. tt-metal writes each as a sum over the
+  operation's cores (`sum_us`), not the average its profiling guide describes;
+  `per_core_us` divides it by the operation's `CORE COUNT` (`core_count`), so it reads low
+  where fewer cores ran the compute kernel, and `kernel_share_percent` is that over the
+  operation's kernel duration. `core_count` is null where the CSV's is not a positive whole
+  number, and both figures are then null too.
+
+It divides by the CSV's `CORE COUNT` rather than tt-perf-report's `cores`, which the other
+tools give. The two differ only on a DRAM-sharded matmul, for which tt-perf-report puts a
+fixed count of DRAM-interface workers per architecture in place of the profiler's, and the
+operation's Stalls tab, which divides by the same rule, reads the CSV row, which holds only
+the profiler's.
+
+The waits are not a split of the stall rate. tt-llk counts each one apart from it, so they
+overlap one another and the stall rate: they never add up to the stall rate, and one can
+read above it. `stall_overlap` is tt-llk's own measure, and a ratio rather than a
+percentage: the thread's waits summed over its cycles, so 0.79 means they add up to 79% of
+them, and it can pass 1. Semaphore Zero Wait T2, the packer waiting for math's result,
+reads high whenever math or a stage before it holds the pipeline up, so read the threads
+before it.
+
+Each operation's `stalled_percent` is the largest of its threads' stall rates and its CB
+poll shares, never their sum, since a core can poll a circular buffer while instructions
+it already issued stall. `stalled_us` estimates it as an average core's time: a CB poll's
+`per_core_us`, or a stall rate times the operation's per-core average kernel duration
+(`per_core_avg_us` in `cores`), since the counters count each core's own cycles, and null
+where the row has no such duration. Operations are ranked by `stalled_us`, and those with
+no figure come last. `stalled_thread` is the thread it came from, and `largest_wait` names
+the wait behind it, with its `source`: the CB poll itself, or that thread's named wait
+with the highest average, which is null when none reads above 0. Its `downstream` is true
+for a wait on an earlier stage, such as Semaphore Zero Wait T2: a symptom of what held the
+pipeline up before the thread, not its own cause. Each `waits` entry carries the same flag,
+so such a wait is marked wherever it is listed, not only as the largest.
+
+- With `perf_ids`, up to 25 performance row ids, it reads those operations; with
+  `op_code`, every call whose raw op code or tt-perf-report's op code matches, ignoring
+  case, ranked before `limit` cuts them; with neither, the `limit` costliest operations by
+  device time. `limit` is 10 unless asked, capped at 25, and `matched` counts what the
+  selection named before the cut.
+- `counters` and `cb_waits` each give their `state`: `filled`, `not_captured` with a
+  `fill_hint` naming what fills them, as a hardware counter's absence names one, or
+  `no_value` where the capture has them but the operation does not. An operation without a
+  compute kernel, such as a concat or a slice, has no counters (`counters` reads
+  `no_value`). tt-metal writes the previous operation's CB sums on its row again, so they
+  are ignored (`cb_waits` reads `ignored`) rather than read.
+- `capture_groups` says which of the `instrn`, `unpack` and `pack` groups the capture
+  filled, as `hw_utilisation`'s does, and `sum_profiling` whether it had sum profiling,
+  with a `fill_hint` naming `--profiler-capture-perf-counters=instrn,unpack,pack,fpu`,
+  whose `fpu` is only for utilization, not the stalls, and `--enable-sum-profiling`
+  when it lacks any. A capture without sum profiling is still answered: each compute
+  operation's `cb_waits` reads `not_captured`, and a caveat says a stall rate near 0 does
+  not mean it did not wait. A capture without the `instrn` group is refused, naming both
+  flags, so one with sum profiling but no hardware counters is out of scope: the tool does
+  not read its CB waits alone, and the application offers an operation's Counters popover
+  only for a capture with counters. `wait_labels_absent` lists the named waits a capture
+  with the `instrn` group lacks, which only an architecture without them, such as Quasar,
+  does; Quasar's fourth thread and its stall reasons are not read.
+
+As in `hw_utilisation`, rows are merged across devices, so a multi-device operation's
+figures are those of the row tt-perf-report keeps, and the tool reads the whole report,
+with no signpost range. `sum_profiling` alone is read from the CSV itself, every device's
+rows, as the operation's Stalls tab reads it, so a CB wait on a row the merge drops still
+counts.
+
 **`op_breakdown` says where the time went, grouped as the performance view's stacked table
 groups it**, which is tt-perf-report's stacked report. `group_by: op`, the default, takes the
 op code's first word, as `tt-perf-report --group-by op` does, so every shape of a matmul is
@@ -504,6 +685,49 @@ op-to-op gap. On every local performance capture, the groups, their counts, thei
 time and their shares match the stacked report tt-perf-report generates from the same CSV.
 That report itself is not generated: the answer is computed from the rows, which also gives
 it the op-to-op gap the stacked report leaves out.
+
+**`source_lines` groups the same rows by the model-code line that launched them**, as the
+performance view's stacked table does under Source line. Each row is filed under frame 0
+of its linked memory report operation's stack trace — the `ttnn.<op>` call in the model
+code, which `operation_provenance` gives as the call site — keyed by full path and line,
+so two files that share a name stay apart. Device time is summed per line, as
+tt-perf-report's `Device_Time_Sum_us` sums it, so each group's `device_time_share_percent`
+is of `device_time_total`, the rows read, and the shares add up to 100 across every
+group, to rounding; the graph view weighs an operation by its slowest row instead, so its
+numbers can differ.
+Every row but a signpost adds to `row_count`, and only a positive device time adds to
+`device_time`. Each group names its `top_op_codes`, the 3 raw op codes with the most
+device time, and the first 20 of its `operation_ids`, with `operation_count` for all of
+them. A call site's `file`, `function` or `code` past 300 characters is cut, with its
+`_full_length` and a `_digest` of the whole, so two long paths cut alike stay apart. Rows
+with no linked operation form one `unlinked` group, counted by why in
+`unlinked_by_reason`: host ops, which the application's stacked table hides by default,
+and rows past the end of the memory report capture. Rows whose operation recorded no stack
+trace, or none naming a frame, form one `no_trace` group, and its count is in the caveat;
+so does a frame at line 0 or past 2³¹, which the application groups as a line of its own.
+An operation with several stack traces is filed under its first, where the application's
+operations list keeps its last. The application's table also follows its range slider, so
+its shares match these only over the same rows. Groups with equal device time are ordered
+by kind, path and line as text, and `top_op_codes` with equal device time by op code, each
+by code point, where the application compares them by locale: two paths that differ in
+case or punctuation (`_`, `-` or `.`) can come out swapped, and of tied op codes that
+differ so, a different 3 can be listed. With no countable device time at all, every
+`device_time_share_percent` is `null`, where the application shows 0%. The groups are a
+page of the ranking by device time from `offset`, 0 unless given, which the answer states
+with how many it `returned`; `next_offset` starts the next page and is null on the last,
+so every call site can be reached, and an `offset` past the end returns none. `limit`
+caps the groups at 25 a page, and `rest` sums only the groups after the page, so the
+first page's shares and `rest`'s add up to 100, while a later page's fall short by the
+groups before it, which are in neither the page nor `rest`. Over a
+range, the rows and shares are the window's, the unlinked group's `unlinked_by_reason`
+included, while `operation_link` carries `scope: whole_report`, as `top_ops`'s does, since
+its `matched_rows` counts the whole report. The tool refuses a handle whose two reports
+did not link, a capture that records no stack traces, and one where no linked operation's
+trace at the linked rank names a Python frame (a C++ backtrace, say), as the application
+then disables Source line, since every row would read `no_trace`; it reads the linked rank
+only. The first call reads every linked operation's stack trace, 500 at a time, or in one
+streamed pass past 2,000 operations, and keeps only each one's call site; later calls,
+over any range, reuse them.
 
 **`diff_reports` calls a move a change only when it is bigger than run-to-run noise.** Two
 captures of the same code never time an operation identically, so a diff that ranks every
@@ -580,13 +804,13 @@ two-call shapes of one op code moved by 9–18% while the op code as a whole mov
 the answer's caveat quotes that before a signature's move is read as a change. A signature
 past 300 characters is cut, `signature_full_length` gives its length, and `signature_digest`
 a digest of the whole signature, so two signatures cut alike are told apart. An op code past
-it is cut the same way, with `op_code_full_length` and `op_code_digest`
-(`raw_op_code_full_length` and `raw_op_code_digest` with signatures). With signatures
-`changes` is capped at 25 rather than 100. A capture whose CSV has no tensor columns, or
-cannot be read, is refused. Older captures record a tile-padded size alone, where newer
-ones record `padded[logical]`, so an operation on a padded tensor has a different signature
-in each; `mismatched` names `tensor_sizes` when the captures differ in it, as `padded` or
-`padded[logical]` by handle.
+256 characters is cut the same way, as every tool cuts one, with `op_code_full_length` and
+`op_code_digest` (`raw_op_code_full_length` and `raw_op_code_digest` with signatures).
+With signatures `changes` is capped at 25 rather than 100. A capture whose CSV has no
+tensor columns, or cannot be read, is refused. Older captures record a tile-padded size
+alone, where newer ones record `padded[logical]`, so an operation on a padded tensor has a
+different signature in each; `mismatched` names `tensor_sizes` when the captures differ in
+it, as `padded` or `padded[logical]` by handle.
 
 When the captures' device logs name different architectures, clocks or compute core
 counts, or their CSVs hold rows for different numbers of devices, `mismatched` lists the
@@ -650,47 +874,54 @@ device's L1 its figures are withheld and `reason` says why, as the web applicati
 panel does. The first call on a handle reads every captured graph, which can take seconds on
 a large capture; later calls reuse it.
 
-**`late_deallocations` applies Buffer Summary's late-deallocation rule, grouped by where the
-fix goes.** Each operation's post-operation `buffers` snapshot is matched to the last tensor
-seen at each address, and a tensor is held late at every operation after its last consumer
-that is not a deallocate call, the rule the overlay hatches L1 rows by. The app applies it
-to L1 only; `buffer_type: DRAM` applies the same rule to DRAM buffers, which the app does
-not show. A hold is one tensor at one address over consecutive operations with these
-buffers. `call_sites` groups the holds by frame 0 of the last use's stack trace, the call
-site `operation_provenance` gives, which is where a `ttnn.deallocate` would free them
-sooner: 192 L1 holds come from 7 call sites on a 1,199-op llama capture, and 3,453 DRAM
-holds from 14 on a 9,940-op one. Both lists rank by `byte_operations`, bytes per bank summed
-over the operations held, which is the hatched area in Buffer Summary. `limit` caps
-`call_sites` at 25; `top_holds` lists the 20 largest holds whatever the limit, each with
-`producer_operation_ids`, the operations that output its tensor: none for a tensor from the
-host, and two for some.
+**`late_deallocations` applies Buffer Summary's late-deallocation rule, grouped by where
+the fix goes.** Each operation's post-operation `buffers` snapshot is matched to the last
+tensor seen at each address, and a tensor is held late at every operation after its last
+consumer that is not a deallocate call, the rule the overlay hatches L1 rows by. The app
+applies it to L1 only; `buffer_type: DRAM` applies the same rule to DRAM buffers, which
+the app does not show. A hold is one tensor at one address over consecutive operations
+with these buffers. `call_sites` groups the holds by frame 0 of the last use's stack
+trace, the call site `operation_provenance` gives, which is where a `ttnn.deallocate`
+would free them sooner; its `file`, `function` or `code` past 300 characters is cut, with
+its `_full_length` and a `_digest` of the whole: 192 L1 holds come from 7 call sites on a
+1,199-op llama capture, and 3,453 DRAM holds from 14 on a 9,940-op one. Both lists rank by
+`byte_operations`, bytes per bank summed over the operations held, which is the hatched
+area in Buffer Summary. `limit` caps `call_sites` at 25; `top_holds` lists the 20 largest
+holds whatever the limit, each with `producer_operation_ids`, the operations that output
+its tensor: none for a tensor from the host, and two for some.
 
 Each hold's `ending` says how it stopped, and `ended` counts them: `deallocated` by a
 deallocate call naming the tensor, `freed_otherwise` when it left the snapshot or its
 address went to another tensor without one, or `held_to_end` when the capture ended first,
-as weights, outputs and caches often do by design. The app's address map keeps crediting an
-address to the last tensor seen there after that tensor is gone, so a later buffer at the
-same address reads as the old tensor held again. A hold that opens after its tensor's
-buffer left the snapshot, or after its deallocate call, is that case: it is counted in
-`unattributed_hold_count`, left out of everything else, and named in the caveat. On one
-local capture that is 95 of 123 L1 holds. `run_start_count` is the count beside Buffer
-Summary's L1 toggle: the operations where at least one run starts, those included. An
+as weights, outputs and caches often do by design. A buffer belongs to the last tensor
+seen at its address only until a later operation with buffers of the type no longer has
+that address, or a deallocate call frees the tensor. An operation that recorded none of
+these buffers leaves the address with the old tensor, so where L1 empties and refills, a
+later buffer there can still read as that tensor held (#2284). `run_start_count` is the
+count beside Buffer Summary's L1 toggle: the operations where at least one run starts. An
 operation that recorded none of these buffers ends every run in the app but no hold here,
 so the app counts the next operation with buffers as a start again, and `operations_held`
-counts only operations with buffers; the caveat says when that happened. The tool reads the
-same tables the overlay does, so it answers on any capture with `buffers`, not only the
-ones that recorded `tensor_lifetime`. `l1_peak` counts a tensor stale only where no other
-tensor used its address, so it can call a tensor held here persistent: on the llama capture
-it counts all three tensors held at its peak as persistent. Match a hold to `l1_peak`'s
-peak by operation id.
+counts only operations with buffers; the caveat says when that happened. The tool reads
+the same tables the overlay does, so it answers on any capture with `buffers`, not only
+the ones that recorded `tensor_lifetime`. `l1_peak` counts a tensor stale only where no
+other tensor used its address, so it can call a tensor held here persistent: on the llama
+capture it counts all three tensors held at its peak as persistent. Match a hold to
+`l1_peak`'s peak by operation id.
 
 `zone_timings` carries a caveat of its own: cycles are summed across every core that ran
 the zone, so they measure occupancy rather than wall-clock duration. A core is counted per
 device — the captures we test against span 8 and 32 PCIe slots, and coordinates alone
 repeat on each — so a zone can report thousands of cores on a multi-device run. Durations
 need the device log's `type` column to pair zone starts with ends; a capture without it
-reports occurrence counts only, and a capture that stopped mid-zone reports how many starts
-and ends failed to pair so a partial total does not read as a complete one.
+reports occurrence counts only, and a capture that stopped mid-zone reports how many
+starts and ends failed to pair so a partial total does not read as a complete one; a start
+that a second start replaced before its end counts as unpaired. A row whose slot, core,
+run or cycle count is not a whole number or does not fit a 64-bit integer, or whose cycle
+count is negative, is left out and counted in a caveat. `zone_intervals` and
+`core_spread` apply the same rule, each counting only the rows it would have used. The
+rule is about negative cells, not totals: a zone whose end was recorded before its start
+still pairs, and its `total_cycles` is negative. The first call on a handle reads the
+device log once, and later calls answer from that read, with the clock it was read at.
 
 `core_spread` reads each operation on one device only, never pooling devices, since each
 runs its own clock. A performance row's global call count is the device log's `run host ID`
@@ -719,11 +950,12 @@ covers only the cores that did. Dropped markers cause that, and tt-metal reports
 profiler buffer in its host log only, never in the device log. When more cores recorded
 zones than the row reports, as a DRAM-sharded matmul's helper cores do, the median and
 `imbalance` mix cores with different roles, while the maximum and `slowest_cores` still
-name the cores that set the time; a caveat says so. Unpaired zones are counted per call
-count and device, not per replay, so an unpaired zone in one replay is reported on every
-replay of that operation. A kernel row whose slot, core or cycle count is not a number or
-does not fit a 64-bit integer, or whose cycle count is negative, is left out and counted in
-a caveat rather than failing the call. The first call on a handle reads the whole device
+name the cores that set the time; a caveat says so. A start that a second start replaced
+before its end counts as unpaired, and unpaired zones are counted per call count and
+device, not per replay, so an unpaired zone in one replay is reported on every replay of
+that operation. A kernel row whose slot, core or cycle count is not a whole number or does
+not fit a 64-bit integer, or whose cycle count is negative, is left out and counted in a
+caveat rather than failing the call. The first call on a handle reads the whole device
 log once for every operation in the report, and later calls answer from that read, with
 the clock it was read at.
 
@@ -759,22 +991,90 @@ says so. Starts and ends of the zone that did not pair are counted in a caveat, 
 interval across a dropped start spans two occurrences. A zone pairs only within its run,
 except a firmware zone, which starts before the kernel start that opens its run, and a
 start replaced before its end counts as unpaired. A zone the log does not start is refused
-with the zones it does, most started first, leaving out any name longer than 256
-characters, which is the capture's text, not the tool's; a zone asked for by a longer name
-is refused. A row whose slot, core, run or cycle count is not a number or does not fit a
-64-bit integer, or whose cycle count is negative, is left out and counted in a caveat, and
-a zone whose every start was left out is refused with how many were unreadable that way
-and how many lay past the 200,000 core-RISC timelines followed at once.
+with the zones it does, most started first, leaving out any name longer than 256 bytes,
+which is the capture's text, not the tool's; a zone asked for by a longer name is
+refused. A row whose slot, core, run or cycle count is not a whole number or does not
+fit a 64-bit integer, or whose cycle count is negative, is left out and counted in a
+caveat, and a zone whose every start was left out is refused with how many were unreadable
+that way and how many lay past the 200,000 core-RISC timelines followed at once. The first
+call on a handle reads the device log once for every zone, and later calls, for any zone
+and the refusal of one the log does not start included, answer from that read, with the
+clock it was read at; a log that cannot be read is refused until `load_report` loads it
+again. A log that one pass cannot read as each zone's own read would has the zone asked
+for read alone on every call, the first after the pass: one past those caps counted across
+all its zones, naming more than 1,000 zones or holding more than 4,000,000 intervals, one
+where a RISC's run host ID comes back before its next kernel start, and one whose cycle
+counts run past what a float holds exactly where a cell is not a whole number. A zone also
+named on rows that neither start nor end one is read alone the same way. The server's log
+says when and why the pass gave up.
 
-No zone tool shows a zone name longer than 256 characters or a RISC name longer than 32
-characters: such a name is the capture's text, not the tool's, and tt-metal's longest RISC
-name, `QUASAR_NEO3_TRISC3`, is 18. `zone_timings` leaves an entry with one out, counted in
-`zones_unlisted_too_long`, and `limit` counts only the entries listed. Both count
+No zone tool shows a zone name longer than 256 bytes or a RISC name longer than 32 bytes:
+such a name is the capture's text, not the tool's, and tt-metal's longest RISC name,
+`QUASAR_NEO3_TRISC3`, is 18. These bounds, like the signposts', count bytes as an answer
+writes it, so a name of four-byte characters is held to a quarter as many characters, and
+one of control characters to a sixth. `zone_timings` leaves an entry with one out, counted
+in `zones_unlisted_too_long`, and `limit` counts only the entries listed. Both count
 zone-and-RISC entries, not names, so a long zone name on five RISCs counts five.
 `core_spread` leaves such a RISC out of `by_risc`, counted in `by_risc_unlisted_too_long`,
 though its kernels still count in their cores' spans. `zone_intervals` leaves such a
 timeline out of `by_core_risc`, counted in `by_core_risc_unlisted_too_long`, though its
-intervals still count in `by_device` and `timeline_count`.
+intervals still count in `by_device` and `timeline_count`. `core_spread` also lists at
+most 32 RISCs an operation in `by_risc`, the first by name, counting the rest in
+`by_risc_unlisted_past_cap`, since tt-metal has 32 RISC types; their kernels too still
+count in their cores' spans.
+
+**`op_configurations` groups calls as tt-metal's model tracer does, so a sweep's coverage
+can be checked against a real run.** The tracer (`model_tracer/generic_ops_tracer.py`)
+records each `ttnn` call's arguments for the sweeps built from it, and calls two calls one
+configuration when their cleaned arguments match. A memory report keeps each argument as
+the text of its repr, so the tracer's rules are applied to that text. An op name's `::`
+reads as `.`. The operations the tracer excludes are left out and counted in `left_out`:
+data movement and memory management such as `ttnn.to_device`, `ttnn.from_torch` and
+`ttnn.deallocate`, and any name outside `ttnn`. The tracer also records only the operations
+its sweep list (`tests/sweep_framework/Allops.txt`) names. That list moves with tt-metal's
+ops, so it is not applied here, and a listed operation may have no sweep at all: at
+tt-metal `4bf156f6ea` the list names neither `ttnn.Tensor.__getitem__` nor
+`ttnn.avg_pool2d`. The tracer's two semaphore keyword arguments,
+`multi_device_global_semaphore` and `barrier_semaphore`, are dropped, and an object's
+address (` at 0x…`) and a program config's unset `allowed_worker_cores` are removed. Any
+other semaphore, such as `all_reduce_async`'s `barrier_semaphores`, is kept, as the tracer
+keeps it: a semaphore prints as an object at an address, so with the address removed it
+reads the same on every call. The text also holds what the tracer's JSON never does, so a
+tensor's `tensor_id`, `device_id` and `is_allocated`, the `device_id: N, ` that leads each
+device's copy of a tensor (`device_id:N` on a line of its own in older captures), and the
+preview of its data that older captures print ahead of its shape are removed too, from the
+tensor's own text only: a `device_id=` anywhere else is kept. Arguments are then compared
+whole, by name: calls whose arguments differ in any text are different configurations. The
+tracer's memory-config hash has no counterpart in the text. The tracer also tells
+configurations apart by the machine and mesh they ran on, which the arguments need not
+record: `load_report` gives this capture's architecture and device count, to compare with a
+sweep's.
+
+Configurations rank by device time when the performance report links, summed over the rows
+each call launched as `operation_detail` sums them, with `untimed_calls` counting the calls
+that launched none; otherwise they rank by calls. `ops` gives each operation's calls and
+configuration count, the first look at what a sweep must cover, and, when the report links,
+its configurations' device time, share and `untimed_calls` summed, so an operation with an
+untimed configuration says how many calls its time leaves out. `ops` lists the first 20
+operations, ranked as configurations are, and `op_count` counts them all; `left_out` lists
+the 10 left-out operations with the most calls, and `left_out_op_count` and
+`left_out_calls` count them all. A listing shows up to 20 configurations (`limit`), each
+with its first 8 arguments, positional ones first, cut at 224 characters, which is far
+enough for a tensor's shape, dtype, layout, memory layout and buffer type, and its first 5
+operation ids. A listing is a page of the ranking from `offset`, 0 unless given, which it
+states with how many it `returned`; `next_offset` starts the next page and is null on the
+last, so every configuration and its digest can be reached. An `offset` past the end lists
+none. A configuration's `config_digest` asks for it alone: every argument up to 32, each
+cut at 1,500 characters, and up to 100 of its operation ids, which `operation_provenance`
+turns into call sites. A `config_digest` is the first 16 hex digits of the SHA-256 of the
+configuration's grouped text, so the same configuration in another capture written by the
+same ttnn has the same digest. It is not the tracer's `config_hash`, which hashes the
+tracer's JSON, so a sweep is matched by the arguments themselves. Older captures write a
+tensor's shape, dtype and layout without its memory config, so calls that differ only in a
+tensor's memory config share a configuration there, and the caveat says so. Arguments are
+read a row at a time. A read stops and is refused once the argument names and values it has
+read pass 1,073,741,824 characters, a sanity bound rather than a memory guard: the most any
+local capture holds is 54 million characters.
 
 **`noc_congestion` reads tt-npe's simulation of the NoC, not a measurement.** Its figures
 are percentages of a link's bandwidth per timestep of `cycles_per_timestep` device cycles.
@@ -802,15 +1102,28 @@ index of it when that index is built and current, and from the trace itself othe
 tool never builds the index, so it writes nothing beside the trace. The visualizer builds
 its index beside the copy it opens, which for an upload is its own copy under its report
 data directory, so an `npe_path` naming that copy reuses the index, in a fraction of the
-time and memory a parse takes. Otherwise the first call on a handle parses the whole
-trace: a trace of tens of thousands of timesteps and millions of link rows takes seconds
-to tens of seconds and several GB at its peak, as building the visualizer's index does,
-and the server process can keep much of that memory afterwards. A trace whose JSON passes
-1 GiB, summed over every zstd frame, or a `.zst` file itself past that size, is refused
-rather than parsed, and so is a `.zst` with a frame that does not declare its size. Later
-calls answer from the first read, and so does every handle on the same unchanged file. A
-handle stays with the trace it first read: if the file changes or goes away afterwards,
-its answers say so in their caveat, and a fresh `load_report` reads the new one.
+time and memory a parse takes. Otherwise the first call on a handle reads the trace itself
+a timestep at a time: a trace of tens of thousands of timesteps and millions of link rows
+takes seconds to tens of seconds and about twice its JSON's size at its peak, against
+several times that for building the visualizer's index
+([#2302](https://github.com/tenstorrent/ttnn-visualizer/issues/2302)). That bound assumes
+the trace's bulk is spread over its timesteps, as tt-npe writes it: each value is read
+whole, so a single timestep or `common_info` holding most of the trace costs more than a
+whole parse ([#2320](https://github.com/tenstorrent/ttnn-visualizer/issues/2320)). A trace
+past 64 MiB of JSON is read in a process of its own, so that memory goes back to the
+system when the read ends rather than staying with the server; starting it adds about half
+a second ([#2319](https://github.com/tenstorrent/ttnn-visualizer/issues/2319)), and it
+ends with the server if the server is stopped mid-read. That process imports the calling
+script again, so a script that calls the tool on such a trace needs its top level under
+`if __name__ == "__main__":`. A trace whose JSON passes 1 GiB, summed over every zstd
+frame, or a `.zst` file itself past that size, is refused rather than read, and so is a
+`.zst` with a frame that does not declare its size. A trace nested more than 1,024 arrays
+and objects deep is refused, as the visualizer's own parse refuses it, and so is one that
+names `timestep_data` twice, whose first list has been read by the time the second is
+found. Later calls answer from the first read, and so does every handle on the same
+unchanged file. A handle stays with the trace it first read: if the file changes or goes
+away afterwards, its answers say so in their caveat, and a fresh `load_report` reads the
+new one.
 
 **A performance row and a memory report operation are linked by order, not by a shared id.**
 Neither report records the other's id, so when a handle is loaded with both, the tools
@@ -868,15 +1181,17 @@ its CSV position in either read, so its `operation_id` is the one it has unrange
 `top_ops`'s own `op_count` and totals describe the window.
 
 The link is resolved once per handle, on the first `top_ops`, `program_cache`,
-`operation_detail` or `critical_path` that needs it, and reads every captured graph at the linked rank. On a handle with both reports,
-the first `operation_detail` therefore also generates the performance report, which can
-take seconds on a large capture; every later call reuses both. A link that failed on a read
+`operation_detail`, `critical_path`, `op_configurations` or `source_lines` that needs it,
+and reads every captured graph at the linked rank. On a handle with both reports, the first
+`operation_detail` therefore also generates the performance report, which can take seconds
+on a large capture; every later call reuses both. A link that failed on a read
 that might pass next time — a locked database, a temp-file error in tt-perf-report — is not
 kept, so the next call tries again. A handle keeps answering from the capture it first
 read, so it never mixes two. A read that needs the CSV again after it was rewritten, or
 after a newer `ops_perf_results` file appeared — a range not asked before, or one dropped
 from the cache — is refused rather than lined up against operations linked from the old
-capture; call `load_report` again for a fresh handle.
+capture; call `load_report` again for a fresh handle. For a handle loaded before its CSV
+was written, see {ref}`load_report <agent-load-report-capture>`.
 
 **`critical_path` and `subgraph_between` read the graph's edges as the graph view does.**
 An edge runs from the operation that produced a tensor to each operation that consumed it,
@@ -958,19 +1273,28 @@ called through helpers rather than only those it called directly.
 Accuracy questions are not answerable. Both tensor-comparison tables exist in every
 local capture and are empty in every one, so there is nothing to build a PCC tool on.
 
-Page-level memory questions — the per-bank, per-page detail behind the web
-application's memory plot — are not exposed, because `buffer_pages` runs to millions of
-rows on an ordinary capture and needs a different shape than a tool response. Per-operation
-L1 fullness, free-segment counts and the largest free block are derived from `buffers` and
+Page-level memory questions — the per-bank, per-page detail behind the web application's
+memory plot — are not exposed, because `buffer_pages` runs to millions of rows on an
+ordinary capture and needs a different shape than a tool response. Per-operation L1
+fullness, free-segment counts and the largest free block are derived from `buffers` and
 `devices` instead (bounded per device to `[address_at_first_l1_cb_buffer,
 address_at_first_l1_cb_buffer + l1_bank_size)`, capped at `worker_l1_size`, and reporting
 the most constrained device — the one with the smallest largest free block — with
-free-space figures marked as an upper bound because circular buffers and intra-op tensors
-are absent) and exposed as `l1_pressure` on `operation_detail` and `memory_profile`. Its
-figures are bytes per bank (`size_unit`), so a whole-tensor size in `bytes` is not
-comparable to them. It is null, with a caveat saying why, for an operation with no
-`buffers` rows, a report whose devices record no L1 geometry, or a report holding more
-than one rank whose `devices` table carries no `rank`. A `device_id` with more than one
+`largest_free_block` and `largest_free_pct` marked as an upper bound and
+`allocated_bytes`, `fullness_pct` and `high_water_bytes` as a floor, because circular
+buffers and intra-op tensors are absent; `free_segments` is bounded neither way) and
+exposed as `l1_pressure` on `operation_detail` and `memory_profile`. `high_water_bytes` is
+where the highest recorded tensor ends above the window's start, not a peak: it often
+equals `usable_bytes` with most of L1 free. `l1_pressure`'s figures are bytes per bank
+(`size_unit`), so a whole-tensor size in `bytes` is not comparable to them.
+`memory_profile`'s `operations_at_top` counts the operations that share the first row's
+`largest_free_block`, however full, as `operations_at_peak` counts a footprint's, and
+those rows come fullest first: 60 of 255 share it on the `sentence_bert` demo.
+`l1_pressure` is null, with a caveat saying why, for an operation with no `buffers` rows,
+a report whose devices record no L1 geometry, or a report holding more than one rank whose
+`devices` table carries no `rank`. `memory_profile`'s is also null, with no caveat, under
+any `buffer_type` but `L1` and for a report holding no L1 buffers, where `buffer_type`
+`L1` is refused if the report holds other buffer types. A `device_id` with more than one
 row is read as its last row, as the web application reads it, for `l1_pressure` and the
 `device` block alike, and `device.devices` counts distinct ids.
 

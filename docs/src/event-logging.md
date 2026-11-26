@@ -66,7 +66,7 @@ Under `SERVER_MODE`, create `/data/usage/disabled` instead. The marker applies t
 Ordinary event lines contain these common fields:
 
 - `ts`: the UTC time at which the server wrote the event, in `YYYY-MM-DDTHH:MM:SSZ` form. Frontend events are buffered, so this can be later than the interaction.
-- `event`: one of `app_start`, `report_loaded`, `report_load_failed`, `view_opened`, `view_engaged`, or `mcp_tool_called`.
+- `event`: one of `app_start`, `report_loaded`, `report_load_failed`, `view_opened`, `view_engaged`, `mcp_tool_called`, `perf_chart_viewed`, `perf_table_option_toggled`, `perf_comparison_used`, `npe_playback_started`, `npe_mode_changed`, `drilldown_opened`, `filter_used`, or `remote_connection_test`.
 - `schema_version`: the log format version, currently `1`.
 - `run_id`: a random `8`-character identifier generated for each backend launch and shared by its server workers. It is not persisted between launches and is never exported, either by the local metrics projection or by a hosted collector. Hosted browser-session identity comes from the containing directory, not this field.
 
@@ -92,7 +92,7 @@ Recorded by the server once during a successful local launch.
 
 ### `report_loaded`
 
-Recorded after a report is loaded successfully.
+Recorded once a report chosen inside the visualizer has had its data read: for a memory report, its operations, and its metadata at a supported version, or no metadata at all for a legacy report without the metadata table; for a performance report, its rows. Choosing a report records nothing on its own, so a choice abandoned or replaced before its data arrives records no event. Restoring the active report when the page is reloaded records no `report_loaded`. Neither does opening a report by path: the first page load after launching with `--memory-report-path` or `--performance-path`, or following a link from the agent tools. So counts are reports chosen inside the visualizer, not report sessions.
 
 - `kind`: `profiler` (the memory report), `performance`, `npe`, `mlir`, `cluster_descriptor`.
 - `source`: `upload`, `remote_sync`, `local_tt_metal`, `demo`.
@@ -103,11 +103,13 @@ Recorded after a report is loaded successfully.
 
 Because reselected uploads count as `upload` when hosted but as `local_tt_metal` locally, do not compare upload share between hosted and local logs.
 
+Before 0.113.0, `report_loaded` was recorded as soon as a report was chosen, before its data was read. Earlier counts include choices that then failed to load, which recorded no `report_load_failed`: memory reports with an unsupported version, memory reports whose operations or metadata could not be read, and performance reports that failed for any reason, including those the server could not parse. They also include choices abandoned before their data arrived: the page reloaded, the tab closed, or another report chosen.
+
 Before 0.107.0, hosted event logs tagged every report picked from the hosted report list as `local_tt_metal`. Hosted logs carry no version, since `app_start` is not written under `SERVER_MODE`, so find the cut-over from the 0.107.0 deploy date. Read hosted `local_tt_metal` counts from before it as demo loads or reselected uploads, not as a tt-metal checkout.
 
 ### `report_load_failed`
 
-Recorded after a report cannot be loaded.
+Recorded after a report cannot be loaded. A report restored when the page is reloaded, or opened by path with `--memory-report-path`, `--performance-path` or a link from the agent tools, records no failure even if it fails to load. So counts are failures among reports chosen inside the visualizer, not failed report sessions. A failure includes any error reading a report's data after it was chosen, recorded with its class. For example, a memory report whose version is unsupported, which the visualizer still opens with a warning, records `unsupported_version`; a performance report the server cannot parse records `parse_error`; and a report whose files have gone records `missing_file`.
 
 - `kind`: `profiler` (the memory report), `performance`, `npe`, `mlir`, `cluster_descriptor`.
 - `reason_class`: `unsupported_version`, `missing_file`, `parse_error`, `too_large`, `permission`, `other`.
@@ -132,10 +134,78 @@ This is the intentionally revisable v1 definition of deliberate activity used fo
 
 Recorded by `ttnn-visualizer-mcp` when a registered tool reaches its handler, not by the SPA. It answers which tools are chosen and how often they refuse or fail (Q4 and Q5 in #1819). It does not fire on `initialize`, `ping`, `tools/list`, unknown tool names, or malformed `params`/`arguments`: only calls that get as far as a handler are counted.
 
-- `tool`: `load_report`, `top_ops`, `op_breakdown`, `program_cache`, `zone_timings`, `zone_intervals`, `core_spread`, `noc_congestion`, `diff_reports`, `find_operations`, `operation_detail`, `memory_profile`, `tensor_flow`, `operation_provenance`, `errors`, `dram_fallbacks`, `l1_peak`, `late_deallocations`, `critical_path`, `subgraph_between`.
+- `tool`: `load_report`, `top_ops`, `op_breakdown`, `program_cache`, `zone_timings`, `zone_intervals`, `core_spread`, `hw_utilisation`, `stall_breakdown`, `noc_congestion`, `diff_reports`, `find_operations`, `operation_detail`, `memory_profile`, `tensor_flow`, `operation_provenance`, `op_configurations`, `errors`, `dram_fallbacks`, `l1_peak`, `late_deallocations`, `critical_path`, `source_lines`, `subgraph_between`.
 - `outcome`: `ok`, `refused`, `error`.
 
 `refused` is a tool declining a well-formed call it cannot answer (unknown handle, argument out of range). `error` is an unexpected failure the server did not anticipate.
+
+**Per-surface events.** The events below record what is used inside the Performance and NPE views, and across them. Each section names the #1819 question it answers. Most fire once per deliberate action, from the control itself: restoring persisted state, a reset by the application, a re-click on the option already selected, and anything continuous such as dragging or scrubbing record nothing. One is tied to what is shown rather than to a control, and says so in its section: `perf_chart_viewed` follows the scroll position. Read every count against the matching `report_loaded` count: a view nobody opens because nobody loaded that kind of report is not evidence that the feature is unwanted.
+
+### `perf_chart_viewed`
+
+Recorded the first time each performance chart becomes the chart in view, per visit to the Charts tab. It answers which charts to keep (Q4). Every chart renders on one scrolling page, so this means the chart was scrolled or jumped to, not that it was studied. Opening the tab counts the chart in view: the first chart at the top of the page, or the one under the "Jump to chart" bar when the window is already scrolled. While the bar lies in the gap between two charts, no chart is in view until the next scroll.
+
+- `perf_chart`: `op_duration_histogram`, `op_count_vs_runtime`, `core_count_kernel_runtime`, `kernel_duration_vs_core_count`, `matmul_core_count_utilization`, `matmul_device_time`, `matmul_kernel_duration_utilization`, `matmul_utilization_vs_kernel_duration`, `conv_core_count_utilization`, `conv_device_time`, `conv_kernel_duration_utilization`, `conv_utilization_vs_kernel_duration`, `operation_types`.
+
+The matmul and conv charts show a placeholder when the report has no such operations, and record nothing while they do: a placeholder is not a chart. Reaching the bottom of the page, or a page short enough not to scroll, counts every chart whose top is then in view: the last charts may be too short to scroll up to the top, and on a tall screen several of them are. A chart passed over by a jump to a later one is not counted, unless the jump lands at the bottom with that chart's top in view.
+
+### `perf_table_option_toggled`
+
+Recorded when a switch above the performance table is flipped. It answers which table options are used (Q4). The direction is not recorded.
+
+- `perf_table_option`: `hide_host_ops`, `merge_devices`, `tracing_mode`, `matmul_advice`, `highlight_high_dispatch`, `normalise_data`, `hardware_counters`.
+
+`normalise_data` can only be flipped while comparison reports are selected, and `hardware_counters` only on a report with hardware counter columns.
+
+### `perf_comparison_used`
+
+Recorded each time a comparison report is added or replaced in the Performance view. It answers whether comparison is worth its complexity (Q4). Removing one records nothing. Comparison is unavailable under `SERVER_MODE`, so the endpoint refuses this event there.
+
+- `report_count_bucket`: `one`, `two`, `three_or_more`.
+
+The bucket counts comparison reports besides the active one, after the change.
+
+### `npe_playback_started`
+
+Recorded when NPE timeline playback is started from the play or 2x button. It answers whether playback is used (Q4). Switching speed during playback, stepping, and dragging the timeline record nothing. It has no event-specific fields.
+
+### `npe_mode_changed`
+
+Recorded when an NPE view control is switched. It answers which NPE modes are used (Q4). The value names the state chosen; for the NoC and event filters, that is the filter state the switch leads to.
+
+- `npe_mode`: `congestion`, `transfers`, `noc0`, `noc1`, `all_nocs`, `fabric_events`, `local_events`, `all_events`, `alt_congestion_colours`, `timesteps_scale`, `cycles_scale`, `zones`.
+
+`fabric_events` and `local_events` mean only that kind of event is shown, and `all_events` that both are. `zones` is opening the zones panel. `alt_congestion_colours` is the one two-state switch, so it names the switch flipped and is recorded whichever way it goes, never for the saved preference applied at load.
+
+### `drilldown_opened`
+
+Recorded when a detail surface is opened. It answers how deep use goes (Q4).
+
+- `drilldown_target`: `tensor_details`, `buffer_details`, `stack_trace`, `source_file`, `hardware_counters`.
+
+  - `tensor_details`: the tensor details drawer in the performance table, or a tensor's per-core allocation view.
+  - `buffer_details`: a buffer or tensor focused by a click in a memory view, or a "Buffer details" link clicked. A click on the buffer already focused records nothing, and neither does the focus that link's navigation applies, so a reload does not count it again.
+  - `stack_trace`: a stack trace expanded. Opening an operation's error records nothing until its trace is expanded, and expanding the error message never records. In the error overlay a trace opened after the message was expanded is shown expanded, so switching to it records, once, and only if the trace is long enough to expand. On the operation page, a trace that opens expanded because the previous operation's trace was left expanded records nothing: moving between operations carries the state over, and the expansion that set it was already counted.
+  - `source_file`: a source file opened, from a stack trace, an operation-list row, the Performance tensor drawer or the operation graph's info panel.
+  - `hardware_counters`: a device operation's Counters popover opened in operation details, whichever of its Utilization and Stalls tabs is then viewed. Switching tabs or closing it records nothing.
+
+Operation details are not a target: `view_opened` already counts them with `view` set to `operation_details`.
+
+### `filter_used`
+
+Recorded the first time per visit that a user's change leaves a filter's query non-empty, a visit being each time the list is opened. A filter restored on return records nothing, but editing one that was restored non-empty counts. It answers which filters are used (Q4). The query text is never recorded.
+
+- `filter_surface`: `operations`, `tensors`, `perf_op_code`.
+
+`perf_op_code` covers the Performance Table tab's op-name search and its raw op-code list, counted together as one filter. The Charts tab's op-code filter, and a chart click that filters the table, are not counted.
+
+### `remote_connection_test`
+
+Recorded when a remote connection test in the connection dialog finishes. It answers how often SSH sync works, and how it fails (Q5). Form errors caught before a request is sent are not tests and record nothing. Remote sync is unavailable under `SERVER_MODE`, so the endpoint refuses this event there. Host, user and path are never recorded.
+
+- `connection_test_result`: `success`, `auth_failed`, `host_key_rejected`, `unreachable`, `no_reports_found`, `report_path_failed`, `other`.
+
+`unreachable` includes a host that did not answer before the test timed out, and a connection lost during the SSH test itself or while a path was being searched. `report_path_failed` means SSH connected and the server marked a configured report path as missing, not a directory, or unreadable. `no_reports_found` means the paths exist but hold no reports. `other` is a failure the server does not classify, a search that ended before settling whether its path exists, a form value the server refuses that the dialog's own check does not catch, or a request that failed before the server answered; a path failure is never assumed. Trusting a host key from the dialog re-runs the test, so that flow records `host_key_rejected` and then the result of the second test.
 
 ## Information that is not recorded
 
@@ -152,7 +222,7 @@ TT-NN Visualizer does not record:
 
 ## Aggregate collection
 
-The TT-NN Visualizer backend never forwards raw events. When a local install opts in, the launcher projects the local log into cumulative counters and pushes them to a configured endpoint as OTLP/HTTP JSON: once at launch, then every minute, then once when the server stops. Collection is disabled by default and is unavailable under `SERVER_MODE`. Either recording opt-out stops the next push without a restart; a launch under an opt-out starts no exporter at all, so lifting the opt-out mid-session takes effect at the next launch.
+The TT-NN Visualizer backend never forwards raw events. When a local install opts in, the launcher and `ttnn-visualizer-mcp` project the local log into cumulative counters and push them to a configured endpoint as OTLP/HTTP JSON: once at start, then every minute, then once when the server stops. Collection is disabled by default and is unavailable under `SERVER_MODE`; `ttnn-visualizer-mcp` reads the same variable from its environment and exports nothing when it is set to a true or unrecognised value, including an empty one. Only the environment counts: a `SERVER_MODE` set in a `.env` file applies to the app alone. Either recording opt-out stops the next push without a restart; a launch or MCP server started under an opt-out starts no exporter at all, so lifting the opt-out mid-session takes effect at the next start.
 
 The opt-in file is:
 
@@ -168,17 +238,17 @@ The opt-in file is:
 }
 ```
 
-It contains the explicit `enabled` flag, the metrics endpoint, which must accept OTLP/HTTP JSON rather than Prometheus remote-write despite the `remote_write_` key names, an optional `remote_write_auth_token` for that endpoint, and a random persistent `machine_id`. Nothing is collected without an endpoint. The ID is generated at the first launch with collection enabled; it is not derived from a hostname, username, path, or IP address. Despite its name, it identifies a home directory rather than a machine: the config lives under each user's home, so several accounts on one machine report as several series, and one person working on several machines reports once per home directory. Deleting the config disables collection and causes a new identity to be generated if collection is enabled again. The exporter rereads the config before every push, so disabling or deleting it takes effect within a minute. Enabling collection or adding an endpoint takes effect at the next launch, because the exporter only starts at launch. A malformed config fails closed without preventing TT-NN Visualizer from starting. The token field was named `remote_write_bearer_token` before this release; a config still using that name fails closed with a warning naming the new field. If an earlier release's `pnpm prometheus:config` wrote a `prometheus.remote-write.token` file, delete it.
+It contains the explicit `enabled` flag, the metrics endpoint, which must accept OTLP/HTTP JSON rather than Prometheus remote-write despite the `remote_write_` key names, an optional `remote_write_auth_token` for that endpoint, and a random persistent `machine_id`. Nothing is collected without an endpoint. The ID is generated at the first launch or MCP server start with collection enabled and event logging on; a start under a recording opt-out reads the config without writing an identity; it is not derived from a hostname, username, path, or IP address. Despite its name, it identifies a home directory rather than a machine: the config lives under each user's home, so several accounts on one machine report as several series, and one person working on several machines reports once per home directory. Deleting the config disables collection and causes a new identity to be generated if collection is enabled again. The exporter rereads the config before every push, so disabling or deleting it takes effect within a minute. Enabling collection or adding an endpoint takes effect at the next launch or MCP server start, because the exporter only starts then. A malformed config fails closed without preventing TT-NN Visualizer from starting. The token field was named `remote_write_bearer_token` before this release; a config still using that name fails closed with a warning naming the new field. If an earlier release's `pnpm prometheus:config` wrote a `prometheus.remote-write.token` file, delete it.
 
 The endpoint must use HTTPS unless it is a loopback address, and must not contain whitespace, control characters, credentials, query parameters, or a fragment. A Prometheus remote-write path (`/api/v1/write`, `/api/v1/push`), as configs for earlier releases used, fails the config closed, since it cannot take OTLP. When the endpoint answers 4xx, the logged warning says it must accept OTLP/HTTP JSON. The token is sent as an `Authorization: Bearer` header; it requires an endpoint and must not contain whitespace or control characters, and a token that breaks either rule fails the whole config closed. `collection.json` is kept at mode `0600`. Pushes are sent with the system `curl`, which must be on `PATH`; it verifies TLS against the operating system's trust store, so an endpoint signed by an internal CA installed on the machine is trusted. The token and payload are passed to `curl` on standard input, never on its command line, and `curl` is run with `-q` so a user's `~/.curlrc` cannot change these options. Redirects are refused, so the token is never resent to another host, and URL globbing is off, so `{}` or `[]` in the endpoint cannot turn one push into several. A loopback endpoint bypasses any configured `http_proxy` or `ALL_PROXY`, so a token sent over plain HTTP never leaves the machine. Without a token, pushes are unauthenticated. A failed push is logged once until a later push succeeds; the counters are cumulative, so the next successful push carries everything missed.
 
-The projection exports one `_total` counter per event name with only that event's documented fields and `machine_id` as attributes, under the resource attribute `service.name="ttnn-visualizer"`. It honours compacted `count` values. It never exports timestamps of events, `run_id`, hosted session directory names, raw event rows, usernames, hostnames, paths, or unknown fields. The counters carry no start time, because they total a log that outlives any one launch; receivers treat each value as following the last, so a relaunch is not read as a counter reset. Collector health metrics distinguish a missing log, malformed lines, and a read failure. Deleting the event log resets the projected counters; compaction preserves them. The projection only reads the event log; it never writes, trims, or deletes it.
+The projection exports one `_total` counter per event name with only that event's documented fields and `machine_id` as attributes, under the resource attribute `service.name="ttnn-visualizer"`. It honours compacted `count` values. It never exports timestamps of events, `run_id`, hosted session directory names, raw event rows, usernames, hostnames, paths, or unknown fields. The counters carry no start time, because they total a log that outlives any one launch; receivers treat each value as following the last, so a relaunch is not read as a counter reset. Collector health metrics distinguish a missing log, malformed lines, and a read failure. A push after a read failure sends only the health gauges, since this process's cached totals could be lower than another process has already sent; the next good read carries the counts. Deleting the event log resets the projected counters; compaction preserves them. The projection only reads the event log; it never writes, trims, or deletes it.
 
 The exported shape is a privacy control, not plumbing: it is what keeps a behavioural trace on the machine. Any change to it (metric names, attribute keys or values, resource attributes) needs a privacy re-review, not only a code review. `test_payload_matches_the_privacy_reviewed_golden_output` pins the full payload for a fixed log. `_PRIVACY_REVIEWED_ATTRIBUTES` in the same file writes out every metric's attribute keys and closed vocabularies; `test_the_event_schema_matches_the_privacy_reviewed_shape` fails when the event schema drifts from it, and `test_exported_attributes_are_only_schema_fields_and_machine_id` checks the exported payload against it. A schema change therefore has to edit that literal, and a change that edits it or the golden output is a change to the shape.
 
-Some limits are accepted rather than fixed. Deleting a user account, or its `~/.ttnn-visualizer/usage/` directory, stops that series rather than lowering a total, so it goes stale instead of reading as a reset; removing stale series is the receiving side's job. Deleting `collection.json` and enabling collection again generates a new `machine_id`, so one home directory can appear as several identities over time. Machines sharing one NFS-mounted home share one identity and one log, so they report as a single series. A copied home directory, such as a migrated account, a VM or container image built after collection was enabled, or synced dotfiles, keeps the `machine_id` but starts a separate log; the copies then push independent totals under one series, and each drop between them reads as a counter reset that inflates `increase()` and `rate()`. Reach counts are therefore an upper bound on home directories, not on people: a shared login merges several people into one identity.
+Some limits are accepted rather than fixed. Deleting a user account, or its `~/.ttnn-visualizer/usage/` directory, stops that series rather than lowering a total, so it goes stale instead of reading as a reset; removing stale series is the receiving side's job. Deleting `collection.json` and enabling collection again generates a new `machine_id`, so one home directory can appear as several identities over time. Machines sharing one NFS-mounted home share one identity and one log, so they report as a single series. A copied home directory, such as a migrated account, a VM or container image built after collection was enabled, or synced dotfiles, keeps the `machine_id` but starts a separate log; the copies then push independent totals under one series, and each drop between them reads as a counter reset that inflates `increase()` and `rate()`. Reach counts are therefore an upper bound on home directories, not on people: a shared login merges several people into one identity. Versions also skew: a batch of frontend events is accepted or refused whole, so a newer page posting to an older backend, such as a stale tab or a hosted rolling deploy, loses every batch carrying an event that backend does not know, including the familiar events in it. An older version reading a newer log counts unknown events as parse errors, so two installed versions sharing one home push alternating `ttnn_visualizer_usage_collector_parse_errors_total` values.
 
-The pushes come from the `ttnn-visualizer` launcher, not the gunicorn workers, so one exporter serves any number of workers. Under `--daemon` the launcher exits as soon as gunicorn detaches, so both of its pushes happen at launch; usage from a daemon session is only sent by the next launch with collection enabled. The final push on exit is limited to a few seconds, and is skipped if an earlier push is still in flight, so a slow endpoint cannot hold up shutdown. Any local process can append to the event log and so inflate the counts. Treat per-machine counts as indicative rather than trustworthy.
+The pushes come from the `ttnn-visualizer` launcher, not the gunicorn workers, so one exporter serves any number of workers, and from each `ttnn-visualizer-mcp` process, so an agent-only user is counted without ever launching the app. Every process sharing a home directory pushes the same series, so pushes take turns through a `.export.lock` file beside `collection.json`: each reads, stamps and sends under it. A periodic push that finds another process pushing skips rather than waits, since that push or the next one carries the same counts. A second lock, `.collection.lock`, makes processes starting together agree on one `machine_id`; a start that cannot get it within a few seconds reads the config without preparing it, so it exports only if an identity already exists. Neither lock is taken on Windows, or on a home where file locking fails rather than finding the lock held (such as an NFS mount without a lock manager); there, concurrent pushes can arrive out of order and processes starting together can each generate a `machine_id`. Under `--daemon` the launcher exits as soon as gunicorn detaches, so both of its pushes happen at launch; usage from a daemon session is only sent by the next launch with collection enabled. The final push on exit waits for another process's push, since none may follow it, and is limited to a few seconds including that wait, and is skipped if an earlier push is still in flight, so a slow endpoint cannot hold up shutdown. An MCP server pushes on exit when its client closes standard input or sends `SIGTERM`, and after a `SIGTERM` exits without flushing any reply its client has not read; one killed outright leaves its counts for the next push from any process. Any local process can append to the event log and so inflate the counts. Treat per-machine counts as indicative rather than trustworthy.
 
 ## Hosted collection
 

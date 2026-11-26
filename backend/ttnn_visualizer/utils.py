@@ -1090,12 +1090,49 @@ def get_available_reports(current_app):
     return reports
 
 
-def get_npe_path(npe_name, current_app, remote_connection=None):
-    local_dir = Path(current_app.config["LOCAL_DATA_DIRECTORY"])
+# What the NPE upload accepts (`create_npe_files`), and what `extract_uploaded_name`
+# drops from a file's name to name the report. A file with any other accepted
+# extension keeps its whole name.
+NPE_UPLOAD_EXTENSIONS = (".json", ".zst", ".npeviz")
+NPE_UPLOAD_NAME_SUFFIXES = (".json", ".npeviz.zst")
+_NPE_WHOLE_NAME_EXTENSIONS = tuple(
+    extension
+    for extension in NPE_UPLOAD_EXTENSIONS
+    if extension not in NPE_UPLOAD_NAME_SUFFIXES
+)
 
-    npe_path = local_dir / current_app.config["NPE_DIRECTORY_NAME"]
 
-    return str(npe_path)
+def get_npe_path(npe_name, current_app, **_kwargs):
+    # Hosted files carry a timestamp prefix the name lacks, in a folder all visitors
+    # share, so there a name could only miss its file or find another visitor's.
+    if current_app.config["SERVER_MODE"]:
+        return None
+    # `PUT /instance` stores names unchecked (#2391); an upload's is a plain file name.
+    if not isinstance(npe_name, str) or Path(npe_name).name != npe_name:
+        return None
+
+    # Files an upload saves under this name; nothing else in the folder, such as an
+    # index sidecar, is an upload.
+    suffixes = list(NPE_UPLOAD_NAME_SUFFIXES)
+    stripped_on_upload = npe_name.endswith(NPE_UPLOAD_NAME_SUFFIXES)
+    if npe_name.endswith(_NPE_WHOLE_NAME_EXTENSIONS) and not stripped_on_upload:
+        suffixes.append("")
+
+    npe_directory = (
+        Path(current_app.config["LOCAL_DATA_DIRECTORY"])
+        / current_app.config["NPE_DIRECTORY_NAME"]
+    )
+    candidates = [npe_directory / f"{npe_name}{suffix}" for suffix in suffixes]
+    # Not Path.is_file(), which raises for a name too long before 3.14.
+    uploads = [path for path in candidates if os.path.isfile(path)]
+    if not uploads:
+        return None
+    # `trace.json` and `trace.npeviz.zst` share a name; the newest was uploaded last.
+    try:
+        return str(max(uploads, key=os.path.getmtime))
+    except OSError:
+        # Removed after the check above.
+        return None
 
 
 def get_mlir_path(mlir_name, current_app, remote_connection=None, **_kwargs):

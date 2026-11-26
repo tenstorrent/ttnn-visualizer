@@ -14,7 +14,9 @@ import {
     PerformanceReportParams,
     getLinkedPerformanceReportParams,
     getPerformanceComparisonReportQueryKey,
+    getPerformanceCountersQueryKey,
     getPerformanceReportQueryKey,
+    toBackendStackedGroupBy,
 } from '../src/functions/performanceReportQueryKey';
 import { StackedGroupBy } from '../src/definitions/StackedPerfTable';
 import { ReportLocation } from '../src/definitions/Reports';
@@ -171,5 +173,39 @@ describe('getPerformanceComparisonReportQueryKey', () => {
         expect(comparisonKey(COMPARISON_NAMES, defaultViewParams)).not.toEqual(
             comparisonKey(COMPARISON_NAMES, { ...defaultViewParams, mergeDevices: false }),
         );
+    });
+});
+
+describe('getPerformanceCountersQueryKey', () => {
+    const countersKey = (perfId: number, name = REPORT_NAME, location = ReportLocation.LOCAL) =>
+        getPerformanceCountersQueryKey({ name, instanceId: INSTANCE_ID, location, perfId });
+
+    it('keys a row on its report as the report itself is keyed, and on the row', () => {
+        expect(countersKey(2)).toEqual(['get-performance-counters', INSTANCE_ID, ReportLocation.LOCAL, REPORT_NAME, 2]);
+    });
+
+    it('separates the same row id in different reports and locations, since ids restart per report', () => {
+        expect(countersKey(2)).not.toEqual(countersKey(2, 'another-report'));
+        expect(countersKey(2)).not.toEqual(countersKey(2, REPORT_NAME, ReportLocation.REMOTE));
+        expect(countersKey(2)).not.toEqual(countersKey(3));
+    });
+});
+
+describe('toBackendStackedGroupBy', () => {
+    it('asks tt-perf-report for operations when the view groups by source line', () => {
+        expect(toBackendStackedGroupBy(StackedGroupBy.SOURCE_LINE)).toBe(StackedGroupBy.OP);
+    });
+
+    it.each([StackedGroupBy.CATEGORY, StackedGroupBy.MEMORY, StackedGroupBy.OP])('passes %s through', (groupBy) => {
+        expect(toBackendStackedGroupBy(groupBy)).toBe(groupBy);
+    });
+
+    it('keys a source-line view on the operation-grouped report', () => {
+        const sourceLineParams = {
+            ...defaultViewParams,
+            groupBy: toBackendStackedGroupBy(StackedGroupBy.SOURCE_LINE),
+        };
+
+        expect(reportKey(sourceLineParams)).toEqual(reportKey(defaultViewParams));
     });
 });

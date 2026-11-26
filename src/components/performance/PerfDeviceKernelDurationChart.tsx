@@ -10,6 +10,7 @@ import PerfChart from './PerfChart';
 import { PlotConfiguration, getNsAxisConfig } from '../../definitions/PlotConfigurations';
 import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
 import getPlotLabel from '../../functions/getPlotLabel';
+import getDeviceTimeNs from '../../functions/getDeviceTimeNs';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import { getPrimaryDataColours } from '../../definitions/PerformancePlotColours';
 
@@ -25,7 +26,7 @@ function PerfDeviceKernelDurationChart({ datasets = [] }: PerfDeviceKernelDurati
         () =>
             datasets.map((data, dataIndex) => ({
                 x: data?.map((row) => row.cores),
-                y: data?.map((row) => row.device_time),
+                y: data?.map(getDeviceTimeNs),
                 mode: 'markers',
                 type: 'scatter',
                 name: getPlotLabel(dataIndex, perfReport?.reportName, comparisonReportList),

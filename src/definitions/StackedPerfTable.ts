@@ -29,7 +29,17 @@ export enum StackedGroupBy {
     CATEGORY = 'category',
     MEMORY = 'memory',
     OP = 'operation',
+    // Rolled up in the browser from the row report, never sent to tt-perf-report as is:
+    // `toBackendStackedGroupBy` maps it to `OP`.
+    SOURCE_LINE = 'source_line',
 }
+
+export const STACKED_GROUP_BY_LABELS: Record<StackedGroupBy, string> = {
+    [StackedGroupBy.CATEGORY]: 'Category',
+    [StackedGroupBy.MEMORY]: 'Memory',
+    [StackedGroupBy.OP]: 'Operation',
+    [StackedGroupBy.SOURCE_LINE]: 'Source line',
+};
 
 export interface StackedTableColumn {
     label: string;

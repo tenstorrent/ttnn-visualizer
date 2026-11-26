@@ -23,6 +23,8 @@ from types import SimpleNamespace
 
 import pytest
 from ttnn_visualizer import event_logging
+from ttnn_visualizer.agent import server
+from ttnn_visualizer.agent.handles import ReportRegistry
 from ttnn_visualizer.event_logging import (
     _DETAIL_FIELD_ENUMS,
     _REQUIRED_FIELDS,
@@ -38,6 +40,7 @@ from ttnn_visualizer.event_logging import (
     UNKNOWN_VALUE,
     DeploymentMode,
     EventLogEvent,
+    EventLogEventRejected,
     EventLogView,
     LaunchMode,
     ReportKind,
@@ -45,12 +48,14 @@ from ttnn_visualizer.event_logging import (
     get_application_version,
     get_deployment_mode,
     get_event_log_path,
+    get_event_log_root,
     get_launch_mode,
     is_recording_enabled,
     parse_known_event_fields,
     record_app_start,
     record_event,
     record_events,
+    validate_client_event,
 )
 from ttnn_visualizer.settings import DefaultConfig
 from ttnn_visualizer.tests.event_log_readers import (
@@ -166,7 +171,9 @@ def test_concurrent_batches_do_not_interleave(event_log_directory):
 def test_the_path_ignores_every_environment_derived_data_directory(monkeypatch):
     # The whole reason for not using get_app_data_directory(): a collector running as
     # root cannot read the user's shell environment, so the path has to be knowable
-    # from outside the process.
+    # from outside the process. Reads the production root, so it clears the conftest
+    # redirect; it only resolves the path and writes nothing.
+    monkeypatch.setattr(event_logging, "EVENT_LOG_DIRECTORY", None)
     monkeypatch.setenv("TT_METAL_HOME", "/somewhere/tt-metal")
     monkeypatch.setenv("APP_DATA_DIRECTORY", "/somewhere/else")
 
@@ -1776,3 +1783,69 @@ def test_record_events_writes_nothing_when_recording_is_disabled(
         is False
     )
     assert read_event_log_lines(event_log_directory) == []
+
+
+@pytest.mark.parametrize(
+    "details",
+    [
+        pytest.param({"npe_mode": "zones"}, id="a_stray_detail"),
+        pytest.param(None, id="details_absent"),
+        pytest.param("zones", id="details_not_an_object"),
+    ],
+)
+def test_an_event_without_details_says_so_however_it_is_refused(details):
+    """Neither rejection may describe the expected details as an empty list."""
+    entry = {"event": EventLogEvent.NPE_PLAYBACK_STARTED.value}
+    if details is not None:
+        entry["details"] = details
+
+    with pytest.raises(
+        EventLogEventRejected,
+        match=r"^Event npe_playback_started takes no details: send an empty details object$",
+    ):
+        validate_client_event(entry)
+
+
+def test_an_event_with_details_still_lists_them_when_refused():
+    with pytest.raises(
+        EventLogEventRejected,
+        match=r"^Event view_opened needs a details object with: view$",
+    ):
+        validate_client_event({"event": EventLogEvent.VIEW_OPENED.value})
+
+
+def test_a_test_that_opts_into_nothing_still_logs_inside_tmp_path(
+    tmp_path, monkeypatch
+):
+    """The conftest redirect is autouse: an unpatched tools/call from a test that asks
+    for no event-log fixture must land under ``tmp_path``, never in the developer's
+    ``~/.ttnn-visualizer/usage`` or ``/data/usage``. Three tests forgot the opt-in
+    before it was the default (#2278, #2279, #2288)."""
+    monkeypatch.delenv(RECORDING_DISABLED_ENV_VAR, raising=False)
+    for server_mode in (False, True):
+        assert get_event_log_root(server_mode).is_relative_to(tmp_path)
+
+    server.handle_message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "load_report", "arguments": {}},
+        },
+        server._tool_table(ReportRegistry()),
+    )
+
+    assert get_event_log_path().is_file()
+
+
+def test_an_event_with_details_names_them_when_the_keys_are_wrong():
+    with pytest.raises(
+        EventLogEventRejected,
+        match=r"^Event view_opened expects exactly these details: view$",
+    ):
+        validate_client_event(
+            {
+                "event": EventLogEvent.VIEW_OPENED.value,
+                "details": {"view": "operations", "query": "matmul"},
+            }
+        )

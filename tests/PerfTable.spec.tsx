@@ -19,6 +19,11 @@ import { TestProviders } from './helpers/TestProviders';
 import { DEFAULT_MAX_CORES } from '../src/functions/getCoreCount';
 import { enrichRowData } from '../src/functions/enrichPerfRowData';
 import { makeRawPerfRow } from './helpers/perfRowFixtures';
+import { DrilldownTarget, EventLogEvent } from '../src/definitions/EventLogEvent';
+
+const { recordEvent } = vi.hoisted(() => ({ recordEvent: vi.fn() }));
+
+vi.mock('../src/functions/recordEvent', () => ({ default: recordEvent }));
 
 vi.mock('../src/hooks/useAPI.tsx', () => ({
     useGetNPEManifest: vi.fn(),
@@ -89,6 +94,7 @@ function renderTable(rows: TypedPerfTableRow[], options: RenderTableOptions = {}
 afterEach(cleanup);
 
 beforeEach(() => {
+    recordEvent.mockClear();
     (useGetNPEManifest as Mock).mockReturnValue({ data: [], error: null });
     // Reset per test: a value left by an earlier test would make results depend on run order.
     (useOpToPerfIdFiltered as Mock).mockReturnValue([]);
@@ -173,6 +179,28 @@ describe('PerfTable tensor-drawer trigger column', () => {
         fireEvent.click(trigger);
 
         expect(trigger.closest('tr')).toHaveClass('is-selected');
+    });
+
+    it('records opening the tensor details once per click', () => {
+        (useOpToPerfIdFiltered as Mock).mockReturnValue([{ opId: 11, perfId: '1' }]);
+        renderTable([matmulRow]);
+
+        fireEvent.click(screen.getByRole('button', { name: 'View tensor details for Matmul' }));
+
+        expect(recordEvent).toHaveBeenCalledExactlyOnceWith({
+            event: EventLogEvent.DRILLDOWN_OPENED,
+            details: { drilldown_target: DrilldownTarget.TENSOR_DETAILS },
+        });
+    });
+
+    it('records nothing for a re-click on the row whose drawer is already open', () => {
+        (useOpToPerfIdFiltered as Mock).mockReturnValue([{ opId: 11, perfId: '1' }]);
+        renderTable([matmulRow]);
+
+        fireEvent.click(screen.getByRole('button', { name: 'View tensor details for Matmul' }));
+        fireEvent.click(screen.getByRole('button', { name: 'View tensor details for Matmul' }));
+
+        expect(recordEvent).toHaveBeenCalledOnce();
     });
 
     it('renders the trigger on the comparison sub-row that holds the active report (comparison-report tab)', () => {

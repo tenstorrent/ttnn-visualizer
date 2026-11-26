@@ -57,6 +57,8 @@ import { TestProviders } from './helpers/TestProviders';
 import { runsWithoutFingerprints } from './helpers/reportLinkFixtures';
 import { ReportLinkRunsById } from '../src/definitions/ReportLinks';
 import { ReportKind, ReportLoadFailureReason, ReportSource } from '../src/definitions/EventLogEvent';
+import { PendingReportLoadsProbe } from './helpers/PendingReportLoadsProbe';
+import { getProbedPendingReportLoads } from './helpers/pendingReportLoads';
 import { RemoteFolderType } from '../src/definitions/Reports';
 
 // Scrub the markup after each test
@@ -85,21 +87,14 @@ const IsActivatingReportProbe = () => {
     return <span data-testid={IS_ACTIVATING_REPORT_PROBE_TEST_ID}>{isActivatingReport ? 'true' : 'false'}</span>;
 };
 
-const {
-    mockUseReportFolderList,
-    mockUsePerfFolderList,
-    mockUseInstance,
-    mockUseReportMetadata,
-    recordReportLoaded,
-    recordReportLoadFailed,
-} = vi.hoisted(() => ({
-    mockUseReportFolderList: vi.fn(),
-    mockUsePerfFolderList: vi.fn(),
-    mockUseInstance: vi.fn(),
-    mockUseReportMetadata: vi.fn(),
-    recordReportLoaded: vi.fn(),
-    recordReportLoadFailed: vi.fn(),
-}));
+const { mockUseReportFolderList, mockUsePerfFolderList, mockUseInstance, recordReportLoaded, recordReportLoadFailed } =
+    vi.hoisted(() => ({
+        mockUseReportFolderList: vi.fn(),
+        mockUsePerfFolderList: vi.fn(),
+        mockUseInstance: vi.fn(),
+        recordReportLoaded: vi.fn(),
+        recordReportLoadFailed: vi.fn(),
+    }));
 
 const useSshConfigHostsMock = vi.hoisted(() => vi.fn<(enabled?: boolean) => SshConfigHostsQueryResult>());
 
@@ -111,7 +106,6 @@ vi.mock('../src/hooks/useAPI.tsx', async () => {
         useReportFolderList: () => mockUseReportFolderList(),
         usePerfFolderList: () => mockUsePerfFolderList(),
         useInstance: () => mockUseInstance(),
-        useReportMetadata: () => mockUseReportMetadata(),
         updateInstance: vi.fn().mockResolvedValue({}),
         deleteProfiler: vi.fn().mockResolvedValue({ success: true }),
         deletePerformance: vi.fn().mockResolvedValue({ success: true }),
@@ -127,6 +121,15 @@ vi.mock('../src/libs/axiosInstance', () => ({
     },
 }));
 
+// The connection dialog records `remote_connection_test` for real. Left unmocked, the buffered
+// event is flushed two seconds later through the bare `post` mock above, which returns no
+// promise, and the throw lands as an unhandled error in whichever test is then running.
+// Delivery is covered by recordEvent.spec.ts; nothing here asserts on it.
+vi.mock('../src/functions/recordEvent', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../src/functions/recordEvent')>()),
+    default: vi.fn(),
+}));
+
 vi.mock('../src/functions/reportLoadEvents', async (importOriginal) => {
     const { reportLoadEventsSpiesMock } = await import('./helpers/mockReportLoadEvents');
 
@@ -137,13 +140,18 @@ vi.mock('../src/functions/reportLoadEvents', async (importOriginal) => {
 // jsdom, and the picker would be absent because the query failed rather than because of a fixture.
 vi.mock('../src/hooks/useSshConfigHosts', () => ({ default: useSshConfigHostsMock }));
 
+// A remote pick only marks its load as pending; `useReportLoadSettlement` records it once the
+// data settles (#2343), so the configurator itself must record no `report_loaded`.
+const expectPendingLoad = (kind: ReportKind, path: string) => {
+    expect(getProbedPendingReportLoads()).toEqual({ [kind]: { path, source: ReportSource.REMOTE_SYNC } });
+    expect(recordReportLoaded).not.toHaveBeenCalled();
+};
+
 beforeEach(() => {
     vi.resetAllMocks();
     mockUseReportFolderList.mockReturnValue({ data: mockProfilerFolderList });
     mockUsePerfFolderList.mockReturnValue({ data: mockPerformanceReportFolders });
     mockUseInstance.mockReturnValue({ data: mockInstance });
-    // No active report metadata by default; effect short-circuits.
-    mockUseReportMetadata.mockReturnValue({ data: undefined, error: undefined });
     useSshConfigHostsMock.mockReturnValue(noSshConfigResult());
     // Clean up localStorage between tests
     window.localStorage.clear();
@@ -677,6 +685,7 @@ it('disables remote report selectors while mount is confirming the active report
     render(
         <TestProviders>
             <RemoteSyncConfigurator />
+            <PendingReportLoadsProbe />
         </TestProviders>,
     );
 
@@ -710,8 +719,7 @@ it('disables remote report selectors while mount is confirming the active report
         });
         expect(screen.getByTestId(TEST_IDS.REMOTE_SYNC_BUTTON)).toHaveProperty(HTML_DISABLED, false);
     }, WAIT_FOR_OPTIONS);
-    expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.PERFORMANCE, ReportSource.REMOTE_SYNC);
-    expect(recordReportLoaded).toHaveBeenCalledTimes(1);
+    expectPendingLoad(ReportKind.PERFORMANCE, selectedReport.remotePath);
 });
 
 it('re-enables remote report selectors when mount fails', async () => {
@@ -810,6 +818,7 @@ it('mounts a previously synced outdated performance folder on selection without 
     render(
         <TestProviders>
             <RemoteSyncConfigurator />
+            <PendingReportLoadsProbe />
         </TestProviders>,
     );
 
@@ -822,7 +831,7 @@ it('mounts a previously synced outdated performance folder on selection without 
 
     expect(mockPost.mock.calls.some(([url]) => String(url).includes('/api/remote/sync'))).toBe(false);
     expect(mockPost.mock.calls.some(([url]) => String(url).includes('/api/remote/use'))).toBe(true);
-    expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.PERFORMANCE, ReportSource.REMOTE_SYNC);
+    expectPendingLoad(ReportKind.PERFORMANCE, selectedReport.remotePath);
 });
 
 it('mounts a previously synced outdated memory folder on selection without syncing', async () => {
@@ -847,6 +856,7 @@ it('mounts a previously synced outdated memory folder on selection without synci
     render(
         <TestProviders>
             <RemoteSyncConfigurator />
+            <PendingReportLoadsProbe />
         </TestProviders>,
     );
 
@@ -859,7 +869,7 @@ it('mounts a previously synced outdated memory folder on selection without synci
 
     expect(mockPost.mock.calls.some(([url]) => String(url).includes('/api/remote/sync'))).toBe(false);
     expect(mockPost.mock.calls.some(([url]) => String(url).includes('/api/remote/use'))).toBe(true);
-    expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.PROFILER, ReportSource.REMOTE_SYNC);
+    expectPendingLoad(ReportKind.PROFILER, selectedReport.remotePath);
 });
 
 it('does not activate remote report when a local report is chosen mid-sync', async () => {
@@ -1011,6 +1021,7 @@ it('falls back to the local copy when never-synced select sync fails', async () 
     render(
         <TestProviders>
             <RemoteSyncConfigurator />
+            <PendingReportLoadsProbe />
         </TestProviders>,
     );
 
@@ -1022,9 +1033,8 @@ it('falls back to the local copy when never-synced select sync fails', async () 
 
     expect(mockPost.mock.calls.some(([url]) => String(url).includes('/api/remote/sync'))).toBe(true);
     expect(mockPost.mock.calls.some(([url]) => String(url).includes('/api/remote/use'))).toBe(true);
-    expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.PERFORMANCE, ReportSource.REMOTE_SYNC);
+    expectPendingLoad(ReportKind.PERFORMANCE, selectedReport.remotePath);
     expect(recordReportLoadFailed).not.toHaveBeenCalled();
-    expect(recordReportLoaded).toHaveBeenCalledTimes(1);
 });
 
 it('mounts the local copy and warns when Sync fails for a previously synced folder', async () => {
@@ -1492,24 +1502,6 @@ it('ignores a connection written to localStorage by something other than this co
 
     expect(getButtonWithText(NO_CONNECTION)).not.toBeNull();
     expect(screen.queryAllByTestId(TEST_IDS.REMOTE_CONNECTION_ROW)).toHaveLength(0);
-});
-
-it('shows an "Incompatible report version" toast when the active report uses an unsupported DB schema', async () => {
-    mockUseReportMetadata.mockReturnValue({
-        data: { version: { major: 999, minor: 0, patch: 0 } },
-        error: undefined,
-    });
-
-    render(
-        <TestProviders>
-            <RemoteSyncConfigurator />
-        </TestProviders>,
-    );
-
-    await waitFor(
-        () => expect(screen.getByTestId(TEST_IDS.TOAST_FILENAME).textContent).to.contain('v999.0.0'),
-        WAIT_FOR_OPTIONS,
-    );
 });
 
 it('displays appropriate connection count information', () => {

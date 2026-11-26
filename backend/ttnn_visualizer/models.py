@@ -12,7 +12,11 @@ from typing import Any, List, Optional, Tuple
 from pydantic import BaseModel, Field, ValidationError, field_validator
 from sqlalchemy import JSON, Column, Integer, String
 from sqlalchemy.ext.mutable import MutableDict
-from ttnn_visualizer.enums import ConnectionTestStates, HostKeyIssue
+from ttnn_visualizer.enums import (
+    ConnectionTestStates,
+    HostKeyIssue,
+    RemoteConnectionFailureReason,
+)
 from ttnn_visualizer.extensions import db
 from ttnn_visualizer.utils import (
     SerializeableDataclass,
@@ -601,17 +605,18 @@ def connection_status(
     message: str,
     detail: Optional[str] = None,
     host_key: Optional["HostKeyStatus"] = None,
+    reason: Optional[RemoteConnectionFailureReason] = None,
 ) -> StatusMessage:
-    """One status line for a connection test, widened only when a host key rides along.
+    """One status line for a connection test, widened only when a verdict rides along.
 
     The narrowing matters: ``StatusMessage`` is also the NPE upload response and is
-    spread into every MLIR upload entry, so a ``hostKey`` field on it would change two
-    responses this has nothing to do with.
+    spread into every MLIR upload entry, so a ``hostKey`` or ``reason`` field on it would
+    change two responses this has nothing to do with.
     """
-    if host_key is None:
+    if host_key is None and reason is None:
         return StatusMessage(status=status, message=message, detail=detail)
     return ConnectionStatusMessage(
-        status=status, message=message, detail=detail, hostKey=host_key
+        status=status, message=message, detail=detail, hostKey=host_key, reason=reason
     )
 
 
@@ -622,18 +627,25 @@ def connection_status_from_exception(error) -> StatusMessage:
         error.message,
         getattr(error, "detail", None),
         getattr(error, "host_key", None),
+        getattr(error, "reason", None),
     )
 
 
 class ConnectionStatusMessage(StatusMessage):
-    """A status line that may carry a host-key verdict.
+    """A connection test's status line that carries a host-key verdict or a failure reason.
 
-    Deliberately a subclass rather than a field on ``StatusMessage``: that model is
-    also dumped as the NPE upload response and spread into every MLIR upload entry,
-    neither of which has any business gaining a host-key field.
+    Used by the remote connection test and the MLIR server test alike; on the latter any
+    classified failure carries ``reason``, a host-key line its verdict as well, and every
+    other line a null ``hostKey``. Deliberately a
+    subclass rather than fields on ``StatusMessage``: that model is also dumped as the NPE
+    upload response and spread into every MLIR upload entry, neither of which has any
+    business gaining either field.
     """
 
     hostKey: Optional[HostKeyStatus] = None
+    # Why the connection failed, so the client never parses ``message``. Absent for a
+    # failure that fits no class and for every line that did not fail.
+    reason: Optional[RemoteConnectionFailureReason] = None
 
 
 class HostKeyTarget(SerializeableModel):
@@ -811,6 +823,9 @@ class InstanceTable(db.Model):
     remote_connection = Column(JSON, nullable=True)
     remote_profiler_folder = Column(JSON, nullable=True)
     remote_performance_folder = Column(JSON, nullable=True)
+    # The hosted session that created the instance (its `session["instance_owner"]`
+    # token), so another session can't use it by sending its ID. Unused locally.
+    owner = Column(String, nullable=True)
 
     def __init__(
         self,
@@ -823,8 +838,10 @@ class InstanceTable(db.Model):
         performance_path=None,
         npe_path=None,
         mlir_path=None,
+        owner=None,
     ):
         self.instance_id = instance_id
+        self.owner = owner
         self.active_report = active_report
         self.profiler_path = profiler_path
         self.npe_path = npe_path

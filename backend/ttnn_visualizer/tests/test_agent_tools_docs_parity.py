@@ -17,13 +17,30 @@ from pathlib import Path
 from typing import Dict, Set
 
 import pytest
-from ttnn_visualizer.agent import report_diff, server, tools
-from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_LIMIT
+from ttnn_visualizer import hardware_counters, pipeline_stalls
+from ttnn_visualizer.agent import (
+    failures,
+    hw_utilisation,
+    op_configurations,
+    report_diff,
+    server,
+    source_lines,
+    stall_breakdown,
+    tools,
+)
+from ttnn_visualizer.agent.bounds import (
+    CUT_DIGEST_CHARS,
+    MAX_DETAILED_LIMIT,
+    MAX_LIMIT,
+    MAX_OP_CODE_CHARS,
+)
 from ttnn_visualizer.agent.handles import MAX_SCOPED_DIFF_TOTALS, ReportRegistry
 from ttnn_visualizer.agent.perf_detail import DetailGroup
 from ttnn_visualizer.csv_queries import (
     ACCUMULATE_FLUSH_ZONES,
     L1_ZONE_MARKER_CAPACITY,
+    MAX_CAPTURE_FIELD_CHARS,
+    MAX_CAPTURE_FIELDS,
     MAX_LISTED_SIGNPOSTS,
     MAX_ZONE_TIMELINES,
     PROFILER_ZONE_PREFIX,
@@ -34,6 +51,7 @@ _REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 _AGENT_DOCS = _REPOSITORY_ROOT / "docs" / "src" / "agent-tools.md"
 _DOCS_INDEX = _REPOSITORY_ROOT / "docs" / "index.rst"
 _AGENTS = _REPOSITORY_ROOT / "AGENTS.md"
+_AGENT_README = _REPOSITORY_ROOT / "backend" / "ttnn_visualizer" / "agent" / "README.md"
 
 
 def _read(path: Path) -> str:
@@ -140,12 +158,15 @@ def test_the_page_describes_every_include_group():
 
 
 def test_the_page_carries_where_the_flags_differ_from_the_view():
-    """The one flag the tools answer differently, and the rule a range does not move."""
+    """The rule a range does not move, and the placeholder neither side flags."""
     page = " ".join(_read(_AGENT_DOCS).split())
 
-    assert "#2162" in page
-    assert "a 1 ns ideal time never flags `low_utilisation`" in page
+    assert "in one deliberate way" in page
     assert "decided over the whole report" in page
+    assert (
+        "1 ns placeholder, described above, is never flagged, here or in the view"
+        in page
+    )
     assert "`errors`" in page and "`dram_fallbacks`" in page
 
 
@@ -194,7 +215,7 @@ def test_the_page_carries_the_zone_intervals_caveats():
     assert f"at most {L1_ZONE_MARKER_CAPACITY // 2} zones" in page
     assert f"zones, named `{PROFILER_ZONE_PREFIX}…`" in page
     assert all(f"`{name}`" in page for name in ACCUMULATE_FLUSH_ZONES)
-    assert f"longer than {tools.MAX_ZONE_NAME_LENGTH} characters" in page
+    assert f"longer than {tools.MAX_ZONE_NAME_LENGTH} bytes" in page
     assert f"past the {MAX_ZONE_TIMELINES:,} core-RISC timelines" in page
     assert "never pooled, since each runs its own clock" in page
 
@@ -208,20 +229,118 @@ def test_the_detailed_row_cap_the_page_states_is_the_enforced_one():
     assert f"or {MAX_DETAILED_LIMIT}, whichever is smaller" in page
 
 
-def test_the_signpost_name_limit_the_page_states_is_the_enforced_one():
-    """The page states the limit as a number, so nothing else ties it to the code."""
-    page = " ".join(_read(_AGENT_DOCS).split())
-
-    assert f"a name longer than {tools.MAX_SIGNPOST_NAME_LENGTH} characters" in page
-
-
-def test_the_zone_tools_name_bounds_the_page_states_are_the_enforced_ones():
-    """The page states both bounds as numbers, so nothing else ties them to the code."""
+def test_the_op_configurations_caps_the_page_states_are_the_enforced_ones():
     page = " ".join(_read(_AGENT_DOCS).split())
 
     assert (
-        f"a zone name longer than {tools.MAX_ZONE_NAME_LENGTH} characters or a RISC "
-        f"name longer than {tools.MAX_RISC_NAME_LENGTH} characters"
+        f"A listing shows up to {op_configurations.MAX_LISTED_CONFIGURATIONS} "
+        f"configurations (`limit`), each with its first "
+        f"{op_configurations.MAX_LISTED_ARGUMENTS} arguments, positional ones first, "
+        f"cut at {op_configurations.LISTED_VALUE_CHARS} characters"
+    ) in page
+    assert (
+        f"its first {op_configurations.MAX_LISTED_OPERATION_IDS} operation ids" in page
+    )
+    assert (
+        f"every argument up to {op_configurations.MAX_DETAIL_ARGUMENTS}, each cut at "
+        f"{op_configurations.DETAIL_VALUE_CHARS:,} characters, and up to {MAX_LIMIT} of "
+        "its operation ids"
+    ) in page
+    assert f"first {CUT_DIGEST_CHARS} hex digits of the SHA-256" in page
+    assert (
+        f"`ops` lists the first {op_configurations.MAX_LISTED_OPS} operations" in page
+    )
+    assert (
+        f"`left_out` lists the {op_configurations.MAX_LISTED_LEFT_OUT} left-out "
+        "operations with the most calls"
+    ) in page
+    assert (
+        f"pass {op_configurations.MAX_ARGUMENT_CHARS:,} characters, a sanity bound"
+        in page
+    )
+    # Paging adds no cap; the page must still say how to reach the next one.
+    assert "`next_offset` starts the next page" in page
+
+
+def test_the_source_lines_caps_the_page_states_are_the_enforced_ones():
+    page = " ".join(_read(_AGENT_DOCS).split())
+
+    assert (
+        f"the {source_lines.TOP_OP_CODE_COUNT} raw op codes with the most device time"
+        in page
+    )
+    assert (
+        f"the first {source_lines.MAX_LISTED_OPERATION_IDS} of its `operation_ids`"
+        in page
+    )
+    assert f"`limit` caps the groups at {MAX_DETAILED_LIMIT} a page" in page
+    # Phrases only the source_lines paragraph holds: op_configurations pages too.
+    assert "so every call site can be reached" in page
+    assert "`rest` sums only the groups after the page" in page
+    # The call-site wording, since the signature sentence states a 300 cut as well.
+    assert (
+        f"`function` or `code` past {failures.MAX_CALL_SITE_TEXT_CHARS} characters "
+        "is cut"
+    ) in page
+    assert (
+        f"{failures.STACK_TRACE_IDS_PER_READ} at a time, or in one streamed pass "
+        f"past {failures.STACK_TRACE_SCAN_IDS:,} operations"
+    ) in page
+
+
+def test_the_op_configurations_rules_the_page_names_are_the_restated_ones():
+    """The page names the tracer's dropped arguments and the commit its rules come from
+    by hand, so nothing else ties them to the code on the next re-sync."""
+    page = " ".join(_read(_AGENT_DOCS).split())
+    sentence = re.search(
+        r"The tracer's (\w+) semaphore keyword arguments, (.+?), are dropped", page
+    )
+
+    assert sentence is not None
+    named = re.findall(r"`([a-z_]+)`", sentence.group(2))
+    assert set(named) == op_configurations.TRACER_EXCLUDED_ARGUMENTS
+    assert len(named) == len(op_configurations.TRACER_EXCLUDED_ARGUMENTS)
+    assert sentence.group(1) == "two", (
+        f"the page counts the {len(named)} dropped arguments in words, so a change to "
+        "TRACER_EXCLUDED_ARGUMENTS changes that word too"
+    )
+    revision = f"`{op_configurations.TRACER_REVISION}`"
+    assert f"at tt-metal {revision}" in page
+    assert revision in _AGENT_README.read_text(encoding="utf-8")
+
+
+def test_the_signpost_name_limit_the_page_states_is_the_enforced_one():
+    """The page states the limit as a number, so nothing else ties it to the code:
+    once for `load_report`'s list and once for a range's refusal."""
+    page = " ".join(_read(_AGENT_DOCS).split())
+    stated = f"name longer than {tools.MAX_SIGNPOST_NAME_LENGTH} bytes as an answer"
+
+    assert f"A {stated} writes it, which a range cannot take" in page
+    assert f"or a {stated} writes it" in page
+
+
+def test_the_capture_field_bounds_the_page_states_are_the_enforced_ones():
+    page = " ".join(_read(_AGENT_DOCS).split())
+
+    assert f"value runs past {MAX_CAPTURE_FIELD_CHARS} characters" in page
+    assert f"after the first {MAX_CAPTURE_FIELDS} it keeps" in page
+    assert (
+        f"name longer than {MAX_CAPTURE_FIELD_CHARS} characters reads as none" in page
+    )
+
+
+def test_the_zone_tools_name_bounds_and_risc_cap_the_page_states_are_enforced():
+    """The page states the bounds and the cap as numbers, so nothing else ties them to
+    the code."""
+    page = " ".join(_read(_AGENT_DOCS).split())
+
+    assert (
+        f"a zone name longer than {tools.MAX_ZONE_NAME_LENGTH} bytes or a RISC "
+        f"name longer than {tools.MAX_RISC_NAME_LENGTH} bytes"
+    ) in page
+    assert (
+        f"lists at most {tools.MAX_LISTED_RISCS} RISCs an operation in `by_risc`, the "
+        "first by name, counting the rest in `by_risc_unlisted_past_cap`"
     ) in page
 
 
@@ -260,6 +379,8 @@ def test_the_diff_figures_the_page_states_are_the_enforced_ones():
     assert f"up to {report_diff.MAX_CAPTURES_PER_SIDE} captures a side" in page
     assert f"for up to {MAX_SCOPED_DIFF_TOTALS} captures and ranges" in page
     assert f"past {report_diff.MAX_SIGNATURE_CHARS} characters is cut" in page
+    assert f"An op code past {MAX_OP_CODE_CHARS} characters is cut" in page
+    assert f"An op code longer than {MAX_OP_CODE_CHARS} characters" in page
     assert f"{report_diff.DEFAULT_MIN_PERCENT:g}% unless asked" in page
     assert (
         f"{min_deltas['device_time']} µs for device time and op-to-op gap, "
@@ -326,6 +447,23 @@ def test_the_page_explains_each_diff_caveat(caveat, page_phrase):
     assert page_phrase in " ".join(_read(_AGENT_DOCS).split())
 
 
+def test_the_page_names_every_tool_a_csv_that_cannot_be_read_costs():
+    """`without_performance_csv` moves exactly these, so the page names them as one set."""
+    from ttnn_visualizer.agent.handles import PERF_CSV_TOOLS
+
+    page = " ".join(_read(_AGENT_DOCS).split())
+    sentence = re.search(
+        r"The (\w+) tools that read the performance CSV's rows, (.+?), are listed only",
+        page,
+    )
+
+    assert sentence is not None
+    named = re.findall(r"`([a-z_]+)`", sentence.group(2))
+    assert set(named) == PERF_CSV_TOOLS
+    assert len(named) == len(PERF_CSV_TOOLS)
+    assert sentence.group(1) == "eight"
+
+
 def test_the_signpost_listing_cap_the_page_states_is_the_enforced_one():
     page = " ".join(_read(_AGENT_DOCS).split())
 
@@ -354,3 +492,93 @@ def test_agents_md_points_at_the_agent_tools_page():
         "AGENTS.md must point at the agent-tools page from the Agent-facing tools "
         "section, so adding a tool without documenting it is visible in review."
     )
+
+
+def test_the_page_carries_the_hw_utilisation_caveats():
+    """Counters are per op and per core, a merged row is one device's, and an op
+    without a compute kernel is left out rather than read as idle."""
+    page = " ".join(_read(_AGENT_DOCS).split())
+
+    assert f"lists the {hw_utilisation.TOP_OPS_PER_UNIT} operations" in page
+    assert "the slowest device's" in page
+    assert "left out of every figure rather than read as 0" in page
+    assert "not a time series" in page
+    assert (
+        "`--profiler-capture-perf-counters=<group>` for each `counters` field" in page
+    )
+    assert f"`{hardware_counters.EXAMPLE_GROUPS}`" in page
+
+
+def test_the_page_carries_the_stall_breakdown_caveats():
+    """The counters cannot see a CB poll, the CSV sums CB waits over cores, waits
+    overlap, a CB copy on an op without a compute kernel is ignored, the stalled time
+    is an estimate, a downstream wait is a symptom wherever it is listed, and CB waits
+    alone are refused."""
+    page = " ".join(_read(_AGENT_DOCS).split())
+
+    assert "issue no Tensix instruction" in page
+    assert "with a stall rate near 0" in page
+    assert "as a sum over the operation's cores" in page
+    assert "they never add up to the stall rate" in page
+    assert "are ignored (`cb_waits` reads `ignored`)" in page
+    assert "never their sum" in page
+    assert "`stalled_us` estimates it as an average core's time" in page
+    assert "a ratio rather than a percentage" in page
+    assert "Semaphore Zero Wait T2" in page
+    assert "a symptom of what held the pipeline up" in page
+    assert "Each `waits` entry carries the same flag" in page
+    assert "`sum_profiling` alone is read from the CSV itself, every device's" in page
+    assert "rather than tt-perf-report's `cores`" in page
+    assert "sum profiling but no hardware counters is out of scope" in page
+    assert f"up to {stall_breakdown.MAX_PERF_IDS} performance row ids" in page
+    assert f"capped at {MAX_DETAILED_LIMIT}, and `matched`" in page
+
+
+def test_the_page_names_the_flags_a_stall_breakdown_refusal_names():
+    page = " ".join(_read(_AGENT_DOCS).split())
+
+    assert (
+        f"`{hardware_counters.CAPTURE_FLAG}={pipeline_stalls.STALL_COUNTER_GROUPS}`"
+        in page
+    )
+    assert f"`{pipeline_stalls.SUM_PROFILING_FLAG}`" in page
+
+
+def test_the_page_names_each_stall_breakdown_answer_key():
+    page = _read(_AGENT_DOCS)
+
+    for key in (
+        "hardware_counters",
+        "instrumentation",
+        "issue_rate",
+        "stall_rate",
+        "waits",
+        "zero_waits",
+        "math_pipeline_stalls",
+        "stall_overlap",
+        "sum_us",
+        "per_core_us",
+        "core_count",
+        "kernel_share_percent",
+        "stalled_percent",
+        "stalled_us",
+        "stalled_thread",
+        "largest_wait",
+        "matched",
+        "state",
+        "fill_hint",
+        "downstream",
+        "capture_groups",
+        "sum_profiling",
+        "wait_labels_absent",
+        *(zone.value for zone in pipeline_stalls.CbWaitZone),
+    ):
+        assert f"`{key}`" in page, key
+
+
+def test_the_page_names_each_hardware_counter_sort_key():
+    """A renamed key the page still spells the old way is one an agent cannot pass."""
+    page = _read(_AGENT_DOCS)
+
+    for metric in tools.COUNTER_METRICS:
+        assert f"`{metric}`" in page, metric

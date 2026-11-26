@@ -32,7 +32,12 @@ from ttnn_visualizer.agent import (
     server,
     tools,
 )
-from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_LIMIT
+from ttnn_visualizer.agent.bounds import (
+    CUT_DIGEST_CHARS,
+    MAX_DETAILED_LIMIT,
+    MAX_LIMIT,
+    MAX_OP_CODE_CHARS,
+)
 from ttnn_visualizer.agent.handles import CacheVariant, ReportRegistry, load_report
 from ttnn_visualizer.agent.linking import (
     DeviceOperation,
@@ -1195,10 +1200,21 @@ class TestOperationDetailLink:
             }
         ]
         assert result["perf_row_count"] == 1
-        assert result["device_time_unit"] == linking.DEVICE_TIME_UNIT
+        assert result["device_time_unit"] == tools.DEVICE_TIME_UNIT
         assert result["duration_unit"] == "host_seconds"
         # The rows and their shares come from the canonical report, merged per device.
         assert result["projection"] == tools.CANONICAL_PROJECTION
+
+    def test_a_perf_row_cuts_its_op_code_as_every_tool_does(self, linked):
+        code = "Matmul" + "x" * MAX_OP_CODE_CHARS
+        graph = _graph("ttnn.matmul", code, nested=False)
+        registry, handle, _ = linked(graphs={2: graph}, rows=[_perf_row(code, 0)])
+
+        (row,) = linking.operation_detail(registry, handle, operation_id=2)["perf_rows"]
+
+        assert row["op_code"] == code[:MAX_OP_CODE_CHARS]
+        assert row["op_code_full_length"] == len(code)
+        assert len(row["op_code_digest"]) == CUT_DIGEST_CHARS
 
     def test_perf_rows_are_capped_and_the_full_count_kept(self, linked):
         count = MAX_LIMIT + 5
@@ -1386,10 +1402,6 @@ class TestOperationDetailLink:
 class TestServerRouting:
     """Reverting either handler to its unlinked tool must fail something."""
 
-    @pytest.fixture(autouse=True)
-    def _never_touch_the_real_event_log(self, event_log_directory):
-        """Any tools/call reaches the recorder; none may write outside tmp_path."""
-
     def _call(self, registry, name, arguments):
         response = server.handle_message(
             {
@@ -1505,6 +1517,36 @@ class TestLinkCache:
         assert first["operation_link"]["status"] == LinkStatus.UNAVAILABLE.value
         assert second["operation_link"]["status"] == LinkStatus.LINKED.value
         assert {row["id"]: row["operation_id"] for row in second["ops"]}["3"] == 2
+
+    def test_a_handle_loaded_before_its_csv_links_once_a_read_finds_one(
+        self, linked, tmp_path
+    ):
+        """A link missed for want of the CSV is not kept as unavailable, and the read that
+        links pins the CSV its operation ids were matched against. #2227"""
+        registry, handle, generate = linked()
+        csv_path = tmp_path / "perf" / "ops_perf_results.csv"
+        report = _report_for(_CANONICAL_ROWS)
+
+        def once_written(instance, **overrides):
+            if not csv_path.exists():
+                raise FileNotFoundError(csv_path)
+            return report(instance, **overrides)
+
+        generate.side_effect = once_written
+        with pytest.raises(FileNotFoundError):
+            linking.top_ops(registry, handle)
+        missed = linking.operation_detail(registry, handle, operation_id=2)
+        write_ops_perf(tmp_path / "perf", smoke_rows())
+
+        result = linking.top_ops(registry, handle)
+
+        assert missed["operation_link"]["status"] == LinkStatus.UNAVAILABLE.value
+        assert result["operation_link"]["status"] == LinkStatus.LINKED.value
+        by_id = {row["id"]: row["operation_id"] for row in result["ops"]}
+        assert (by_id["3"], by_id["5"]) == (2, 3)
+        write_ops_perf(tmp_path / "perf", smoke_rows()[:-1])
+        with pytest.raises(ValueError, match="has changed since it was first read"):
+            linking.top_ops(registry, handle, start_signpost="signpost-start")
 
     def test_a_profiler_database_that_failed_once_is_read_again(self, linked):
         """A locked database raises the same `sqlite3.Error` a corrupt one does."""
@@ -1907,6 +1949,8 @@ class TestCriticalPath:
         assert result["device_time_share_percent"] == tools.share_percent(
             16.0, report_total
         )
+        assert result["report_device_time_total"] == round(report_total, 3)
+        assert result["device_time_unit"] == tools.DEVICE_TIME_UNIT
 
     def test_it_states_the_projection_its_weights_were_read_through(self, path_report):
         registry, handle = path_report()

@@ -94,6 +94,8 @@ const useBufferNavigation = ({ buffersByOperation, tensorListByOperation, virtua
 
         if (lastIntentNavigationKeyRef.current !== intentKey) {
             lastIntentNavigationKeyRef.current = intentKey;
+            // Records nothing: the "Buffer details" click recorded this drill-down, and the
+            // effect runs again when the other tab's list mounts, and on a reload.
             updateBufferFocus(tensorAddress, tensorId);
             setSelectedTabId(bufferType === BufferType.DRAM ? TAB_IDS.DRAM : TAB_IDS.L1);
         }

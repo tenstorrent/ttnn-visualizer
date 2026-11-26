@@ -22,6 +22,7 @@ from ttnn_visualizer.event_logging import (
     EVENT_FIELD,
     EVENT_LOG_ID_LENGTH,
     EVENT_LOG_ID_SESSION_KEY,
+    LOCAL_ONLY_CLIENT_EVENTS,
     LOG_SIZE_CHECK_INTERVAL_BYTES,
     MAX_EVENT_LOG_BATCH_EVENTS,
     RECORDING_DISABLED_ENV_VAR,
@@ -433,6 +434,38 @@ def test_accepted_batch_totals_the_way_the_collector_reads_it(
             id="details_not_an_object",
         ),
         pytest.param({"event": EventLogEvent.VIEW_OPENED.value}, id="details_absent"),
+        pytest.param(
+            {"event": EventLogEvent.NPE_PLAYBACK_STARTED.value},
+            id="details_absent_on_an_event_without_details",
+        ),
+        pytest.param(
+            {
+                "event": EventLogEvent.NPE_PLAYBACK_STARTED.value,
+                "details": {"npe_mode": "zones"},
+            },
+            id="detail_on_an_event_without_details",
+        ),
+        pytest.param(
+            {
+                "event": EventLogEvent.FILTER_USED.value,
+                "details": {"filter_surface": "operations", "query": "matmul"},
+            },
+            id="filter_query_text",
+        ),
+        pytest.param(
+            {
+                "event": EventLogEvent.DRILLDOWN_OPENED.value,
+                "details": {"drilldown_target": "operation_details"},
+            },
+            id="operation_details_is_not_a_drilldown",
+        ),
+        pytest.param(
+            {
+                "event": EventLogEvent.PERF_CHART_VIEWED.value,
+                "details": {"perf_chart": "perf-chart-op-duration-histogram"},
+            },
+            id="perf_chart_as_its_dom_id",
+        ),
         pytest.param({"details": {"view": "operations"}}, id="event_name_absent"),
     ],
 )
@@ -480,13 +513,23 @@ ACCEPTED_EVENTS = {
     },
     EventLogEvent.VIEW_OPENED: {"view": "operations"},
     EventLogEvent.VIEW_ENGAGED: {"view": "performance"},
+    EventLogEvent.PERF_CHART_VIEWED: {"perf_chart": "matmul_device_time"},
+    EventLogEvent.PERF_TABLE_OPTION_TOGGLED: {"perf_table_option": "tracing_mode"},
+    EventLogEvent.PERF_COMPARISON_USED: {"report_count_bucket": "three_or_more"},
+    EventLogEvent.NPE_PLAYBACK_STARTED: {},
+    EventLogEvent.NPE_MODE_CHANGED: {"npe_mode": "cycles_scale"},
+    EventLogEvent.DRILLDOWN_OPENED: {"drilldown_target": "source_file"},
+    EventLogEvent.FILTER_USED: {"filter_surface": "perf_op_code"},
+    EventLogEvent.REMOTE_CONNECTION_TEST: {
+        "connection_test_result": "report_path_failed"
+    },
 }
 
 
 def test_the_round_trip_fixture_covers_every_client_postable_event():
     """The parametrisation above is hand-written, so nothing else would notice a gap.
 
-    A fifth entry in ``CLIENT_EVENT_DETAIL_FIELDS`` fails no existing test: it would
+    A new entry in ``CLIENT_EVENT_DETAIL_FIELDS`` fails no existing test: it would
     simply never be posted, and the suite would stay green while end-to-end coverage
     quietly narrowed.
     """
@@ -495,7 +538,7 @@ def test_the_round_trip_fixture_covers_every_client_postable_event():
 
 @pytest.mark.parametrize("event", list(ACCEPTED_EVENTS), ids=lambda event: event.value)
 def test_every_client_postable_event_round_trips(client, event_log_directory, event):
-    """All four, not just the two the other cases happen to use.
+    """Every postable event, not only those the other cases happen to use.
 
     A detail tuple naming the wrong-but-valid field — ``view`` where ``reason_class``
     belongs — would satisfy the schema meta-tests and fail only here.
@@ -892,3 +935,49 @@ def test_switch_off_via_marker_file_writes_nothing(client, event_log_directory):
 
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert read_event_log_lines(event_log_directory) == []
+
+
+_LOCAL_ONLY_EVENT_DETAILS = {
+    EventLogEvent.PERF_COMPARISON_USED: {"report_count_bucket": "one"},
+    EventLogEvent.REMOTE_CONNECTION_TEST: {"connection_test_result": "success"},
+}
+
+
+def test_every_local_only_event_has_a_case_below():
+    assert set(_LOCAL_ONLY_EVENT_DETAILS) == LOCAL_ONLY_CLIENT_EVENTS
+
+
+@pytest.mark.parametrize("event", sorted(LOCAL_ONLY_CLIENT_EVENTS, key=str))
+def test_hosted_endpoint_refuses_an_event_for_a_local_only_feature(
+    app, client, event_log_directory, event
+):
+    """Comparison and remote sync do not exist hosted, so a hosted post is not real use."""
+    app.config["SERVER_MODE"] = True
+
+    response = _post_events(
+        client,
+        [
+            REPORT_LOADED_EVENT,
+            {EVENT_FIELD: event.value, "details": _LOCAL_ONLY_EVENT_DETAILS[event]},
+        ],
+    )
+
+    assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+    assert (
+        response.get_json()["error"] == "That event is not recorded under SERVER_MODE"
+    )
+    # Refused whole, like any batch carrying a bad event, so the session gains no log.
+    assert _event_log_id(client) is None
+
+
+@pytest.mark.parametrize("event", sorted(LOCAL_ONLY_CLIENT_EVENTS, key=str))
+def test_local_endpoint_records_an_event_for_a_local_only_feature(
+    client, event_log_directory, event
+):
+    response = _post_events(
+        client,
+        [{EVENT_FIELD: event.value, "details": _LOCAL_ONLY_EVENT_DETAILS[event]}],
+    )
+
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert len(read_event_log_lines(event_log_directory)) == 1

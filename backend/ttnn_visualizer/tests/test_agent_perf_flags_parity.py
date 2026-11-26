@@ -17,7 +17,7 @@ import math
 import random
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
-from ttnn_visualizer.agent import perf_flags
+from ttnn_visualizer.agent import perf_detail, perf_flags
 from ttnn_visualizer.csv_queries import DeviceLogMeta
 from ttnn_visualizer.tests.parity_golden import Golden
 
@@ -162,9 +162,23 @@ def _curated_flag_cases() -> List[Dict]:
         ),
         # Just under the threshold, where a rounded figure would read as at it.
         _flag_case(_rows({**_AT_UTILISATION, "pm_ideal_ns": "299.9999"})),
-        # The perf model's 1 ns placeholder reads as an ideal time to the port, as to the
-        # view; only the tool's own reading drops it.
-        _flag_case(_rows({"pm_ideal_ns": "1", "cores": "64"})),
+        # The perf model's 1 ns placeholder is an unknown utilisation, not a low one, in
+        # each cell JavaScript reads as exactly 1; a time either side of it is modelled.
+        _flag_case(
+            _rows(
+                {**_AT_UTILISATION, "pm_ideal_ns": "1"},
+                {**_AT_UTILISATION, "pm_ideal_ns": "1.0"},
+                {**_AT_UTILISATION, "pm_ideal_ns": " 1"},
+                {**_AT_UTILISATION, "pm_ideal_ns": "1e0"},
+                {**_AT_UTILISATION, "pm_ideal_ns": "1abc"},
+                {**_AT_UTILISATION, "pm_ideal_ns": "\ufeff1"},
+                {**_AT_UTILISATION, "pm_ideal_ns": 1},
+                {**_AT_UTILISATION, "pm_ideal_ns": "1", "bound_analysis": "none"},
+                {**_AT_UTILISATION, "pm_ideal_ns": "0.9999"},
+                {**_AT_UTILISATION, "pm_ideal_ns": "1.0004"},
+                {**_AT_UTILISATION, "pm_ideal_ns": "2"},
+            )
+        ),
         # Underutilised cores at a quarter of the capacity, below it, and the capacity
         # the row's own available cores or the device's maximum give.
         _flag_case(
@@ -425,6 +439,14 @@ def test_the_golden_exercises_every_branch():
         for case in golden["flagCases"]
         for row_flags in case["flags"]
     )
+    placeholder_utilisation = [
+        utilisation
+        for case in golden["flagCases"]
+        for row, utilisation in zip(case["rows"], case["utilisation"])
+        if perf_detail.is_unmodelled(perf_flags.typed_row(row).pm_ideal_ns)
+    ]
+    assert placeholder_utilisation
+    assert set(placeholder_utilisation) == {None}
 
 
 def test_the_max_core_cases_reach_every_source():

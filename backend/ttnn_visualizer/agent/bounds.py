@@ -8,19 +8,50 @@ and how much captured graph a tool reads at once.
 Shared rather than declared per module: `server` quotes the caps to an agent in every
 limit schema, so a second copy would eventually promise one cap and enforce another.
 #2012 The graph guard is shared because the link and the failure tools read the same
-column.
+column. The text cuts are shared so that an op code is cut the same way wherever a tool
+shows one, as are the other texts that go through them; #2290 tracks the rest. #2208
+A bound that leaves out or refuses a name counts its `answer_size`, the bytes an
+answer's budget counts. #2255 Those are the answer's bytes: the stdio wrapper writes
+non-ASCII as escapes, so a name can take up to three times as many on the wire.
 """
 
-from typing import TYPE_CHECKING, Any, Dict, Iterable, Optional
+import hashlib
+import json
+from functools import lru_cache
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 if TYPE_CHECKING:
     from ttnn_visualizer.queries import DatabaseQueries
+
+T = TypeVar("T")
 
 DEFAULT_LIMIT = 10
 MAX_LIMIT = 100
 # Rows with every `include` group run to about 3 KB each, so 100 of them would pass
 # a client's MCP output cap; 25 stay under Claude Code's 25k tokens.
 MAX_DETAILED_LIMIT = 25
+
+# An op code past this is the capture's text, not tt-perf-report's: the longest a tool
+# shows across 67 local captures is a signpost's 91 characters. #2208
+MAX_OP_CODE_CHARS = 256
+# 64 bits: a chance match between two texts cut alike is vanishingly unlikely, and a crafted
+# one fools only the display, since groups are kept by the whole text.
+CUT_DIGEST_CHARS = 16
+# An operation's name is cut here wherever a tool shows one.
+MAX_OPERATION_NAME_CHARS = 100
+# Enough for any number or handle list an agent means to pass.
+MAX_ECHOED_CHARS = 64
 
 
 # The captured graph a tool will read in one go. The largest real total across 85 local
@@ -65,6 +96,128 @@ def bounded(limit: Optional[int], maximum: int = MAX_LIMIT) -> int:
     return max(1, min(requested, maximum))
 
 
+def parsed_offset(offset: Optional[int]) -> int:
+    """Where a page starts in a ranking, 0 unless given. A page past the end is
+    `page_of`'s to clamp, since only the ranking knows its length.
+
+    A fraction or a boolean is refused rather than read as the whole number `int()`
+    makes of it, so an agent is never handed a page it did not ask for.
+    """
+    if offset is None:
+        return 0
+    if isinstance(offset, bool) or (
+        isinstance(offset, float) and not float(offset).is_integer()
+    ):
+        raise ValueError(f"offset must be a whole number, not {echoed(offset)}")
+    try:
+        start = int(offset)
+    except (TypeError, ValueError):
+        raise ValueError(
+            f"offset must be a whole number, not {echoed(offset)}"
+        ) from None
+    if start < 0:
+        raise ValueError(f"offset must be 0 or more, not {echoed(offset)}")
+    return start
+
+
+def page_of(
+    ranking: Sequence[T], start: int, count: int
+) -> Tuple[int, List[T], Optional[int]]:
+    """The page of `ranking` from `start`, a `parsed_offset`, with at most `count`
+    entries: where it starts, its entries and the next page's offset, None on the
+    last. An offset past the end starts at the end, so the page is empty and says
+    where."""
+    start = min(start, len(ranking))
+    page = list(ranking[start : start + count])
+    end = start + len(page)
+    return start, page, end if end < len(ranking) else None
+
+
+def cut_text(
+    field: str, text: object, limit: int, digest: bool = False
+) -> Dict[str, object]:
+    """`text` under `field`, cut at `limit` characters with its full length, and with
+    `digest` a digest of the whole, since two texts can share a cut and a length. A
+    BLOB a report keeps where text belongs is cut by its bytes."""
+    if not isinstance(text, (str, bytes)) or len(text) <= limit:
+        return {field: text}
+    fields: Dict[str, object] = {
+        field: text[:limit],
+        f"{field}_full_length": len(text),
+    }
+    if digest:
+        fields[f"{field}_digest"] = short_digest(text)
+    return fields
+
+
+def short_digest(text: Union[str, bytes]) -> str:
+    """The first `CUT_DIGEST_CHARS` hex digits of `text`'s SHA-256; a BLOB's bytes."""
+    # A lone surrogate is hashed as written rather than failing the answer.
+    encoded = text.encode("utf-8", "surrogatepass") if isinstance(text, str) else text
+    return hashlib.sha256(encoded).hexdigest()[:CUT_DIGEST_CHARS]
+
+
+def cut_op_code(field: str, op_code: object) -> Dict[str, object]:
+    """An op code as every tool shows one: past `MAX_OP_CODE_CHARS`, cut and told apart
+    by its digest from another cut alike."""
+    return cut_text(field, op_code, MAX_OP_CODE_CHARS, digest=True)
+
+
+def cut_operation_name(field: str, name: object) -> Dict[str, object]:
+    """An operation's name where a tool groups by it: past `MAX_OPERATION_NAME_CHARS`,
+    cut and told apart by its digest from another cut alike."""
+    return cut_text(field, name, MAX_OPERATION_NAME_CHARS, digest=True)
+
+
+def shown_op_code(op_code: object) -> str:
+    """An op code as a refusal quotes it: cut before it is quoted, so the cut and the
+    length it gives are the code's own."""
+    if isinstance(op_code, str) and len(op_code) > MAX_OP_CODE_CHARS:
+        return f"{op_code[:MAX_OP_CODE_CHARS]!r}... ({len(op_code)} characters)"
+    return repr(op_code)
+
+
+def shown_in_text(text: str, limit: int) -> str:
+    """`text` for a sentence: past `limit` characters, cut and said to be."""
+    if len(text) <= limit:
+        return text
+    return f"{text[:limit]}... ({len(text)} characters)"
+
+
+def echoed(value: object) -> str:
+    """`value` as a refusal names it, cut so an argument cannot fill the answer."""
+    return shown_in_text(repr(value), MAX_ECHOED_CHARS)
+
+
+def answer_size(name: str) -> int:
+    """The bytes a name takes in an answer: UTF-8, with JSON's escapes and the wire's
+    escape of a lone surrogate, so a control character is six and a wide one four."""
+    encoded = json.dumps(name, ensure_ascii=False).encode("utf-8", "backslashreplace")
+    return len(encoded) - 2
+
+
+def name_fits(name: str, limit: int) -> bool:
+    """Whether a name takes at most `limit` bytes of an answer; one longer than that in
+    characters never does, so it is not encoded."""
+    return len(name) <= limit and _encoded_fits(name, limit)
+
+
+# So a name a trace repeats on every row, kept or left out, is encoded once; only names
+# within a bound in characters reach it, so its entries stay small.
+@lru_cache(maxsize=1024)
+def _encoded_fits(name: str, limit: int) -> bool:
+    return answer_size(name) <= limit
+
+
+def require_name_fits(label: str, kind: str, name: str, limit: int) -> None:
+    """Refuse the argument `label`, naming a `kind`, when it is past `limit` bytes."""
+    if not name_fits(name, limit):
+        raise ValueError(
+            f"{label} is {answer_size(name)} bytes as an answer writes it; a {kind} "
+            f"name is at most {limit} bytes"
+        )
+
+
 def normalised_choice(value: Optional[str]) -> Optional[str]:
     """A choice as `require_choice` compares it: trimmed and upper-cased, None if blank."""
     return (value.strip().upper() or None) if isinstance(value, str) else value
@@ -79,13 +232,29 @@ def require_choice(kind: str, value: str, allowed: Iterable[str]) -> None:
 
 
 __all__ = [
+    "CUT_DIGEST_CHARS",
     "DEFAULT_LIMIT",
     "GraphTooLargeError",
     "MAX_CAPTURED_GRAPH_CHARS",
     "MAX_DETAILED_LIMIT",
+    "MAX_ECHOED_CHARS",
     "MAX_LIMIT",
+    "MAX_OPERATION_NAME_CHARS",
+    "MAX_OP_CODE_CHARS",
+    "answer_size",
     "bounded",
+    "cut_op_code",
+    "cut_operation_name",
+    "cut_text",
+    "echoed",
     "ensure_graph_readable",
+    "name_fits",
     "normalised_choice",
+    "page_of",
+    "parsed_offset",
     "require_choice",
+    "require_name_fits",
+    "short_digest",
+    "shown_in_text",
+    "shown_op_code",
 ]

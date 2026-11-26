@@ -119,6 +119,10 @@ export default function Performance() {
         () => comparisonData?.map((d) => d?.stacked_report ?? NO_COMPARISON_STACKED_ROWS) || [],
         [comparisonData],
     );
+    const hasHardwareCounters = useMemo(
+        () => !!data?.has_hardware_counters || !!comparisonData?.some((report) => report?.has_hardware_counters),
+        [data, comparisonData],
+    );
     // Reports asked for a signpost range they hold no signposts for come back whole,
     // so their figures are not the window's: name each one rather than let them pass
     // for it. A comparison report captured without signposts is the usual case.
@@ -427,6 +431,8 @@ export default function Performance() {
                             maxCores={maxCores}
                             comparisonMaxCores={comparisonMaxCores}
                             allocationFailureListings={allocationFailureListings}
+                            hasHardwareCounters={hasHardwareCounters}
+                            hasLinkedOperations={perfTableOpIdsMap.length > 0}
                         />
                     }
                 />

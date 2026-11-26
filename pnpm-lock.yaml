@@ -114,6 +114,9 @@ importers:
       '@testing-library/react':
         specifier: ^16.3.3
         version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@types/d3-format':
+        specifier: ^1.4.5
+        version: 1.4.5
       '@types/dagre':
         specifier: ^0.7.54
         version: 0.7.54
@@ -147,6 +150,9 @@ importers:
       classnames:
         specifier: ^2.5.1
         version: 2.5.1
+      d3-format:
+        specifier: ^1.4.5
+        version: 1.4.5
       eslint:
         specifier: ^10.13.0
         version: 10.13.0(supports-color@10.2.2)
@@ -1098,6 +1104,9 @@ packages:
 
   '@types/d3-drag@3.0.7':
     resolution: {integrity: sha512-HE3jVKlzU9AaMazNufooRJ5ZpWmLIoc90A37WU2JMmeq28w1FQqCZswHZ3xR+SuxYftzHq6WU6KJHvqxKzTxxQ==}
+
+  '@types/d3-format@1.4.5':
+    resolution: {integrity: sha512-mLxrC1MSWupOSncXN/HOlWUAAIffAEBaI4+PKy2uMPsKe4FNZlk7qrbTjmzJXITQQqBHivaks4Td18azgqnotA==}
 
   '@types/d3-interpolate@3.0.4':
     resolution: {integrity: sha512-mgLPETlrpVV1YRJIglr4Ez47g7Yxjl1lj7YKsiMCb27VJH9W8NVM6Bb9d8kkpG/uAQS5AmbA48q2IAolKKo1MA==}
@@ -5749,6 +5758,8 @@ snapshots:
   '@types/d3-drag@3.0.7':
     dependencies:
       '@types/d3-selection': 3.0.12
+
+  '@types/d3-format@1.4.5': {}
 
   '@types/d3-interpolate@3.0.4':
     dependencies:
