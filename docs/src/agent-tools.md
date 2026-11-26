@@ -728,16 +728,15 @@ stay of every row read, with `matching_row_count`, `matching_device_time` and
 shares and `rest`'s add up to `matching_device_time_share_percent` rather than 100. The
 `unlinked` and `no_trace` groups have no path, so a filter leaves them out, and a caveat
 says so. The answer echoes the filter as `path_contains`, cut past 300 characters with its
-`_full_length`. Over a
-range, the rows and shares are the window's, the unlinked group's `unlinked_by_reason`
-included, while `operation_link` carries `scope: whole_report`, as `top_ops`'s does, since
-its `matched_rows` counts the whole report. The tool refuses a handle whose two reports
-did not link, a capture that records no stack traces, and one where no linked operation's
-trace at the linked rank names a Python frame (a C++ backtrace, say), as the application
-then disables Source line, since every row would read `no_trace`; it reads the linked rank
-only. The first call reads every linked operation's stack trace, 500 at a time, or in one
-streamed pass past 2,000 operations, and keeps only each one's call site; later calls,
-over any range, reuse them.
+`_full_length`. Over a range, the rows and shares are the window's, the unlinked group's
+`unlinked_by_reason` included, while `operation_link` carries `scope: whole_report`, as
+`top_ops`'s does, since its `matched_rows` counts the whole report. The tool refuses a
+handle whose two reports did not link, a capture that records no stack traces, and one
+where no linked operation's trace at the linked rank names a Python frame (a C++
+backtrace, say), as the application then disables Source line, since every row would read
+`no_trace`; it reads the linked rank only. The first call reads every linked operation's
+stack trace, 500 at a time, or in one streamed pass past 2,000 operations, and keeps only
+each one's call site; later calls, over any range, reuse them.
 
 **`diff_reports` calls a move a change only when it is bigger than run-to-run noise.** Two
 captures of the same code never time an operation identically, so a diff that ranks every

@@ -992,6 +992,7 @@ def source_lines_by_call_site(
     stay of every row read, filtered or not. #2359 #2369 #2401"""
     count = bounded(limit, MAX_DETAILED_LIMIT)
     # As `op_configurations` reads name_contains: spaces alone filter nothing.
+    # A path_contains that is not a string fails instead of being refused (#2347).
     needle = (path_contains or "").strip().lower()
     requested_start = parsed_offset(offset)
     signposts = tools.SignpostRange.of(start_signpost, end_signpost)

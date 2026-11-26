@@ -35,7 +35,8 @@ PAGING = (
 
 PATH_FILTER = (
     "path_contains keeps only the line groups whose full path contains it, ignoring "
-    "case and the spaces around it (spaces alone filter nothing), and leaves out the unlinked and no_trace groups, which have no path. "
+    "case and the spaces around it (spaces alone filter nothing), and leaves out the "
+    "unlinked and no_trace groups, which have no path. "
     "group_count, offset, next_offset and rest then count the matching groups only, "
     "while device_time_total and every share stay of every row read, so a filtered "
     "first page's shares and rest's add up to matching_device_time_share_percent "

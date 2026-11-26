@@ -912,6 +912,7 @@ class TestPathFilter:
             "device_time_share_percent": tools.share_percent(7.0, 17.5),
             "row_count": 2,
         }
+        assert first["matching_row_count"] == 3
         assert first["matching_device_time"] == 16.0
         assert _by_location(second).keys() == {("/model/a/block.py", 10)}
         assert second["next_offset"] is None
