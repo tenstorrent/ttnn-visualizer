@@ -73,12 +73,14 @@ $container-border-width: 1px;
         padding: 6px 0;
     }
 
+    // Only the stack trace balances its lines: in the source viewer, balance breaks a line midway,
+    // even inside a string.
     .formatted-code .code-output {
         text-wrap: balance;
     }
 
     // Long lines in the source viewer wrap at the edge: scrolling sideways would take the line
-    // numbers along, and the stack trace's balanced wrap breaks a line midway, even inside a string.
+    // numbers along.
     .source-file-code {
         margin: 0;
         white-space: pre-wrap;
