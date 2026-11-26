@@ -23,6 +23,7 @@ import pytest
 from ttnn_visualizer.csv_queries import NPEQueries
 from ttnn_visualizer.decorators import (
     ACTIVE_MEMORY_REPORT_HEADER,
+    LOCAL_ONLY_REFUSAL,
     is_local_only,
     local_only,
     with_instance,
@@ -242,6 +243,9 @@ def test_local_only_marker_survives_a_decorator_stacked_above():
 # if the marker stops reaching the registered view.
 KNOWN_LOCAL_ONLY_RULES = {
     "/api/instance/local-paths",
+    # `@with_instance` over `@local_only` over `@timer`: the stack most gated
+    # report routes use.
+    "/api/npe/summary",
     "/api/profiler/<profiler_name>",
     "/api/remote/ssh-config-hosts",
     "/api/remote/sync",
@@ -263,13 +267,24 @@ def test_local_only_routes_are_read_off_the_url_map(app):
     gated = {rule for rule, _ in _local_only_routes(app)}
 
     assert KNOWN_LOCAL_ONLY_RULES <= gated
-    assert f"{app.config['BASE_PATH']}api/up" not in gated
+    assert "/api/up" not in gated
+
+
+def _refused_by_local_only(response):
+    return response.status_code == HTTPStatus.FORBIDDEN and response.get_json() == {
+        "error": LOCAL_ONLY_REFUSAL
+    }
 
 
 def test_every_local_only_route_refuses_under_server_mode(app, client):
     """The `app` fixture runs in the hosted posture, where each gated route must
     answer 403 before reading its body or path parameters. Derived from the URL
-    map, so a route gated later is audited without being listed here."""
+    map, so a route gated later is audited without being listed here.
+
+    The refusal text is checked as well as the status, because `@with_instance`
+    sits above `@local_only` on most of these routes and answers its own 403 for
+    an instance another session owns. A status-only check would let such a route
+    pass with its `@local_only` gone."""
     assert app.config["SERVER_MODE"]
 
     not_refused = []
@@ -278,7 +293,22 @@ def test_every_local_only_route_refuses_under_server_mode(app, client):
         response = client.open(
             path, method=method, query_string={"instanceId": INSTANCE_ID}
         )
-        if response.status_code != HTTPStatus.FORBIDDEN:
-            not_refused.append(f"{method} {rule} -> {response.status_code}")
+        if not _refused_by_local_only(response):
+            not_refused.append(
+                f"{method} {rule} -> {response.status_code} {response.get_data(as_text=True)}"
+            )
 
     assert not_refused == []
+
+
+def test_the_audit_does_not_count_an_ownership_refusal(app):
+    """A 403 from `@with_instance` for another session's instance must not pass
+    for the `@local_only` refusal, or the audit above could not tell them apart."""
+    owner, other = app.test_client(), app.test_client()
+    query = {"instanceId": INSTANCE_ID}
+
+    assert _refused_by_local_only(owner.get("/api/npe/summary", query_string=query))
+
+    response = other.get("/api/npe/summary", query_string=query)
+    assert response.status_code == HTTPStatus.FORBIDDEN
+    assert not _refused_by_local_only(response)

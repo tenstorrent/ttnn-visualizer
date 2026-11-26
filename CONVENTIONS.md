@@ -1381,7 +1381,7 @@ def delete_profiler_report(profiler_name, instance: Instance):
 
 - `@api.route` outermost (Flask registers the URL).
 - `@with_instance` (from `decorators.py`) resolves the `instanceId` query param into an `instance` kwarg and updates the session's report list. Always present on `/api/*` endpoints.
-- `@local_only` (from `decorators.py`), when needed, aborts with 403 in `SERVER_MODE`. Sits **below** `@with_instance` so the 403 fires after instance resolution. It also marks the view (`is_local_only(view)`), and `functools.wraps` carries the marker up the stack, so the gated set can be read off `app.url_map`: `test_every_local_only_route_refuses_under_server_mode` audits every marked route that way, so a newly gated route needs no test entry of its own.
+- `@local_only` (from `decorators.py`), when needed, aborts with 403 in `SERVER_MODE`. Sits **below** `@with_instance` so the 403 fires after instance resolution. It also marks the view (`is_local_only(view)`), and `functools.wraps` carries the marker up the stack, so the gated set can be read off `app.url_map`: the route audit in `test_decorators.py` checks every marked route answers the `@local_only` refusal, so a newly gated route needs no test entry of its own. A decorator stacked above `@local_only` must use `functools.wraps`, or its route drops out of the audit. The audit proves marked routes refuse; it cannot find a route that should be gated and isn't, nor one that checks `SERVER_MODE` inline, so deciding to gate a route is still a review question.
 - `@timer` innermost — wraps just the view body for timing. Used selectively on hot-path read endpoints; not present on every route.
 
 ### Error responses go through helpers, not hand-rolled `jsonify`

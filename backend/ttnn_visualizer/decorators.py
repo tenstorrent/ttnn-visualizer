@@ -179,6 +179,7 @@ def with_instance(func):
 def remote_exception_handler(func):
     from flask import current_app
 
+    @wraps(func)
     def remote_handler(*args, **kwargs):
         if kwargs.get("connection", None):
             connection = kwargs["connection"]
@@ -270,29 +271,36 @@ def remote_exception_handler(func):
 
 # Attribute ``local_only`` sets on the view it returns. ``functools.wraps`` copies a
 # function's ``__dict__`` onto its wrapper, so the marker survives every decorator
-# stacked above (``@with_instance`` included) and is readable on the view function
-# Flask registers, which is what lets the gated set be read off ``app.url_map``.
-LOCAL_ONLY_MARKER = "local_only"
+# stacked above that uses it (``@with_instance`` included) and is readable on the
+# view function Flask registers, which is what lets the gated set be read off
+# ``app.url_map``. Tooling outside this repository reads the attribute by this
+# literal name, so renaming it breaks that tooling without failing a test here.
+_LOCAL_ONLY_MARKER = "local_only"
+
+# The 403 description ``local_only`` refuses with. A route can also answer 403 for
+# other reasons (``with_instance`` refuses an instance another session owns), so
+# anything asserting the gate held checks for this text, not the status alone.
+LOCAL_ONLY_REFUSAL = "Endpoint not accessible"
 
 
-def local_only(f):
+def local_only(f: Callable[..., Any]) -> Callable[..., Any]:
     """Refuse the route with 403 under ``SERVER_MODE``, and mark it as gated."""
     from flask import current_app
 
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if current_app.config["SERVER_MODE"]:
-            abort(403, description="Endpoint not accessible")
+            abort(403, description=LOCAL_ONLY_REFUSAL)
 
         return f(*args, **kwargs)
 
-    setattr(decorated_function, LOCAL_ONLY_MARKER, True)
+    setattr(decorated_function, _LOCAL_ONLY_MARKER, True)
     return decorated_function
 
 
 def is_local_only(view: Callable[..., Any]) -> bool:
     """Whether ``view`` went through ``@local_only``."""
-    return getattr(view, LOCAL_ONLY_MARKER, False) is True
+    return bool(getattr(view, _LOCAL_ONLY_MARKER, False))
 
 
 DIRECT_REPORT_MODE_DELETE_REFUSAL = (
