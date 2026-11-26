@@ -49,6 +49,12 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
     const previousOperation = usePreviousOperation(operationId);
     const nextOperation = useNextOperation(operationId);
 
+    // An empty trace counts as none, as in `OperationErrorTraces`. Without one there is no Stack
+    // Trace tab, so a tab chosen on a previous operation (this stays mounted across prev/next)
+    // falls back to the error details rather than selecting a tab that is not there.
+    const errorStackTrace = operation?.error?.stack_trace || null;
+    const activeErrorTabId = errorStackTrace ? selectedTabId : TAB_IDS.ERROR;
+
     // Both tabs share the expanded state, so a trace opened after the message was expanded
     // mounts expanded, with no Expand click of its own to record it. `Tabs` also calls this
     // for the tab already open, and a trace that fits its preview has nothing to expand, so
@@ -56,9 +62,9 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
     const handleErrorTabChange = (tabId: TabId) => {
         const isOpeningExpandedTrace =
             tabId === TAB_IDS.STACK_TRACE &&
-            selectedTabId !== TAB_IDS.STACK_TRACE &&
+            activeErrorTabId !== TAB_IDS.STACK_TRACE &&
             isErrorExpanded &&
-            canStackTraceExpand(operation?.error?.stack_trace ?? '');
+            canStackTraceExpand(errorStackTrace ?? '');
 
         setSelectedTabId(tabId);
 
@@ -190,7 +196,7 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
             >
                 {operation?.error && (
                     <Tabs
-                        selectedTabId={selectedTabId}
+                        selectedTabId={activeErrorTabId}
                         onChange={handleErrorTabChange}
                         size={Size.LARGE}
                         id='error-details-tabs'
@@ -214,23 +220,25 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
                             }
                         />
 
-                        <Tab
-                            id={TAB_IDS.STACK_TRACE}
-                            title='Stack Trace'
-                            icon={IconNames.APPLICATION}
-                            panel={
-                                <StackTrace
-                                    stackTrace={operation.error.stack_trace}
-                                    language={StackTraceLanguage.CPP}
-                                    intent={Intent.DANGER}
-                                    isInitiallyExpanded={isErrorExpanded}
-                                    onExpandChange={(state) => setIsErrorExpanded(!state)}
-                                    hideSourceButton
-                                    isInline
-                                    recordsExpansion
-                                />
-                            }
-                        />
+                        {errorStackTrace && (
+                            <Tab
+                                id={TAB_IDS.STACK_TRACE}
+                                title='Stack Trace'
+                                icon={IconNames.APPLICATION}
+                                panel={
+                                    <StackTrace
+                                        stackTrace={errorStackTrace}
+                                        language={StackTraceLanguage.CPP}
+                                        intent={Intent.DANGER}
+                                        isInitiallyExpanded={isErrorExpanded}
+                                        onExpandChange={(state) => setIsErrorExpanded(!state)}
+                                        hideSourceButton
+                                        isInline
+                                        recordsExpansion
+                                    />
+                                }
+                            />
+                        )}
                     </Tabs>
                 )}
             </Overlay>
