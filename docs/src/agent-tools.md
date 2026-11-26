@@ -115,7 +115,7 @@ another rank's operation under the same id.
 | `late_deallocations` | Tensors still allocated after their last use, by Buffer Summary's late-deallocation rule (L1, as the app shows it, or DRAM), grouped by the call site of that use: how many holds each has, how they ended, and the bytes per bank they held over the operations held. |
 | `noc_congestion` | How congested the NoC links were in a tt-npe trace: the trace's own run summary, the highest demand any single link reached and when, bursts of congested timesteps ranked by peak, and the links with the highest mean demand. |
 | `critical_path` | The longest chain of cumulative device time through the operation graph, source to sink, with each operation's device time, the chain's total and share of the report's, and how many of its operations have no device time. Needs a linked performance report. |
-| `source_lines` | Where in the model code the device time went: performance rows rolled up by the call site of their linked memory report operation, as the performance view's stacked table groups by Source line — each line's file, function, summed device time and share, row count, top op codes and operation ids, over the whole report or a signpost range, a page at a time. Needs a linked performance report and a capture that records stack traces. |
+| `source_lines` | Where in the model code the device time went: performance rows rolled up by the call site of their linked memory report operation, as the performance view's stacked table groups by Source line — each line's file, function, summed device time and share, row count, top op codes and operation ids, over the whole report or a signpost range, a page at a time, optionally scoped to call sites whose path contains a text. Needs a linked performance report and a capture that records stack traces. |
 | `subgraph_between` | The operations, tensor edges and tensors on every path from one operation to another, each tensor once with its shape, dtype, layout, buffer type and memory layout, so a block can be read without walking it one tensor at a time. |
 
 `top_ops`, `op_breakdown`, `program_cache`, `zone_timings`, `zone_intervals`, `core_spread`,
@@ -718,7 +718,17 @@ with how many it `returned`; `next_offset` starts the next page and is null on t
 so every call site can be reached, and an `offset` past the end returns none. `limit`
 caps the groups at 25 a page, and `rest` sums only the groups after the page, so the
 first page's shares and `rest`'s add up to 100, while a later page's fall short by the
-groups before it, which are in neither the page nor `rest`. Over a
+groups before it, which are in neither the page nor `rest`.
+`path_contains` keeps only the call sites whose full path contains the text, ignoring case
+and the spaces around it (spaces alone filter nothing), so one module's lines can be read
+without paging through the whole ranking. `group_count`, `offset`, `next_offset` and
+`rest` then count the matching groups only, while `device_time_total` and every share
+stay of every row read, with `matching_row_count`, `matching_device_time` and
+`matching_device_time_share_percent` for the matching groups: a filtered first page's
+shares and `rest`'s add up to `matching_device_time_share_percent` rather than 100. The
+`unlinked` and `no_trace` groups have no path, so a filter leaves them out, and a caveat
+says so. The answer echoes the filter as `path_contains`, cut past 300 characters with its
+`_full_length`. Over a
 range, the rows and shares are the window's, the unlinked group's `unlinked_by_reason`
 included, while `operation_link` carries `scope: whole_report`, as `top_ops`'s does, since
 its `matched_rows` counts the whole report. The tool refuses a handle whose two reports

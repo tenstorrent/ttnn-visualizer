@@ -809,3 +809,162 @@ class TestSourceLines:
 
         assert tool["schema"]["properties"]["offset"]["type"] == "integer"
         assert source_lines.PAGING in tool["description"]
+
+    def test_the_server_offers_path_contains_and_describes_it(self, traced):
+        registry, handle = traced()
+
+        tool = server._tool_table(registry)["source_lines"]
+        result = tool["handler"]({"handle": handle, "path_contains": "/model/a/"})
+
+        assert tool["schema"]["properties"]["path_contains"]["type"] == "string"
+        assert source_lines.PATH_FILTER in tool["description"]
+        assert source_lines.PATH_FILTER in source_lines.SOURCE_LINES_NOTE
+        assert result["group_count"] == 1
+
+
+class TestPathFilter:
+    """`path_contains` scopes the groups to a path, the shares staying of every row
+    read. #2401"""
+
+    def test_it_keeps_the_matching_lines_ignoring_case_and_spaces(self, traced):
+        registry, handle = traced()
+
+        result = linking.source_lines_by_call_site(
+            registry, handle, path_contains=" /MODEL/A/ "
+        )
+
+        assert _by_location(result).keys() == {("/model/a/block.py", 10)}
+        assert result["group_count"] == 1
+        assert result["path_contains"] == " /MODEL/A/ "
+
+    def test_the_shares_stay_of_every_row_read(self, traced):
+        registry, handle = traced()
+
+        result = linking.source_lines_by_call_site(
+            registry, handle, path_contains="/model/a/"
+        )
+
+        [group] = result["groups"]
+        assert result["device_time_total"] == 17.5
+        assert result["row_count"] == 5
+        assert group["device_time_share_percent"] == tools.share_percent(7.0, 17.5)
+        assert result["matching_row_count"] == 2
+        assert result["matching_device_time"] == 7.0
+        assert result["matching_device_time_share_percent"] == tools.share_percent(
+            7.0, 17.5
+        )
+
+    def test_it_leaves_out_the_pathless_groups_and_says_so(self, traced):
+        traces = {key: value for key, value in _TRACES.items() if key != 3}
+        registry, handle = traced(traces=traces)
+
+        result = linking.source_lines_by_call_site(
+            registry, handle, path_contains="block.py"
+        )
+
+        assert [group["kind"] for group in result["groups"]] == ["line"]
+        assert (
+            "path_contains leaves out the no_trace group (1 row) and the unlinked "
+            "group (2 rows), which have no path"
+        ) in result["caveat"]
+        # The untraced caveat still counts every row read, not the matching ones.
+        assert "1 linked operations, launching 1 rows" in result["caveat"]
+
+    def test_a_filter_over_a_report_with_only_lines_adds_no_caveat(self, traced):
+        rows = [row for row in _ROWS if row["id"] not in ("4", "7")]
+        registry, handle = traced(rows=rows)
+
+        result = linking.source_lines_by_call_site(
+            registry, handle, path_contains="block.py"
+        )
+
+        assert "caveat" not in result
+        assert result["group_count"] == 2
+
+    def test_it_pages_and_rests_over_the_matching_groups(self, traced):
+        registry, handle = traced()
+
+        first = linking.source_lines_by_call_site(
+            registry, handle, path_contains="block.py", limit=1
+        )
+        second = linking.source_lines_by_call_site(
+            registry, handle, path_contains="block.py", limit=1, offset=1
+        )
+
+        assert first["group_count"] == 2
+        assert (first["returned"], first["next_offset"]) == (1, 1)
+        # The unlinked group is neither a page's nor rest's.
+        assert first["rest"] == {
+            "group_count": 1,
+            "device_time": 7.0,
+            "device_time_share_percent": tools.share_percent(7.0, 17.5),
+            "row_count": 2,
+        }
+        assert first["matching_device_time"] == 16.0
+        assert _by_location(second).keys() == {("/model/a/block.py", 10)}
+        assert second["next_offset"] is None
+        assert "rest" not in second
+
+    def test_a_filter_matching_nothing_returns_no_groups(self, traced):
+        registry, handle = traced()
+
+        result = linking.source_lines_by_call_site(
+            registry, handle, path_contains="/elsewhere/"
+        )
+
+        assert (result["group_count"], result["groups"]) == (0, [])
+        assert result["next_offset"] is None
+        assert "rest" not in result
+        assert (result["matching_row_count"], result["matching_device_time"]) == (
+            0,
+            0.0,
+        )
+        assert result["device_time_total"] == 17.5
+
+    def test_spaces_alone_filter_nothing(self, traced):
+        registry, handle = traced()
+
+        unfiltered = linking.source_lines_by_call_site(registry, handle)
+        spaces = linking.source_lines_by_call_site(registry, handle, path_contains="  ")
+
+        assert unfiltered.pop("path_contains") is None
+        assert spaces.pop("path_contains") == "  "
+        assert spaces == unfiltered
+        assert "matching_row_count" not in spaces
+
+    def test_a_long_filter_is_echoed_cut(self, traced):
+        registry, handle = traced()
+        needle = "x" * (failures.MAX_CALL_SITE_TEXT_CHARS + 1)
+
+        result = linking.source_lines_by_call_site(
+            registry, handle, path_contains=needle
+        )
+
+        assert result["path_contains"] == needle[: failures.MAX_CALL_SITE_TEXT_CHARS]
+        assert result["path_contains_full_length"] == len(needle)
+
+    def test_it_filters_a_signpost_range_by_the_window(self, traced):
+        registry, handle = traced()
+
+        result = linking.source_lines_by_call_site(
+            registry, handle, start_signpost="signpost-start", path_contains="/a/"
+        )
+
+        [group] = result["groups"]
+        # The window drops the matmul row, so a's 7.0 is 4.0, of the window's 14.5.
+        assert group["device_time"] == 4.0
+        assert result["device_time_total"] == 14.5
+        assert result["matching_device_time_share_percent"] == tools.share_percent(
+            4.0, 14.5
+        )
+
+    def test_it_matches_the_whole_path_not_the_cut_one(self, traced):
+        deep = "/" + "d" * failures.MAX_CALL_SITE_TEXT_CHARS + "/tail/block.py"
+        registry, handle = traced(traces={**_TRACES, 3: _trace(deep, 10, "mlp")})
+
+        result = linking.source_lines_by_call_site(
+            registry, handle, path_contains="/tail/"
+        )
+
+        [group] = result["groups"]
+        assert group["call_site"]["file_full_length"] == len(deep)

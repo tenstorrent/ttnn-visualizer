@@ -50,6 +50,7 @@ from ttnn_visualizer.agent.bounds import (
     MAX_LIMIT,
     GraphTooLargeError,
     bounded,
+    cut_text,
     ensure_graph_readable,
     page_of,
     parsed_offset,
@@ -983,11 +984,15 @@ def source_lines_by_call_site(
     end_signpost: Optional[str] = None,
     rank: Optional[int] = None,
     offset: Optional[int] = None,
+    path_contains: Optional[str] = None,
 ) -> Dict[str, object]:
     """The performance rows rolled up by the call site of their linked operation, as
-    the stacked table's Source line grouping rolls them up, a page from `offset`.
-    #2359 #2369"""
+    the stacked table's Source line grouping rolls them up, a page from `offset`,
+    narrowed by `path_contains` to the call sites whose path contains it. The shares
+    stay of every row read, filtered or not. #2359 #2369 #2401"""
     count = bounded(limit, MAX_DETAILED_LIMIT)
+    # As `op_configurations` reads name_contains: spaces alone filter nothing.
+    needle = (path_contains or "").strip().lower()
     requested_start = parsed_offset(offset)
     signposts = tools.SignpostRange.of(start_signpost, end_signpost)
     # First, so a range the report lacks is refused before any trace is read.
@@ -1042,13 +1047,28 @@ def source_lines_by_call_site(
     def share(device_time: float) -> Optional[float]:
         return tools.share_percent(device_time, device_time_total)
 
-    start, shown, next_offset = page_of(groups, requested_start, count)
+    # Narrowed after the grouping, so the shares and the no_trace caveat below still
+    # read every group. Matched on the whole path, not the cut an answer shows.
+    matching = (
+        [
+            group
+            for group in groups
+            if group.kind is source_lines.SourceLineKind.LINE
+            and needle in str((group.call_site or {}).get("file", "")).lower()
+        ]
+        if needle
+        else groups
+    )
+    start, shown, next_offset = page_of(matching, requested_start, count)
     # Only the groups after the page: those before it were an earlier page's.
-    rest = groups[start + len(shown) :]
+    rest = matching[start + len(shown) :]
     result: Dict[str, object] = {
         "handle": handle,
         "row_count": len(rows),
-        "group_count": len(groups),
+        **cut_text(
+            "path_contains", path_contains or None, failures.MAX_CALL_SITE_TEXT_CHARS
+        ),
+        "group_count": len(matching),
         "offset": start,
         "returned": len(shown),
         "next_offset": next_offset,
@@ -1064,6 +1084,11 @@ def source_lines_by_call_site(
         "note": source_lines.SOURCE_LINES_NOTE,
         **scope.as_response(),
     }
+    if needle:
+        matching_time = sum(group.device_time for group in matching)
+        result["matching_row_count"] = sum(group.row_count for group in matching)
+        result["matching_device_time"] = report_diff.as_answered(matching_time)
+        result["matching_device_time_share_percent"] = share(matching_time)
     if rest:
         rest_time = sum(group.device_time for group in rest)
         result["rest"] = {
@@ -1073,6 +1098,10 @@ def source_lines_by_call_site(
             "row_count": sum(group.row_count for group in rest),
         }
     caveats: List[str] = []
+    if needle:
+        left_out = _pathless_groups_left_out(groups)
+        if left_out:
+            caveats.append(left_out)
     untraced = next(
         (
             group
@@ -1099,6 +1128,26 @@ def source_lines_by_call_site(
     )
     result["operation_link"] = link_response
     return result
+
+
+def _pathless_groups_left_out(
+    groups: Sequence[source_lines.SourceLineGroup],
+) -> Optional[str]:
+    """What a path filter leaves out for having no path, or None when it leaves out
+    nothing that way."""
+    left_out = [
+        f"the {group.kind.value} group ({group.row_count} "
+        f"{'row' if group.row_count == 1 else 'rows'})"
+        for group in groups
+        if group.kind is not source_lines.SourceLineKind.LINE
+    ]
+    if not left_out:
+        return None
+    return (
+        f"path_contains leaves out {' and '.join(left_out)}, which "
+        f"{'have' if len(left_out) > 1 else 'has'} no path; device_time_total and "
+        "every share are still of every row read."
+    )
 
 
 PROGRAM_CACHE_LINK_NOTE = (
