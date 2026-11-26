@@ -51,7 +51,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
 
     l1_sizes: number[];
 
-    stack_trace: string;
+    stack_trace: string | null;
 
     tensorList: Tensor[];
 

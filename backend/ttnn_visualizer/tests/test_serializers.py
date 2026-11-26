@@ -560,6 +560,19 @@ class TestSerializers(unittest.TestCase):
         self.assertEqual(result["stack_trace"], "trace text")
         self.assertEqual(result["stack_trace_source_file_id"], 7)
 
+    def test_serialize_operations_sends_null_for_an_operation_without_a_trace(self):
+        result = serialize_operations(
+            [], [], [Operation(1, "op1", 0.5)], [], [], [], [], [], [], []
+        )
+        self.assertIsNone(result[0]["stack_trace"])
+
+    def test_serialize_operation_sends_null_for_an_operation_without_a_trace(self):
+        """The same "no trace" as the list sends. #2429"""
+        result = serialize_operation(
+            [], [], Operation(1, "op1", 0.5), [], [], None, [], [], [], [], [], []
+        )
+        self.assertIsNone(result["stack_trace"])
+
     def test_serialize_buffer_chunks(self):
         chunks = [
             BufferChunk(

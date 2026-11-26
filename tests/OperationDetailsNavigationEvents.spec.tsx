@@ -6,6 +6,9 @@
  * Pins the usage events of the operation error overlay: opening it records nothing, so a
  * stack trace is counted once, by the trace itself when it is expanded, or on switching to
  * it when it opens already expanded.
+ *
+ * Also pins its tabs: an error with no stack trace has no Stack Trace tab, and the tab chosen
+ * on a traced operation falls back to the error details while it is absent.
  */
 
 import '@testing-library/jest-dom/vitest';
@@ -17,7 +20,7 @@ import { TestProviders } from './helpers/TestProviders';
 
 const { recordEvent, errorTrace } = vi.hoisted(() => ({
     recordEvent: vi.fn(),
-    errorTrace: { stackTrace: '' },
+    errorTrace: { stackTrace: '' as string | null },
 }));
 
 const LONG_TRACE = 'frame 0\nframe 1\nframe 2';
@@ -44,15 +47,17 @@ vi.mock('../src/hooks/useAPI', () => ({
     useNextOperation: () => undefined,
 }));
 
-const renderNavigation = () =>
-    render(
-        <TestProviders>
-            <OperationDetailsNavigation
-                operationId={OPERATION_ID}
-                isLoading={false}
-            />
-        </TestProviders>,
-    );
+// A fresh element each call, so `rerender` re-renders rather than bailing out on identical props.
+const navigationTree = () => (
+    <TestProviders>
+        <OperationDetailsNavigation
+            operationId={OPERATION_ID}
+            isLoading={false}
+        />
+    </TestProviders>
+);
+
+const renderNavigation = () => render(navigationTree());
 
 beforeEach(() => {
     recordEvent.mockClear();
@@ -125,11 +130,8 @@ describe('OperationDetailsNavigation error overlay events', () => {
         expect(recordEvent).toHaveBeenCalledExactlyOnceWith(STACK_TRACE_DRILLDOWN);
     });
 
-    it.each([
-        ['empty', ''],
-        ['short enough for the preview', 'frame 0\nframe 1'],
-    ])('records nothing on switching to a trace that is %s, which has nothing to expand', async (_case, trace) => {
-        errorTrace.stackTrace = trace;
+    it('records nothing on switching to a trace short enough for the preview, which has nothing to expand', async () => {
+        errorTrace.stackTrace = 'frame 0\nframe 1';
         renderNavigation();
 
         await openTraceAfterExpandingMessage();
@@ -145,5 +147,43 @@ describe('OperationDetailsNavigation error overlay events', () => {
         expect(await screen.findByRole('tab', { name: 'Stack Trace', selected: true })).toBeInTheDocument();
 
         expect(recordEvent).not.toHaveBeenCalled();
+    });
+});
+
+describe('OperationDetailsNavigation error overlay without a stack trace', () => {
+    it.each([
+        ['null', null],
+        ['empty', ''],
+    ])('shows only the error details when the trace is %s', async (_case, trace) => {
+        errorTrace.stackTrace = trace;
+        renderNavigation();
+
+        fireEvent.click(screen.getByRole('button', { name: 'View operation error' }));
+
+        expect(await screen.findByRole('tab', { name: 'Error details', selected: true })).toBeInTheDocument();
+        expect(screen.getByText(/boom/)).toBeInTheDocument();
+        expect(screen.queryByRole('tab', { name: 'Stack Trace' })).not.toBeInTheDocument();
+    });
+
+    it('falls back to the error details while the Stack Trace tab it had open has no trace, then restores it', async () => {
+        const { rerender } = renderNavigation();
+
+        fireEvent.click(screen.getByRole('button', { name: 'View operation error' }));
+        fireEvent.click(await screen.findByRole('tab', { name: 'Stack Trace' }));
+        expect(await screen.findByRole('tab', { name: 'Stack Trace', selected: true })).toBeInTheDocument();
+
+        // The component stays mounted across prev/next, so its chosen tab outlives the operation.
+        errorTrace.stackTrace = null;
+        rerender(navigationTree());
+
+        expect(await screen.findByRole('tab', { name: 'Error details', selected: true })).toBeInTheDocument();
+        expect(screen.getByText(/boom/)).toBeInTheDocument();
+        expect(screen.queryByRole('tab', { name: 'Stack Trace' })).not.toBeInTheDocument();
+
+        // The fallback is derived, not stored, so a traced operation reopens on the user's tab.
+        errorTrace.stackTrace = LONG_TRACE;
+        rerender(navigationTree());
+
+        expect(await screen.findByRole('tab', { name: 'Stack Trace', selected: true })).toBeInTheDocument();
     });
 });

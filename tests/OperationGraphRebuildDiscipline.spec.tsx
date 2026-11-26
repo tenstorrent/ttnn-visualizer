@@ -351,6 +351,9 @@ const operation = (
         outputs: [{ id: id * 10, shape: 'Shape([1, 32])', consumers }],
         inputs: [],
         arguments: [],
+        // The operations endpoint always sends both keys; the info panel reads them.
+        stack_trace: null,
+        stack_trace_source_file_id: null,
     }) as unknown as OperationDescription;
 
 // A chain, so every op is connected and survives the builder's isolated-op drop.

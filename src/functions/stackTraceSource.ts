@@ -51,14 +51,8 @@ const toStackTraceFrame = (match: RegExpExecArray, index: number, lineIndex: num
 
 export const splitStackTraceLines = (stackTrace: string): string[] => stackTrace.split(LINE_BREAK_REGEX);
 
-// `stackTrace` is typed `string`, but the operations endpoint sends `null` for an operation
-// with no captured trace, which reads as no frames rather than a crash in render.
 export const parseStackTraceFrames = (stackTrace: string): StackTraceFrame[] => {
     const frames: StackTraceFrame[] = [];
-
-    if (typeof stackTrace !== 'string') {
-        return frames;
-    }
 
     splitStackTraceLines(stackTrace).forEach((text, lineIndex) => {
         const match = TRACE_FRAME_REGEX.exec(text);
@@ -72,13 +66,13 @@ export const parseStackTraceFrames = (stackTrace: string): StackTraceFrame[] => 
 };
 
 /**
- * Frame 0, the `ttnn.<op>` call site, or `null` when the trace has no frame. The same frame
- * `parseStackTraceFrames(stackTrace)[0]` returns, but read one line at a time and stopping
- * there: traces average about 7 KB, and grouping a performance report by call site reads every
- * operation's, so splitting and matching every line of each would be wasted.
+ * Frame 0, the `ttnn.<op>` call site, or `null` when there is no trace or it has no frame. The
+ * same frame `parseStackTraceFrames(stackTrace)[0]` returns, but read one line at a time and
+ * stopping there: traces average about 7 KB, and grouping a performance report by call site reads
+ * every operation's, so splitting and matching every line of each would be wasted.
  */
-export const getCallSiteFrame = (stackTrace: string): StackTraceFrame | null => {
-    if (typeof stackTrace !== 'string') {
+export const getCallSiteFrame = (stackTrace: string | null): StackTraceFrame | null => {
+    if (stackTrace === null) {
         return null;
     }
 
@@ -116,11 +110,11 @@ export const formatFrameLabel = (frame: Pick<StackTraceFrame, 'file' | 'line'>):
 };
 
 /**
- * `formatFrameLabel` of the call site, the frame the Source button opens, or `''` when the trace
- * has no frame. Read through `getCallSiteFrame` so the label can never name a different frame
- * from the one `extractOperationSourceData` links to.
+ * `formatFrameLabel` of the call site, the frame the Source button opens, or `''` when there is
+ * no trace or it has no frame. Read through `getCallSiteFrame` so the label can never name a
+ * different frame from the one `extractOperationSourceData` links to.
  */
-export const getOperationFileIdentifier = (stackTrace: string): string => {
+export const getOperationFileIdentifier = (stackTrace: string | null): string => {
     const callSite = getCallSiteFrame(stackTrace);
 
     return callSite ? formatFrameLabel(callSite) : '';

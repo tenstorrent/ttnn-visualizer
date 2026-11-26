@@ -5,10 +5,10 @@
 """Performance rows rolled up by the model-code line that launched them. #2359
 
 A port of `getSourceLineGroups` in `src/functions/perfSourceLines.ts`, the stacked
-table's Source line grouping; mirror a change there. The rows are the canonical
-report's, whose devices are merged, so there is no per-device key. Each row's
-operation and each operation's call site come in from `linking`, which owns the join,
-so this module reads neither report.
+table's Source line grouping; mirror a change there, then `pnpm run agent:parity-golden`
+(#2370). The rows are the canonical report's, whose devices are merged, so there is no
+per-device key. Each row's operation and each operation's call site come in from
+`linking`, which owns the join, so this module reads neither report.
 """
 
 from collections import Counter, defaultdict
@@ -33,6 +33,16 @@ PAGING = (
     "the groups before it, which are in neither the page nor rest."
 )
 
+PATH_FILTER = (
+    "path_contains keeps only the line groups whose full path contains it, ignoring "
+    "case and the spaces around it (spaces alone filter nothing), and leaves out the "
+    "unlinked and no_trace groups, which have no path. "
+    "group_count, offset, next_offset and rest then count the matching groups only, "
+    "while device_time_total and every share stay of every row read, so a filtered "
+    "first page's shares and rest's add up to matching_device_time_share_percent "
+    "rather than 100."
+)
+
 SOURCE_LINES_NOTE = (
     "Each performance row is filed under frame 0 of its linked memory report "
     "operation's stack trace, the call site operation_provenance gives, keyed by full "
@@ -54,7 +64,10 @@ SOURCE_LINES_NOTE = (
     "code point, where the app compares them by locale: two paths can swap when they "
     "differ in case or punctuation (_, - or a dot), and of tied op codes so differing, "
     "a different 3 can be listed. With no countable device time at all, every "
-    "device_time_share_percent is null, where the app shows 0%. " + PAGING
+    "device_time_share_percent is null, where the app shows 0%. "
+    + PAGING
+    + " "
+    + PATH_FILTER
 )
 
 
@@ -175,6 +188,7 @@ __all__ = [
     "CallSite",
     "MAX_LISTED_OPERATION_IDS",
     "PAGING",
+    "PATH_FILTER",
     "SOURCE_LINES_NOTE",
     "TOP_OP_CODE_COUNT",
     "SourceLineGroup",

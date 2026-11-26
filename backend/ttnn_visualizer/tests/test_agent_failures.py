@@ -463,6 +463,29 @@ class TestErrors:
         assert result["errors"] == []
         assert "predates the errors table" in result["caveat"]
 
+    def test_an_errors_table_without_the_trace_column_lists_a_null_trace(
+        self, tmp_path
+    ):
+        """As the app's endpoints send it. #2429"""
+        registry, handle = _report(tmp_path, operations=[(1, "ttnn.add")])
+        connection = sqlite3.connect(tmp_path / "profiler" / "db.sqlite")
+        try:
+            connection.executescript("""
+                DROP TABLE errors;
+                CREATE TABLE errors (
+                    operation_id int, operation_name text, error_type text,
+                    error_message text, timestamp text
+                );
+                INSERT INTO errors VALUES (1, 'ttnn.add', 'TT_THROW', 'boom', '');
+                """)
+            connection.commit()
+        finally:
+            connection.close()
+
+        error = failures.errors(registry, handle)["errors"][0]
+
+        assert (error["error_message"], error["stack_trace"]) == ("boom", None)
+
 
 class TestDramFallbacks:
     def test_an_op_that_asked_for_l1_and_landed_in_dram_is_listed_by_name(

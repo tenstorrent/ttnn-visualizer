@@ -12,7 +12,7 @@ import { BufferType, StringBufferType } from './BufferType';
 export interface OperationError {
     error_type: string;
     error_message: string;
-    stack_trace: string;
+    stack_trace: string | null;
     timestamp: string;
     rank: number;
 }
@@ -34,7 +34,8 @@ export interface Operation {
     name: string;
     inputs: Tensor[];
     outputs: Tensor[];
-    stack_trace: string;
+    // Null when the report holds no trace for the operation.
+    stack_trace: string | null;
     stack_trace_source_file_id: number | null;
     device_operations: Node[];
     operationFileIdentifier: string;
@@ -168,7 +169,7 @@ export const defaultOperation: OperationDetailsData = {
     buffers: [],
     buffersSummary: [],
     l1_sizes: [],
-    stack_trace: '',
+    stack_trace: null,
     stack_trace_source_file_id: null,
     device_operations: [],
     operationFileIdentifier: '',
