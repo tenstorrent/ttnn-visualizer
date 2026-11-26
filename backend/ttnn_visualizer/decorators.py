@@ -273,8 +273,8 @@ def remote_exception_handler(func):
 # copies a function's ``__dict__`` onto its wrapper, so the marker survives every
 # decorator stacked above that uses it (``@with_instance`` included) and is readable
 # on the view function Flask registers, which is what lets the gated set be read
-# from ``app.url_map`` and ``app.view_functions``. Tooling outside this repository reads the attribute by this
-# literal name, so renaming it breaks that tooling without failing a test here.
+# from ``app.url_map`` and ``app.view_functions``. Tooling outside this repository
+# reads the attribute by this literal name, so ``test_decorators.py`` pins it too.
 _LOCAL_ONLY_MARKER = "local_only"
 
 # The 403 description ``local_only`` refuses with. A route can also answer 403 for

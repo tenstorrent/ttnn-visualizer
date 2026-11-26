@@ -229,6 +229,16 @@ def test_local_only_marks_the_view_it_returns():
     assert not is_local_only(view)
 
 
+def test_local_only_marker_keeps_its_literal_name():
+    """Tooling outside this repository reads the marker as `local_only`, so a
+    rename would leave it finding no gated routes without anything here failing."""
+
+    def view():
+        return "ok"
+
+    assert getattr(local_only(view), "local_only") is True
+
+
 def test_local_only_marker_survives_a_decorator_stacked_above():
     """Views stack `@with_instance` over `@local_only`; the registered function must
     still carry the marker, or the route audit below would find nothing to check."""
@@ -298,9 +308,9 @@ def test_every_local_only_route_refuses_under_server_mode(app, client):
     list, so this one can't pass on a route that silently dropped out of it.
 
     The refusal text is checked as well as the status, because `@with_instance`
-    sits above `@local_only` on most of these routes and answers its own 403 for
-    an instance another session owns. A status-only check would let such a route
-    pass with its `@local_only` gone."""
+    sits above `@local_only` on some of these routes and answers its own 403 for
+    an instance another session owns: a 403 from anything other than `@local_only`
+    must not count."""
     assert app.config["SERVER_MODE"]
 
     not_refused = []
@@ -310,9 +320,11 @@ def test_every_local_only_route_refuses_under_server_mode(app, client):
             path, method=method, query_string={"instanceId": INSTANCE_ID}
         )
         if not _refused_by_local_only(response):
-            not_refused.append(
-                f"{method} {rule} -> {response.status_code} {response.get_data(as_text=True)}"
-            )
+            # Status and error only: a gated route's body can hold local details,
+            # such as the runner's SSH host aliases, that don't belong in CI logs.
+            body = response.get_json(silent=True)
+            error = body.get("error") if isinstance(body, dict) else None
+            not_refused.append(f"{method} {rule} -> {response.status_code} {error!r}")
 
     assert not_refused == []
 
