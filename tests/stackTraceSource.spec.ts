@@ -89,14 +89,6 @@ describe('parseStackTraceFrames', () => {
         expect(parseStackTraceFrames('#0 0x7f in ttnn::run()')).toEqual([]);
         expect(parseStackTraceFrames('')).toEqual([]);
     });
-
-    it('reads no frames from the null the operations endpoint sends for an untraced operation', () => {
-        // The model types `stack_trace` as a string; the serializer can send null.
-        const untraced = null as unknown as string;
-
-        expect(parseStackTraceFrames(untraced)).toEqual([]);
-        expect(extractOperationSourceData({ stack_trace: untraced, stack_trace_source_file_id: null })).toBeNull();
-    });
 });
 
 describe('getCallSiteFrame', () => {
@@ -117,7 +109,10 @@ describe('getCallSiteFrame', () => {
         expect(getCallSiteFrame('#0 0x7f in ttnn::run()')).toBeNull();
         expect(getCallSiteFrame('')).toBeNull();
         expect(getCallSiteFrame('  File "/m/we"ird.py", line 20, in f\n    x()')).toBeNull();
-        expect(getCallSiteFrame(null as unknown as string)).toBeNull();
+    });
+
+    it('returns null for the null the operations endpoint sends for an untraced operation', () => {
+        expect(getCallSiteFrame(null)).toBeNull();
     });
 
     it.each([
@@ -210,6 +205,17 @@ describe('extractOperationSourceData', () => {
             }),
         ).toBeNull();
     });
+
+    it('returns source data for an untraced operation with a source file id', () => {
+        expect(extractOperationSourceData({ stack_trace: null, stack_trace_source_file_id: 7 })).toEqual({
+            filePath: '',
+            lineNumber: null,
+        });
+    });
+
+    it('returns null for an untraced operation with no source file id', () => {
+        expect(extractOperationSourceData({ stack_trace: null, stack_trace_source_file_id: null })).toBeNull();
+    });
 });
 
 describe('formatFrameLabel', () => {
@@ -241,10 +247,10 @@ describe('getOperationFileIdentifier', () => {
         expect(getOperationFileIdentifier('  File "C:\\m\\model.py", line 9, in f')).toBe('model.py:9');
     });
 
-    it('is empty when the trace has no frame', () => {
+    it('is empty when there is no trace or it has no frame', () => {
         expect(getOperationFileIdentifier('')).toBe('');
         expect(getOperationFileIdentifier('#0 0x7f in ttnn::run()')).toBe('');
-        expect(getOperationFileIdentifier(null as unknown as string)).toBe('');
+        expect(getOperationFileIdentifier(null)).toBe('');
     });
 
     it('is empty when the frame names no file', () => {
