@@ -269,11 +269,11 @@ def remote_exception_handler(func):
     return remote_handler
 
 
-# Attribute ``local_only`` sets on the view it returns. ``functools.wraps`` copies a
-# function's ``__dict__`` onto its wrapper, so the marker survives every decorator
-# stacked above that uses it (``@with_instance`` included) and is readable on the
-# view function Flask registers, which is what lets the gated set be read off
-# ``app.url_map``. Tooling outside this repository reads the attribute by this
+# The attribute ``local_only`` sets on the view it returns. ``functools.wraps``
+# copies a function's ``__dict__`` onto its wrapper, so the marker survives every
+# decorator stacked above that uses it (``@with_instance`` included) and is readable
+# on the view function Flask registers, which is what lets the gated set be read
+# from ``app.url_map`` and ``app.view_functions``. Tooling outside this repository reads the attribute by this
 # literal name, so renaming it breaks that tooling without failing a test here.
 _LOCAL_ONLY_MARKER = "local_only"
 

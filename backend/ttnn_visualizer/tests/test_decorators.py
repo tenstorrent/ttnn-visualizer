@@ -239,16 +239,32 @@ def test_local_only_marker_survives_a_decorator_stacked_above():
     assert is_local_only(with_instance(local_only(view)))
 
 
-# Routes known to be `@local_only`. Pinned so the audit below can't pass vacuously
-# if the marker stops reaching the registered view.
-KNOWN_LOCAL_ONLY_RULES = {
-    "/api/instance/local-paths",
-    # `@with_instance` over `@local_only` over `@timer`: the stack most gated
-    # report routes use.
-    "/api/npe/summary",
-    "/api/profiler/<profiler_name>",
-    "/api/remote/ssh-config-hosts",
-    "/api/remote/sync",
+# Every `@local_only` (rule, method), pinned in full and compared for equality. The
+# audit below finds routes by their marker, so on its own it cannot notice a route
+# that loses `@local_only` (it is no longer marked, so no longer checked) or loses the
+# marker under a decorator that skips `functools.wraps`. Either now fails here.
+# Gating or un-gating a route means editing this set, which is the point: it makes
+# a change to the SERVER_MODE boundary show up in review.
+GATED_ROUTES = {
+    ("/api/instance/local-paths", "POST"),
+    ("/api/mlir", "GET"),
+    ("/api/mlir/active", "POST"),
+    ("/api/npe/summary", "GET"),
+    ("/api/npe/window", "GET"),
+    ("/api/performance/<performance_name>", "DELETE"),
+    ("/api/profiler/<profiler_name>", "DELETE"),
+    ("/api/remote/host-key", "POST"),
+    ("/api/remote/host-key/trust", "POST"),
+    ("/api/remote/local-performance-reports", "POST"),
+    ("/api/remote/local-profiler-reports", "POST"),
+    ("/api/remote/mlir/test", "POST"),
+    ("/api/remote/mlir/upload", "POST"),
+    ("/api/remote/performance-reports", "POST"),
+    ("/api/remote/profiler-reports", "POST"),
+    ("/api/remote/ssh-config-hosts", "GET"),
+    ("/api/remote/sync", "POST"),
+    ("/api/remote/test", "POST"),
+    ("/api/remote/use", "POST"),
 }
 PATH_PARAMETER = re.compile(r"<[^>]*>")
 IGNORED_METHODS = {"HEAD", "OPTIONS"}
@@ -263,11 +279,10 @@ def _local_only_routes(app):
     ]
 
 
-def test_local_only_routes_are_read_off_the_url_map(app):
-    gated = {rule for rule, _ in _local_only_routes(app)}
-
-    assert KNOWN_LOCAL_ONLY_RULES <= gated
-    assert "/api/up" not in gated
+def test_the_marked_routes_are_exactly_the_gated_set(app):
+    """Fails on a route gated, un-gated or dropped from the marker without
+    `GATED_ROUTES` being updated to match."""
+    assert set(_local_only_routes(app)) == GATED_ROUTES
 
 
 def _refused_by_local_only(response):
@@ -278,8 +293,9 @@ def _refused_by_local_only(response):
 
 def test_every_local_only_route_refuses_under_server_mode(app, client):
     """The `app` fixture runs in the hosted posture, where each gated route must
-    answer 403 before reading its body or path parameters. Derived from the URL
-    map, so a route gated later is audited without being listed here.
+    answer 403 before reading its body or path parameters. The routes come from
+    the URL map; `test_the_marked_routes_are_exactly_the_gated_set` pins that
+    list, so this one can't pass on a route that silently dropped out of it.
 
     The refusal text is checked as well as the status, because `@with_instance`
     sits above `@local_only` on most of these routes and answers its own 403 for
