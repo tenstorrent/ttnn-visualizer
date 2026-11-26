@@ -6,6 +6,9 @@
  * Pins the usage events of the operation error overlay: opening it records nothing, so a
  * stack trace is counted once, by the trace itself when it is expanded, or on switching to
  * it when it opens already expanded.
+ *
+ * Also pins its tabs: an error with no stack trace has no Stack Trace tab, and the tab chosen
+ * on a traced operation falls back to the error details while it is absent.
  */
 
 import '@testing-library/jest-dom/vitest';
@@ -162,7 +165,7 @@ describe('OperationDetailsNavigation error overlay without a stack trace', () =>
         expect(screen.queryByRole('tab', { name: 'Stack Trace' })).not.toBeInTheDocument();
     });
 
-    it('falls back to the error details when the Stack Trace tab it had open has no trace', async () => {
+    it('falls back to the error details while the Stack Trace tab it had open has no trace, then restores it', async () => {
         const { rerender } = renderNavigation();
 
         fireEvent.click(screen.getByRole('button', { name: 'View operation error' }));
@@ -176,5 +179,11 @@ describe('OperationDetailsNavigation error overlay without a stack trace', () =>
         expect(await screen.findByRole('tab', { name: 'Error details', selected: true })).toBeInTheDocument();
         expect(screen.getByText(/boom/)).toBeInTheDocument();
         expect(screen.queryByRole('tab', { name: 'Stack Trace' })).not.toBeInTheDocument();
+
+        // The fallback is derived, not stored, so a traced operation reopens on the user's tab.
+        errorTrace.stackTrace = LONG_TRACE;
+        rerender(navigationTree());
+
+        expect(await screen.findByRole('tab', { name: 'Stack Trace', selected: true })).toBeInTheDocument();
     });
 });
