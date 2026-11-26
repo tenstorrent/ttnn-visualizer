@@ -277,6 +277,12 @@ def test_the_source_lines_caps_the_page_states_are_the_enforced_ones():
     # Phrases only the source_lines paragraph holds: op_configurations pages too.
     assert "so every call site can be reached" in page
     assert "`rest` sums only the groups after the page" in page
+    # The path filter's share basis and echo cut (#2401).
+    assert "add up to `matching_device_time_share_percent` rather than 100" in page
+    assert (
+        "echoes the filter as `path_contains`, cut past "
+        f"{failures.MAX_CALL_SITE_TEXT_CHARS} characters"
+    ) in page
     # The call-site wording, since the signature sentence states a 300 cut as well.
     assert (
         f"`function` or `code` past {failures.MAX_CALL_SITE_TEXT_CHARS} characters "
