@@ -57,6 +57,12 @@ from ttnn_visualizer.agent.bounds import (
 )
 from ttnn_visualizer.agent.captured_graph import UnreadableGraphError, parse_graph
 from ttnn_visualizer.agent.handles import CacheVariant, ReportRegistry
+from ttnn_visualizer.agent.layout_round_trips import (
+    LAYOUT_MOVE_OPERATIONS,
+    RoundTrip,
+    find_round_trips,
+    move_operation_ids,
+)
 from ttnn_visualizer.agent.op_configurations import (
     DeviceTime,
     answer_configurations,
@@ -917,6 +923,159 @@ def critical_path(
     return result
 
 
+ROUND_TRIP_SHARD_SPEC_CAVEAT = (
+    "A tensor's state is its layout, buffer type and memory layout. Shard specs are "
+    "not compared, because the memory config parser reads only the older "
+    "`ShardSpec(...)` form, so a chain that changes the shard grid or shape and "
+    "changes it back under the same memory layout is not found."
+)
+
+ROUND_TRIPS_UNLINKED_CAVEAT = (
+    "No device time: the performance report is not linked to the memory report, so "
+    "the round trips are listed in operation order rather than by cost."
+)
+
+
+def layout_round_trips(
+    registry: ReportRegistry,
+    handle: str,
+    limit: Optional[int] = None,
+    rank: Optional[int] = None,
+) -> Dict[str, object]:
+    """Chains of layout and memory moves that leave a tensor stored as it started."""
+    instance = registry.get(handle)
+    with operations.profiler_db(instance) as queries:
+        scope = operations.rank_scope(queries, rank)
+        graph = operations.read_scoped_graph(registry, handle, queries, scope)
+        moves = move_operation_ids(
+            graph.names,
+            op_graph.kept_operation_ids(graph),
+            graph.inputs_by_operation,
+            graph.outputs_by_operation,
+        )
+        state_by_tensor = operations.tensor_states(
+            queries,
+            scope,
+            [
+                tensor_id
+                for operation_id in moves
+                for tensor_id in (
+                    *graph.inputs_by_operation[operation_id],
+                    *graph.outputs_by_operation[operation_id],
+                )
+            ],
+        )
+    trips = find_round_trips(
+        moves, graph.inputs_by_operation, graph.outputs_by_operation, state_by_tensor
+    )
+
+    link = _link_at_rank(operation_link(registry, handle), scope.rank, "the graph")
+    linked = link.status is LinkStatus.LINKED
+    time_by_operation = link.device_time_by_operation if linked else {}
+
+    def costed(trip: RoundTrip) -> float:
+        return sum(
+            time_by_operation.get(operation_id, 0.0)
+            for operation_id in trip.operation_ids
+        )
+
+    if linked:
+        trips.sort(key=lambda trip: (-costed(trip), trip.operation_ids[0]))
+
+    cap = bounded(limit, MAX_LIMIT)
+    uncosted_ids: Set[int] = set()
+    answered: List[Dict[str, object]] = []
+    for trip in trips:
+        uncosted = [
+            operation_id
+            for operation_id in trip.operation_ids
+            if operation_id not in time_by_operation
+        ]
+        uncosted_ids.update(uncosted)
+        if len(answered) >= cap:
+            continue
+        entry: Dict[str, object] = {
+            "operations": [
+                {
+                    "operation_id": operation_id,
+                    "name": graph.names.get(operation_id),
+                    **(
+                        {
+                            "device_time": (
+                                round(time_by_operation[operation_id], 3)
+                                if operation_id in time_by_operation
+                                else None
+                            )
+                        }
+                        if linked
+                        else {}
+                    ),
+                }
+                for operation_id in trip.operation_ids
+            ],
+            "tensor_ids": trip.tensor_ids,
+            "from_state": trip.states[0].as_response(),
+            "through_states": [state.as_response() for state in trip.states[1:-1]],
+        }
+        if linked:
+            entry["device_time"] = round(costed(trip), 3)
+            entry["uncosted_operation_count"] = len(uncosted)
+        answered.append(entry)
+
+    caveats = [ROUND_TRIP_SHARD_SPEC_CAVEAT]
+    if not graph.edges:
+        caveats.append(
+            "The graph holds no tensor edge between two operations, so no chain can "
+            "be followed: the report recorded which operations ran but not what "
+            "flowed between them."
+        )
+    if not linked:
+        caveats.append(ROUND_TRIPS_UNLINKED_CAVEAT)
+    elif uncosted_ids:
+        caveats.append(
+            f"{len(uncosted_ids)} operations across the round trips launched no "
+            "performance row with a device time, and each counts as 0, so those "
+            "trips cost more than they show."
+        )
+    if linked and link.partitioned_caveat:
+        caveats.append(link.partitioned_caveat)
+
+    result: Dict[str, object] = {
+        "handle": handle,
+        "round_trip_count": len(trips),
+        "move_operation_count": len(moves),
+        "round_trips": answered,
+        "truncated": len(trips) > cap,
+        "move_operations": sorted(LAYOUT_MOVE_OPERATIONS),
+    }
+    if linked:
+        # Over the operations rather than the trips: two trips from one fan share
+        # their first move, which ran once.
+        total = sum(
+            time_by_operation.get(operation_id, 0.0)
+            for operation_id in {
+                operation_id for trip in trips for operation_id in trip.operation_ids
+            }
+        )
+        result.update(
+            {
+                "device_time_total": round(total, 3),
+                "device_time_share_percent": tools.share_percent(
+                    total, link.report_device_time_total
+                ),
+                **tools.device_time_header(link.report_device_time_total),
+            }
+        )
+    result.update(
+        {
+            **scope.as_response(),
+            **operations.caveat_field(scope, *caveats),
+            "operation_link": link.as_response(),
+        }
+    )
+    return result
+
+
 def op_configurations(
     registry: ReportRegistry,
     handle: str,
@@ -1193,6 +1352,7 @@ __all__ = [
     "critical_path",
     "device_operation_orders",
     "is_host_op_row",
+    "layout_round_trips",
     "match_device_operations",
     "op_configurations",
     "operation_detail",

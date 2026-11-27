@@ -122,6 +122,22 @@ def _read(report) -> op_graph.OpGraph:
 
 
 class TestReadGraph:
+    def test_it_lists_each_operations_tensors_including_ones_with_no_producer(
+        self, graph_report
+    ):
+        graph = _read(graph_report)
+
+        # Op 7 reads tensor 14, which no operation produced, so no edge reaches it.
+        assert graph.inputs_by_operation == {
+            2: [10],
+            3: [10],
+            4: [11, 12],
+            5: [13],
+            6: [13],
+            7: [14],
+        }
+        assert graph.outputs_by_operation == {1: [10], 2: [11], 3: [12], 4: [13]}
+
     def test_it_emits_one_edge_per_tensor_and_consumer(self, graph_report):
 
         graph = _read(graph_report)

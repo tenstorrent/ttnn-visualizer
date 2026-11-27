@@ -1105,6 +1105,38 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 linking.critical_path(registry, **arguments),
             ),
         },
+        McpToolName.LAYOUT_ROUND_TRIPS: {
+            "title": "Layout round trips",
+            "description": (
+                "Chains of layout and memory moves that leave a tensor stored as it "
+                "started: a tilize undone by an untilize, an interleaved tensor "
+                "sharded and unsharded, a move to L1 and back to DRAM. A move is one "
+                "of move_operations with one input tensor and one new output tensor; "
+                "a round trip is two to six moves, each reading the last one's "
+                "output, whose final output has the first input's layout, buffer "
+                "type and memory layout after passing through another. Shard specs "
+                "are not compared, so a reshard there and back under one memory "
+                "layout is not found, and dtype changes (typecast, to_dtype) are not "
+                "moves. With a linked performance report each trip carries its "
+                "summed device time and the trips are ranked by it; otherwise they "
+                "come in operation order with no time. Each operation_id is the "
+                "memory report's, as operation_detail takes it. Lists up to "
+                f"{MAX_LIMIT} round trips; round_trip_count is the whole report's."
+            ),
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "handle": {"type": "string"},
+                    "limit": _LIMIT_SCHEMA,
+                    "rank": _RANK_SCHEMA,
+                },
+                "required": ["handle"],
+            },
+            "handler": lambda arguments: app_links.with_operation_link_template(
+                registry,
+                linking.layout_round_trips(registry, **arguments),
+            ),
+        },
         McpToolName.SOURCE_LINES: {
             "title": "Time by source line",
             "description": (

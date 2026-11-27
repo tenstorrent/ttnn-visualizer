@@ -26,6 +26,7 @@ from typing import (
     Dict,
     Final,
     Hashable,
+    Iterable,
     Iterator,
     List,
     Mapping,
@@ -38,7 +39,7 @@ from typing import (
     TypeVar,
 )
 
-from ttnn_visualizer.agent import op_graph
+from ttnn_visualizer.agent import layout_round_trips, op_graph
 from ttnn_visualizer.agent.bounds import (
     MAX_DETAILED_LIMIT,
     MAX_LIMIT,
@@ -1390,6 +1391,31 @@ def read_scoped_graph(
     )
 
 
+def tensor_states(
+    queries: DatabaseQueries, scope: RankScope, tensor_ids: Iterable[int]
+) -> Dict[int, layout_round_trips.TensorState]:
+    """Where and how each of `tensor_ids` is stored, read only for those ids."""
+    ids = sorted(set(tensor_ids))
+    # Never an empty id list, which drops the filter and parses every tensor.
+    if not ids:
+        return {}
+    return {
+        tensor.tensor_id: layout_round_trips.tensor_state(
+            tensor.layout,
+            (
+                _buffer_type_name(tensor.buffer_type)
+                if tensor.buffer_type is not None
+                else None
+            ),
+            tensor.memory_config,
+        )
+        for tensor in queries.query_tensors(
+            filters=scoped(queries, "tensors", scope, tensor_id=ids),
+            size_from_buffers=False,
+        )
+    }
+
+
 def _subgraph_tensor(tensor: Optional[Tensor], tensor_id: int) -> Dict[str, object]:
     """What a subgraph edge carries: enough to read a block's layout, not its sizes,
     which `operation_detail` gives with the unit they need."""
@@ -1552,6 +1578,7 @@ __all__ = [
     "scoped_devices",
     "subgraph_between",
     "tensor_flow",
+    "tensor_states",
     "unattributable_reason",
     "withheld_caveat",
 ]

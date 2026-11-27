@@ -61,7 +61,7 @@ Answers link to the same thing in the web application, for the reader to open:
 - `operation_detail` and `operation_provenance` return an `app_link` to the operation.
 - `find_operations`, `top_ops`, `program_cache`, `memory_profile`, `tensor_flow`,
   `errors`, `dram_fallbacks`, `l1_peak`, `late_deallocations`, `critical_path`,
-  `source_lines`, `subgraph_between` and `op_configurations` return one
+  `layout_round_trips`, `source_lines`, `subgraph_between` and `op_configurations` return one
   `app_link_template`, in which `{operation_id}` takes any operation id the answer lists.
 
 A link names the report by its directories, and the visualizer opens them when the link is
@@ -115,14 +115,15 @@ another rank's operation under the same id.
 | `late_deallocations` | Tensors still allocated after their last use, by Buffer Summary's late-deallocation rule (L1, as the app shows it, or DRAM), grouped by the call site of that use: how many holds each has, how they ended, and the bytes per bank they held over the operations held. |
 | `noc_congestion` | How congested the NoC links were in a tt-npe trace: the trace's own run summary, the highest demand any single link reached and when, bursts of congested timesteps ranked by peak, and the links with the highest mean demand. |
 | `critical_path` | The longest chain of cumulative device time through the operation graph, source to sink, with each operation's device time, the chain's total and share of the report's, and how many of its operations have no device time. Needs a linked performance report. |
+| `layout_round_trips` | Chains of layout and memory moves that leave a tensor stored as it started — a tilize undone by an untilize, a tensor sharded and unsharded, a move to L1 and back — each with its operations, the states it passed through and, with a linked performance report, the device time it cost. |
 | `source_lines` | Where in the model code the device time went: performance rows rolled up by the call site of their linked memory report operation, as the performance view's stacked table groups by Source line — each line's file, function, summed device time and share, row count, top op codes and operation ids, over the whole report or a signpost range, a page at a time, optionally scoped to call sites whose path contains a text. Needs a linked performance report and a capture that records stack traces. |
 | `subgraph_between` | The operations, tensor edges and tensors on every path from one operation to another, each tensor once with its shape, dtype, layout, buffer type and memory layout, so a block can be read without walking it one tensor at a time. |
 
 `top_ops`, `op_breakdown`, `program_cache`, `zone_timings`, `zone_intervals`, `core_spread`,
 `hw_utilisation`, `stall_breakdown` and `diff_reports` read the performance CSVs; the operation tools — `find_operations`,
 `operation_detail`, `memory_profile`, `tensor_flow`, `operation_provenance`,
-`op_configurations`, `errors`, `dram_fallbacks`, `l1_peak`, `late_deallocations` and
-`subgraph_between` — read the memory report's SQLite database; `critical_path` and
+`op_configurations`, `errors`, `dram_fallbacks`, `l1_peak`, `late_deallocations`,
+`layout_round_trips` and `subgraph_between` — read the memory report's SQLite database; `critical_path` and
 `source_lines` read both, and are listed only when the performance CSV can be reported on
 and the database holds the captured graphs, with the graph's tables for `critical_path` and
 the stack traces for `source_lines`; `noc_congestion` reads a tt-npe trace.
@@ -1241,6 +1242,34 @@ the second, the call is refused, and says so when one runs the other way.
 
 Both tools read the graph once per handle and rank, so walking a model block by block
 pays for the read on the first call only.
+
+**`layout_round_trips` finds chains of moves that undo themselves.** A move is a call to
+one of `move_operations` — `to_layout`, `tilize`, `untilize`, `tilize_with_val_padding`,
+`untilize_with_unpadding`, `to_memory_config`, `interleaved_to_sharded`,
+`sharded_to_interleaved`, `reshard` and `move` — that reads one tensor and writes a new
+one; a move that hands back the tensor it was given changed nothing and is not one. A
+tensor's state is its layout, buffer type and memory layout. A round trip is a chain of
+two to six moves, each reading the previous one's output, whose last output is in the
+first input's state after passing through at least one other. Each chain is the shortest
+that returns: a tilize, untilize and tilize again is one round trip and a move left over.
+A move already in a listed round trip starts no other, but a move whose output feeds two
+chains that each return is listed in both, and counted once in `device_time_total`.
+
+Shard specs are not part of the state, because the memory config parser reads only the
+older `ShardSpec(...)` form and a newer capture's shard spec reads as absent; a chain that
+reshards to another grid and back under one memory layout is not found. A change of dtype
+is not a move either: `typecast` and `to_dtype` are often a deliberate precision choice.
+Nor is a pair of moves around a compute operation, such as `to_memory_config` into L1, a
+matmul, and `to_memory_config` back to DRAM: the tensor coming back is not the one that
+left.
+
+The tool needs only the database, and takes `rank`. With the performance report linked
+at the rank read, each round trip carries `device_time`, the summed device time of its
+operations as `operation_detail` sums it, and `uncosted_operation_count`, its operations
+with no timed row, each counted as 0; the round trips are ranked by device time, and
+`device_time_total` and `device_time_share_percent` cover them all. Without the link
+they are listed in operation order with no time, and the caveat says so.
+`round_trip_count` counts every round trip when the list is capped.
 
 **An operation id is not the end of the answer.** `memory_profile` names the operations
 holding its largest footprint, and `operation_provenance` turns such an id into the two things you need

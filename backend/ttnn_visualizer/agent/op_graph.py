@@ -6,7 +6,7 @@
 
 `tensor_flow` answers one tensor at a time, which leaves an agent walking the graph call
 by call for any question about its shape (#2174). This module reads every edge at once
-and answers over all of them.
+and answers over all of them, along with the tensors each operation read and wrote.
 
 `find_critical_path` is a port of `findCriticalPath`
 (`src/components/operation-graph/opGraphCriticalPath.ts`), and `kept_operation_ids` of
@@ -53,6 +53,10 @@ class OpGraph:
     drawn_edges: List[GraphEdge]
     outgoing: Dict[int, List[GraphEdge]] = field(default_factory=dict)
     incoming: Dict[int, List[GraphEdge]] = field(default_factory=dict)
+    # Each operation's tensors by id, ascending. The edges cannot give these: a tensor
+    # the model was handed has no producer, so no edge reaches the operation reading it.
+    inputs_by_operation: Dict[int, List[int]] = field(default_factory=dict)
+    outputs_by_operation: Dict[int, List[int]] = field(default_factory=dict)
 
 
 def edges_within(
@@ -62,7 +66,12 @@ def edges_within(
     return [edge for edge in edges if edge.source in members and edge.target in members]
 
 
-def build_graph(names: Mapping[int, str], edges: Iterable[GraphEdge]) -> OpGraph:
+def build_graph(
+    names: Mapping[int, str],
+    edges: Iterable[GraphEdge],
+    inputs_by_operation: Optional[Mapping[int, List[int]]] = None,
+    outputs_by_operation: Optional[Mapping[int, List[int]]] = None,
+) -> OpGraph:
     """An edge whose endpoint is not one of `names` is dropped, as `buildOpGraph` drops
     an edge to an operation it did not keep."""
     kept = edges_within(edges, names.keys())
@@ -72,7 +81,27 @@ def build_graph(names: Mapping[int, str], edges: Iterable[GraphEdge]) -> OpGraph
     for edge in drawn:
         outgoing[edge.source].append(edge)
         incoming[edge.target].append(edge)
-    return OpGraph(dict(names), kept, drawn, dict(outgoing), dict(incoming))
+    return OpGraph(
+        dict(names),
+        kept,
+        drawn,
+        dict(outgoing),
+        dict(incoming),
+        _tensors_within(inputs_by_operation, names),
+        _tensors_within(outputs_by_operation, names),
+    )
+
+
+def _tensors_within(
+    tensors_by_operation: Optional[Mapping[int, List[int]]], names: Mapping[int, str]
+) -> Dict[int, List[int]]:
+    if not tensors_by_operation:
+        return {}
+    return {
+        operation_id: sorted(tensor_ids)
+        for operation_id, tensor_ids in tensors_by_operation.items()
+        if operation_id in names
+    }
 
 
 def read_graph(
@@ -87,13 +116,19 @@ def read_graph(
         operation.operation_id: operation.name
         for operation in queries.query_operations(filters=operations_filter)
     }
-    edges = [
-        GraphEdge(producer, consumer, link.tensor_id)
-        for link in queries.query_producers_consumers(rank=rank)
-        for producer in link.producers
-        for consumer in link.consumers
-    ]
-    return build_graph(names, edges)
+    edges: List[GraphEdge] = []
+    inputs_by_operation: Dict[int, List[int]] = defaultdict(list)
+    outputs_by_operation: Dict[int, List[int]] = defaultdict(list)
+    for link in queries.query_producers_consumers(rank=rank):
+        for consumer in link.consumers:
+            inputs_by_operation[consumer].append(link.tensor_id)
+        for producer in link.producers:
+            outputs_by_operation[producer].append(link.tensor_id)
+            edges.extend(
+                GraphEdge(producer, consumer, link.tensor_id)
+                for consumer in link.consumers
+            )
+    return build_graph(names, edges, inputs_by_operation, outputs_by_operation)
 
 
 def kept_operation_ids(graph: OpGraph) -> FrozenSet[int]:

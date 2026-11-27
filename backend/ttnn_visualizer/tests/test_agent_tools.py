@@ -385,6 +385,7 @@ class TestReportInventory:
             "late_deallocations",
             "noc_congestion",
             "critical_path",
+            "layout_round_trips",
             "source_lines",
             "subgraph_between",
         }
@@ -3373,6 +3374,7 @@ class TestTransport:
             "l1_peak",
             "late_deallocations",
             "critical_path",
+            "layout_round_trips",
             "source_lines",
             "subgraph_between",
         }
