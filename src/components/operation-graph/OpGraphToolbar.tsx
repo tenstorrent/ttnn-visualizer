@@ -9,6 +9,7 @@ import classNames from 'classnames';
 import GraphOpFilter, { type GraphOpFilterHandle } from '../GraphOpFilter';
 import type { GraphFilterMode } from '../../definitions/GraphFilterMode';
 import { HOT_OPS_TITLE } from '../../definitions/HotOps';
+import { OpGraphBlockAction } from '../../definitions/OpGraphBlockAction';
 import {
     CRITICAL_PATH_TOOLTIP,
     HOT_OPS_TOOLTIP,
@@ -18,15 +19,15 @@ import {
 import { OpGraphGrouping } from './opGraphTypes';
 import 'styles/components/OpGraphToolbar.scss';
 
-/**
- * The noun every per-mode string is built from: the accessible names on Unroll and
- * Fold, and the note that says which detector came up empty. The row was called
- * "Repeats" before layers existed, and a screen reader was still being told "unroll
- * all repeats" while the buttons acted on layers. #1976
- */
 /** Paired with each `swatchClass` below, so the colours are keyed off our own class. */
 const GROUPING_ACTIVE_CLASS = 'op-graph-grouping-active';
 
+/**
+ * The noun every per-mode string is built from: the accessible names on Expand and
+ * Collapse, and the note that says which detector came up empty. The row was called
+ * "Repeats" before layers existed, and a screen reader was still being told "unroll
+ * all repeats" while the buttons acted on layers. #1976
+ */
 const GROUPING_NOUN: Readonly<Record<OpGraphGrouping, string>> = {
     [OpGraphGrouping.REPEATS]: 'repeats',
     [OpGraphGrouping.LAYERS]: 'layers',
@@ -41,7 +42,7 @@ const GROUPING_OPTIONS = [
     {
         value: OpGraphGrouping.REPEATS,
         label: 'Repeats',
-        description: 'Fold subgraphs that repeat, whatever they do',
+        description: 'Collapse subgraphs that repeat, whatever they do',
         // Tied to the colour its blocks are drawn in, so the control and the thing it
         // produces are recognisably the same feature. #1982
         swatchClass: 'op-graph-grouping-repeat',
@@ -49,7 +50,7 @@ const GROUPING_OPTIONS = [
     {
         value: OpGraphGrouping.LAYERS,
         label: 'Layers',
-        description: 'Fold spans whose operation names identify them — attention, feed-forward, embedding',
+        description: 'Collapse spans whose operation names identify them — attention, feed-forward, embedding',
         swatchClass: 'op-graph-grouping-layer',
     },
 ] as const;
@@ -332,17 +333,17 @@ const OpGraphToolbar = memo(
                             variant={ButtonVariant.OUTLINED}
                             disabled={isDisabled || areAllBlocksExpanded}
                             onClick={onExpandAllBlocks}
-                            aria-label={`Unroll all ${GROUPING_NOUN[grouping]}`}
+                            aria-label={`${OpGraphBlockAction.EXPAND} all ${GROUPING_NOUN[grouping]}`}
                         >
-                            Unroll
+                            {OpGraphBlockAction.EXPAND}
                         </Button>
                         <Button
                             variant={ButtonVariant.OUTLINED}
                             disabled={isDisabled || areAllBlocksCollapsed}
                             onClick={onCollapseAllBlocks}
-                            aria-label={`Fold all ${GROUPING_NOUN[grouping]}`}
+                            aria-label={`${OpGraphBlockAction.COLLAPSE} all ${GROUPING_NOUN[grouping]}`}
                         >
-                            Fold
+                            {OpGraphBlockAction.COLLAPSE}
                         </Button>
                     </>
                 ) : (

@@ -433,6 +433,23 @@ class TestCaveats:
         assert "core_span" not in op
         assert "1 of 1 operations have no kernel zones" in result["caveat"]
 
+    @pytest.mark.parametrize(
+        ("cores", "fewer", "more"),
+        [("1_0", False, True), ("4abc", True, False), ("\uff12", False, False)],
+    )
+    def test_the_caveats_count_the_cores_the_entry_reports(
+        self, tmp_path, cores, fewer, more
+    ):
+        """Read as the entry is, with `parseInt`: `1_0` is 1 core, short of the log's 3,
+        and a full-width two is no count at all. #2440"""
+        result = _spread(tmp_path, THREE_CORES, [_op(cores=cores)], perf_id="1")
+        caveat = result.get("caveat", "")
+
+        assert result["ops"][0]["cores"] == tools.metric_number(
+            _op(cores=cores), "cores"
+        )
+        assert ("fewer cores" in caveat, "more cores" in caveat) == (fewer, more)
+
     def test_fewer_cores_than_the_row_reports_is_caveated(self, tmp_path):
         result = _spread(tmp_path, THREE_CORES, [_op(cores="4")], perf_id="1")
 

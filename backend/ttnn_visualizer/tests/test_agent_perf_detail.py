@@ -236,7 +236,9 @@ class TestDetailFields:
         assert fields["ideal_us"] == 1.568
         assert fields["first_to_last_start_us"] == 0.37
 
-    @pytest.mark.parametrize("cell", ["", "nan", "NaN", "inf", "-inf", "not a number"])
+    @pytest.mark.parametrize(
+        "cell", ["", "nan", "NaN", "inf", "-inf", "Infinity", "not a number"]
+    )
     def test_an_empty_or_non_finite_cell_is_null_rather_than_nan(self, cell):
         """A NaN would reach the client as invalid JSON."""
         fields = perf_detail.detail_fields(
@@ -248,6 +250,36 @@ class TestDetailFields:
         assert fields["ideal_us"] is None
         if cell in ("", "nan", "NaN"):
             assert fields["input_1_datatype"] is None
+
+    def test_a_metric_column_reads_as_the_rows_metric_does(self):
+        """As `row_cells` reads it, as `enrichRowData` does, so a detail field never
+        contradicts the metric beside it: `1_0` is 1, not 10, `1abc` is 1, and a
+        fraction is rounded to 3 places. #2440"""
+        row = {
+            "dram": "1_0",
+            "dram_percent": "2abc",
+            "flops": "1abc",
+            "flops_percent": "1.23456abc",
+            "op_to_op_gap": "1_0",
+        }
+
+        fields = perf_detail.detail_fields(
+            row, [DetailGroup.UTILISATION, DetailGroup.DISPATCH]
+        )
+
+        assert (
+            fields["dram_gb_per_s"],
+            fields["dram_percent"],
+            fields["tflops"],
+            fields["flops_percent"],
+            fields["op_to_op_gap_us"],
+        ) == (1.0, 2.0, 1.0, 1.235, 1.0)
+        for metric, field in [
+            ("dram", "dram_gb_per_s"),
+            ("flops", "tflops"),
+            ("op_to_op_gap", "op_to_op_gap_us"),
+        ]:
+            assert tools.metric_value(row, metric) == fields[field]
 
     def test_flags_and_counts_are_typed(self):
         row = {

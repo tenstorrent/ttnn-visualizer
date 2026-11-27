@@ -274,6 +274,15 @@ class TestEvidence:
         assert dram["dram_percent"] is None
         assert dram["flops_percent"] is None
 
+    def test_a_slow_row_compares_an_infinite_dram_percent_as_the_app_does(self):
+        """`parseFloat("Infinity")` is Infinity, which `isSlowDramDominant` finds above
+        40, so the flags keep it where a reported figure would drop it. #2440"""
+        row = perf_flags.typed_row(
+            _row(1, bound="SLOW", dram_percent="Infinity", flops_percent="40")
+        )
+
+        assert perf_flags.PerfHeuristicFlag.DRAM_BOUND in perf_flags.flag_names(row, 64)
+
 
 class TestFlagFields:
     _INPUTS = perf_flags.flag_inputs(

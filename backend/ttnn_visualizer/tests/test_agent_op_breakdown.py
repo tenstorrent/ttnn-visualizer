@@ -127,6 +127,19 @@ class TestOpBreakdown:
             30.0,
         )
 
+    def test_a_groups_gap_and_total_percent_are_read_as_the_app_reads_them(
+        self, tmp_path
+    ):
+        """`parseFloat`, so `1abc` adds 1 and `1_0` adds 1, not 10. #2440"""
+        rows = [
+            _row(op_code="A", op_to_op_gap="1abc", total_percent="1_0"),
+            _row(op_code="A", op_to_op_gap="1_0", total_percent="2abc"),
+        ]
+
+        group = _breakdown(tmp_path, rows)["groups"][0]
+
+        assert (group["op_to_op_gap"], group["total_percent"]) == (2.0, 3.0)
+
     def test_each_share_is_of_its_own_total(self, tmp_path):
         """Device time against device time, gap against gap: one op can hold most of
         the device time and little of the dispatch gap."""

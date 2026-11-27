@@ -34,7 +34,13 @@ from typing import (
 )
 
 from ttnn_visualizer import hardware_counters
-from ttnn_visualizer.agent import op_signatures, perf_detail, perf_flags, report_diff
+from ttnn_visualizer.agent import (
+    op_signatures,
+    perf_detail,
+    perf_flags,
+    report_diff,
+    row_cells,
+)
 from ttnn_visualizer.agent.bounds import (
     MAX_DETAILED_LIMIT,
     MAX_LIMIT,
@@ -55,7 +61,6 @@ from ttnn_visualizer.agent.handles import (
     read_once,
     without_performance_csv,
 )
-from ttnn_visualizer.agent.js_values import js_is_finite, js_parse_float
 from ttnn_visualizer.cells import finite_number, whole_number
 from ttnn_visualizer.csv_queries import (
     L1_ZONE_MARKER_CAPACITY,
@@ -160,17 +165,17 @@ ADDITIVE_METRICS = frozenset({"device_time", "op_to_op_gap", "total_percent"})
 def metric_number(row: Dict, metric: str = DEFAULT_METRIC) -> Optional[float]:
     """A row's metric, unrounded, or None where it is blank, unreadable or not finite.
 
-    Device time is read with `parseFloat`, as `enrichRowData` in
-    `src/functions/enrichPerfRowData.ts` reads it, so a row ranks and reports the
-    number `countable_device_time` counts in a share: `"1abc"` is 1 and `"1_0"` is 1,
-    where Python's `float` refuses the one and reads 10 for the other; mirror a change
-    there. The other metrics are still read with Python's `float`. #2428
+    A text column is read as the app reads it (`row_cells`), so a row ranks, reports
+    and sums the number the app shows, and device time read this way is what
+    `countable_device_time` counts in a share. The counter metrics are not text: the
+    backend fills them as numbers (`hardware_counters.cell_value`), which the app takes
+    as they come. #2428 #2440
     """
-    cell = row.get(SORTABLE_METRICS[metric])
-    if metric != "device_time":
-        return finite_number(cell)
-    value = js_parse_float(cell)
-    return value if js_is_finite(value) else None
+    column = SORTABLE_METRICS[metric]
+    cell = row.get(column)
+    if column in row_cells.COLUMNS:
+        return row_cells.cell_number(column, cell)
+    return finite_number(cell)
 
 
 def countable_device_time(row: Dict) -> Optional[float]:
@@ -728,7 +733,7 @@ def project_row(row: Dict, metric: str = DEFAULT_METRIC) -> Dict[str, object]:
         "id": row.get("id"),
         **cut_op_code("op_code", _display_op_code(row)),
         metric: metric_value(row, metric),
-        "cores": finite_number(row.get("cores")),
+        "cores": metric_number(row, "cores"),
         "bound": row.get("bound") or None,
         # Without it a null bound reads as "fine" when the op was never modelled (#2064).
         "bound_analysis": row.get("bound_analysis") or None,
@@ -1224,8 +1229,8 @@ def _readable_signatures(
         return None
 
 
-# The report field behind each summable metric, all summed in one pass.
-_DIFF_FIELDS = {metric: SORTABLE_METRICS[metric] for metric in sorted(ADDITIVE_METRICS)}
+# The summable metrics, all summed in one pass.
+_DIFF_METRICS = tuple(sorted(ADDITIVE_METRICS))
 
 # By match; signature totals are None where the CSV's signatures could not be read.
 _DiffTotals = Dict[report_diff.DiffMatch, Optional[report_diff.CaptureTotals]]
@@ -1257,7 +1262,8 @@ def _diff_totals(
         rows = report.get("report", [])
         return report_diff.capture_totals(
             rows,
-            _DIFF_FIELDS,
+            _DIFF_METRICS,
+            metric_number,
             key_of,
             frozenset(_sub_devices(rows)),
             bool(report.get(_DEGRADED_KEY)),
@@ -1611,7 +1617,8 @@ def core_spread(
     for row in rows:
         request = _span_request(row)
         figures = index.figures.get(request)
-        perf_cores = whole_number(row.get("cores"))
+        # As the entry reports it, so a caveat never counts cores the entry doesn't show.
+        perf_cores = metric_number(row, "cores")
         detail = perf_detail.detail_fields(row, (perf_detail.DetailGroup.CORES,))
         call_count, device = request.run
         entry: Dict[str, object] = {
@@ -2341,8 +2348,8 @@ class _Share:
     def add_row(self, row: Dict) -> None:
         self.count += 1
         self.device_time += countable_device_time(row) or 0.0
-        self.op_to_op_gap += finite_number(row.get("op_to_op_gap")) or 0.0
-        self.total_percent += finite_number(row.get("total_percent")) or 0.0
+        self.op_to_op_gap += metric_number(row, "op_to_op_gap") or 0.0
+        self.total_percent += metric_number(row, "total_percent") or 0.0
 
     def add(self, other: "_Share") -> None:
         self.count += other.count
