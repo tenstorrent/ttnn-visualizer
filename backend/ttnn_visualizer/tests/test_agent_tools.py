@@ -31,7 +31,7 @@ from unittest.mock import patch
 import matplotlib
 import pytest
 from ttnn_visualizer import csv_queries
-from ttnn_visualizer.agent import handles, server, tools
+from ttnn_visualizer.agent import handles, row_cells, server, tools
 from ttnn_visualizer.agent.bounds import MAX_LIMIT
 from ttnn_visualizer.agent.handles import (
     MAX_SCOPED_DIFF_TOTALS,
@@ -1496,6 +1496,26 @@ class TestTopOps:
             ("c", 1.0),
         ]
         assert result["device_time_total"] == 5.0
+
+    def test_another_metric_ranks_and_totals_as_the_app_reads_it(self, tmp_path):
+        """`1_0` is 1, not 10, and `1abc` is 1, not left out. #2440"""
+        registry = self._registry(tmp_path)
+        rows = [
+            _row(id="a", op_to_op_gap="1_0"),
+            _row(id="b", op_to_op_gap="3"),
+            _row(id="c", op_to_op_gap="1abc"),
+        ]
+        with patch.object(
+            tools, "_generate_canonical_report", return_value=_perf_report(rows)
+        ):
+            result = tools.top_ops(registry, "report-1", by="op_to_op_gap")
+
+        assert [(op["id"], op["op_to_op_gap"]) for op in result["ops"]] == [
+            ("b", 3.0),
+            ("a", 1.0),
+            ("c", 1.0),
+        ]
+        assert result["op_to_op_gap_total"] == 5.0
 
     def test_it_ranks_by_the_requested_metric(self, tmp_path):
         registry = self._registry(tmp_path)
@@ -4367,10 +4387,7 @@ class TestProjectRow:
         "cell", ["nan", "inf", "-inf", "Infinity", "-Infinity", "1e400"]
     )
     def test_a_non_finite_cell_is_null(self, cell):
-        projected = tools.project_row(_row(device_time=cell, cores=cell))
-
-        assert projected["device_time"] is None
-        assert projected["cores"] is None
+        assert tools.project_row(_row(device_time=cell))["device_time"] is None
 
     @pytest.mark.parametrize(
         ("cell", "expected"),
@@ -4380,6 +4397,72 @@ class TestProjectRow:
         """The number a share counts, so a row ranked by it never reports another; a
         time that is not positive is still reported, though no share counts it. #2428"""
         assert tools.project_row(_row(device_time=cell))["device_time"] == expected
+
+    @pytest.mark.parametrize(
+        "metric", ["device_time", "op_to_op_gap", "total_percent", "flops", "dram"]
+    )
+    @pytest.mark.parametrize(
+        ("cell", "expected"), [("1abc", 1.0), ("1_0", 1.0), ("\uff11", None)]
+    )
+    def test_a_metric_is_reported_as_parse_float_reads_it(self, metric, cell, expected):
+        """As `enrichRowData` reads it, where Python's `float` refuses `1abc`, reads
+        `1_0` as 10 and reads a full-width one as 1. #2440"""
+        assert tools.project_row(_row(**{metric: cell}), metric)[metric] == expected
+
+    @pytest.mark.parametrize(
+        "metric", ["device_time", "op_to_op_gap", "total_percent", "flops", "dram"]
+    )
+    @pytest.mark.parametrize("cell", ["Infinity", "-Infinity", "1e400"])
+    def test_a_metric_parse_float_reads_as_infinite_is_null(self, metric, cell):
+        """An infinity would reach the client as invalid JSON. `parseFloat` reads
+        Python's `inf` as NaN, so these are the cells that hold the check. #2440"""
+        assert tools.project_row(_row(**{metric: cell}), metric)[metric] is None
+
+    @pytest.mark.parametrize("metric", ["flops", "dram"])
+    def test_a_blank_flops_or_dram_is_null_and_a_zero_is_zero(self, metric):
+        """`row.dram ? parseFloat(row.dram) : null`: only a blank cell is falsy."""
+        assert tools.metric_number(_row(**{metric: ""}), metric) is None
+        assert tools.metric_number(_row(**{metric: "0"}), metric) == 0.0
+
+    @pytest.mark.parametrize(
+        ("cell", "expected"),
+        [
+            ("1.5", 1.0),
+            ("64abc", 64.0),
+            ("1_0", 1.0),
+            ("\uff11", None),
+            ("", None),
+            ("1e400", 1.0),
+            ("Infinity", None),
+            ("inf", None),
+        ],
+    )
+    def test_cores_are_reported_as_parse_int_reads_them(self, cell, expected):
+        """`parseInt(row.cores, 10)`, so a fraction is cut, as the app shows it. #2440"""
+        assert tools.project_row(_row(cores=cell))["cores"] == expected
+        assert tools.project_row(_row(cores=cell), "cores")["cores"] == expected
+
+    def test_a_counter_metric_is_read_as_the_number_the_backend_filled(self):
+        """The backend fills counter columns as numbers, which the app takes as they
+        come, so there is no text to read another way."""
+        assert tools.metric_number(_row(hw_fpu_util=12.5), "hw_fpu_util") == 12.5
+        assert tools.metric_number(_row(hw_fpu_util=None), "hw_fpu_util") is None
+
+    def test_every_text_metric_is_read_as_the_app_reads_it(self):
+        """A text column added to `SORTABLE_METRICS` without a `row_cells` read would
+        fall back to Python's `float` unnoticed; the counter metrics are numbers the
+        backend filled. #2440"""
+        columns = {
+            column
+            for metric, column in tools.SORTABLE_METRICS.items()
+            if metric not in tools.COUNTER_METRICS
+        }
+
+        assert columns <= row_cells.COLUMNS
+        assert (
+            not {tools.SORTABLE_METRICS[metric] for metric in tools.COUNTER_METRICS}
+            & row_cells.COLUMNS
+        )
 
     def test_a_row_without_the_columns_reports_them_as_null(self):
         projected = tools.project_row(_row())

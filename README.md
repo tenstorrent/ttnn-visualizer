@@ -100,7 +100,7 @@ https://github.com/user-attachments/assets/4e51a636-c6d6-46df-bf34-a06bca13c0b3
 
 | Operation graph view | Model buffer summary |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" alt="Operation graph view" src="https://github.com/user-attachments/assets/d33175d7-217b-4ed5-81fa-9cd9a1a8cd8c" /> | <img width="400" alt="Model buffer summary" src="https://github.com/user-attachments/assets/0310cd6d-5153-4cc3-8423-73da2031e24d" /> |
+| <img width="400" alt="Operation graph view" src="https://github.com/user-attachments/assets/951e7597-7944-4d29-b084-cf7162a1f1ec" /> | <img width="400" alt="Model buffer summary" src="https://github.com/user-attachments/assets/0310cd6d-5153-4cc3-8423-73da2031e24d" /> |
 
 | Per core allocation details | Per core allocation details for individual tensors |
 |-----------------------------------------------|------------------------------------------|
