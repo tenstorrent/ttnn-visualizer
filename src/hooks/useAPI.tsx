@@ -1055,9 +1055,15 @@ export const useReportMetadata = () => {
 export const fetchReportSourceFiles = async (reportId: string | null): Promise<ReportSourceFiles> => {
     const data = await fetchMemoryReportData<SourceFileResponse[]>(Endpoints.SOURCE_FILES, reportId);
 
+    // Aliases first, so a stored path, which names its own file, wins over any alias equal to it.
+    const idsByPath = new Map<string, number>([
+        ...data.flatMap(({ id, aliases }) => (aliases ?? []).map((alias): [string, number] => [alias, id])),
+        ...data.map(({ id, path }): [string, number] => [path, id]),
+    ]);
+
     return {
         ids: new Set<number>(data.map(({ id }) => id)),
-        paths: new Set<string>(data.map(({ path }) => path)),
+        idsByPath,
     };
 };
 

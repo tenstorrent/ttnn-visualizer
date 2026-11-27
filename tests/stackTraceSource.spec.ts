@@ -130,20 +130,36 @@ describe('getCallSiteFrame', () => {
 });
 
 describe('getFrameSourceFileId', () => {
-    it("passes the report's source file id to frame 0 only", () => {
-        const [callSite, caller] = parseStackTraceFrames(MULTI_FRAME_TRACE);
+    const [callSite, caller] = parseStackTraceFrames(MULTI_FRAME_TRACE);
+    const mapping = (idsByPath: Record<string, number>) => ({
+        ids: new Set(Object.values(idsByPath)),
+        idsByPath: new Map(Object.entries(idsByPath)),
+    });
 
-        expect(getFrameSourceFileId(callSite, 7)).toBe(7);
-        expect(getFrameSourceFileId(caller, 7)).toBeNull();
-        expect(getFrameSourceFileId(callSite, null)).toBeNull();
+    it("passes the trace's source file id to frame 0 only", () => {
+        expect(getFrameSourceFileId(callSite, 7, mapping({}))).toBe(7);
+        expect(getFrameSourceFileId(caller, 7, mapping({}))).toBeNull();
+        expect(getFrameSourceFileId(callSite, null, mapping({}))).toBeNull();
+    });
+
+    it('passes a later frame the id the report maps its path to', () => {
+        expect(getFrameSourceFileId(caller, 7, mapping({ [caller.file]: 9 }))).toBe(9);
+        expect(getFrameSourceFileId(caller, 7, undefined)).toBeNull();
+    });
+
+    it("keeps the trace's id for frame 0 even where its path maps to another file", () => {
+        expect(getFrameSourceFileId(callSite, 7, mapping({ [callSite.file]: 9 }))).toBe(7);
     });
 });
 
 describe('isFrameSourceInReport', () => {
     const [callSite, caller] = parseStackTraceFrames(MULTI_FRAME_TRACE);
-    const holding = (ids: number[], paths: string[]) => ({ ids: new Set(ids), paths: new Set(paths) });
+    const holding = (ids: number[], paths: string[]) => ({
+        ids: new Set(ids),
+        idsByPath: new Map(paths.map((path, index): [string, number] => [path, 100 + index])),
+    });
 
-    it('holds a frame whose path the report lists', () => {
+    it('holds a frame whose path the report maps to a file', () => {
         expect(isFrameSourceInReport(caller, null, holding([], ['/m/tests/infra.py']))).toBe(true);
     });
 

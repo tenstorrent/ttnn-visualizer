@@ -101,7 +101,9 @@ same frames, and pins these differences.
 
 The frontend has a second input, `stack_trace_source_file_id`, with no equivalent here.
 It is one id per trace, for frame 0's file (tt-metal's writer stores the first file a trace
-names), so only frame 0 sends it.
+names), so only frame 0 sends it. Later frames send the id `/api/source-files` maps their
+raw path to: each file lists, as `aliases`, the raw paths traces were stored with for it,
+which differ from its stored realpath under a symlinked checkout.
 
 **Two size units share one response.** `buffers.max_size_per_bank` is per bank and
 `tensors.size` is a whole-tensor byte count, so `operations.py` labels both rather than

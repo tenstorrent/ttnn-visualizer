@@ -42,6 +42,8 @@ vi.mock('../src/hooks/useAPI.tsx', async (importOriginal) => {
 const CALL_SITE = '/m/models/resnet.py';
 const CALLER = '/m/tests/infra.py';
 const SOURCE_FILE_ID = 7;
+// The caller's own file, which the report maps its path to: not the trace's id.
+const CALLER_SOURCE_FILE_ID = 9;
 
 // Innermost first, as the capture writes it, so frame 1 is past the collapsed preview.
 const TRACE = [
@@ -61,8 +63,12 @@ const TRACE_WITH_LIBRARY_FRAME = [
     '    result = f()',
 ].join('\n');
 
-const reportSourceFiles = (ids: number[], paths: string[]): { data: ReportSourceFiles } => ({
-    data: { ids: new Set<number>(ids), paths: new Set<string>(paths) },
+// `idsByPath`'s ids are listed too, as the fetcher lists every file's.
+const reportSourceFiles = (ids: number[], idsByPath: Record<string, number>): { data: ReportSourceFiles } => ({
+    data: {
+        ids: new Set<number>([...ids, ...Object.values(idsByPath)]),
+        idsByPath: new Map<string, number>(Object.entries(idsByPath)),
+    },
 });
 
 const FILE_CONTENTS = ['line 1', 'line 2', 'line 3', 'line 4', 'line 5', 'line 6'].join('\n');
@@ -91,7 +97,7 @@ beforeEach(() => {
     vi.clearAllMocks();
     // The report holds the call site only by the trace's source file id, and its caller by
     // path, so both routes to a link are exercised.
-    mockUseReportSourceFiles.mockReturnValue(reportSourceFiles([SOURCE_FILE_ID], [CALLER]));
+    mockUseReportSourceFiles.mockReturnValue(reportSourceFiles([SOURCE_FILE_ID], { [CALLER]: CALLER_SOURCE_FILE_ID }));
     isSourceFileAvailable.mockResolvedValue({ available: true, source: StackSourceOrigin.Path });
     readRemoteFile.mockImplementation((filePath: string) =>
         Promise.resolve({ data: FILE_CONTENTS, error: null, resolvedPath: filePath }),
@@ -120,13 +126,13 @@ describe('StackTrace frame links', () => {
         expect(line?.textContent).toBe(`1  File "${CALL_SITE}", line 3, in run_downsample_if_req`);
     });
 
-    it("opens a caller frame by its own path, without the report's source file id", async () => {
+    it("opens a caller frame with the id the report maps its path to, not the trace's", async () => {
         renderStackTrace({ isInitiallyExpanded: true });
 
         openFrame(CALLER, 5);
 
         expect(await screen.findByText(CALLER)).toBeInTheDocument();
-        expect(readRemoteFile).toHaveBeenCalledWith(CALLER, null);
+        expect(readRemoteFile).toHaveBeenCalledWith(CALLER, CALLER_SOURCE_FILE_ID);
         // Linked only because the report lists it, so it is read without an availability probe.
         // Checked by path: the Source button probes frame 0 on its own.
         expect(isSourceFileAvailable.mock.calls.filter(([path]) => path === CALLER)).toEqual([]);
@@ -163,7 +169,7 @@ describe('StackTrace frame links', () => {
         openFrame(CALLER, 5);
 
         expect(await screen.findByText('Source file not found')).toBeInTheDocument();
-        expect(readRemoteFile).toHaveBeenCalledWith(CALLER, null);
+        expect(readRemoteFile).toHaveBeenCalledWith(CALLER, CALLER_SOURCE_FILE_ID);
     });
 
     it('records a source file drill-down when a frame opens', async () => {
@@ -187,7 +193,7 @@ describe('StackTrace frame links', () => {
     });
 
     it("links frame 0 by the report's source file id, but no other frame", () => {
-        mockUseReportSourceFiles.mockReturnValue(reportSourceFiles([SOURCE_FILE_ID], []));
+        mockUseReportSourceFiles.mockReturnValue(reportSourceFiles([SOURCE_FILE_ID], {}));
         renderStackTrace({ isInitiallyExpanded: true });
 
         expect(frameLinks().map((link) => link.textContent)).toEqual([`"${CALL_SITE}", line 3`]);
@@ -252,7 +258,9 @@ describe('StackTrace frame links', () => {
 
     it('forgets an opened frame when the trace it was opened in is replaced', async () => {
         const nextSourceFileId = SOURCE_FILE_ID + 1;
-        mockUseReportSourceFiles.mockReturnValue(reportSourceFiles([SOURCE_FILE_ID, nextSourceFileId], [CALLER]));
+        mockUseReportSourceFiles.mockReturnValue(
+            reportSourceFiles([SOURCE_FILE_ID, nextSourceFileId], { [CALLER]: CALLER_SOURCE_FILE_ID }),
+        );
         const { rerender } = renderStackTrace();
 
         openFrame(CALL_SITE, 3);

@@ -635,6 +635,22 @@ class DatabaseQueries:
         ):
             yield StackTrace(*row)
 
+    def iter_stack_trace_source_refs(self) -> Iterator[Tuple[int, str]]:
+        """``(source_file_id, stack_trace)`` of every trace the writer paired with a
+        source file, streamed: the traces are the largest text in a report.
+
+        A report without the table, or from before the column, pairs none.
+        """
+        if not self._check_table_exists("stack_traces"):
+            return
+        if "source_file_id" not in self._get_table_columns("stack_traces"):
+            return
+        for row in self.query_runner.iter_query(
+            "SELECT source_file_id, stack_trace FROM stack_traces "
+            "WHERE source_file_id IS NOT NULL AND stack_trace IS NOT NULL"
+        ):
+            yield row[0], row[1]
+
     def query_source_files(
         self, filters: Optional[Dict[str, Any]] = None
     ) -> Generator[SourceFile, None, None]:

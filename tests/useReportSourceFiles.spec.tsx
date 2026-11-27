@@ -45,14 +45,14 @@ beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(axiosInstance.get).mockResolvedValue({
         data: [
-            { id: 1, path: '/a.py' },
+            { id: 1, path: '/a.py', aliases: ['/link/a.py'] },
             { id: 2, path: '/b.py' },
         ],
     });
 });
 
 describe('useReportSourceFiles', () => {
-    it("reads the report's source files into sets of ids and paths", async () => {
+    it("reads the report's source files into their ids, and ids by stored path and alias", async () => {
         const { result } = renderWithProfilerReport(PROFILER_REPORT);
 
         await waitFor(() => expect(result.current.sourceFiles.data).toBeDefined());
@@ -60,7 +60,11 @@ describe('useReportSourceFiles', () => {
         expect(axiosInstance.get).toHaveBeenCalledWith(Endpoints.SOURCE_FILES, undefined);
         expect(result.current.sourceFiles.data).toEqual({
             ids: new Set([1, 2]),
-            paths: new Set(['/a.py', '/b.py']),
+            idsByPath: new Map([
+                ['/link/a.py', 1],
+                ['/a.py', 1],
+                ['/b.py', 2],
+            ]),
         });
     });
 

@@ -325,6 +325,25 @@ class TestDatabaseQueries(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].stack_trace, "trace_data")
 
+    def test_iter_stack_trace_source_refs_without_the_column_pairs_none(self):
+        self.connection.execute("INSERT INTO stack_traces VALUES (1, 'trace_data')")
+        self.assertEqual(list(self.db_queries.iter_stack_trace_source_refs()), [])
+
+    def test_iter_stack_trace_source_refs_without_the_table_pairs_none(self):
+        self.connection.execute("DROP TABLE stack_traces")
+        self.assertEqual(list(self.db_queries.iter_stack_trace_source_refs()), [])
+
+    def test_iter_stack_trace_source_refs_skips_unpaired_and_empty_rows(self):
+        self.connection.executescript("""
+            ALTER TABLE stack_traces ADD COLUMN source_file_id int;
+            INSERT INTO stack_traces VALUES (1, 'paired', 4);
+            INSERT INTO stack_traces VALUES (2, 'unpaired', NULL);
+            INSERT INTO stack_traces VALUES (3, NULL, 5);
+            """)
+        self.assertEqual(
+            list(self.db_queries.iter_stack_trace_source_refs()), [(4, "paired")]
+        )
+
     def test_query_source_files(self):
         self.connection.executescript("""
             CREATE TABLE source_files (
