@@ -35,14 +35,15 @@ from typing import (
     Tuple,
 )
 
+from ttnn_visualizer.agent import row_cells
 from ttnn_visualizer.agent.js_values import (
     js_divide,
     js_is_finite,
-    js_parse_float,
     js_parse_int,
     js_truthy,
 )
 from ttnn_visualizer.agent.perf_detail import is_unmodelled
+from ttnn_visualizer.agent.row_cells import parse_filled_float
 from ttnn_visualizer.csv_queries import SIGNPOST_OP_TYPE, DeviceLogMeta
 from ttnn_visualizer.device_architecture import DeviceArchitecture, architecture_of
 
@@ -122,10 +123,6 @@ def _parse_nullable_integer(value: object) -> Optional[float]:
     return None if math.isnan(parsed) else float(parsed)
 
 
-def _parse_filled_float(value: object) -> Optional[float]:
-    return js_parse_float(value) if js_truthy(value) else None
-
-
 def program_calls(rows: Iterable[Dict]) -> Iterator[Tuple[Dict, bool]]:
     """Each row with a program hash, and whether it is its program's first call.
 
@@ -188,7 +185,8 @@ class FlagRow:
 
 def row_cores(row: Dict) -> float:
     """A row's core count as `enrichRowData` parses it, which `core_count` reads."""
-    return float(js_parse_int(row.get("cores")))
+    cores = row_cells.read("cores", row.get("cores"))
+    return math.nan if cores is None else cores
 
 
 def typed_row(row: Dict, is_first_hash_occurrence: bool = True) -> FlagRow:
@@ -199,13 +197,13 @@ def typed_row(row: Dict, is_first_hash_occurrence: bool = True) -> FlagRow:
     """
     bound_analysis = row.get("bound_analysis")
     return FlagRow(
-        total_percent=js_parse_float(row.get("total_percent")),
-        device_time=js_parse_float(row.get("device_time")),
+        total_percent=row_cells.read("total_percent", row.get("total_percent")),
+        device_time=row_cells.read("device_time", row.get("device_time")),
         cores=row_cores(row),
         available_cores=_parse_nullable_integer(row.get("available_cores")),
-        dram_percent=_parse_filled_float(row.get("dram_percent")),
-        flops_percent=_parse_filled_float(row.get("flops_percent")),
-        pm_ideal_ns=_parse_filled_float(row.get("pm_ideal_ns")),
+        dram_percent=row_cells.read("dram_percent", row.get("dram_percent")),
+        flops_percent=row_cells.read("flops_percent", row.get("flops_percent")),
+        pm_ideal_ns=parse_filled_float(row.get("pm_ideal_ns")),
         bound=row.get("bound"),
         bound_analysis=(
             BoundAnalysis(bound_analysis) if bound_analysis in _BOUND_ANALYSES else None
