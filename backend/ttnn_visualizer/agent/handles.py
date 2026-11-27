@@ -350,10 +350,11 @@ TOOL_TABLES: Dict[str, frozenset] = {
     # Not `stack_traces`, even though `called_from` reads it: the raw `no such
     # table` that justified requiring it cannot happen any more, because
     # `query_operation_ids_by_stack_trace` and `query_stack_traces` each guard for
-    # the table now. Requiring it withdrew the name search from a capture that can
-    # answer it, which is the opposite of the call made for `operation_provenance`
-    # below — and that call is the better one. A `called_from` search on a capture
-    # with no traces says so in its caveat instead.
+    # the table now, and for a table without the `stack_trace` column. Requiring
+    # it withdrew the name search from a capture that can answer it, which is the
+    # opposite of the call made for `operation_provenance` below — and that call
+    # is the better one. A `called_from` search on a capture with no traces says
+    # so in its caveat instead.
     "find_operations": frozenset({"operations"}),
     "memory_profile": frozenset({"buffers", "operations"}),
     "operation_detail": frozenset(

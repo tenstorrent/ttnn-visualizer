@@ -2,6 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
+import { IconNames } from '@blueprintjs/icons';
 import { memo, useContext } from 'react';
 import OpGraphNodeExpander from './OpGraphNodeExpander';
 import { OpGraphExpansionContext } from './opGraphExpansionContext';
@@ -24,6 +25,9 @@ const OpGraphDeviceOpExpander = memo(({ operationId, count, isExpanded }: OpGrap
             count={count}
             isExpanded={isExpanded}
             onToggle={() => toggleExpansion(operationId)}
+            // A chevron would read as a folded block; the cube marks device
+            // operations, as in the details view and the L1 plots. #2210
+            icon={isExpanded ? IconNames.CUBE_REMOVE : IconNames.CUBE_ADD}
         />
     );
 });

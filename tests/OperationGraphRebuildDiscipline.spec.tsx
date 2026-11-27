@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { getDefaultStore } from 'jotai';
 
+import { IconNames } from '@blueprintjs/icons';
 import type { NodeChange } from '@xyflow/react';
 
 import { type DeviceOperationNode, type Node, NodeType, type OperationDescription } from '../src/model/APIData';
@@ -2120,8 +2121,12 @@ describe('OperationGraphReactFlow device operation expansion', () => {
             );
         });
 
+        // The chip now sits in the expanded node's header, a different component.
+        const hideChip = screen.getByRole('button', { name: 'Hide device operations' });
+        expect(hideChip.querySelector('[data-icon]')).toHaveAttribute('data-icon', IconNames.CUBE_REMOVE);
+
         runBuild.mockClear();
-        fireEvent.click(screen.getByRole('button', { name: 'Hide device operations' }));
+        fireEvent.click(hideChip);
         expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ deviceSubgraphs: [] }));
     });
 

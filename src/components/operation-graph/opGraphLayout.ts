@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import dagre from '@dagrejs/dagre';
+import { EXPANDER_ICON_SIZE } from './opGraphTypes';
 
 const CHAR_WIDTH = 6.8;
 const FILE_CHAR_WIDTH = 6.2;
@@ -12,8 +13,9 @@ const NODE_MAX_WIDTH = 560;
 const NODE_HEIGHT = 32;
 const NODE_HEIGHT_WITH_FILE = 46;
 const BLOCK_NODE_HEIGHT = 58;
-// The device-operation badge, kept in step with `.op-graph-node-expander`.
-const EXPANDER_WIDTH = 32;
+// The device-operation badge: its icon, then a one-digit count, padding and a
+// little slack. Kept in step with `.op-graph-node-expander`.
+const EXPANDER_WIDTH = EXPANDER_ICON_SIZE + 25;
 // Pill chip (`▾ 336`) is wider than the device-op badge.
 const BLOCK_EXPANDER_WIDTH = 52;
 // Wide enough for an edge to carry its shape label between two ranks without
