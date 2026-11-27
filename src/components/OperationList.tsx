@@ -17,6 +17,7 @@ import { StackTraceLanguage } from '../definitions/StackTrace';
 import { formatSize } from '../functions/math';
 import { formatOperationLabel } from '../functions/formatting';
 import { useGetUniqueDeviceOperationsList, useOperationsList } from '../hooks/useAPI';
+import { useLinkedReportDeviceTimeTotalUs } from '../hooks/useDeviceOperationPerf';
 import useRestoreScrollPosition from '../hooks/useRestoreScrollPosition';
 import useScrollShade from '../hooks/useScrollShade';
 import { OperationDescription } from '../model/APIData';
@@ -73,6 +74,8 @@ const OperationList = () => {
     const navigate = useNavigate();
     const { data: fetchedOperations, error, isLoading } = useOperationsList();
     const { scoreByOpId, isAvailable: hasPerfRowBars } = useOpPerfRowScores();
+    // Read here rather than in each virtualised row, where it would add a query observer per row.
+    const totalDeviceTimeUs = useLinkedReportDeviceTimeTotalUs();
     const { hasScrolledFromTop, hasScrolledToBottom, updateScrollShade, resetScrollShade, shadeClasses } =
         useScrollShade();
     const { getListState, updateListState } = useRestoreScrollPosition(ScrollLocations.OPERATION_LIST);
@@ -572,7 +575,10 @@ const OperationList = () => {
                                                     />
                                                 )}
 
-                                                <OperationListPerfData operation={operation} />
+                                                <OperationListPerfData
+                                                    operation={operation}
+                                                    totalDeviceTimeUs={totalDeviceTimeUs}
+                                                />
 
                                                 {operation.arguments && (
                                                     <OperationArguments

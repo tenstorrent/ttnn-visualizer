@@ -42,6 +42,44 @@ export const makeRawPerfRow = (overrides: Partial<PerfTableRow> = {}): PerfTable
         ...overrides,
     }) as PerfTableRow;
 
+// bge_m3's untraced ttnn.cumsum: no matmul, so no roofline, and gaps dwarf device time, so Total % rounds to 0.
+const BGE_M3_CUMSUM_COLUMNS: Partial<PerfTableRow> = {
+    bound: '' as PerfTableRow['bound'],
+    bound_analysis: 'none',
+    dram: '',
+    dram_percent: '',
+    flops: '',
+    flops_percent: '',
+    total_percent: '0.0',
+};
+
+export const BGE_M3_CUMSUM = {
+    firstPermute: makeRawPerfRow({
+        ...BGE_M3_CUMSUM_COLUMNS,
+        id: '5',
+        raw_op_code: 'PermuteDeviceOperation',
+        device_time: '14.418',
+        cores: '64',
+    }),
+    accumulation: makeRawPerfRow({
+        ...BGE_M3_CUMSUM_COLUMNS,
+        id: '6',
+        raw_op_code: 'AccumulationDeviceOperation',
+        device_time: '115.73',
+        cores: '1',
+    }),
+    secondPermute: makeRawPerfRow({
+        ...BGE_M3_CUMSUM_COLUMNS,
+        id: '7',
+        raw_op_code: 'PermuteDeviceOperation',
+        device_time: '5.559',
+        cores: '32',
+    }),
+};
+
+/** bge_m3's whole device time (µs), which each of its operations' shares divides by. */
+export const BGE_M3_DEVICE_TIME_US = 49_989;
+
 // A typed row with only the fields the perf charts read; specs override what they assert on.
 export const makeTypedPerfRow = (overrides: Partial<TypedPerfTableRow> = {}): TypedPerfTableRow =>
     ({

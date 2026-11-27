@@ -16,15 +16,21 @@ import { TEST_IDS } from '../src/definitions/TestIds';
 import { useGetUniqueDeviceOperationsList, useOperationsList, useReportErrors } from '../src/hooks/useAPI';
 import { OperationDescription, OperationError, ReportError } from '../src/model/APIData';
 import { TestProviders } from './helpers/TestProviders';
+import { mockLinkedPerformanceReport } from './helpers/linkedReports';
+import { makeRawPerfRow } from './helpers/perfRowFixtures';
 import { operationListFilterAtom } from '../src/store/app';
 
-const { recordEvent } = vi.hoisted(() => ({ recordEvent: vi.fn() }));
+const { recordEvent, OperationListPerfData } = vi.hoisted(() => ({
+    recordEvent: vi.fn(),
+    OperationListPerfData: vi.fn<(props: { operation: { id: number }; totalDeviceTimeUs: number }) => null>(() => null),
+}));
 
 vi.mock('../src/functions/recordEvent', () => ({ default: recordEvent }));
 
 vi.mock('../src/hooks/useAPI', () => ({
     useOperationsList: vi.fn(),
     useGetUniqueDeviceOperationsList: vi.fn(),
+    useLinkedPerformanceReport: vi.fn(),
     useReportErrors: vi.fn(),
 }));
 
@@ -32,7 +38,7 @@ vi.mock('../src/hooks/useOpPerfRowScores', () => ({
     useOpPerfRowScores: () => ({ scoreByOpId: new Map(), isAvailable: false }),
 }));
 
-vi.mock('../src/components/OperationListPerfData', () => ({ default: () => null }));
+vi.mock('../src/components/OperationListPerfData', () => ({ default: OperationListPerfData }));
 
 vi.mock('../src/hooks/useRestoreScrollPosition', () => ({
     default: () => ({ getListState: () => undefined, updateListState: vi.fn() }),
@@ -90,6 +96,12 @@ const unattachedError: ReportError = {
     attached: false,
 };
 
+const listTree = (restoredQuery = '') => (
+    <TestProviders initialAtomValues={[[operationListFilterAtom, restoredQuery]]}>
+        <OperationList />
+    </TestProviders>
+);
+
 const renderList = (operations: OperationDescription[], reportErrors: ReportError[], restoredQuery = '') => {
     vi.mocked(useOperationsList).mockReturnValue({
         data: operations,
@@ -98,11 +110,7 @@ const renderList = (operations: OperationDescription[], reportErrors: ReportErro
     } as unknown as ReturnType<typeof useOperationsList>);
     vi.mocked(useReportErrors).mockReturnValue({ data: reportErrors } as unknown as ReturnType<typeof useReportErrors>);
 
-    return render(
-        <TestProviders initialAtomValues={[[operationListFilterAtom, restoredQuery]]}>
-            <OperationList />
-        </TestProviders>,
-    );
+    return render(listTree(restoredQuery));
 };
 
 const rowFor = (container: HTMLElement, operationId: number) =>
@@ -110,7 +118,9 @@ const rowFor = (container: HTMLElement, operationId: number) =>
 
 beforeEach(() => {
     recordEvent.mockClear();
+    OperationListPerfData.mockClear();
     vi.mocked(useGetUniqueDeviceOperationsList).mockReturnValue([]);
+    mockLinkedPerformanceReport(undefined);
 });
 
 // RTL auto-cleanup is off in this project.
@@ -187,5 +197,60 @@ describe('OperationList filter event', () => {
 
         expect(screen.getByPlaceholderText<HTMLInputElement>('Filter operations').value).toBe('');
         expect(recordEvent).not.toHaveBeenCalled();
+    });
+});
+
+describe('OperationList device time', () => {
+    // Each row's latest total, as it shows after any re-render.
+    const totalByRow = () =>
+        new Map(OperationListPerfData.mock.calls.map(([props]) => [props.operation.id, props.totalDeviceTimeUs]));
+    const timedRows = (...deviceTimes: string[]) =>
+        deviceTimes.map((deviceTime) => makeRawPerfRow({ device_time: deviceTime }));
+    const operations = [operation(1, 'ttnn.add'), operation(2, 'ttnn.mul')];
+
+    it("hands every row the linked report's device time, which Operation Details divides by too", () => {
+        mockLinkedPerformanceReport(timedRows('10', '30.5', ''));
+
+        renderList(operations, []);
+
+        expect(totalByRow()).toEqual(
+            new Map([
+                [1, 40.5],
+                [2, 40.5],
+            ]),
+        );
+    });
+
+    it('hands the rows no total before the linked report loads', () => {
+        renderList(operations, []);
+
+        expect(totalByRow()).toEqual(
+            new Map([
+                [1, 0],
+                [2, 0],
+            ]),
+        );
+    });
+
+    it('hands every row the new total when the linked report loads after the list', () => {
+        const { rerender } = renderList(operations, []);
+
+        expect(totalByRow()).toEqual(
+            new Map([
+                [1, 0],
+                [2, 0],
+            ]),
+        );
+
+        mockLinkedPerformanceReport(timedRows('10', '30.5'));
+
+        rerender(listTree());
+
+        expect(totalByRow()).toEqual(
+            new Map([
+                [1, 40.5],
+                [2, 40.5],
+            ]),
+        );
     });
 });

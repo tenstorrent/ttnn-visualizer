@@ -6,19 +6,16 @@ import { ReactNode } from 'react';
 import { renderHook } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useDeviceOperationPerf } from '../src/hooks/useDeviceOperationPerf';
-import {
-    PerformanceReportResponse,
-    useGetDeviceOperationListPerfByOpId,
-    useLinkedPerformanceReport,
-} from '../src/hooks/useAPI';
+import { useDeviceOperationPerf, useLinkedReportDeviceTimeTotalUs } from '../src/hooks/useDeviceOperationPerf';
+import { useGetDeviceOperationListPerfByOpId } from '../src/hooks/useAPI';
 import { useReportLinkMatch } from '../src/hooks/useReportLinkMatch';
 import { ReportLinkMatchResult } from '../src/definitions/ReportLinks';
 import { ReportFolder } from '../src/definitions/Reports';
 import { activePerformanceReportAtom } from '../src/store/app';
 import { DeviceOperationMapping } from '../src/model/DeviceOperationMapping';
 import { PerfTableRow } from '../src/model/PerfTable';
-import { makeRawPerfRow } from './helpers/perfRowFixtures';
+import { mockLinkedPerformanceReport } from './helpers/linkedReports';
+import { BGE_M3_CUMSUM, makeRawPerfRow } from './helpers/perfRowFixtures';
 
 vi.mock('../src/hooks/useAPI', () => ({
     useLinkedPerformanceReport: vi.fn(),
@@ -31,13 +28,6 @@ vi.mock('../src/hooks/useReportLinkMatch', () => ({
 
 const OPERATION_ID = 4;
 
-const givenLinkedReport = (rows: PerfTableRow[] | undefined, envelope: Partial<PerformanceReportResponse> = {}) =>
-    vi
-        .mocked(useLinkedPerformanceReport)
-        .mockReturnValue({ data: rows && { report: rows, ...envelope } } as ReturnType<
-            typeof useLinkedPerformanceReport
-        >);
-
 const givenMatches = (mappingsByOpId: Map<number, DeviceOperationMapping[]>) =>
     vi.mocked(useGetDeviceOperationListPerfByOpId).mockReturnValue(mappingsByOpId);
 
@@ -49,14 +39,13 @@ const scopeMapping = (startNodeId: number, row: PerfTableRow | undefined): Devic
     perfData: row,
 });
 
-const firstPermute = makeRawPerfRow({ id: '5', raw_op_code: 'PermuteDeviceOperation', device_time: '14.418' });
-const secondPermute = makeRawPerfRow({ id: '7', raw_op_code: 'PermuteDeviceOperation', device_time: '5.559' });
+const { firstPermute, secondPermute } = BGE_M3_CUMSUM;
 
 const renderPerf = () => renderHook(() => useDeviceOperationPerf(OPERATION_ID)).result.current;
 
 beforeEach(() => {
     vi.mocked(useReportLinkMatch).mockReturnValue(ReportLinkMatchResult.LINKED);
-    givenLinkedReport([firstPermute, secondPermute]);
+    mockLinkedPerformanceReport([firstPermute, secondPermute]);
     givenMatches(new Map([[OPERATION_ID, [scopeMapping(101, firstPermute), scopeMapping(105, secondPermute)]]]));
 });
 
@@ -107,7 +96,7 @@ describe('useDeviceOperationPerf', () => {
     });
 
     it("sums every row's countable device time for the share", () => {
-        givenLinkedReport([
+        mockLinkedPerformanceReport([
             makeRawPerfRow({ device_time: '10' }),
             makeRawPerfRow({ device_time: '30.5' }),
             makeRawPerfRow({ device_time: '' }),
@@ -117,10 +106,40 @@ describe('useDeviceOperationPerf', () => {
         expect(renderPerf().totalDeviceTimeUs).toBe(40.5);
     });
 
+    it('gives the operations list the same total, and none before the linked report loads', () => {
+        const renderTotal = () => renderHook(() => useLinkedReportDeviceTimeTotalUs()).result.current;
+
+        expect(renderTotal()).toBe(renderPerf().totalDeviceTimeUs);
+        expect(renderTotal()).toBe(19.977);
+
+        mockLinkedPerformanceReport(undefined);
+
+        expect(renderTotal()).toBe(0);
+    });
+
+    it('sums the linked report once however many readers ask for its total', () => {
+        let deviceTimeReads = 0;
+        const countedRows = Array.from({ length: 4 }, (_, index) =>
+            Object.defineProperty(makeRawPerfRow({ id: `${index}` }), 'device_time', {
+                get: () => {
+                    deviceTimeReads += 1;
+                    return '10';
+                },
+            }),
+        );
+        mockLinkedPerformanceReport(countedRows);
+
+        const totals = [1, 2, 3].map(() => renderHook(() => useLinkedReportDeviceTimeTotalUs()).result.current);
+
+        expect(totals).toEqual([40, 40, 40]);
+        expect(renderPerf().totalDeviceTimeUs).toBe(40);
+        expect(deviceTimeReads).toBe(countedRows.length);
+    });
+
     it("says whether the linked report has hardware counters, from its envelope rather than its rows' keys", () => {
         expect(renderPerf().hasHardwareCounters).toBe(false);
 
-        givenLinkedReport([firstPermute], { has_hardware_counters: true });
+        mockLinkedPerformanceReport([firstPermute], { has_hardware_counters: true });
 
         expect(renderPerf().hasHardwareCounters).toBe(true);
     });
@@ -131,7 +150,7 @@ describe('useDeviceOperationPerf', () => {
         [1, false],
         [2, true],
     ])('reads a report naming %s devices as multi-device: %s', (deviceCount, isMultiDevice) => {
-        givenLinkedReport([firstPermute], { device_count: deviceCount });
+        mockLinkedPerformanceReport([firstPermute], { device_count: deviceCount });
 
         expect(renderPerf().isMultiDeviceReport).toBe(isMultiDevice);
     });
