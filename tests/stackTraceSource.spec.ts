@@ -130,20 +130,54 @@ describe('getCallSiteFrame', () => {
 });
 
 describe('getFrameSourceFileId', () => {
-    it("passes the report's source file id to frame 0 only", () => {
-        const [callSite, caller] = parseStackTraceFrames(MULTI_FRAME_TRACE);
+    const [callSite, caller] = parseStackTraceFrames(MULTI_FRAME_TRACE);
+    const mapping = (idsByPath: Record<string, number>) => ({
+        ids: new Set(Object.values(idsByPath)),
+        idsByPath: new Map(Object.entries(idsByPath)),
+    });
 
-        expect(getFrameSourceFileId(callSite, 7)).toBe(7);
-        expect(getFrameSourceFileId(caller, 7)).toBeNull();
-        expect(getFrameSourceFileId(callSite, null)).toBeNull();
+    // Report files listed by id, with no path mapped to any of them.
+    const listing = (ids: number[]) => ({ ids: new Set(ids), idsByPath: new Map<string, number>() });
+
+    it("passes the trace's source file id to frame 0 only", () => {
+        expect(getFrameSourceFileId(callSite, 7, listing([7]))).toBe(7);
+        expect(getFrameSourceFileId(callSite, 7, undefined)).toBe(7);
+        expect(getFrameSourceFileId(caller, 7, listing([7]))).toBeNull();
+        expect(getFrameSourceFileId(callSite, null, mapping({}))).toBeNull();
+    });
+
+    it('passes a later frame the id the report maps its path to', () => {
+        expect(getFrameSourceFileId(caller, 7, mapping({ [caller.file]: 9 }))).toBe(9);
+        expect(getFrameSourceFileId(caller, 7, undefined)).toBeNull();
+    });
+
+    it("keeps the trace's id for frame 0 even where its path maps to another file", () => {
+        const sourceFiles = mapping({ [callSite.file]: 9 });
+        const withTraceId = { ...sourceFiles, ids: new Set([7, 9]) };
+
+        expect(getFrameSourceFileId(callSite, 7, withTraceId)).toBe(7);
+    });
+
+    it('passes frame 0 the id its path maps to when the trace has no id', () => {
+        // The path is an alias, so the backend's exact path lookup alone would not find it.
+        expect(getFrameSourceFileId(callSite, null, mapping({ [callSite.file]: 9 }))).toBe(9);
+    });
+
+    it('passes frame 0 the id its path maps to when the report does not list the trace id', () => {
+        expect(getFrameSourceFileId(callSite, 7, mapping({ [callSite.file]: 9 }))).toBe(9);
+        // With nothing mapped, the trace's id still goes, and the backend falls back to the path.
+        expect(getFrameSourceFileId(callSite, 7, listing([8]))).toBe(7);
     });
 });
 
 describe('isFrameSourceInReport', () => {
     const [callSite, caller] = parseStackTraceFrames(MULTI_FRAME_TRACE);
-    const holding = (ids: number[], paths: string[]) => ({ ids: new Set(ids), paths: new Set(paths) });
+    const holding = (ids: number[], paths: string[]) => ({
+        ids: new Set(ids),
+        idsByPath: new Map(paths.map((path, index): [string, number] => [path, 100 + index])),
+    });
 
-    it('holds a frame whose path the report lists', () => {
+    it('holds a frame whose path the report maps to a file', () => {
         expect(isFrameSourceInReport(caller, null, holding([], ['/m/tests/infra.py']))).toBe(true);
     });
 

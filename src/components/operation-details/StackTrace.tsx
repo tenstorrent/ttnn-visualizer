@@ -97,8 +97,14 @@ function StackTrace({
     const activeFrame = openedFrame?.frame ?? null;
 
     const handleOpenFrame = useCallback(
-        (frame: StackTraceFrame) =>
-            setOpenedFrame({ frame, stackTrace, sourceFileId: stackTraceSourceFileId, isOpen: true }),
+        (frame: StackTraceFrame, frameSourceFileId: number | null) =>
+            setOpenedFrame({
+                frame,
+                frameSourceFileId,
+                stackTrace,
+                sourceFileId: stackTraceSourceFileId,
+                isOpen: true,
+            }),
         [stackTrace, stackTraceSourceFileId],
     );
 
@@ -195,7 +201,7 @@ function StackTrace({
                     // Another frame mounts its own viewer and reads its own file.
                     key={`${activeFrame.index}:${activeFrame.file}:${activeFrame.line}`}
                     filePath={activeFrame.file}
-                    sourceFileId={getFrameSourceFileId(activeFrame, stackTraceSourceFileId)}
+                    sourceFileId={openedFrame?.frameSourceFileId ?? null}
                     lineNumber={activeFrame.line}
                     language={language}
                     isOpen={openedFrame?.isOpen ?? false}
@@ -212,12 +218,14 @@ interface StackTraceFrameLineProps {
     text: string;
     prefix: string;
     suffix: string;
-    onOpen: (frame: StackTraceFrame) => void;
+    onOpen: (frame: StackTraceFrame, frameSourceFileId: number | null) => void;
 }
 
 /**
  * A frame's line, with its `"<file>", line <n>` linked when the report holds that file in
- * its `source_files`, and plain text otherwise, as every frame is until that list loads.
+ * its `source_files`, and plain text otherwise, as every frame is until that list loads. A file
+ * is held by its stored path, by a raw path the report's traces map to it (a symlinked checkout's
+ * path, say), or, for frame 0 only, by the trace's source file id.
  * Outside server mode the read could also find a file in a tt-metal checkout or over SSH,
  * but finding out means probing each frame (an SSH round trip on remote reports), so only
  * the report's own files are linked, in both modes. The Source button still falls back.
@@ -238,7 +246,7 @@ function StackTraceFrameLine({ frame, sourceFileId, text, prefix, suffix, onOpen
                 data-testid={TEST_IDS.STACK_TRACE_FRAME_LINK}
                 // Starts with the visible text, so voice control can name it by what it shows.
                 aria-label={`"${frame.file}", line ${frame.line}: view source`}
-                onClick={() => onOpen(frame)}
+                onClick={() => onOpen(frame, getFrameSourceFileId(frame, sourceFileId, sourceFiles))}
             >
                 &quot;{frame.file}&quot;, line {frame.line}
             </button>
@@ -249,6 +257,8 @@ function StackTraceFrameLine({ frame, sourceFileId, text, prefix, suffix, onOpen
 
 interface OpenedFrame {
     frame: StackTraceFrame;
+    // The id its file is read by, taken when it was clicked: see `getFrameSourceFileId`.
+    frameSourceFileId: number | null;
     // The trace and source file id it was opened in, to forget it when either changes.
     stackTrace: string;
     sourceFileId: number | null;

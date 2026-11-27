@@ -21,12 +21,17 @@ export interface OperationError {
 export interface SourceFileResponse {
     id: number;
     path: string;
+    // The raw paths the report's traces name this file by, where no stored path equals them:
+    // tt-metal stores a file under its realpath, which a symlinked checkout's traces never show.
+    // Absent from an older backend.
+    aliases?: string[];
 }
 
 /** The report's source files, by id and by path, for checking a stack trace frame against. */
 export interface ReportSourceFiles {
     ids: ReadonlySet<number>;
-    paths: ReadonlySet<string>;
+    // Each file's id by its stored path and by every alias its traces name it by.
+    idsByPath: ReadonlyMap<string, number>;
 }
 
 export interface Operation {

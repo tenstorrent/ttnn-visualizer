@@ -8,6 +8,7 @@ import unittest
 from ttnn_visualizer.models import SourceFile
 from ttnn_visualizer.queries import DatabaseQueries
 from ttnn_visualizer.report_source_file import (
+    _writer_stack_trace_file,
     lookup_report_source_file,
     read_report_source_file,
     report_source_file_available,
@@ -116,3 +117,31 @@ class TestReportSourceFile(unittest.TestCase):
                 self.assertFalse(
                     report_source_file_available(self.db, source_file_id=row_id)
                 )
+
+
+class TestWriterStackTraceFile(unittest.TestCase):
+    """The path tt-metal's `extract_stack_trace_file` pairs a trace's
+    `source_file_id` with, read the same way."""
+
+    def test_the_first_file_frame_past_blank_lines(self):
+        trace = '\n\n  File "/m/a.py", line 3, in run\n    x()\n  File "/m/b.py", line 5, in f'
+        self.assertEqual(_writer_stack_trace_file(trace), "/m/a.py")
+
+    def test_a_path_with_line_before_any_file_frame(self):
+        trace = '/m/kernel.cpp:12:4\n  File "/m/a.py", line 3, in run'
+        self.assertEqual(_writer_stack_trace_file(trace), "/m/kernel.cpp")
+
+    def test_a_file_frame_with_no_path_is_no_match(self):
+        # The writer's `[^"]+` needs a path; the viewer's `[^"]*` does not.
+        self.assertIsNone(_writer_stack_trace_file('File "", line 3, in run'))
+
+    def test_a_blob_trace_is_none(self):
+        # SQLite hands a BLOB back as bytes, which the string patterns cannot read.
+        self.assertIsNone(_writer_stack_trace_file(b'File "/m/a.py", line 3, in run'))
+
+    def test_no_trace_or_no_path_is_none(self):
+        self.assertIsNone(_writer_stack_trace_file(None))
+        self.assertIsNone(_writer_stack_trace_file(""))
+        self.assertIsNone(
+            _writer_stack_trace_file("Traceback (most recent call last):")
+        )
