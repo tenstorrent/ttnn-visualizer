@@ -88,6 +88,10 @@ TENSOR_SIZE_UNIT = "bytes"
 # strings a given capture happens to contain.
 BUFFER_TYPE_NAMES = tuple(sorted(member.name for member in BufferType))
 
+# Ids per `tensors` read by `tensor_states`, inside SQLite's oldest bound of 999
+# parameters, as `failures.STACK_TRACE_IDS_PER_READ`.
+TENSOR_IDS_PER_READ = 500
+
 
 class ProfilerDatabaseMissingError(ValueError):
     """Raised when a handle has no memory report database to read."""
@@ -1394,26 +1398,29 @@ def read_scoped_graph(
 def tensor_states(
     queries: DatabaseQueries, scope: RankScope, tensor_ids: Iterable[int]
 ) -> Dict[int, layout_round_trips.TensorState]:
-    """Where and how each of `tensor_ids` is stored, read only for those ids."""
+    """Where and how each of `tensor_ids` is stored, read only for those ids, in
+    batches of `TENSOR_IDS_PER_READ` so no read binds past SQLite's bound.
+
+    Never an empty batch, which drops the filter and parses every tensor.
+    """
     ids = sorted(set(tensor_ids))
-    # Never an empty id list, which drops the filter and parses every tensor.
-    if not ids:
-        return {}
-    return {
-        tensor.tensor_id: layout_round_trips.tensor_state(
-            tensor.layout,
-            (
-                _buffer_type_name(tensor.buffer_type)
-                if tensor.buffer_type is not None
-                else None
-            ),
-            tensor.memory_config,
-        )
+    states: Dict[int, layout_round_trips.TensorState] = {}
+    for start in range(0, len(ids), TENSOR_IDS_PER_READ):
+        batch = ids[start : start + TENSOR_IDS_PER_READ]
         for tensor in queries.query_tensors(
-            filters=scoped(queries, "tensors", scope, tensor_id=ids),
+            filters=scoped(queries, "tensors", scope, tensor_id=batch),
             size_from_buffers=False,
-        )
-    }
+        ):
+            states[tensor.tensor_id] = layout_round_trips.tensor_state(
+                tensor.layout,
+                (
+                    _buffer_type_name(tensor.buffer_type)
+                    if tensor.buffer_type is not None
+                    else None
+                ),
+                tensor.memory_config,
+            )
+    return states
 
 
 def _subgraph_tensor(tensor: Optional[Tensor], tensor_id: int) -> Dict[str, object]:
@@ -1558,6 +1565,7 @@ __all__ = [
     "DetailFields",
     "MAX_ARGUMENT_VALUE_CHARS",
     "RankScope",
+    "TENSOR_IDS_PER_READ",
     "TENSOR_SIZE_UNIT",
     "ProfilerDatabaseMissingError",
     "cached_per_rank",

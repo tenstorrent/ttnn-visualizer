@@ -947,9 +947,11 @@ def layout_round_trips(
     with operations.profiler_db(instance) as queries:
         scope = operations.rank_scope(queries, rank)
         graph = operations.read_scoped_graph(registry, handle, queries, scope)
+        # Every operation, not the graph view's kept ones: a move with no edge, from
+        # a tensor nothing produced to one nothing reads, is still a move to count.
         moves = move_operation_ids(
             graph.names,
-            op_graph.kept_operation_ids(graph),
+            graph.names.keys(),
             graph.inputs_by_operation,
             graph.outputs_by_operation,
         )

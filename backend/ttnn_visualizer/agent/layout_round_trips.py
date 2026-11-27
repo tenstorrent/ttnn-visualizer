@@ -13,7 +13,7 @@ which chains are round trips.
 """
 
 from dataclasses import dataclass
-from typing import AbstractSet, Dict, List, Mapping, Optional, Sequence, Set
+from typing import AbstractSet, Dict, Iterable, List, Mapping, Optional, Sequence, Set
 
 # Operations that change only where or how a tensor is stored. Names are compared with
 # their `ttnn.` or `ttnn::` prefix removed. `typecast` and `to_dtype` are left out: a
@@ -103,16 +103,17 @@ class RoundTrip:
 
 def move_operation_ids(
     names: Mapping[int, str],
-    kept: AbstractSet[int],
+    operation_ids: Iterable[int],
     inputs_by_operation: Mapping[int, Sequence[int]],
     outputs_by_operation: Mapping[int, Sequence[int]],
 ) -> List[int]:
-    """The kept operations that move one tensor into a new one, in id order.
+    """The operations of `operation_ids` that move one tensor into a new one, in id
+    order.
 
     A move that hands back the tensor it was given changed nothing, so it is no step.
     """
     moves = []
-    for operation_id in sorted(kept):
+    for operation_id in sorted(set(operation_ids)):
         inputs = inputs_by_operation.get(operation_id, ())
         outputs = outputs_by_operation.get(operation_id, ())
         if (

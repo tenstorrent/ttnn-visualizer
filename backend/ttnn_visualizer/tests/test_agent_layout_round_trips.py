@@ -9,7 +9,7 @@ linked answer, with device time, is in `test_agent_linking.py`.
 """
 
 import pytest
-from ttnn_visualizer.agent import linking, server
+from ttnn_visualizer.agent import linking, operations, server
 from ttnn_visualizer.agent.layout_round_trips import (
     MAX_ROUND_TRIP_MOVES,
     TensorState,
@@ -151,8 +151,9 @@ class TestMoveOperationIds:
         inputs = {1: [10], 2: [11], 3: [12, 13], 4: [14], 6: [16]}
         outputs = {1: [20], 2: [11], 3: [22], 4: [24], 6: [26]}
 
-        # 2 hands back its input, 3 reads two tensors, 4 is no move, 5 is not kept.
-        assert move_operation_ids(names, {1, 2, 3, 4, 6}, inputs, outputs) == [1, 6]
+        # 2 hands back its input, 3 reads two tensors, 4 is no move, 5 is a
+        # deallocate.
+        assert move_operation_ids(names, names.keys(), inputs, outputs) == [1, 6]
 
 
 _SCHEMA = """
@@ -270,6 +271,32 @@ class TestLayoutRoundTripsTool:
         assert result["round_trip_count"] == 2
         assert len(result["round_trips"]) == 1
         assert result["truncated"] is True
+
+    def test_a_move_with_no_edge_is_counted(self, tmp_path):
+        rows = list(_ROUND_TRIP_ROWS)
+        # Op 6 tilizes a tensor nothing produced into one nothing reads.
+        rows += [
+            ("operations", (6, "ttnn.tilize", 0.1)),
+            _tensor(16, "Layout.ROW_MAJOR", _INTERLEAVED_DRAM),
+            _tensor(17, "Layout.TILE", _INTERLEAVED_DRAM),
+            ("input_tensors", (6, 0, 16)),
+            ("output_tensors", (6, 0, 17)),
+        ]
+        registry, handle = load_memory_report(tmp_path, _SCHEMA, rows)
+
+        result = linking.layout_round_trips(registry, handle)
+
+        assert result["move_operation_count"] == 5
+        assert result["round_trip_count"] == 1
+
+    def test_tensor_states_are_read_in_batches(self, round_trip_report, monkeypatch):
+        monkeypatch.setattr(operations, "TENSOR_IDS_PER_READ", 1)
+        registry, handle = round_trip_report
+
+        result = linking.layout_round_trips(registry, handle)
+
+        assert result["round_trip_count"] == 1
+        assert result["round_trips"][0]["tensor_ids"] == [10, 11, 12]
 
     def test_a_report_with_no_edges_says_so(self, tmp_path):
         registry, handle = load_memory_report(
