@@ -639,9 +639,10 @@ class DatabaseQueries:
         """``(source_file_id, stack_trace)`` of every trace the writer paired with a
         source file, streamed: the traces are the largest text in a report.
 
-        A report without the table, or from before the column, pairs none.
+        A report without the table, or from before the column, pairs none, as does
+        one whose table lacks the trace column itself.
         """
-        if not self._check_table_exists("stack_traces"):
+        if not self._stack_traces_hold_traces():
             return
         if "source_file_id" not in self._get_table_columns("stack_traces"):
             return

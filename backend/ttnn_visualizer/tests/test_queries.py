@@ -333,6 +333,16 @@ class TestDatabaseQueries(unittest.TestCase):
         self.connection.execute("DROP TABLE stack_traces")
         self.assertEqual(list(self.db_queries.iter_stack_trace_source_refs()), [])
 
+    def test_iter_stack_trace_source_refs_without_the_trace_column_pairs_none(self):
+        # The id alone names no raw path, and SQL naming the missing column would
+        # fail the whole source-file listing with `no such column`.
+        self.connection.executescript("""
+            DROP TABLE stack_traces;
+            CREATE TABLE stack_traces (operation_id int, source_file_id int);
+            INSERT INTO stack_traces VALUES (1, 4);
+            """)
+        self.assertEqual(list(self.db_queries.iter_stack_trace_source_refs()), [])
+
     def test_iter_stack_trace_source_refs_skips_unpaired_and_empty_rows(self):
         self.connection.executescript("""
             ALTER TABLE stack_traces ADD COLUMN source_file_id int;

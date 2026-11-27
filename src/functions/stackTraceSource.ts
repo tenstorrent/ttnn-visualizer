@@ -126,12 +126,28 @@ export const getOperationFileIdentifier = (stackTrace: string | null): string =>
  * (`extract_stack_trace_file` in `ttnn/ttnn/stack_trace_source.py`). The backend tries the id
  * before the path, so any other frame sends its own file's id instead: the one the report maps
  * its path to, by stored path or by a raw path other traces were stored with, or none.
+ *
+ * Frame 0 falls back to that mapping too when the trace has no id, or one the report does not
+ * list: the backend would then look the path up exactly, and an alias is no stored path, so the
+ * file `isFrameSourceInReport` linked it by would open as not found.
  */
 export const getFrameSourceFileId = (
     frame: StackTraceFrame,
     sourceFileId: number | null,
     sourceFiles: ReportSourceFiles | undefined,
-): number | null => (frame.index === 0 ? sourceFileId : (sourceFiles?.idsByPath.get(frame.file) ?? null));
+): number | null => {
+    const mappedId = sourceFiles?.idsByPath.get(frame.file) ?? null;
+
+    if (frame.index !== 0) {
+        return mappedId;
+    }
+
+    if (sourceFileId != null && (!sourceFiles || sourceFiles.ids.has(sourceFileId))) {
+        return sourceFileId;
+    }
+
+    return mappedId ?? sourceFileId;
+};
 
 /**
  * Whether the report holds a frame's source file, by a path it maps to a file or, for frame 0

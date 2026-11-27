@@ -107,6 +107,45 @@ def test_a_raw_path_stored_with_two_files_names_neither(client, make_report):
     ]
 
 
+def test_a_raw_path_also_stored_with_an_unservable_file_names_neither(
+    client, make_report
+):
+    """The pairing with a file that has no contents, or no row at all, still makes
+    the path ambiguous, so it is no alias of the file that can be served."""
+    instance_id = make_report(
+        schema_sql=SCHEMA_V2_1,
+        inserts_sql=f"""
+        INSERT INTO source_files VALUES (1, '/real/a.py', 'x = 1');
+        INSERT INTO source_files VALUES (2, '/real/empty.py', '');
+        INSERT INTO stack_traces VALUES (1, '{_trace("/link/a.py")}', 1);
+        INSERT INTO stack_traces VALUES (2, '{_trace("/link/a.py")}', 2);
+        INSERT INTO stack_traces VALUES (3, '{_trace("/link/b.py")}', 1);
+        INSERT INTO stack_traces VALUES (4, '{_trace("/link/b.py")}', 99);
+        """,
+    )
+
+    assert _source_files(client, instance_id) == [
+        {"id": 1, "path": "/real/a.py", "aliases": []}
+    ]
+
+
+def test_a_blob_trace_names_no_alias(client, make_report):
+    """A trace stored as a BLOB is read as no trace, and the listing still
+    answers for the files other traces name."""
+    instance_id = make_report(
+        schema_sql=SCHEMA_V2_1,
+        inserts_sql=f"""
+        INSERT INTO source_files VALUES (1, '/real/a.py', 'x = 1');
+        INSERT INTO stack_traces VALUES (1, CAST('{_trace("/link/x.py")}' AS BLOB), 1);
+        INSERT INTO stack_traces VALUES (2, '{_trace("/link/a.py")}', 1);
+        """,
+    )
+
+    assert _source_files(client, instance_id) == [
+        {"id": 1, "path": "/real/a.py", "aliases": ["/link/a.py"]}
+    ]
+
+
 def test_another_files_stored_path_is_never_an_alias(client, make_report):
     """An exact stored path names its own file, whatever a trace paired it with."""
     instance_id = make_report(

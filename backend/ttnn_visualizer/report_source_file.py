@@ -24,10 +24,12 @@ _WRITER_FILE_FRAME = re.compile(r'^\s*File "([^"]+)", line \d+, in ')
 _WRITER_PATH_WITH_LINE = re.compile(r"^\s*([^:\n]+):(\d+)(?::\d+)?\s*$")
 
 
-def _writer_stack_trace_file(trace: Optional[str]) -> Optional[str]:
+def _writer_stack_trace_file(trace: object) -> Optional[str]:
     """The raw path tt-metal's writer stored the trace's ``source_file_id`` for,
     read as ``extract_stack_trace_file`` reads it."""
-    if not trace:
+    # A BLOB a report keeps where text belongs names no path, as `_call_site` in
+    # `agent/failures.py` reads it, rather than failing the whole listing.
+    if not isinstance(trace, str) or not trace:
         return None
     for line in trace.splitlines():
         line = line.strip()
@@ -152,13 +154,13 @@ def _source_file_aliases(
     symlinked checkout names it by a path no ``source_files.path`` equals. Only the
     trace's own pairing says which file it is, and that needs no filesystem, so it
     holds for a report synced from another machine. A raw path paired with two ids
-    is dropped: linking by its exact path, if any, is safer than guessing.
+    is dropped: linking by its exact path, if any, is safer than guessing. That
+    holds even when one of the ids cannot be served, so conflicts are found across
+    every pairing and only then narrowed to servable ids.
     """
     id_by_raw_path: Dict[str, int] = {}
     conflicted: Set[str] = set()
     for source_file_id, trace in db.iter_stack_trace_source_refs():
-        if source_file_id not in servable_ids:
-            continue
         raw_path = _writer_stack_trace_file(trace)
         # Kept only as the trace spells it: the frontend looks a frame up by its
         # text, so a path validation would trim could never match.
@@ -175,6 +177,8 @@ def _source_file_aliases(
 
     aliases: Dict[int, List[str]] = {}
     for raw_path, source_file_id in sorted(id_by_raw_path.items()):
+        if source_file_id not in servable_ids:
+            continue
         aliases.setdefault(source_file_id, []).append(raw_path)
     return aliases
 

@@ -135,6 +135,10 @@ class TestWriterStackTraceFile(unittest.TestCase):
         # The writer's `[^"]+` needs a path; the viewer's `[^"]*` does not.
         self.assertIsNone(_writer_stack_trace_file('File "", line 3, in run'))
 
+    def test_a_blob_trace_is_none(self):
+        # SQLite hands a BLOB back as bytes, which the string patterns cannot read.
+        self.assertIsNone(_writer_stack_trace_file(b'File "/m/a.py", line 3, in run'))
+
     def test_no_trace_or_no_path_is_none(self):
         self.assertIsNone(_writer_stack_trace_file(None))
         self.assertIsNone(_writer_stack_trace_file(""))
