@@ -22,7 +22,7 @@ import { DeviceOperationPerf } from '../src/hooks/useDeviceOperationPerf';
 import { enrichRowData } from '../src/functions/enrichPerfRowData';
 import { PerfTableRow } from '../src/model/PerfTable';
 import { TestProviders } from './helpers/TestProviders';
-import { makeRawPerfRow } from './helpers/perfRowFixtures';
+import { BGE_M3_CUMSUM, BGE_M3_DEVICE_TIME_US, makeRawPerfRow } from './helpers/perfRowFixtures';
 import { openPopover } from './helpers/testForPortal';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { OperationHardwareCounters } from '../src/model/HardwareCounters';
@@ -668,21 +668,18 @@ describe('DeviceOperationsFullRender - tensors at a shared L1/DRAM address (#207
 });
 
 describe('DeviceOperationsFullRender - device operation perf (#1512)', () => {
+    const typed = (row: PerfTableRow) => enrichRowData([row], [], null)[0];
     const perfRow = (id: string, rawOpCode: string, deviceTimeUs: string, cores: string) =>
-        enrichRowData(
-            [
-                makeRawPerfRow({
-                    id,
-                    raw_op_code: rawOpCode,
-                    device_time: deviceTimeUs,
-                    cores,
-                    bound: '' as PerfTableRow['bound'],
-                    bound_analysis: 'none',
-                }),
-            ],
-            [],
-            null,
-        )[0];
+        typed(
+            makeRawPerfRow({
+                id,
+                raw_op_code: rawOpCode,
+                device_time: deviceTimeUs,
+                cores,
+                bound: '' as PerfTableRow['bound'],
+                bound_analysis: 'none',
+            }),
+        );
 
     const perfByScope = (container: HTMLElement) =>
         [...container.querySelectorAll('.device-operation-label')].map((label) => [
@@ -700,11 +697,11 @@ describe('DeviceOperationsFullRender - device operation perf (#1512)', () => {
             ...PERF_LOADING,
             linkStatus: ReportLinkMatchResult.LINKED,
             hasPerformanceReport: true,
-            totalDeviceTimeUs: 50_000,
+            totalDeviceTimeUs: BGE_M3_DEVICE_TIME_US,
             rowByStartNodeId: new Map([
-                [firstPermute.id, perfRow('5', 'PermuteDeviceOperation', '14.418', '64')],
-                [accumulation.id, perfRow('6', 'AccumulationDeviceOperation', '115.73', '1')],
-                [secondPermute.id, perfRow('7', 'PermuteDeviceOperation', '5.559', '32')],
+                [firstPermute.id, typed(BGE_M3_CUMSUM.firstPermute)],
+                [accumulation.id, typed(BGE_M3_CUMSUM.accumulation)],
+                [secondPermute.id, typed(BGE_M3_CUMSUM.secondPermute)],
             ]),
         });
 
@@ -722,9 +719,9 @@ describe('DeviceOperationsFullRender - device operation perf (#1512)', () => {
 
         expect(perfByScope(container)).toEqual([
             ['Tensor::reshape', null],
-            ['PermuteDeviceOperation', '14 µs·64 cores·<0.1% of device time'],
-            ['AccumulationDeviceOperation', '116 µs·1 core·0.2% of device time'],
-            ['PermuteDeviceOperation', '6 µs·32 cores·<0.1% of device time'],
+            ['PermuteDeviceOperation', "14 µs·64 cores·<0.1% of the report's device time"],
+            ['AccumulationDeviceOperation', "116 µs·1 core·0.2% of the report's device time"],
+            ['PermuteDeviceOperation', "6 µs·32 cores·<0.1% of the report's device time"],
         ]);
         expect(container).toHaveTextContent(
             "3 device operations ran for 136 µs (0.3% of the report's device time). " +
@@ -769,7 +766,9 @@ describe('DeviceOperationsFullRender - device operation perf (#1512)', () => {
 
         const container = renderGraph([captureStart(), matmul, functionEnd('MatmulDeviceOperation')]);
 
-        expect(perfByScope(container)).toEqual([['MatmulDeviceOperation', '40 µs·8 cores·<0.1% of device time']]);
+        expect(perfByScope(container)).toEqual([
+            ['MatmulDeviceOperation', "40 µs·8 cores·<0.1% of the report's device time"],
+        ]);
         expect(utilizationTriggers()).toHaveLength(0);
     });
 
@@ -845,7 +844,9 @@ describe('DeviceOperationsFullRender - device operation perf (#1512)', () => {
         const container = renderGraph([captureStart(), matmul, functionEnd('MatmulDeviceOperation')]);
         fireEvent.click(screen.getByRole('button', { name: /Arguments/ }));
 
-        expect(perfByScope(container)).toEqual([['MatmulDeviceOperation', '40 µs·8 cores·<0.1% of device time']]);
+        expect(perfByScope(container)).toEqual([
+            ['MatmulDeviceOperation', "40 µs·8 cores·<0.1% of the report's device time"],
+        ]);
         expect(document.querySelector('.device-operation-arguments-visualisation-overlay')).toHaveTextContent(
             'Tensor(shape = [32, 32])',
         );
@@ -857,7 +858,9 @@ describe('DeviceOperationsFullRender - device operation perf (#1512)', () => {
 
         const container = renderGraph([captureStart(), matmul, functionEnd('MatmulDeviceOperation')]);
 
-        expect(perfByScope(container)).toEqual([['MatmulDeviceOperation', '40 µs·8 cores·<0.1% of device time']]);
+        expect(perfByScope(container)).toEqual([
+            ['MatmulDeviceOperation', "40 µs·8 cores·<0.1% of the report's device time"],
+        ]);
         expect(screen.queryByRole('button', { name: /Arguments/ })).not.toBeInTheDocument();
     });
 

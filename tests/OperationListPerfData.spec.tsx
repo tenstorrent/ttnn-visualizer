@@ -15,14 +15,16 @@ import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import OperationListPerfData from '../src/components/OperationListPerfData';
 import { DeviceOperationPerfSummary } from '../src/components/operation-details/DeviceOperationPerf';
+import { DEVICE_TIME_SHARE_SUFFIX } from '../src/definitions/Performance';
 import { ReportLinkMatchResult } from '../src/definitions/ReportLinks';
-import { useGetDeviceOperationListPerfByOpId, useLinkedPerformanceReport } from '../src/hooks/useAPI';
+import { useGetDeviceOperationListPerfByOpId } from '../src/hooks/useAPI';
 import { useDeviceOperationPerf, useLinkedReportDeviceTimeTotalUs } from '../src/hooks/useDeviceOperationPerf';
 import { useReportLinkMatch } from '../src/hooks/useReportLinkMatch';
 import { DeviceOperationMapping } from '../src/model/DeviceOperationMapping';
 import { OperationDescription } from '../src/model/APIData';
 import { PerfTableRow } from '../src/model/PerfTable';
-import { makeRawPerfRow } from './helpers/perfRowFixtures';
+import { mockLinkedPerformanceReport } from './helpers/linkedReports';
+import { BGE_M3_CUMSUM, BGE_M3_DEVICE_TIME_US, makeRawPerfRow } from './helpers/perfRowFixtures';
 
 vi.mock('../src/hooks/useAPI', () => ({
     useGetDeviceOperationListPerfByOpId: vi.fn(),
@@ -66,33 +68,9 @@ const operation = (deviceOperationNameList: string[]): OperationDescription =>
 const mockMatch = (entries: [number, DeviceOperationMapping[]][]) =>
     vi.mocked(useGetDeviceOperationListPerfByOpId).mockReturnValue(new Map(entries));
 
-const givenLinkedReport = (rows: PerfTableRow[]) =>
-    vi
-        .mocked(useLinkedPerformanceReport)
-        .mockReturnValue({ data: { report: rows } } as ReturnType<typeof useLinkedPerformanceReport>);
-
-// bge_m3's ttnn.cumsum, untraced: op-to-op gaps dwarf device time, so Total % rounds to 0.
-const firstPermute = makeRawPerfRow({
-    id: '5',
-    raw_op_code: 'PermuteDeviceOperation',
-    device_time: '14.418',
-    total_percent: '0.0',
-});
-const accumulation = makeRawPerfRow({
-    id: '6',
-    raw_op_code: 'AccumulationDeviceOperation',
-    device_time: '115.73',
-    total_percent: '0.0',
-});
-const secondPermute = makeRawPerfRow({
-    id: '7',
-    raw_op_code: 'PermuteDeviceOperation',
-    device_time: '5.559',
-    total_percent: '0.0',
-});
+const { firstPermute, accumulation, secondPermute } = BGE_M3_CUMSUM;
 // parseFloat reads this as 1 µs and Number as NaN; both views must read it as the app's parse does.
 const trailingExponent = makeRawPerfRow({ id: '8', raw_op_code: 'TilizeDeviceOperation', device_time: '1e' });
-const REPORT_DEVICE_TIME_US = 49_989;
 const BGE_M3_REPORT = [
     firstPermute,
     accumulation,
@@ -103,14 +81,12 @@ const BGE_M3_REPORT = [
     makeRawPerfRow({ id: '10', device_time: '' }),
 ];
 
-const DEVICE_TIME_SHARE = /(<?[\d.]+%) of the report's device time|(<?[\d.]+%) of device time/g;
+const DEVICE_TIME_SHARE = new RegExp(`(<?[\\d.]+%) ${DEVICE_TIME_SHARE_SUFFIX}`, 'g');
 
 const sharesIn = (element: HTMLElement): string[] =>
-    [...(element.textContent ?? '').matchAll(DEVICE_TIME_SHARE)].map(([, listShare, detailsShare]) =>
-        String(listShare ?? detailsShare),
-    );
+    [...(element.textContent ?? '').matchAll(DEVICE_TIME_SHARE)].map(([, share]) => share);
 
-const renderRow = (deviceOperationNames: string[], totalDeviceTimeUs = REPORT_DEVICE_TIME_US) =>
+const renderRow = (deviceOperationNames: string[], totalDeviceTimeUs = BGE_M3_DEVICE_TIME_US) =>
     render(
         <OperationListPerfData
             operation={operation(deviceOperationNames)}
@@ -140,7 +116,7 @@ const OperationDetailsShares = () => {
 
 beforeEach(() => {
     vi.clearAllMocks();
-    givenLinkedReport(BGE_M3_REPORT);
+    mockLinkedPerformanceReport(BGE_M3_REPORT);
     vi.mocked(useReportLinkMatch).mockReturnValue(ReportLinkMatchResult.LINKED);
 });
 
@@ -195,8 +171,11 @@ describe('OperationListPerfData', () => {
 
             const container = renderRow(['Accumulation']);
 
-            expect(container).toHaveTextContent("execution time 115.73 µs (0.2% of the report's device time)");
-            expect(container).not.toHaveTextContent('0%)');
+            // The whole line, so a Total % in any format fails it.
+            expect(container.textContent).toBe(
+                "AccumulationDeviceOperation1 core, execution time 115.73 µs (0.2% of the report's device time), " +
+                    '2.5 µs op-to-op gap.',
+            );
         });
 
         it('agrees with Operation Details on every device operation of the operation', () => {

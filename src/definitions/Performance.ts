@@ -42,6 +42,8 @@ export const COMPARISON_LOAD_FAILED_TITLE = 'Comparison reports could not be loa
 export const SIGNPOST_RANGE_IGNORED_TITLE = 'Shown without the signpost range';
 export const SIGNPOST_RANGE_IGNORED_REASON =
     'holds no signposts, so it is shown whole rather than narrowed to the range';
+// Follows a device operation's share in the operations list and Operation Details, so the two read alike.
+export const DEVICE_TIME_SHARE_SUFFIX = "of the report's device time";
 
 export enum SignpostSelectType {
     START,

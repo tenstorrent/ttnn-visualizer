@@ -244,6 +244,7 @@ export const formatColumnNumber = (value: number, column: ColumnDefinition): str
     return unit ? `${formatted} ${unit}` : formatted;
 };
 
+// Not in formatting.ts: importing durationBuckets there cycles back through formatDurationBucketRange.
 /** A device time's share of the report's device time, or null when either has none to divide. */
 export const formatDeviceTimeShare = (deviceTimeUs: number | null, totalDeviceTimeUs: number): string | null =>
     isCountableDeviceTime(deviceTimeUs) && totalDeviceTimeUs > 0

@@ -14,10 +14,9 @@ import { enrichRowData } from '../src/functions/enrichPerfRowData';
 import { NOT_MODELLED_REASON, SLOW_BOUND_REASON } from '../src/functions/perfBoundAnalysis';
 import { PerfTableRow, TypedPerfTableRow } from '../src/model/PerfTable';
 import { focusTooltipTarget } from './helpers/focusTooltipTarget';
-import { makeRawPerfRow } from './helpers/perfRowFixtures';
+import { BGE_M3_CUMSUM, BGE_M3_DEVICE_TIME_US, makeRawPerfRow } from './helpers/perfRowFixtures';
 
-// What the report would show for ttnn.cumsum in bge_m3: three device operations, none of them
-// a matmul, so tt-perf-report analyses no roofline for any of them.
+// What tt-perf-report gives a device operation that isn't a matmul: no roofline analysis.
 const UNANALYSED: Partial<PerfTableRow> = {
     bound: '' as PerfTableRow['bound'],
     bound_analysis: 'none',
@@ -30,18 +29,11 @@ const UNANALYSED: Partial<PerfTableRow> = {
 const typedRow = (overrides: Partial<PerfTableRow>): TypedPerfTableRow =>
     enrichRowData([makeRawPerfRow({ ...UNANALYSED, ...overrides })], [], null)[0];
 
-const firstPermute = typedRow({ id: '5', raw_op_code: 'PermuteDeviceOperation', device_time: '14.418', cores: '64' });
-const accumulation = typedRow({
-    id: '6',
-    raw_op_code: 'AccumulationDeviceOperation',
-    device_time: '115.73',
-    cores: '1',
-});
-const secondPermute = typedRow({ id: '7', raw_op_code: 'PermuteDeviceOperation', device_time: '5.559', cores: '32' });
+const firstPermute = typedRow(BGE_M3_CUMSUM.firstPermute);
+const accumulation = typedRow(BGE_M3_CUMSUM.accumulation);
+const secondPermute = typedRow(BGE_M3_CUMSUM.secondPermute);
 // tt-perf-report blanks a device time it judges invalid.
 const untimed = typedRow({ id: '8', raw_op_code: 'TilizeDeviceOperation', device_time: '', cores: '64' });
-
-const REPORT_DEVICE_TIME_US = 49_989;
 
 afterEach(cleanup);
 
@@ -57,7 +49,7 @@ const renderOperationSummary = (
             hasPerformanceReport={hasPerformanceReport}
             hasDeviceOperations={hasDeviceOperations}
             rows={rows}
-            totalDeviceTimeUs={REPORT_DEVICE_TIME_US}
+            totalDeviceTimeUs={BGE_M3_DEVICE_TIME_US}
         />,
     ).container;
 
@@ -130,7 +122,7 @@ const renderDeviceSummary = (row: TypedPerfTableRow) =>
     render(
         <DeviceOperationPerfSummary
             row={row}
-            totalDeviceTimeUs={REPORT_DEVICE_TIME_US}
+            totalDeviceTimeUs={BGE_M3_DEVICE_TIME_US}
         />,
     ).container;
 
@@ -148,7 +140,7 @@ const openDetails = async (container: HTMLElement, interaction: 'hover' | 'focus
 
 describe('DeviceOperationPerfSummary', () => {
     it("shows device time, cores and share of the report's device time", () => {
-        expect(renderDeviceSummary(accumulation)).toHaveTextContent('116 µs·1 core·0.2% of device time');
+        expect(renderDeviceSummary(accumulation)).toHaveTextContent("116 µs·1 core·0.2% of the report's device time");
     });
 
     it('drops a part the row has no value for, separator included', () => {
@@ -156,7 +148,7 @@ describe('DeviceOperationPerfSummary', () => {
     });
 
     it('marks a share too small to round as below a tenth of a percent', () => {
-        expect(renderDeviceSummary(firstPermute)).toHaveTextContent('14 µs·64 cores·<0.1% of device time');
+        expect(renderDeviceSummary(firstPermute)).toHaveTextContent("14 µs·64 cores·<0.1% of the report's device time");
     });
 
     it('opens the whole perf row on hover, leaving out a column the row has no value for', async () => {

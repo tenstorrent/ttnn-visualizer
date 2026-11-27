@@ -6,6 +6,7 @@ import { Fragment, JSX, ReactNode } from 'react';
 import classNames from 'classnames';
 import { Classes, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { ColumnDefinition, ColumnKeys, Columns } from '../../definitions/PerfTable';
+import { DEVICE_TIME_SHARE_SUFFIX } from '../../definitions/Performance';
 import { ReportLinkMatchResult } from '../../definitions/ReportLinks';
 import { isCountableDeviceTime } from '../../functions/durationBuckets';
 import { getCoreCountText } from '../../functions/formatting';
@@ -144,7 +145,14 @@ export const DeviceOperationPerfSummary = ({ row, totalDeviceTimeUs }: DeviceOpe
     }
 
     if (share) {
-        parts.push({ key: 'share', node: <span>{share} of device time</span> });
+        parts.push({
+            key: 'share',
+            node: (
+                <span>
+                    {share} {DEVICE_TIME_SHARE_SUFFIX}
+                </span>
+            ),
+        });
     }
 
     if (parts.length === 0) {
@@ -217,7 +225,7 @@ export const OperationDevicePerfSummary = ({
         <p className='operation-device-perf-summary'>
             {timedRows.length} device {timedRows.length === 1 ? 'operation' : 'operations'} ran for{' '}
             <strong>{formatDeviceTime(totalUs)}</strong>
-            {share && ` (${share} of the report's device time)`}.
+            {share && ` (${share} ${DEVICE_TIME_SHARE_SUFFIX})`}.
             {timedRows.length > 1 && (
                 <>
                     {' '}
