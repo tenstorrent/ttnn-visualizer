@@ -12,7 +12,7 @@ import {
     useL1PressureByOperation,
     useOpToPerfIdFiltered,
     useOpToPerfIdForPerfTable,
-    usePerfFolderList,
+    usePerfComparisonCandidates,
     usePerfMeta,
     usePerfMetas,
     usePerformanceComparisonReport,
@@ -59,7 +59,7 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
     useL1PressureByOperation: vi.fn(),
     useOpToPerfIdFiltered: vi.fn(),
     useOpToPerfIdForPerfTable: vi.fn(),
-    usePerfFolderList: vi.fn(),
+    usePerfComparisonCandidates: vi.fn(),
     usePerfMeta: vi.fn(),
     usePerfMetas: vi.fn(),
     usePerformanceComparisonReport: vi.fn(),
@@ -137,7 +137,7 @@ beforeEach(() => {
     // report shell is stubbed, so only the route's active-report effects run here.
     (usePerformanceReport as Mock).mockReturnValue({ data: undefined, isLoading: true, error: null });
     (usePerformanceComparisonReport as Mock).mockReturnValue({ data: undefined });
-    (usePerfFolderList as Mock).mockReturnValue({ data: undefined });
+    (usePerfComparisonCandidates as Mock).mockReturnValue({ data: undefined });
     (usePerformanceRange as Mock).mockReturnValue(null);
     (useOpToPerfIdFiltered as Mock).mockReturnValue([]);
     // Devices are merged unless a test says otherwise, where the table's lookup is the linked one.
@@ -547,6 +547,70 @@ describe('Performance route', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Switch to the remote pick' }));
 
         expect(probe).toHaveTextContent('["run"]');
+    });
+
+    describe("comparisons the active report's directory no longer lists (#2433)", () => {
+        const candidates = (...names: string[]) => names.map((name) => ({ path: name, reportName: name }));
+
+        const renderWithComparisons = (comparisons: string[]) =>
+            render(
+                <TestProviders
+                    initialAtomValues={[
+                        [activePerformanceReportAtom, REPORT_A],
+                        [comparisonPerformanceReportListAtom, comparisons],
+                    ]}
+                >
+                    <Performance />
+                    <ComparisonListProbe />
+                </TestProviders>,
+            );
+
+        it('keeps only the comparisons still listed beside the active report', () => {
+            (usePerfComparisonCandidates as Mock).mockReturnValue({ data: candidates('a', 'report-b', 'c') });
+
+            renderWithComparisons(['report-b', 'elsewhere', 'c']);
+
+            expect(screen.getByTestId(COMPARISON_LIST_PROBE_TEST_ID)).toHaveTextContent('["report-b","c"]');
+        });
+
+        it('clears the comparisons when none of them is listed', () => {
+            (usePerfComparisonCandidates as Mock).mockReturnValue({ data: candidates('a') });
+
+            renderWithComparisons(['elsewhere']);
+
+            expect(screen.getByTestId(COMPARISON_LIST_PROBE_TEST_ID)).toHaveTextContent('null');
+        });
+
+        // A failed fetch leaves `data` undefined too, so it must not wipe the user's picks.
+        it('keeps every comparison while the listing is loading or failed', () => {
+            (usePerfComparisonCandidates as Mock).mockReturnValue({ data: undefined });
+
+            renderWithComparisons(['report-b', 'c']);
+
+            expect(screen.getByTestId(COMPARISON_LIST_PROBE_TEST_ID)).toHaveTextContent('["report-b","c"]');
+        });
+
+        it('drops comparisons once a switch to another directory lists different reports', () => {
+            (usePerfComparisonCandidates as Mock).mockReturnValue({ data: candidates('a', 'report-b') });
+            const { rerender } = renderWithComparisons(['report-b']);
+            const probe = screen.getByTestId(COMPARISON_LIST_PROBE_TEST_ID);
+            expect(probe).toHaveTextContent('["report-b"]');
+
+            (usePerfComparisonCandidates as Mock).mockReturnValue({ data: candidates('synced-a', 'synced-b') });
+            rerender(
+                <TestProviders
+                    initialAtomValues={[
+                        [activePerformanceReportAtom, REPORT_A],
+                        [comparisonPerformanceReportListAtom, ['report-b']],
+                    ]}
+                >
+                    <Performance />
+                    <ComparisonListProbe />
+                </TestProviders>,
+            );
+
+            expect(probe).toHaveTextContent('null');
+        });
     });
 
     it('shows no signpost notice when every report was narrowed', () => {

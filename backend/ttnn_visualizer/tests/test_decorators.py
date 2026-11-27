@@ -261,6 +261,7 @@ GATED_ROUTES = {
     ("/api/mlir/active", "POST"),
     ("/api/npe/summary", "GET"),
     ("/api/npe/window", "GET"),
+    ("/api/performance/comparison-candidates", "GET"),
     ("/api/performance/<performance_name>", "DELETE"),
     ("/api/profiler/<profiler_name>", "DELETE"),
     ("/api/remote/host-key", "POST"),

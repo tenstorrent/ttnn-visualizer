@@ -1697,6 +1697,33 @@ export const usePerfFolderList = () => {
     });
 };
 
+const PERFORMANCE_COMPARISON_CANDIDATES_QUERY_KEY = 'fetch-performance-comparison-candidates';
+
+const fetchPerfComparisonCandidates = async () => {
+    const { data } = await axiosInstance.get<ReportFolder[]>(Endpoints.PERFORMANCE_COMPARISON_CANDIDATES);
+
+    return data;
+};
+
+/**
+ * @description The reports a comparison can name: those beside the active performance
+ * report, which is where `?name=` reads them from. The local listing would offer reports
+ * from another directory whenever the active report is remote or was opened by path (#2433).
+ */
+export const usePerfComparisonCandidates = () => {
+    const activeReportId = useAtomValue(activePerformanceReportFolderNameAtom);
+    // A folder name is not unique across directories: a local and a synced report can share one.
+    const location = useAtomValue(performanceReportLocationAtom);
+    // The route is local-only, and comparison is hidden under SERVER_MODE.
+    const isServerMode = !!getServerConfig().SERVER_MODE;
+
+    return useQuery<ReportFolder[], AxiosError>({
+        queryFn: () => fetchPerfComparisonCandidates(),
+        queryKey: [PERFORMANCE_COMPARISON_CANDIDATES_QUERY_KEY, getOrCreateInstanceId(), activeReportId, location],
+        enabled: activeReportId !== null && !isServerMode,
+    });
+};
+
 // Shared by every operation outside the selected range; callers only read it.
 const NO_TENSORS_BY_ADDRESS: Map<number, Tensor> = new Map<number, Tensor>();
 

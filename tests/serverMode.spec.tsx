@@ -28,6 +28,7 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
     usePerfMeta: () => ({ data: mockDeviceMeta }),
     usePerfMetas: () => [],
     usePerfFolderList: () => ({ data: mockPerformanceReportFolders }),
+    usePerfComparisonCandidates: () => ({ data: mockPerformanceReportFolders }),
     usePerformanceRange: () => null,
     useInstance: () => ({ data: mockInstance }),
     useOpToPerfIdFiltered: () => [],

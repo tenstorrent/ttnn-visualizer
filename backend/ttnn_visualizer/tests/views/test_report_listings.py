@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 from ttnn_visualizer.extensions import db
-from ttnn_visualizer.models import InstanceTable
+from ttnn_visualizer.models import Instance, InstanceTable
 from ttnn_visualizer.report_fingerprint import (
     performance_run_fingerprint,
     profiler_run_fingerprint,
@@ -24,6 +24,7 @@ from ttnn_visualizer.report_fingerprint import (
 from ttnn_visualizer.views import (
     DEMO_PERFORMANCE_DIRECTORY_NAMES,
     DEMO_PROFILER_DIRECTORY_NAMES,
+    _apply_requested_performance_name,
 )
 
 
@@ -280,3 +281,132 @@ def test_hosted_upload_named_after_a_demo_cannot_replace_it(app, client, make_re
         if path.read_bytes() == b"not-the-demo"
     ]
     assert len(uploaded) == 1
+
+
+COMPARISON_CANDIDATES = "/api/performance/comparison-candidates"
+
+
+def _instance_on_performance_report(app, instance_id: str, performance_dir: Path):
+    with app.app_context():
+        db.session.add(
+            InstanceTable(
+                instance_id=instance_id,
+                active_report={"performance_name": performance_dir.name},
+                performance_path=str(performance_dir),
+            )
+        )
+        db.session.commit()
+    return instance_id
+
+
+def _candidate_paths(client, instance_id: str):
+    response = client.get(
+        COMPARISON_CANDIDATES, query_string={"instanceId": instance_id}
+    )
+    assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+    return [folder["path"] for folder in response.get_json()]
+
+
+def _synced_reports_root(app, host: str = "remote-host") -> Path:
+    return (
+        Path(app.config["REMOTE_DATA_DIRECTORY"])
+        / host
+        / app.config["PERFORMANCE_DIRECTORY_NAME"]
+    )
+
+
+def _local_reports_root(app) -> Path:
+    return (
+        Path(app.config["LOCAL_DATA_DIRECTORY"])
+        / app.config["PERFORMANCE_DIRECTORY_NAME"]
+    )
+
+
+class TestComparisonCandidates:
+    """The comparison selector's options come from where `?name=` reads them (#2433)."""
+
+    @pytest.fixture(autouse=True)
+    def _local_install(self, app):
+        app.config["SERVER_MODE"] = False
+
+    def test_a_synced_report_lists_its_synced_siblings_and_no_local_report(
+        self, app, client
+    ):
+        synced = _synced_reports_root(app)
+        _make_performance_report(synced, "active")
+        _make_performance_report(synced, "synced-sibling")
+        _make_performance_report(_local_reports_root(app), "local-only")
+        instance_id = _instance_on_performance_report(app, "remote", synced / "active")
+
+        assert sorted(_candidate_paths(client, instance_id)) == [
+            "active",
+            "synced-sibling",
+        ]
+
+    def test_a_report_opened_by_path_lists_what_sits_beside_it(
+        self, app, client, tmp_path
+    ):
+        """`--performance-path` and `/api/instance/local-paths` keep the real path."""
+        runs = tmp_path / "runs"
+        _make_performance_report(runs, "active")
+        _make_performance_report(runs, "other-run")
+        _make_performance_report(_local_reports_root(app), "local-only")
+        instance_id = _instance_on_performance_report(app, "by-path", runs / "active")
+
+        assert sorted(_candidate_paths(client, instance_id)) == ["active", "other-run"]
+
+    def test_only_valid_visible_report_folders_are_listed(self, app, client):
+        synced = _synced_reports_root(app)
+        _make_performance_report(synced, "active")
+        _make_performance_report(synced, ".hidden")
+        (synced / "not-a-report").mkdir()
+        (synced / "a-file").write_text("")
+        instance_id = _instance_on_performance_report(app, "valid", synced / "active")
+
+        assert _candidate_paths(client, instance_id) == ["active"]
+
+    def test_a_rank_qualified_folder_is_listed_by_its_synced_name(self, app, client):
+        """The listed `path` is what `?name=` receives, rank qualifier included."""
+        synced = _synced_reports_root(app)
+        _make_performance_report(synced, "2026_07_28_18_04_24_rank0")
+        _make_performance_report(synced, "2026_07_28_18_04_24_rank1")
+        instance_id = _instance_on_performance_report(
+            app, "ranks", synced / "2026_07_28_18_04_24_rank0"
+        )
+
+        assert sorted(_candidate_paths(client, instance_id)) == [
+            "2026_07_28_18_04_24_rank0",
+            "2026_07_28_18_04_24_rank1",
+        ]
+
+    def test_a_parent_that_went_away_lists_nothing(self, app, client, tmp_path):
+        instance_id = _instance_on_performance_report(
+            app, "gone", tmp_path / "missing" / "active"
+        )
+
+        assert _candidate_paths(client, instance_id) == []
+
+    def test_no_active_performance_report_is_not_found(self, app, client, make_report):
+        response = client.get(
+            COMPARISON_CANDIDATES, query_string={"instanceId": make_report()}
+        )
+
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    def test_every_candidate_resolves_to_itself_through_name(self, app, client):
+        """A local report sharing a synced report's name must not be the one read."""
+        synced = _synced_reports_root(app)
+        _make_performance_report(synced, "active")
+        _make_performance_report(synced, "shared-name")
+        _make_performance_report(_local_reports_root(app), "shared-name")
+        active = synced / "active"
+        instance_id = _instance_on_performance_report(app, "resolve", active)
+
+        for name in _candidate_paths(client, instance_id):
+            instance = Instance(instance_id=instance_id, performance_path=str(active))
+            with app.test_request_context(
+                "/api/performance/device-log/meta", query_string={"name": name}
+            ):
+                _apply_requested_performance_name(instance)
+
+            assert instance.performance_path == str(synced / name)

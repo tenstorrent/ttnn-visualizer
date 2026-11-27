@@ -9,11 +9,12 @@ import { IconNames } from '@blueprintjs/icons';
 import { useAtom, useAtomValue } from 'jotai';
 import { HttpStatusCode } from 'axios';
 import getResponseError from '../functions/getResponseError';
+import { getFolderReportId } from '../functions/reportLinks';
 import {
     useL1PressureByOperation,
     useOpToPerfIdFiltered,
     useOpToPerfIdForPerfTable,
-    usePerfFolderList,
+    usePerfComparisonCandidates,
     usePerfMeta,
     usePerfMetas,
     usePerformanceComparisonReport,
@@ -85,7 +86,7 @@ export default function Performance() {
         isLoading: isLoadingComparison,
         failures: comparisonFailures,
     } = usePerformanceComparisonReport();
-    const { data: folderList } = usePerfFolderList();
+    const { data: folderList } = usePerfComparisonCandidates();
     const perfRange = usePerformanceRange();
     const opIdsMap = useOpToPerfIdFiltered();
     const perfTableOpIdsMap = useOpToPerfIdForPerfTable();
@@ -307,6 +308,22 @@ export default function Performance() {
             setComparisonReportList(filteredReports.length === 0 ? null : filteredReports);
         }
     }, [comparisonReportList, activeReportFolderName, setComparisonReportList]);
+
+    // Comparisons are read beside the active report, so one that is no longer listed there
+    // would be read from the wrong directory -- or not at all -- after a switch to a report
+    // elsewhere. Only a loaded listing prunes, so a failed fetch keeps the user's picks.
+    useEffect(() => {
+        if (!folderList || !comparisonReportList) {
+            return;
+        }
+
+        const candidateIds = new Set(folderList.map(getFolderReportId));
+        const keptReports = comparisonReportList.filter((reportId) => candidateIds.has(reportId));
+
+        if (keptReports.length !== comparisonReportList.length) {
+            setComparisonReportList(keptReports.length === 0 ? null : keptReports);
+        }
+    }, [folderList, comparisonReportList, setComparisonReportList]);
 
     // If a comparison report is selected, clear the selected range as we don't currently support ranges for comparison
     useEffect(() => {

@@ -1291,6 +1291,39 @@ def delete_profiler_report(profiler_name, instance: Instance):
     )
 
 
+def _performance_report_rows(
+    path: Path, directory_names: List[str], demo_directory_names: List[str]
+) -> List[dict]:
+    """The listing rows for the valid performance reports among ``directory_names``."""
+    valid_dirs = []
+
+    # Most recent first; equal times fall back to the name so ties have one order,
+    # which under SERVER_MODE would otherwise come from hashing a set.
+    def get_modified_time(dir_name):
+        dir_path = Path(path) / dir_name
+        if dir_path.exists():
+            return dir_path.stat().st_mtime
+        return 0
+
+    directory_names.sort(key=lambda name: (-get_modified_time(name), name))
+
+    for dir_name in directory_names:
+        dir_path = Path(path) / dir_name
+        if not dir_path.is_dir() or not is_valid_performance_report_dir(dir_path):
+            continue
+
+        valid_dirs.append(
+            {
+                "path": dir_path.name,
+                "reportName": dir_path.name,
+                "isDemo": dir_name in demo_directory_names,
+                "runFingerprint": performance_run_fingerprint(dir_path),
+            }
+        )
+
+    return valid_dirs
+
+
 @api.route("/performance", methods=["GET"])
 @with_instance
 def get_performance_data_list(instance: Instance):
@@ -1319,33 +1352,46 @@ def get_performance_data_list(instance: Instance):
             else []
         )
 
-    valid_dirs = []
+    return Response(
+        orjson.dumps(
+            _performance_report_rows(path, directory_names, demo_directory_names)
+        ),
+        mimetype="application/json",
+    )
 
-    # Most recent first; equal times fall back to the name so ties have one order,
-    # which under SERVER_MODE would otherwise come from hashing a set.
-    def get_modified_time(dir_name):
-        dir_path = Path(path) / dir_name
-        if dir_path.exists():
-            return dir_path.stat().st_mtime
-        return 0
 
-    directory_names.sort(key=lambda name: (-get_modified_time(name), name))
+@api.route("/performance/comparison-candidates", methods=["GET"])
+@with_instance
+@local_only
+def get_performance_comparison_candidates(instance: Instance):
+    """The performance reports a comparison can name with ``?name=``.
 
-    for dir_name in directory_names:
-        dir_path = Path(path) / dir_name
-        if not dir_path.is_dir() or not is_valid_performance_report_dir(dir_path):
-            continue
+    Listed from the active report's own directory rather than the local data
+    directory: a remote report's siblings are the other reports synced from its
+    host, and a report opened by path has whatever sits beside it.
+    """
+    if not instance.performance_path:
+        raise PerformanceReportNotLoadedException()
 
-        valid_dirs.append(
-            {
-                "path": dir_path.name,
-                "reportName": dir_path.name,
-                "isDemo": dir_name in demo_directory_names,
-                "runFingerprint": performance_run_fingerprint(dir_path),
-            }
-        )
+    # The same parent `_apply_requested_performance_name` resolves `?name=` against.
+    # The two must stay in step, or a listed report is read from somewhere else.
+    parent = Path(instance.performance_path).parent
 
-    return Response(orjson.dumps(valid_dirs), mimetype="application/json")
+    try:
+        directory_names = [
+            entry.name
+            for entry in parent.iterdir()
+            if entry.is_dir() and not entry.name.startswith(".")
+        ]
+    except OSError:
+        # A synced host directory can go away underneath an open report.
+        logger.warning("Unable to list performance reports beside %s", parent)
+        return jsonify([])
+
+    return Response(
+        orjson.dumps(_performance_report_rows(parent, directory_names, [])),
+        mimetype="application/json",
+    )
 
 
 @api.route("/performance/device-log", methods=["GET"])
@@ -1412,6 +1458,8 @@ def _apply_requested_performance_name(instance: Instance) -> None:
 
     Every route that honours ``?name=`` comes through here, so the query value is
     collapsed to a single segment once rather than trusted at each caller.
+    ``get_performance_comparison_candidates`` lists the same parent directory, so
+    the names the selector offers are the ones resolved here.
     """
     name = request.args.get("name", None)
     if not name or current_app.config["SERVER_MODE"]:
