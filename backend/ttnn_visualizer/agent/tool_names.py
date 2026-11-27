@@ -35,5 +35,6 @@ class McpToolName(str, Enum):
     L1_PEAK = "l1_peak"
     LATE_DEALLOCATIONS = "late_deallocations"
     CRITICAL_PATH = "critical_path"
+    LAYOUT_ROUND_TRIPS = "layout_round_trips"
     SOURCE_LINES = "source_lines"
     SUBGRAPH_BETWEEN = "subgraph_between"

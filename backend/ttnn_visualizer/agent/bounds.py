@@ -52,6 +52,8 @@ CUT_DIGEST_CHARS = 16
 MAX_OPERATION_NAME_CHARS = 100
 # Enough for any number or handle list an agent means to pass.
 MAX_ECHOED_CHARS = 64
+# Ids bound in one read, inside SQLite's oldest bound of 999 parameters.
+IDS_PER_READ = 500
 
 
 # The captured graph a tool will read in one go. The largest real total across 85 local

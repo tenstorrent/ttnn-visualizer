@@ -26,6 +26,7 @@ from typing import (
     Dict,
     Final,
     Hashable,
+    Iterable,
     Iterator,
     List,
     Mapping,
@@ -38,8 +39,9 @@ from typing import (
     TypeVar,
 )
 
-from ttnn_visualizer.agent import op_graph
+from ttnn_visualizer.agent import layout_round_trips, op_graph
 from ttnn_visualizer.agent.bounds import (
+    IDS_PER_READ,
     MAX_DETAILED_LIMIT,
     MAX_LIMIT,
     bounded,
@@ -60,8 +62,10 @@ from ttnn_visualizer.models import (
     Instance,
     Operation,
     Tensor,
+    tensor_buffer_type,
 )
 from ttnn_visualizer.queries import DatabaseQueries
+from ttnn_visualizer.utils import parse_memory_config
 
 # Every allocation figure derived from `buffers` is in these units, and the
 # response says so wherever one appears. `max_size_per_bank` is what the column
@@ -1390,6 +1394,38 @@ def read_scoped_graph(
     )
 
 
+def tensor_states(
+    queries: DatabaseQueries, scope: RankScope, tensor_ids: Iterable[int]
+) -> Dict[int, layout_round_trips.TensorState]:
+    """Where and how each of `tensor_ids` is stored, read only for those ids, in
+    batches of `IDS_PER_READ` so no read binds past SQLite's bound.
+
+    Read from `tensors` alone, with `Tensor`'s buffer-type rule, rather than through
+    `query_tensors`, whose `device_tensors` join is unindexed in real captures.
+    Never an empty batch, which drops the filter and reads every tensor.
+    """
+    ids = sorted(set(tensor_ids))
+    states: Dict[int, layout_round_trips.TensorState] = {}
+    for start in range(0, len(ids), IDS_PER_READ):
+        batch = ids[start : start + IDS_PER_READ]
+        for (
+            tensor_id,
+            layout,
+            memory_config,
+            address,
+            stored_buffer_type,
+        ) in queries.query_tensor_storage(
+            filters=scoped(queries, "tensors", scope, tensor_id=batch)
+        ):
+            buffer_type = tensor_buffer_type(address, stored_buffer_type, memory_config)
+            states[tensor_id] = layout_round_trips.tensor_state(
+                layout,
+                _buffer_type_name(buffer_type) if buffer_type is not None else None,
+                parse_memory_config(memory_config),
+            )
+    return states
+
+
 def _subgraph_tensor(tensor: Optional[Tensor], tensor_id: int) -> Dict[str, object]:
     """What a subgraph edge carries: enough to read a block's layout, not its sizes,
     which `operation_detail` gives with the unit they need."""
@@ -1552,6 +1588,7 @@ __all__ = [
     "scoped_devices",
     "subgraph_between",
     "tensor_flow",
+    "tensor_states",
     "unattributable_reason",
     "withheld_caveat",
 ]

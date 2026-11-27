@@ -98,6 +98,9 @@ class CacheVariant(str, Enum):
     OP_GRAPH = "op_graph"
     # Every call grouped into its configuration by rank, which `op_configurations` lists.
     OP_CONFIGURATIONS = "op_configurations"
+    # The layout moves and their round trips by rank, which `layout_round_trips`
+    # finds over every move's tensors and pages through.
+    LAYOUT_ROUND_TRIPS = "layout_round_trips"
     # Every hardware counter column by CSV position, which `hw_utilisation` ranks and
     # `stall_breakdown` reads.
     HARDWARE_COUNTERS = "hardware_counters"
@@ -362,6 +365,8 @@ TOOL_TABLES: Dict[str, frozenset] = {
     ),
     "tensor_flow": frozenset({"operations", *GRAPH_TABLES}),
     "subgraph_between": frozenset({"operations", *GRAPH_TABLES}),
+    # The performance report is optional: without a link the round trips carry no time.
+    "layout_round_trips": frozenset({"operations", *GRAPH_TABLES}),
     # `stack_traces` is not required, because the tool answers the argument half
     # without it and says in the response that the capture recorded no call site --
     # 8 of 86 local captures hold the table with no rows. That reasoning covers a

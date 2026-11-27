@@ -198,19 +198,28 @@ class Tensor(SerializeableDataclass):
     rank: int = 0
 
     def __post_init__(self):
-        # Graph reports up to tt-metal's schema 3.3 store `buffer_type` as `0`
-        # (DRAM) for every tensor the capture gave no buffer: host tensors,
-        # deallocated device tensors, and device tensors on a non-owned
-        # MeshBuffer. The column is only meaningful beside an address, so without
-        # one the tensor's own memory config is the authority, and a tensor that
-        # declares no buffer type has none rather than a fabricated DRAM.
-        if self.address is None:
-            self.buffer_type = BufferType.__members__.get(
-                parse_memory_config_buffer_type(self.memory_config)
-            )
-        else:
-            self.buffer_type = _coerce_buffer_type(self.buffer_type)
+        self.buffer_type = tensor_buffer_type(
+            self.address, self.buffer_type, self.memory_config
+        )
         self.memory_config = parse_memory_config(self.memory_config)
+
+
+def tensor_buffer_type(
+    address: Optional[int], buffer_type: Any, memory_config: Any
+) -> Any:
+    """A `tensors` row's buffer type from its stored columns, as `Tensor` reads it.
+
+    Graph reports up to tt-metal's schema 3.3 store `buffer_type` as `0` (DRAM) for
+    every tensor the capture gave no buffer: host tensors, deallocated device
+    tensors, and device tensors on a non-owned MeshBuffer. The column is only
+    meaningful beside an address, so without one the tensor's own memory config (as
+    stored, not yet parsed) is the authority, and a tensor that declares no buffer
+    type has none rather than a fabricated DRAM.
+    """
+    if address is None:
+        declared = parse_memory_config_buffer_type(memory_config)
+        return BufferType.__members__.get(declared) if declared else None
+    return _coerce_buffer_type(buffer_type)
 
 
 @dataclasses.dataclass
