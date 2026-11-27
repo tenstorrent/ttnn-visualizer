@@ -424,25 +424,12 @@ describe('weight-load control', () => {
 });
 
 describe('accessible names follow the grouping mode', () => {
-    it('says layers when Layers is the active mode', () => {
-        // The row was called "Repeats" before layers existed, so a screen reader was
-        // told "unroll all repeats" while the buttons acted on layers. #1976
-        renderToolbar({ status: PerfOverlayStatus.READY, hasBlocks: true, grouping: OpGraphGrouping.LAYERS });
-
-        expect(screen.getByRole('button', { name: 'Expand all layers' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Collapse all layers' })).toBeInTheDocument();
-    });
-
-    it('still says repeats in Repeats mode', () => {
-        renderToolbar({ status: PerfOverlayStatus.READY, hasBlocks: true, grouping: OpGraphGrouping.REPEATS });
-
-        expect(screen.getByRole('button', { name: 'Expand all repeats' })).toBeInTheDocument();
-    });
-
     it.each([
         ['repeats', OpGraphGrouping.REPEATS],
         ['layers', OpGraphGrouping.LAYERS],
-    ])('starts each accessible name with the word on the button, grouped by %s', (noun, grouping) => {
+    ])('says %s, starting with the word on the button', (noun, grouping) => {
+        // The row was called "Repeats" before layers existed, so a screen reader was
+        // told "unroll all repeats" while the buttons acted on layers. #1976
         // Voice control users say the word they can see, so the name has to contain it.
         renderToolbar({ status: PerfOverlayStatus.READY, hasBlocks: true, grouping });
 

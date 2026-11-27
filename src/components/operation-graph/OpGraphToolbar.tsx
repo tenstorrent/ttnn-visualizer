@@ -9,6 +9,7 @@ import classNames from 'classnames';
 import GraphOpFilter, { type GraphOpFilterHandle } from '../GraphOpFilter';
 import type { GraphFilterMode } from '../../definitions/GraphFilterMode';
 import { HOT_OPS_TITLE } from '../../definitions/HotOps';
+import { OpGraphBlockAction } from '../../definitions/OpGraphBlockAction';
 import {
     CRITICAL_PATH_TOOLTIP,
     HOT_OPS_TOOLTIP,
@@ -31,10 +32,6 @@ const GROUPING_NOUN: Readonly<Record<OpGraphGrouping, string>> = {
     [OpGraphGrouping.REPEATS]: 'repeats',
     [OpGraphGrouping.LAYERS]: 'layers',
 };
-
-/** Each block button's visible word, which its accessible name has to start with. */
-const EXPAND_LABEL = 'Expand';
-const COLLAPSE_LABEL = 'Collapse';
 
 /**
  * Descriptions rather than bare labels: "Layers" means nothing until a reader knows
@@ -336,17 +333,17 @@ const OpGraphToolbar = memo(
                             variant={ButtonVariant.OUTLINED}
                             disabled={isDisabled || areAllBlocksExpanded}
                             onClick={onExpandAllBlocks}
-                            aria-label={`${EXPAND_LABEL} all ${GROUPING_NOUN[grouping]}`}
+                            aria-label={`${OpGraphBlockAction.EXPAND} all ${GROUPING_NOUN[grouping]}`}
                         >
-                            {EXPAND_LABEL}
+                            {OpGraphBlockAction.EXPAND}
                         </Button>
                         <Button
                             variant={ButtonVariant.OUTLINED}
                             disabled={isDisabled || areAllBlocksCollapsed}
                             onClick={onCollapseAllBlocks}
-                            aria-label={`${COLLAPSE_LABEL} all ${GROUPING_NOUN[grouping]}`}
+                            aria-label={`${OpGraphBlockAction.COLLAPSE} all ${GROUPING_NOUN[grouping]}`}
                         >
-                            {COLLAPSE_LABEL}
+                            {OpGraphBlockAction.COLLAPSE}
                         </Button>
                     </>
                 ) : (

@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { memo, useContext } from 'react';
+import { OpGraphBlockAction } from '../../definitions/OpGraphBlockAction';
 import OpGraphNodeExpander from './OpGraphNodeExpander';
 import { OpGraphBlockExpansionContext } from './opGraphExpansionContext';
 
@@ -17,7 +18,7 @@ const OpGraphBlockExpander = memo(({ instanceId, opCount, isExpanded }: OpGraphB
 
     return (
         <OpGraphNodeExpander
-            action={isExpanded ? `Collapse ${opCount} operations` : `Expand ${opCount} operations`}
+            action={`${isExpanded ? OpGraphBlockAction.COLLAPSE : OpGraphBlockAction.EXPAND} ${opCount} operations`}
             count={opCount}
             isExpanded={isExpanded}
             onToggle={() => toggleBlock(instanceId)}
