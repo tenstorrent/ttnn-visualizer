@@ -313,7 +313,7 @@ describe('opGraphLayoutWorker', () => {
 
         // Nothing else distinguishes these two requests, and the distinction is not a
         // nicety: `undefined` renders every instance unrolled, `[]` folds every one of
-        // them. Reachable in four clicks — open a report, Fold all, then toggle Hide
+        // them. Reachable in four clicks — open a report, Collapse all, then toggle Hide
         // deallocate on and off, which returns the state to "nothing folded" against a
         // key the fold-all build already wrote. #1977
         it('does not serve a fold-all layout to a graph that has folded nothing', async () => {

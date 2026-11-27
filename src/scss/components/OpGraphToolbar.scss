@@ -52,7 +52,7 @@
     white-space: nowrap;
 }
 
-// Sits where Unroll / Fold would be, so the row keeps its shape when the active
+// Sits where Expand / Collapse would be, so the row keeps its shape when the active
 // detector found nothing. Dimmer than the label: it is an answer, not a control.
 .op-graph-toolbar-empty-note {
     padding: 0 4px;

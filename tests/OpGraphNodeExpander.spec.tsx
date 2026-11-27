@@ -98,8 +98,8 @@ describe('device-operation chip', () => {
 
 describe('folded block chip', () => {
     it.each([
-        [false, 'Unroll 4 operations'],
-        [true, 'Fold 4 operations'],
+        [false, 'Expand 4 operations'],
+        [true, 'Collapse 4 operations'],
     ])('keeps the fold chevron and no icon (expanded: %s)', (isExpanded, name) => {
         renderBlockChip(isExpanded);
         const chip = screen.getByRole('button', { name });
@@ -112,7 +112,7 @@ describe('folded block chip', () => {
     it('toggles its own block', () => {
         const toggle = renderBlockChip(false);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Unroll 4 operations' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Expand 4 operations' }));
 
         expect(toggle).toHaveBeenCalledExactlyOnceWith('block:12');
     });

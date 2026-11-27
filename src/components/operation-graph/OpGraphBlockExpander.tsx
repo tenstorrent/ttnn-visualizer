@@ -17,7 +17,7 @@ const OpGraphBlockExpander = memo(({ instanceId, opCount, isExpanded }: OpGraphB
 
     return (
         <OpGraphNodeExpander
-            action={isExpanded ? `Fold ${opCount} operations` : `Unroll ${opCount} operations`}
+            action={isExpanded ? `Collapse ${opCount} operations` : `Expand ${opCount} operations`}
             count={opCount}
             isExpanded={isExpanded}
             onToggle={() => toggleBlock(instanceId)}
