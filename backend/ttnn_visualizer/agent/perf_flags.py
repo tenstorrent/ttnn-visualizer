@@ -43,7 +43,7 @@ from ttnn_visualizer.agent.js_values import (
     js_truthy,
 )
 from ttnn_visualizer.agent.perf_detail import is_unmodelled
-from ttnn_visualizer.agent.row_cells import parse_filled_float, parse_int
+from ttnn_visualizer.agent.row_cells import parse_filled_float
 from ttnn_visualizer.csv_queries import SIGNPOST_OP_TYPE, DeviceLogMeta
 from ttnn_visualizer.device_architecture import DeviceArchitecture, architecture_of
 
@@ -185,7 +185,8 @@ class FlagRow:
 
 def row_cores(row: Dict) -> float:
     """A row's core count as `enrichRowData` parses it, which `core_count` reads."""
-    return parse_int(row.get("cores"))
+    cores = row_cells.read("cores", row.get("cores"))
+    return math.nan if cores is None else cores
 
 
 def typed_row(row: Dict, is_first_hash_occurrence: bool = True) -> FlagRow:
