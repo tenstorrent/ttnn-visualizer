@@ -55,6 +55,7 @@ from ttnn_visualizer.agent.handles import (
     read_once,
     without_performance_csv,
 )
+from ttnn_visualizer.agent.js_values import js_is_finite, js_parse_float
 from ttnn_visualizer.cells import finite_number, whole_number
 from ttnn_visualizer.csv_queries import (
     L1_ZONE_MARKER_CAPACITY,
@@ -156,13 +157,30 @@ DEFAULT_METRIC = "device_time"
 ADDITIVE_METRICS = frozenset({"device_time", "op_to_op_gap", "total_percent"})
 
 
+def metric_number(row: Dict, metric: str = DEFAULT_METRIC) -> Optional[float]:
+    """A row's metric, unrounded, or None where it is blank, unreadable or not finite.
+
+    Device time is read with `parseFloat`, as `enrichRowData` in
+    `src/functions/enrichPerfRowData.ts` reads it, so a row ranks and reports the
+    number `countable_device_time` counts in a share: `"1abc"` is 1 and `"1_0"` is 1,
+    where Python's `float` refuses the one and reads 10 for the other; mirror a change
+    there. The other metrics are still read with Python's `float`. #2428
+    """
+    cell = row.get(SORTABLE_METRICS[metric])
+    if metric != "device_time":
+        return finite_number(cell)
+    value = js_parse_float(cell)
+    return value if js_is_finite(value) else None
+
+
 def countable_device_time(row: Dict) -> Optional[float]:
     """A row's device time, or None where it is blank, non-finite or not positive.
 
-    `isCountableDeviceTime` in `src/functions/durationBuckets.ts`, which the app
-    counts a share's device time with; mirror a change there.
+    `metric_number`'s read of the cell, then `isCountableDeviceTime` in
+    `src/functions/durationBuckets.ts`, which the app counts a share's device time
+    with; mirror a change there.
     """
-    value = finite_number(row.get("device_time"))
+    value = metric_number(row, "device_time")
     return value if value is not None and value > 0 else None
 
 
@@ -720,7 +738,7 @@ def project_row(row: Dict, metric: str = DEFAULT_METRIC) -> Dict[str, object]:
 
 def metric_value(row: Dict, metric: str = DEFAULT_METRIC) -> Optional[float]:
     """A row's metric as `project_row` gives it."""
-    return _rounded(finite_number(row.get(SORTABLE_METRICS[metric])))
+    return _rounded(metric_number(row, metric))
 
 
 def raw_op_code(row: Dict) -> str:
@@ -818,15 +836,13 @@ def top_ops(
     signposts = SignpostRange.of(start_signpost, end_signpost)
     report = canonical_report(registry, handle, signposts)
     rows = report.get("report", [])
-    field = SORTABLE_METRICS[by]
+    valued = [
+        (value, row) for row in rows if (value := metric_number(row, by)) is not None
+    ]
+    valued.sort(key=lambda entry: entry[0], reverse=True)
+    ranked = [row for _, row in valued[:count]]
 
-    ranked = sorted(
-        (row for row in rows if finite_number(row.get(field)) is not None),
-        key=lambda row: finite_number(row.get(field)) or 0.0,
-        reverse=True,
-    )[:count]
-
-    total: float = sum(finite_number(row.get(field)) or 0.0 for row in rows)
+    total: float = sum(value for value, _ in valued)
     empty = empty_detail_fields(registry, handle, groups)
     flag_inputs = read_flag_inputs(registry, handle, groups)
     ignored = bool(report.get("signpost_range_ignored"))
@@ -1475,16 +1491,7 @@ def _spread_rows(
 ) -> List[Dict]:
     """The one row asked for, or the costliest device ops by device time."""
     if perf_id is None:
-        candidates = [
-            row
-            for row in rows
-            if _spannable(row) and finite_number(row.get("device_time")) is not None
-        ]
-        return sorted(
-            candidates,
-            key=lambda row: finite_number(row.get("device_time")) or 0.0,
-            reverse=True,
-        )[: bounded(limit, MAX_DETAILED_LIMIT)]
+        return costliest_rows(rows, _spannable)[: bounded(limit, MAX_DETAILED_LIMIT)]
 
     (row,) = perf_rows(rows, [perf_id])
     if not _spannable(row):
@@ -2480,6 +2487,7 @@ __all__ = [
     "diff_reports",
     "empty_detail_fields",
     "is_signpost_row",
+    "metric_number",
     "metric_value",
     "op_breakdown",
     "partitioned_caveat",
