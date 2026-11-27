@@ -88,7 +88,7 @@ beforeEach(() => {
     });
     (usePerformanceComparisonReport as Mock).mockReturnValue({ data: [] });
     (usePerformanceRange as Mock).mockReturnValue([1, 2]);
-    (usePerfComparisonCandidates as Mock).mockReturnValue({ data: [] });
+    (usePerfComparisonCandidates as Mock).mockReturnValue({ data: { directory: '/reports', reports: [] } });
     (useGetNPEManifest as Mock).mockReturnValue({ data: [], error: null });
     (useOpToPerfIdFiltered as Mock).mockReturnValue([]);
     (useOperationsList as Mock).mockReturnValue({ data: [] });

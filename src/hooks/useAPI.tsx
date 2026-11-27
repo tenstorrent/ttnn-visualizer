@@ -101,7 +101,7 @@ import {
     NpeClientErrorKind,
 } from '../definitions/NPEData';
 import Endpoints from '../definitions/Endpoints';
-import { ReportFolder, SINGLE_HOST_WORLD_SIZE } from '../definitions/Reports';
+import { PerfComparisonCandidates, ReportFolder, SINGLE_HOST_WORLD_SIZE } from '../definitions/Reports';
 import { RemoteFolder } from '../model/RemoteConnection';
 import createToastNotification from '../functions/createToastNotification';
 import { ToastType } from '../definitions/ToastType';
@@ -1700,7 +1700,7 @@ export const usePerfFolderList = () => {
 const PERFORMANCE_COMPARISON_CANDIDATES_QUERY_KEY = 'fetch-performance-comparison-candidates';
 
 const fetchPerfComparisonCandidates = async () => {
-    const { data } = await axiosInstance.get<ReportFolder[]>(Endpoints.PERFORMANCE_COMPARISON_CANDIDATES);
+    const { data } = await axiosInstance.get<PerfComparisonCandidates>(Endpoints.PERFORMANCE_COMPARISON_CANDIDATES);
 
     return data;
 };
@@ -1717,7 +1717,7 @@ export const usePerfComparisonCandidates = () => {
     // The route is local-only, and comparison is hidden under SERVER_MODE.
     const isServerMode = !!getServerConfig().SERVER_MODE;
 
-    return useQuery<ReportFolder[], AxiosError>({
+    return useQuery<PerfComparisonCandidates, AxiosError>({
         queryFn: () => fetchPerfComparisonCandidates(),
         queryKey: [PERFORMANCE_COMPARISON_CANDIDATES_QUERY_KEY, getOrCreateInstanceId(), activeReportId, location],
         enabled: activeReportId !== null && !isServerMode,

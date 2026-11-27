@@ -29,3 +29,11 @@ export interface ReportFolder {
     // sets without it; useActiveReportFingerprints asks the instance instead.
     runFingerprint?: string | null;
 }
+
+/** The reports beside the active performance report, which is where `?name=` reads them. */
+export interface PerfComparisonCandidates {
+    // Where the reports sit. Folder names repeat across directories, so this is what
+    // tells a pick made against one listing from a namesake in another.
+    directory: string;
+    reports: ReportFolder[];
+}

@@ -199,6 +199,11 @@ export const topNAnnotationCountAtom = atomWithStorage<number>('topNAnnotationCo
  * `activePerformanceReportFolderNameAtom` holds, never a display name.
  */
 export const comparisonPerformanceReportListAtom = atom<string[] | null>(null);
+/**
+ * The directory `comparisonPerformanceReportListAtom` was picked from. The ids are folder
+ * names, which another directory can reuse, so this is what says they still mean the same reports.
+ */
+export const comparisonPerformanceReportDirectoryAtom = atom<string | null>(null);
 export const perfSelectedTabAtom = atom<TabId>(PerfTabIds.TABLE);
 export const isStackedViewAtom = atom(false);
 // One constant so an unset range keeps its identity across reads, and a consumer

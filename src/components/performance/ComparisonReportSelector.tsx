@@ -9,7 +9,11 @@ import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
 import LocalFolderPicker from '../report-selection/LocalFolderPicker';
 import { ReportFolder } from '../../definitions/Reports';
-import { activePerformanceReportFolderNameAtom, comparisonPerformanceReportListAtom } from '../../store/app';
+import {
+    activePerformanceReportFolderNameAtom,
+    comparisonPerformanceReportDirectoryAtom,
+    comparisonPerformanceReportListAtom,
+} from '../../store/app';
 import { formatSyncedReportName } from '../../functions/reportRank';
 import { getFolderReportId } from '../../functions/reportLinks';
 import { recordPerfComparisonUsed } from '../../functions/surfaceEvents';
@@ -17,6 +21,8 @@ import { TEST_IDS } from '../../definitions/TestIds';
 
 interface ComparisonReportSelectorProps {
     folderList: ReportFolder[];
+    // Where `folderList` was read from; null when no listing could be read.
+    directory: string | null;
     reportIndex: number;
     label?: React.ReactNode;
     subLabel?: string;
@@ -25,12 +31,14 @@ interface ComparisonReportSelectorProps {
 
 const ComparisonReportSelector = ({
     folderList,
+    directory,
     reportIndex,
     label,
     subLabel,
     className,
 }: ComparisonReportSelectorProps) => {
     const [comparisonReportList, setComparisonReportList] = useAtom(comparisonPerformanceReportListAtom);
+    const [comparisonDirectory, setComparisonDirectory] = useAtom(comparisonPerformanceReportDirectoryAtom);
     const activeReportId = useAtomValue(activePerformanceReportFolderNameAtom);
     const selectedReportId = comparisonReportList?.[reportIndex] || null;
     // The reports chosen in the other selectors, so one report cannot fill two slots.
@@ -63,10 +71,15 @@ const ComparisonReportSelector = ({
                             return;
                         }
 
-                        const isSameReport = comparisonReportList?.[reportIndex] === reportId;
-                        const updatedReports = [...(comparisonReportList || [])];
-                        updatedReports[reportIndex] = reportId;
+                        // Picks from another directory name other reports here, so a pick
+                        // from this listing starts the list again rather than joining them.
+                        const isPickedElsewhere = comparisonDirectory !== null && comparisonDirectory !== directory;
+                        const currentReports = isPickedElsewhere ? [] : comparisonReportList || [];
+                        const isSameReport = currentReports[reportIndex] === reportId;
+                        const updatedReports = [...currentReports];
+                        updatedReports[isPickedElsewhere ? 0 : reportIndex] = reportId;
 
+                        setComparisonDirectory(directory);
                         setComparisonReportList(updatedReports);
 
                         // Re-picking the report already in this slot changes nothing. The list

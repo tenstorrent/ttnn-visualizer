@@ -33,7 +33,7 @@ vi.mock('../src/functions/getServerConfig', () => ({
 }));
 
 const ACTIVE_REPORT = { path: 'active', reportName: 'active' };
-const CANDIDATES = [ACTIVE_REPORT, { path: 'sibling', reportName: 'sibling' }];
+const CANDIDATES = { directory: '/reports', reports: [ACTIVE_REPORT, { path: 'sibling', reportName: 'sibling' }] };
 
 const candidateRequestCount = () =>
     vi.mocked(axiosInstance.get).mock.calls.filter(([url]) => url === Endpoints.PERFORMANCE_COMPARISON_CANDIDATES)
@@ -80,6 +80,19 @@ describe('usePerfComparisonCandidates', () => {
 
         // Same folder name, different directory: the local listing must not answer for it.
         act(() => store.set(performanceReportLocationAtom, ReportLocation.REMOTE));
+
+        await waitFor(() => expect(candidateRequestCount()).toBe(2));
+    });
+
+    it('asks again when another report becomes the active one', async () => {
+        const store = createStore();
+        store.set(activePerformanceReportAtom, ACTIVE_REPORT);
+        store.set(performanceReportLocationAtom, ReportLocation.LOCAL);
+        const { result } = renderWithStore(store);
+        await waitFor(() => expect(result.current.data).toEqual(CANDIDATES));
+
+        // A report opened by path sits in its own directory, at the same location.
+        act(() => store.set(activePerformanceReportAtom, { path: 'other', reportName: 'other' }));
 
         await waitFor(() => expect(candidateRequestCount()).toBe(2));
     });

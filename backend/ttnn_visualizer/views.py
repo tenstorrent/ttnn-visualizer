@@ -5,6 +5,7 @@
 import dataclasses
 import json
 import logging
+import os
 import platform
 import re
 import shutil
@@ -1300,16 +1301,23 @@ def _performance_report_rows(
     # Most recent first; equal times fall back to the name so ties have one order,
     # which under SERVER_MODE would otherwise come from hashing a set.
     def get_modified_time(dir_name):
-        dir_path = Path(path) / dir_name
-        if dir_path.exists():
-            return dir_path.stat().st_mtime
-        return 0
+        try:
+            return (Path(path) / dir_name).stat().st_mtime
+        except OSError:
+            return 0
 
     directory_names.sort(key=lambda name: (-get_modified_time(name), name))
 
     for dir_name in directory_names:
         dir_path = Path(path) / dir_name
-        if not dir_path.is_dir() or not is_valid_performance_report_dir(dir_path):
+        # Before Python 3.14, `Path.is_file()` raises on a folder the user cannot read
+        # rather than answering False, and one such folder must not sink the listing.
+        try:
+            if not dir_path.is_dir() or not is_valid_performance_report_dir(dir_path):
+                continue
+            run_fingerprint = performance_run_fingerprint(dir_path)
+        except OSError:
+            logger.warning("Skipping unreadable performance report folder %s", dir_path)
             continue
 
         valid_dirs.append(
@@ -1317,11 +1325,23 @@ def _performance_report_rows(
                 "path": dir_path.name,
                 "reportName": dir_path.name,
                 "isDemo": dir_name in demo_directory_names,
-                "runFingerprint": performance_run_fingerprint(dir_path),
+                "runFingerprint": run_fingerprint,
             }
         )
 
     return valid_dirs
+
+
+def _is_addressable_by_name(folder_name: str) -> bool:
+    """Whether ``?name=folder_name`` resolves back to this same folder.
+
+    `sanitise_path_segment` trims whitespace and treats a backslash as a separator,
+    so a folder named `` run `` or ``a\\b`` would be read as a different one.
+    """
+    try:
+        return sanitise_path_segment(folder_name) == folder_name
+    except ValueError:
+        return False
 
 
 @api.route("/performance", methods=["GET"])
@@ -1369,6 +1389,9 @@ def get_performance_comparison_candidates(instance: Instance):
     Listed from the active report's own directory rather than the local data
     directory: a remote report's siblings are the other reports synced from its
     host, and a report opened by path has whatever sits beside it.
+
+    ``directory`` names that directory, so the client can tell picks made against
+    one listing from another listing whose reports happen to share their names.
     """
     if not instance.performance_path:
         raise PerformanceReportNotLoadedException()
@@ -1378,18 +1401,28 @@ def get_performance_comparison_candidates(instance: Instance):
     parent = Path(instance.performance_path).parent
 
     try:
+        # `os.path.isdir` answers False for a sibling it cannot stat, such as a
+        # symlink into an unreadable directory, where `Path.is_dir()` would raise.
         directory_names = [
             entry.name
             for entry in parent.iterdir()
-            if entry.is_dir() and not entry.name.startswith(".")
+            if os.path.isdir(entry)
+            and not entry.name.startswith(".")
+            and _is_addressable_by_name(entry.name)
         ]
     except OSError:
-        # A synced host directory can go away underneath an open report.
+        # A synced host directory can go away underneath an open report. An empty
+        # listing would read as "no siblings" and clear the user's comparisons.
         logger.warning("Unable to list performance reports beside %s", parent)
-        return jsonify([])
+        return response_not_found("Unable to list the reports beside this report")
 
     return Response(
-        orjson.dumps(_performance_report_rows(parent, directory_names, [])),
+        orjson.dumps(
+            {
+                "directory": str(parent),
+                "reports": _performance_report_rows(parent, directory_names, []),
+            }
+        ),
         mimetype="application/json",
     )
 

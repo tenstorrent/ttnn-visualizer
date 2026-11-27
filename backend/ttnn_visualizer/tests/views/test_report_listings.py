@@ -299,12 +299,19 @@ def _instance_on_performance_report(app, instance_id: str, performance_dir: Path
     return instance_id
 
 
-def _candidate_paths(client, instance_id: str):
+def _candidates(client, instance_id: str) -> dict:
     response = client.get(
         COMPARISON_CANDIDATES, query_string={"instanceId": instance_id}
     )
     assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
-    return [folder["path"] for folder in response.get_json()]
+    return response.get_json()
+
+
+def _candidate_paths(client, instance_id: str):
+    return [folder["path"] for folder in _candidates(client, instance_id)["reports"]]
+
+
+_RUNNING_AS_ROOT = hasattr(os, "geteuid") and os.geteuid() == 0
 
 
 def _synced_reports_root(app, host: str = "remote-host") -> Path:
@@ -379,12 +386,67 @@ class TestComparisonCandidates:
             "2026_07_28_18_04_24_rank1",
         ]
 
-    def test_a_parent_that_went_away_lists_nothing(self, app, client, tmp_path):
+    def test_a_parent_that_went_away_is_not_found(self, app, client, tmp_path):
+        """An empty listing would read as "no siblings" and clear every comparison."""
         instance_id = _instance_on_performance_report(
             app, "gone", tmp_path / "missing" / "active"
         )
 
-        assert _candidate_paths(client, instance_id) == []
+        response = client.get(
+            COMPARISON_CANDIDATES, query_string={"instanceId": instance_id}
+        )
+
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    def test_the_listing_names_the_directory_it_was_read_from(
+        self, app, client, tmp_path
+    ):
+        runs = tmp_path / "runs"
+        _make_performance_report(runs, "active")
+        instance_id = _instance_on_performance_report(app, "dir", runs / "active")
+
+        assert _candidates(client, instance_id)["directory"] == str(runs)
+
+    @pytest.mark.parametrize("name", [" padded ", "back\\slash"])
+    def test_a_folder_name_that_does_not_resolve_to_itself_is_not_listed(
+        self, app, client, tmp_path, name
+    ):
+        """`?name=` trims and splits on backslashes, so it would read another folder."""
+        runs = tmp_path / "runs"
+        _make_performance_report(runs, "active")
+        _make_performance_report(runs, name)
+        instance_id = _instance_on_performance_report(app, "names", runs / "active")
+
+        assert _candidate_paths(client, instance_id) == ["active"]
+
+    @pytest.mark.skipif(_RUNNING_AS_ROOT, reason="root reads a mode-000 folder")
+    def test_an_unreadable_sibling_is_skipped(self, app, client, tmp_path):
+        runs = tmp_path / "runs"
+        _make_performance_report(runs, "active")
+        _make_performance_report(runs, "locked")
+        (runs / "locked").chmod(0)
+        instance_id = _instance_on_performance_report(app, "locked", runs / "active")
+
+        try:
+            assert _candidate_paths(client, instance_id) == ["active"]
+        finally:
+            (runs / "locked").chmod(0o755)
+
+    @pytest.mark.skipif(_RUNNING_AS_ROOT, reason="root reads a mode-000 folder")
+    def test_a_sibling_symlink_into_an_unreadable_folder_is_skipped(
+        self, app, client, tmp_path
+    ):
+        runs = tmp_path / "runs"
+        _make_performance_report(runs, "active")
+        _make_performance_report(tmp_path / "locked", "target")
+        (runs / "linked").symlink_to(tmp_path / "locked" / "target")
+        (tmp_path / "locked").chmod(0)
+        instance_id = _instance_on_performance_report(app, "symlink", runs / "active")
+
+        try:
+            assert _candidate_paths(client, instance_id) == ["active"]
+        finally:
+            (tmp_path / "locked").chmod(0o755)
 
     def test_no_active_performance_report_is_not_found(self, app, client, make_report):
         response = client.get(

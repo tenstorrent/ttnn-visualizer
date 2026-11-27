@@ -183,6 +183,7 @@ describe('ComparisonReportSelector usage events', () => {
             <TestProviders initialAtomValues={initialAtomValues}>
                 <ComparisonReportSelector
                     folderList={[picker.folder!]}
+                    directory='/reports'
                     reportIndex={reportIndex}
                     label='Compare'
                 />

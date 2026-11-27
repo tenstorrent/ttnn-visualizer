@@ -8,7 +8,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import ComparisonReportSelector from '../src/components/performance/ComparisonReportSelector';
 import { ReportFolder } from '../src/definitions/Reports';
 import { formatSyncedReportName } from '../src/functions/reportRank';
-import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../src/store/app';
+import {
+    activePerformanceReportAtom,
+    comparisonPerformanceReportDirectoryAtom,
+    comparisonPerformanceReportListAtom,
+} from '../src/store/app';
 import { AtomProviderInitialValues } from './helpers/atomProvider';
 import { COMPARISON_LIST_PROBE_TEST_ID, ComparisonListProbe } from './helpers/ComparisonListProbe';
 import { TestProviders } from './helpers/TestProviders';
@@ -60,15 +64,18 @@ const LOCAL_FOLDERS: ReportFolder[] = [
     { path: 'report-b', reportName: 'report-b' },
     { path: 'report-c', reportName: 'report-c' },
 ];
+const LOCAL_DIRECTORY = '/reports';
 
 function renderSelector({
     activeReport,
     comparisonReports = null,
+    comparisonDirectory = LOCAL_DIRECTORY,
     folderList = LOCAL_FOLDERS,
     reportIndex = 0,
 }: {
     activeReport: ReportFolder;
     comparisonReports?: string[] | null;
+    comparisonDirectory?: string;
     folderList?: ReportFolder[];
     reportIndex?: number;
 }) {
@@ -76,12 +83,14 @@ function renderSelector({
 
     if (comparisonReports) {
         initialAtomValues.push([comparisonPerformanceReportListAtom, comparisonReports]);
+        initialAtomValues.push([comparisonPerformanceReportDirectoryAtom, comparisonDirectory]);
     }
 
     return render(
         <TestProviders initialAtomValues={initialAtomValues}>
             <ComparisonReportSelector
                 folderList={folderList}
+                directory={LOCAL_DIRECTORY}
                 reportIndex={reportIndex}
             />
             <ComparisonListProbe />
@@ -97,6 +106,19 @@ const offeredReports = () =>
 afterEach(cleanup);
 
 describe('ComparisonReportSelector', () => {
+    it('starts the list again when the earlier picks came from another directory (#2433)', () => {
+        renderSelector({
+            activeReport: { path: 'report-a', reportName: 'report-a' },
+            comparisonReports: ['report-c'],
+            comparisonDirectory: '/synced/remote-host',
+            reportIndex: 1,
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'report-b' }));
+
+        expect(screen.getByTestId(COMPARISON_LIST_PROBE_TEST_ID)).toHaveTextContent('["report-b"]');
+    });
+
     it('does not offer the active report', () => {
         renderSelector({ activeReport: { path: 'report-a', reportName: 'report-a' } });
 
