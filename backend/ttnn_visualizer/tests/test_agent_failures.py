@@ -52,6 +52,7 @@ CREATE TABLE errors (
     stack_trace text, timestamp text
 );
 """
+_ERRORS_WITHOUT_TRACE = _ERRORS.replace("stack_trace text, ", "")
 _ARGUMENTS = (
     "CREATE TABLE operation_arguments (operation_id int, name text, value text);"
 )
@@ -463,21 +464,27 @@ class TestErrors:
         assert result["errors"] == []
         assert "predates the errors table" in result["caveat"]
 
-    def test_an_errors_table_without_the_trace_column_lists_a_null_trace(
-        self, tmp_path
-    ):
+    @pytest.mark.parametrize(
+        "errors_sql",
+        [
+            pytest.param(
+                "INSERT INTO errors VALUES (1, 'ttnn.add', 'TT_THROW', 'boom', NULL, '');",
+                id="null-value",
+            ),
+            pytest.param(
+                "DROP TABLE errors;"
+                + _ERRORS_WITHOUT_TRACE
+                + "INSERT INTO errors VALUES (1, 'ttnn.add', 'TT_THROW', 'boom', '');",
+                id="no-column",
+            ),
+        ],
+    )
+    def test_an_error_without_a_trace_lists_a_null_trace(self, tmp_path, errors_sql):
         """As the app's endpoints send it. #2429"""
         registry, handle = _report(tmp_path, operations=[(1, "ttnn.add")])
         connection = sqlite3.connect(tmp_path / "profiler" / "db.sqlite")
         try:
-            connection.executescript("""
-                DROP TABLE errors;
-                CREATE TABLE errors (
-                    operation_id int, operation_name text, error_type text,
-                    error_message text, timestamp text
-                );
-                INSERT INTO errors VALUES (1, 'ttnn.add', 'TT_THROW', 'boom', '');
-                """)
+            connection.executescript(errors_sql)
             connection.commit()
         finally:
             connection.close()
