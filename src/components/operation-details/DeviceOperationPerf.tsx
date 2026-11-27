@@ -8,8 +8,14 @@ import { Classes, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { ColumnDefinition, ColumnKeys, Columns } from '../../definitions/PerfTable';
 import { ReportLinkMatchResult } from '../../definitions/ReportLinks';
 import { isCountableDeviceTime } from '../../functions/durationBuckets';
-import { formatNonZeroShareOfTotal, getCoreCountText } from '../../functions/formatting';
-import { describePlainCell, formatCell, formatColumnNumber, getCellColour } from '../../functions/perfFunctions';
+import { getCoreCountText } from '../../functions/formatting';
+import {
+    describePlainCell,
+    formatCell,
+    formatColumnNumber,
+    formatDeviceTimeShare,
+    getCellColour,
+} from '../../functions/perfFunctions';
 import { NOT_ANALYSED_LABEL } from '../../functions/perfBoundAnalysis';
 import { TypedPerfTableRow } from '../../model/PerfTable';
 import 'styles/components/DeviceOperationPerf.scss';
@@ -51,11 +57,6 @@ const getLinkStatusMessage = (linkStatus: ReportLinkMatchResult, hasPerformanceR
 
     return null;
 };
-
-const formatShare = (deviceTimeUs: number | null, totalDeviceTimeUs: number): string | null =>
-    isCountableDeviceTime(deviceTimeUs) && totalDeviceTimeUs > 0
-        ? formatNonZeroShareOfTotal(deviceTimeUs, totalDeviceTimeUs)
-        : null;
 
 const formatCores = (cores: number | null): string | null =>
     cores !== null && Number.isFinite(cores) ? getCoreCountText(cores) : null;
@@ -131,7 +132,7 @@ interface DeviceOperationPerfSummaryProps {
 export const DeviceOperationPerfSummary = ({ row, totalDeviceTimeUs }: DeviceOperationPerfSummaryProps) => {
     const deviceTime = formatCell(row, DEVICE_TIME_COLUMN);
     const cores = formatCores(row.cores);
-    const share = formatShare(row.device_time, totalDeviceTimeUs);
+    const share = formatDeviceTimeShare(row.device_time, totalDeviceTimeUs);
     const parts: { key: string; node: ReactNode }[] = [];
 
     if (deviceTime) {
@@ -208,7 +209,7 @@ export const OperationDevicePerfSummary = ({
     }
 
     const totalUs = timedRows.reduce((total, row) => total + deviceTimeOf(row), 0);
-    const share = formatShare(totalUs, totalDeviceTimeUs);
+    const share = formatDeviceTimeShare(totalUs, totalDeviceTimeUs);
     const slowest = timedRows.reduce((current, row) => (deviceTimeOf(row) > deviceTimeOf(current) ? row : current));
     const slowestCores = formatCores(slowest.cores);
 

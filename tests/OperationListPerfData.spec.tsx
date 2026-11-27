@@ -11,15 +11,26 @@
  */
 
 import { cleanup, render, screen } from '@testing-library/react';
+import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import OperationListPerfData from '../src/components/OperationListPerfData';
-import { useGetDeviceOperationListPerfByOpId } from '../src/hooks/useAPI';
+import { DeviceOperationPerfSummary } from '../src/components/operation-details/DeviceOperationPerf';
+import { ReportLinkMatchResult } from '../src/definitions/ReportLinks';
+import { useGetDeviceOperationListPerfByOpId, useLinkedPerformanceReport } from '../src/hooks/useAPI';
+import { useDeviceOperationPerf, useLinkedReportDeviceTimeTotalUs } from '../src/hooks/useDeviceOperationPerf';
+import { useReportLinkMatch } from '../src/hooks/useReportLinkMatch';
 import { DeviceOperationMapping } from '../src/model/DeviceOperationMapping';
 import { OperationDescription } from '../src/model/APIData';
 import { PerfTableRow } from '../src/model/PerfTable';
+import { makeRawPerfRow } from './helpers/perfRowFixtures';
 
 vi.mock('../src/hooks/useAPI', () => ({
     useGetDeviceOperationListPerfByOpId: vi.fn(),
+    useLinkedPerformanceReport: vi.fn(),
+}));
+
+vi.mock('../src/hooks/useReportLinkMatch', () => ({
+    useReportLinkMatch: vi.fn(),
 }));
 
 const OP_ID = 7;
@@ -41,13 +52,97 @@ const mapping = (name: string, deviceTime: string): DeviceOperationMapping => ({
     perfData: perfRow(name, deviceTime),
 });
 
+const mappingOf = (row: PerfTableRow, startNodeId: number): DeviceOperationMapping => ({
+    name: row.raw_op_code,
+    id: OP_ID,
+    operationName: 'ttnn.cumsum',
+    startNodeId,
+    perfData: row,
+});
+
 const operation = (deviceOperationNameList: string[]): OperationDescription =>
     ({ id: OP_ID, name: 'ttnn.matmul', deviceOperationNameList }) as OperationDescription;
 
 const mockMatch = (entries: [number, DeviceOperationMapping[]][]) =>
     vi.mocked(useGetDeviceOperationListPerfByOpId).mockReturnValue(new Map(entries));
 
-beforeEach(vi.clearAllMocks);
+const givenLinkedReport = (rows: PerfTableRow[]) =>
+    vi
+        .mocked(useLinkedPerformanceReport)
+        .mockReturnValue({ data: { report: rows } } as ReturnType<typeof useLinkedPerformanceReport>);
+
+// bge_m3's ttnn.cumsum, untraced: op-to-op gaps dwarf device time, so Total % rounds to 0.
+const firstPermute = makeRawPerfRow({
+    id: '5',
+    raw_op_code: 'PermuteDeviceOperation',
+    device_time: '14.418',
+    total_percent: '0.0',
+});
+const accumulation = makeRawPerfRow({
+    id: '6',
+    raw_op_code: 'AccumulationDeviceOperation',
+    device_time: '115.73',
+    total_percent: '0.0',
+});
+const secondPermute = makeRawPerfRow({
+    id: '7',
+    raw_op_code: 'PermuteDeviceOperation',
+    device_time: '5.559',
+    total_percent: '0.0',
+});
+// parseFloat reads this as 1 µs and Number as NaN; both views must read it as the app's parse does.
+const trailingExponent = makeRawPerfRow({ id: '8', raw_op_code: 'TilizeDeviceOperation', device_time: '1e' });
+const REPORT_DEVICE_TIME_US = 49_989;
+const BGE_M3_REPORT = [
+    firstPermute,
+    accumulation,
+    secondPermute,
+    trailingExponent,
+    makeRawPerfRow({ id: '9', device_time: '49852.293' }),
+    // tt-perf-report blanks a device time it judges invalid; it counts towards nothing.
+    makeRawPerfRow({ id: '10', device_time: '' }),
+];
+
+const DEVICE_TIME_SHARE = /(<?[\d.]+%) of the report's device time|(<?[\d.]+%) of device time/g;
+
+const sharesIn = (element: HTMLElement): string[] =>
+    [...(element.textContent ?? '').matchAll(DEVICE_TIME_SHARE)].map(([, listShare, detailsShare]) =>
+        String(listShare ?? detailsShare),
+    );
+
+const renderRow = (deviceOperationNames: string[], totalDeviceTimeUs = REPORT_DEVICE_TIME_US) =>
+    render(
+        <OperationListPerfData
+            operation={operation(deviceOperationNames)}
+            totalDeviceTimeUs={totalDeviceTimeUs}
+        />,
+    ).container;
+
+// Each list row as OperationList renders it, with the total read once from the linked report.
+const LinkedListRow = () => (
+    <OperationListPerfData
+        operation={operation(['Permute'])}
+        totalDeviceTimeUs={useLinkedReportDeviceTimeTotalUs()}
+    />
+);
+
+const OperationDetailsShares = () => {
+    const { rowByStartNodeId, totalDeviceTimeUs } = useDeviceOperationPerf(OP_ID);
+
+    return [...rowByStartNodeId].map(([startNodeId, row]) => (
+        <DeviceOperationPerfSummary
+            key={startNodeId}
+            row={row}
+            totalDeviceTimeUs={totalDeviceTimeUs}
+        />
+    ));
+};
+
+beforeEach(() => {
+    vi.clearAllMocks();
+    givenLinkedReport(BGE_M3_REPORT);
+    vi.mocked(useReportLinkMatch).mockReturnValue(ReportLinkMatchResult.LINKED);
+});
 
 // RTL auto-cleanup is off in this project, so an uncleaned tree leaves its rows in
 // the document and the next case's queries match both.
@@ -58,7 +153,7 @@ describe('OperationListPerfData', () => {
         // A multi-device run: one operation, one perf row per device.
         mockMatch([[OP_ID, [mapping('Matmul', '100'), mapping('Matmul', '250')]]]);
 
-        render(<OperationListPerfData operation={operation(['Matmul'])} />);
+        renderRow(['Matmul']);
 
         expect(screen.getAllByText('Matmul')).toHaveLength(2);
         expect(screen.getByText(/100/)).toBeDefined();
@@ -72,7 +167,7 @@ describe('OperationListPerfData', () => {
             [OP_ID + 1, [mapping('Softmax', '999')]],
         ]);
 
-        render(<OperationListPerfData operation={operation(['Matmul'])} />);
+        renderRow(['Matmul']);
 
         expect(screen.getByText('Matmul')).toBeDefined();
         expect(screen.queryByText('Softmax')).toBeNull();
@@ -82,7 +177,7 @@ describe('OperationListPerfData', () => {
     it('falls back to the memory report’s device operation names when the operation did not match', () => {
         mockMatch([[OP_ID + 1, [mapping('Softmax', '100')]]]);
 
-        render(<OperationListPerfData operation={operation(['Matmul', 'Softmax'])} />);
+        renderRow(['Matmul', 'Softmax']);
 
         expect(screen.getByText('Matmul')).toBeDefined();
         expect(screen.queryByText(/100/)).toBeNull();
@@ -91,6 +186,57 @@ describe('OperationListPerfData', () => {
     it('renders nothing rather than throwing when the match is empty', () => {
         mockMatch([]);
 
-        expect(() => render(<OperationListPerfData operation={operation([])} />)).not.toThrow();
+        expect(() => renderRow([])).not.toThrow();
+    });
+
+    describe('share of device time', () => {
+        it("shows a device operation's share of the report's device time, not its Total %", () => {
+            mockMatch([[OP_ID, [mappingOf(accumulation, 101)]]]);
+
+            const container = renderRow(['Accumulation']);
+
+            expect(container).toHaveTextContent("execution time 115.73 µs (0.2% of the report's device time)");
+            expect(container).not.toHaveTextContent('0%)');
+        });
+
+        it('agrees with Operation Details on every device operation of the operation', () => {
+            mockMatch([
+                [
+                    OP_ID,
+                    [
+                        mappingOf(firstPermute, 101),
+                        mappingOf(accumulation, 103),
+                        mappingOf(secondPermute, 105),
+                        mappingOf(trailingExponent, 107),
+                    ],
+                ],
+            ]);
+
+            const list = render(<LinkedListRow />).container;
+            const details = render(<OperationDetailsShares />).container;
+
+            expect(sharesIn(list)).toEqual(['<0.1%', '0.2%', '<0.1%', '<0.1%']);
+            expect(sharesIn(list)).toEqual(sharesIn(details));
+        });
+
+        it('leaves the share out for a device operation with no device time', () => {
+            mockMatch([
+                [OP_ID, [mappingOf(makeRawPerfRow({ raw_op_code: 'TilizeDeviceOperation', device_time: '' }), 101)]],
+            ]);
+
+            const container = renderRow(['Tilize']);
+
+            expect(screen.getByText('TilizeDeviceOperation')).toBeInTheDocument();
+            expect(container).not.toHaveTextContent('%');
+        });
+
+        it('leaves the share out when the report has no device time to divide by', () => {
+            mockMatch([[OP_ID, [mapping('Matmul', '100')]]]);
+
+            const container = renderRow(['Matmul'], 0);
+
+            expect(container).toHaveTextContent('execution time 100 µs');
+            expect(container).not.toHaveTextContent('%');
+        });
     });
 });

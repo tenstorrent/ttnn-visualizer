@@ -6,7 +6,7 @@ import { ReactNode } from 'react';
 import { renderHook } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useDeviceOperationPerf } from '../src/hooks/useDeviceOperationPerf';
+import { useDeviceOperationPerf, useLinkedReportDeviceTimeTotalUs } from '../src/hooks/useDeviceOperationPerf';
 import {
     PerformanceReportResponse,
     useGetDeviceOperationListPerfByOpId,
@@ -115,6 +115,36 @@ describe('useDeviceOperationPerf', () => {
         ]);
 
         expect(renderPerf().totalDeviceTimeUs).toBe(40.5);
+    });
+
+    it('gives the operations list the same total, and none before the linked report loads', () => {
+        const renderTotal = () => renderHook(() => useLinkedReportDeviceTimeTotalUs()).result.current;
+
+        expect(renderTotal()).toBe(renderPerf().totalDeviceTimeUs);
+        expect(renderTotal()).toBe(19.977);
+
+        givenLinkedReport(undefined);
+
+        expect(renderTotal()).toBe(0);
+    });
+
+    it('sums the linked report once however many readers ask for its total', () => {
+        let deviceTimeReads = 0;
+        const countedRows = Array.from({ length: 4 }, (_, index) =>
+            Object.defineProperty(makeRawPerfRow({ id: `${index}` }), 'device_time', {
+                get: () => {
+                    deviceTimeReads += 1;
+                    return '10';
+                },
+            }),
+        );
+        givenLinkedReport(countedRows);
+
+        const totals = [1, 2, 3].map(() => renderHook(() => useLinkedReportDeviceTimeTotalUs()).result.current);
+
+        expect(totals).toEqual([40, 40, 40]);
+        expect(renderPerf().totalDeviceTimeUs).toBe(40);
+        expect(deviceTimeReads).toBe(countedRows.length);
     });
 
     it("says whether the linked report has hardware counters, from its envelope rather than its rows' keys", () => {

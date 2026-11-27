@@ -13,7 +13,7 @@ import { isFlagEnabled } from './getServerConfig';
 import { MIN_TOTAL_PERCENT } from '../definitions/PerfHeuristics';
 import { OperationDescription } from '../model/APIData';
 import { formatMemorySize, formatPercentage, formatSize, toSecondsPretty } from './math';
-import { formatOperationLabel } from './formatting';
+import { formatNonZeroShareOfTotal, formatOperationLabel } from './formatting';
 import ROUTES from '../definitions/Routes';
 import HighlightedText from '../components/HighlightedText';
 import { HIGH_DISPATCH_THRESHOLD_US, OpType } from '../definitions/Performance';
@@ -28,6 +28,7 @@ import { CellColour, DEFAULT_CELL_COLOUR, FALLBACK_CELL_COLOUR, WARNING_CELL_COL
 import { isHighDispatchGap, isSlowDramDominant } from './perfBoundPredicates';
 import { NOT_ANALYSED_LABEL, getNotAnalysedReason, getSlowBoundExplanation } from './perfBoundAnalysis';
 import { getRepeatCacheOutcome } from './enrichPerfRowData';
+import { isCountableDeviceTime } from './durationBuckets';
 
 const OPERATION_COLOURS: { [key: string]: CellColour } = {
     '(torch)': CellColour.Red,
@@ -242,6 +243,12 @@ export const formatColumnNumber = (value: number, column: ColumnDefinition): str
 
     return unit ? `${formatted} ${unit}` : formatted;
 };
+
+/** A device time's share of the report's device time, or null when either has none to divide. */
+export const formatDeviceTimeShare = (deviceTimeUs: number | null, totalDeviceTimeUs: number): string | null =>
+    isCountableDeviceTime(deviceTimeUs) && totalDeviceTimeUs > 0
+        ? formatNonZeroShareOfTotal(deviceTimeUs, totalDeviceTimeUs)
+        : null;
 
 /** A plain cell's value with its unit, or '' when it has none: what `formatCell` colours and explains. */
 export const formatCellText = (row: TypedPerfTableRow, column: ColumnDefinition): string => {

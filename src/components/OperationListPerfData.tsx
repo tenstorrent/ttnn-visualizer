@@ -4,18 +4,40 @@
 
 import classNames from 'classnames';
 import { Fragment } from 'react/jsx-runtime';
-import { formatPercentage, formatSize } from '../functions/math';
-import { getCoreColour, getOpToOpGapColour } from '../functions/perfFunctions';
+import { formatSize } from '../functions/math';
+import { formatDeviceTimeShare, getCoreColour, getOpToOpGapColour } from '../functions/perfFunctions';
 import { useGetDeviceOperationListPerfByOpId } from '../hooks/useAPI';
 import { OperationDescription } from '../model/APIData';
 
 interface OperationListPerfDataProps {
     operation: OperationDescription;
+    /** The linked report's device time, which each device operation's share divides by. */
+    totalDeviceTimeUs: number;
 }
 
 const EMPTY_PERF_DEVICE_OPERATIONS: never[] = [];
 
-const OperationListPerfData = ({ operation }: OperationListPerfDataProps) => {
+interface DeviceTimeShareProps {
+    deviceTime: string;
+    totalDeviceTimeUs: number;
+}
+
+// As in Operation Details: tt-perf-report's Total % adds the op-to-op gap, which dominates an untraced capture.
+const DeviceTimeShare = ({ deviceTime, totalDeviceTimeUs }: DeviceTimeShareProps) => {
+    const share = formatDeviceTimeShare(parseFloat(deviceTime), totalDeviceTimeUs);
+
+    return (
+        share && (
+            <>
+                {' '}
+                (<span className='monospace'>{share}</span>
+                {" of the report's device time)"}
+            </>
+        )
+    );
+};
+
+const OperationListPerfData = ({ operation, totalDeviceTimeUs }: OperationListPerfDataProps) => {
     // Grouped by op id rather than scanned, because this renders once per row of
     // a virtualised list and a filter over the whole match is O(rows) per row.
     const perfDataByOpId = useGetDeviceOperationListPerfByOpId();
@@ -46,10 +68,11 @@ const OperationListPerfData = ({ operation }: OperationListPerfDataProps) => {
                                     , execution time{' '}
                                     <span className='monospace'>
                                         {formatSize(parseFloat(perf.perfData?.device_time))} µs
-                                    </span>{' '}
-                                    <span className='monospace'>
-                                        ({formatPercentage(parseFloat(perf.perfData?.total_percent), 2)})
                                     </span>
+                                    <DeviceTimeShare
+                                        deviceTime={perf.perfData.device_time}
+                                        totalDeviceTimeUs={totalDeviceTimeUs}
+                                    />
                                     {perf.perfData?.op_to_op_gap && (
                                         <>
                                             ,{' '}

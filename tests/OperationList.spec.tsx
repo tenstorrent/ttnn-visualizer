@@ -13,18 +13,28 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import OperationList from '../src/components/OperationList';
 import { EventLogEvent, FilterSurface } from '../src/definitions/EventLogEvent';
 import { TEST_IDS } from '../src/definitions/TestIds';
-import { useGetUniqueDeviceOperationsList, useOperationsList, useReportErrors } from '../src/hooks/useAPI';
+import {
+    useGetUniqueDeviceOperationsList,
+    useLinkedPerformanceReport,
+    useOperationsList,
+    useReportErrors,
+} from '../src/hooks/useAPI';
 import { OperationDescription, OperationError, ReportError } from '../src/model/APIData';
 import { TestProviders } from './helpers/TestProviders';
+import { makeRawPerfRow } from './helpers/perfRowFixtures';
 import { operationListFilterAtom } from '../src/store/app';
 
-const { recordEvent } = vi.hoisted(() => ({ recordEvent: vi.fn() }));
+const { recordEvent, OperationListPerfData } = vi.hoisted(() => ({
+    recordEvent: vi.fn(),
+    OperationListPerfData: vi.fn<(props: { totalDeviceTimeUs: number }) => null>(() => null),
+}));
 
 vi.mock('../src/functions/recordEvent', () => ({ default: recordEvent }));
 
 vi.mock('../src/hooks/useAPI', () => ({
     useOperationsList: vi.fn(),
     useGetUniqueDeviceOperationsList: vi.fn(),
+    useLinkedPerformanceReport: vi.fn(),
     useReportErrors: vi.fn(),
 }));
 
@@ -32,7 +42,7 @@ vi.mock('../src/hooks/useOpPerfRowScores', () => ({
     useOpPerfRowScores: () => ({ scoreByOpId: new Map(), isAvailable: false }),
 }));
 
-vi.mock('../src/components/OperationListPerfData', () => ({ default: () => null }));
+vi.mock('../src/components/OperationListPerfData', () => ({ default: OperationListPerfData }));
 
 vi.mock('../src/hooks/useRestoreScrollPosition', () => ({
     default: () => ({ getListState: () => undefined, updateListState: vi.fn() }),
@@ -108,9 +118,16 @@ const renderList = (operations: OperationDescription[], reportErrors: ReportErro
 const rowFor = (container: HTMLElement, operationId: number) =>
     container.querySelector<HTMLElement>(`li.list-item-container[data-id='${operationId}']`);
 
+const givenLinkedReport = (deviceTimes: string[] | null) =>
+    vi.mocked(useLinkedPerformanceReport).mockReturnValue({
+        data: deviceTimes && { report: deviceTimes.map((deviceTime) => makeRawPerfRow({ device_time: deviceTime })) },
+    } as ReturnType<typeof useLinkedPerformanceReport>);
+
 beforeEach(() => {
     recordEvent.mockClear();
+    OperationListPerfData.mockClear();
     vi.mocked(useGetUniqueDeviceOperationsList).mockReturnValue([]);
+    givenLinkedReport(null);
 });
 
 // RTL auto-cleanup is off in this project.
@@ -187,5 +204,24 @@ describe('OperationList filter event', () => {
 
         expect(screen.getByPlaceholderText<HTMLInputElement>('Filter operations').value).toBe('');
         expect(recordEvent).not.toHaveBeenCalled();
+    });
+});
+
+describe('OperationList device time', () => {
+    const totalsPassed = () => OperationListPerfData.mock.calls.map(([props]) => props.totalDeviceTimeUs);
+
+    it("hands every row the linked report's device time, which Operation Details divides by too", () => {
+        givenLinkedReport(['10', '30.5', '']);
+
+        renderList([operation(1, 'ttnn.add'), operation(2, 'ttnn.mul')], []);
+
+        expect(new Set(totalsPassed())).toEqual(new Set([40.5]));
+        expect(totalsPassed().length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('hands the rows no total before the linked report loads', () => {
+        renderList([operation(1, 'ttnn.add')], []);
+
+        expect(new Set(totalsPassed())).toEqual(new Set([0]));
     });
 });

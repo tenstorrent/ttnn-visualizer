@@ -19,6 +19,7 @@ vi.mock('../src/hooks/useAPI', () => ({
     useOperationsList: () => ({ data: apiMock.operations, error: null, isLoading: false }),
     useGetUniqueDeviceOperationsList: () => [],
     useGetDeviceOperationListPerfByOpId: () => new Map(),
+    useLinkedPerformanceReport: () => ({ data: undefined }),
     useReportErrors: () => ({ data: [] }),
 }));
 // jsdom lays nothing out, so the real virtualiser renders no rows; this one

@@ -9,6 +9,7 @@ import {
     describePlainCell,
     formatCellText,
     formatColumnNumber,
+    formatDeviceTimeShare,
     getOperationDetails,
 } from '../src/functions/perfFunctions';
 import { NOT_MODELLED_REASON, SLOW_BOUND_REASON } from '../src/functions/perfBoundAnalysis';
@@ -48,6 +49,21 @@ describe('formatColumnNumber', () => {
 
     it('prints an id without a thousands separator', () => {
         expect(formatColumnNumber(12345, getColumn(ColumnKeys.Id))).toBe('12345');
+    });
+});
+
+describe('formatDeviceTimeShare', () => {
+    it("gives a device time's share of the report's device time, marking one too small to round", () => {
+        expect(formatDeviceTimeShare(115.73, 49_989)).toBe('0.2%');
+        expect(formatDeviceTimeShare(14.418, 49_989)).toBe('<0.1%');
+    });
+
+    it.each([null, Number.NaN, 0, -2, Number.POSITIVE_INFINITY])('gives no share of a device time of %s', (time) => {
+        expect(formatDeviceTimeShare(time, 49_989)).toBeNull();
+    });
+
+    it.each([0, -1])('gives no share of a total of %s', (total) => {
+        expect(formatDeviceTimeShare(10, total)).toBeNull();
     });
 });
 

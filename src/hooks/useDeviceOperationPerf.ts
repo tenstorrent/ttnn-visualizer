@@ -33,7 +33,7 @@ export interface DeviceOperationPerf {
 const NO_ROWS: ReadonlyMap<number, TypedPerfTableRow> = new Map();
 const NO_REPORT_ROWS: PerfTableRow[] = [];
 
-// Once per report rather than per mount: every operation's details divide by the same total.
+// Once per report, not per mount: Operation Details and the operations list divide by it.
 const sumDeviceTimeUs = memoiseLatest((rows: PerfTableRow[]): number =>
     rows.reduce((total, row) => {
         const deviceTime = parseFloat(row.device_time);
@@ -41,6 +41,10 @@ const sumDeviceTimeUs = memoiseLatest((rows: PerfTableRow[]): number =>
         return isCountableDeviceTime(deviceTime) ? total + deviceTime : total;
     }, 0),
 );
+
+/** The linked report's countable device time (µs), which every device operation's share divides by. */
+export const useLinkedReportDeviceTimeTotalUs = (): number =>
+    sumDeviceTimeUs(useLinkedPerformanceReport().data?.report ?? NO_REPORT_ROWS);
 
 const hasPerfRow = (mapping: DeviceOperationMapping): mapping is DeviceOperationMapping & { perfData: PerfTableRow } =>
     mapping.perfData !== undefined;
@@ -51,7 +55,7 @@ export const useDeviceOperationPerf = (operationId: number): DeviceOperationPerf
     const { data: perfReport } = useLinkedPerformanceReport();
     const mappings = useGetDeviceOperationListPerfByOpId().get(operationId);
     const hasPerformanceReport = useAtomValue(activePerformanceReportAtom) !== null;
-    const totalDeviceTimeUs = sumDeviceTimeUs(perfReport?.report ?? NO_REPORT_ROWS);
+    const totalDeviceTimeUs = useLinkedReportDeviceTimeTotalUs();
 
     const rowByStartNodeId = useMemo(() => {
         if (linkStatus !== ReportLinkMatchResult.LINKED) {
