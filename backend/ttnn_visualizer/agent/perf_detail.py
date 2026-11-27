@@ -24,6 +24,7 @@ from typing import (
 )
 
 from ttnn_visualizer import hardware_counters
+from ttnn_visualizer.agent import row_cells
 from ttnn_visualizer.cells import finite_number, whole_number
 from ttnn_visualizer.csv_queries import PROGRAM_CACHE_HIT_COLUMN, PROGRAM_HASH_COLUMN
 from ttnn_visualizer.device_architecture import DeviceArchitecture
@@ -57,6 +58,17 @@ def _text(value: object) -> Optional[str]:
 def _number(value: object) -> Optional[float]:
     number = finite_number(value)
     return None if number is None else round(number, 3)
+
+
+def _as_app_reads(column: str) -> Callable[[object], Optional[float]]:
+    """`column`'s reader, as the app reads the cell (`row_cells`), so a detail field
+    reports the number the row's metric does."""
+
+    def read(value: object) -> Optional[float]:
+        number = row_cells.cell_number(column, value)
+        return None if number is None else round(number, 3)
+
+    return read
 
 
 def _microseconds(nanoseconds: object) -> Optional[float]:
@@ -157,10 +169,10 @@ _FIELDS: Dict[DetailGroup, Tuple[_Field, ...]] = {
         _Field("output_subblock_w", "output_subblock_w", whole_number),
     ),
     DetailGroup.UTILISATION: (
-        _Field("dram_gb_per_s", "dram", _number),
-        _Field("dram_percent", "dram_percent", _number),
-        _Field("tflops", "flops", _number),
-        _Field("flops_percent", "flops_percent", _number),
+        _Field("dram_gb_per_s", "dram", _as_app_reads("dram")),
+        _Field("dram_percent", "dram_percent", _as_app_reads("dram_percent")),
+        _Field("tflops", "flops", _as_app_reads("flops")),
+        _Field("flops_percent", "flops_percent", _as_app_reads("flops_percent")),
         _Field("ideal_us", "pm_ideal_ns", _microseconds, "pm_ideal_ns"),
         _Field("ideal_compute_us", "pm_compute_ns", _microseconds, "pm_compute_ns"),
         _Field(
@@ -242,7 +254,7 @@ _FIELDS: Dict[DetailGroup, Tuple[_Field, ...]] = {
         _Field("per_core_avg_us", "device_kernel_duration_per_core_avg", _microseconds),
     ),
     DetailGroup.DISPATCH: (
-        _Field("op_to_op_gap_us", "op_to_op_gap", _number),
+        _Field("op_to_op_gap_us", "op_to_op_gap", _as_app_reads("op_to_op_gap")),
         _Field(
             "dispatch_cq_cmd_op_us",
             "dispatch_total_cq_cmd_op_time",
