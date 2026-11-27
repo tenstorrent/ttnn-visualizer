@@ -31,7 +31,7 @@ from unittest.mock import patch
 import matplotlib
 import pytest
 from ttnn_visualizer import csv_queries
-from ttnn_visualizer.agent import handles, server, tools
+from ttnn_visualizer.agent import handles, row_cells, server, tools
 from ttnn_visualizer.agent.bounds import MAX_LIMIT
 from ttnn_visualizer.agent.handles import (
     MAX_SCOPED_DIFF_TOTALS,
@@ -4445,6 +4445,22 @@ class TestProjectRow:
         come, so there is no text to read another way."""
         assert tools.metric_number(_row(hw_fpu_util=12.5), "hw_fpu_util") == 12.5
         assert tools.metric_number(_row(hw_fpu_util=None), "hw_fpu_util") is None
+
+    def test_every_text_metric_is_read_as_the_app_reads_it(self):
+        """A text column added to `SORTABLE_METRICS` without a `row_cells` read would
+        fall back to Python's `float` unnoticed; the counter metrics are numbers the
+        backend filled. #2440"""
+        columns = {
+            column
+            for metric, column in tools.SORTABLE_METRICS.items()
+            if metric not in tools.COUNTER_METRICS
+        }
+
+        assert columns <= row_cells.COLUMNS
+        assert (
+            not {tools.SORTABLE_METRICS[metric] for metric in tools.COUNTER_METRICS}
+            & row_cells.COLUMNS
+        )
 
     def test_a_row_without_the_columns_reports_them_as_null(self):
         projected = tools.project_row(_row())

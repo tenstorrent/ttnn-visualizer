@@ -43,6 +43,7 @@ from ttnn_visualizer.agent.js_values import (
     js_truthy,
 )
 from ttnn_visualizer.agent.perf_detail import is_unmodelled
+from ttnn_visualizer.agent.row_cells import parse_filled_float, parse_int
 from ttnn_visualizer.csv_queries import SIGNPOST_OP_TYPE, DeviceLogMeta
 from ttnn_visualizer.device_architecture import DeviceArchitecture, architecture_of
 
@@ -122,12 +123,6 @@ def _parse_nullable_integer(value: object) -> Optional[float]:
     return None if math.isnan(parsed) else float(parsed)
 
 
-def parse_filled_float(value: object) -> Optional[float]:
-    """`value ? parseFloat(value) : null`, as `enrichRowData` reads `dram`, `flops` and
-    their percentages."""
-    return js_parse_float(value) if js_truthy(value) else None
-
-
 def program_calls(rows: Iterable[Dict]) -> Iterator[Tuple[Dict, bool]]:
     """Each row with a program hash, and whether it is its program's first call.
 
@@ -190,7 +185,7 @@ class FlagRow:
 
 def row_cores(row: Dict) -> float:
     """A row's core count as `enrichRowData` parses it, which `core_count` reads."""
-    return float(js_parse_int(row.get("cores")))
+    return parse_int(row.get("cores"))
 
 
 def typed_row(row: Dict, is_first_hash_occurrence: bool = True) -> FlagRow:
@@ -538,7 +533,6 @@ __all__ = [
     "flag_inputs",
     "flagged_rows",
     "heuristic_flags",
-    "parse_filled_float",
     "repeat_cache_outcome",
     "program_calls",
     "resolve_max_cores",

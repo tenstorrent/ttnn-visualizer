@@ -458,6 +458,24 @@ class TestGroupsOneReportLacks:
         assert result["device_time_total_before"] == 1.0
         assert result["device_time_total_after"] == 1.0
 
+    def test_a_cell_parse_float_reads_is_measured_rather_than_unmeasured(
+        self, tmp_path
+    ):
+        """`1abc` is 1, as the app reads it, so the group moves rather than reading as
+        one with no device time on one side. #2440"""
+        result = _diff(
+            _registry(tmp_path),
+            {
+                "report-1": [_row(id="2", op_code="Matmul", device_time="1abc")],
+                "report-2": [_row(id="2", op_code="Matmul", device_time="5")],
+            },
+        )
+
+        assert result["unmeasured"] == []
+        assert [(c["op_code"], c["delta"]) for c in result["changes"]] == [
+            ("Matmul", 4.0)
+        ]
+
     def test_equal_totals_move_by_zero_rather_than_float_noise(self, tmp_path):
         """Summed in another order these twelve figures differ by about 1e-14, which
         read as a delta of -0.0 and a percentage of -1.23e-14."""

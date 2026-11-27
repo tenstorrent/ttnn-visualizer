@@ -34,7 +34,13 @@ from typing import (
 )
 
 from ttnn_visualizer import hardware_counters
-from ttnn_visualizer.agent import op_signatures, perf_detail, perf_flags, report_diff
+from ttnn_visualizer.agent import (
+    op_signatures,
+    perf_detail,
+    perf_flags,
+    report_diff,
+    row_cells,
+)
 from ttnn_visualizer.agent.bounds import (
     MAX_DETAILED_LIMIT,
     MAX_LIMIT,
@@ -55,7 +61,6 @@ from ttnn_visualizer.agent.handles import (
     read_once,
     without_performance_csv,
 )
-from ttnn_visualizer.agent.js_values import js_is_finite, js_parse_float, js_parse_int
 from ttnn_visualizer.cells import finite_number, whole_number
 from ttnn_visualizer.csv_queries import (
     L1_ZONE_MARKER_CAPACITY,
@@ -157,32 +162,20 @@ DEFAULT_METRIC = "device_time"
 ADDITIVE_METRICS = frozenset({"device_time", "op_to_op_gap", "total_percent"})
 
 
-# How `enrichRowData` in `src/functions/enrichPerfRowData.ts` reads each text column the
-# agent ranks, reports and sums by; mirror a change there. The counter metrics are not
-# here: the backend fills them as numbers (`hardware_counters.cell_value`), which the
-# app takes as they come.
-_APP_READS: Dict[str, Callable[[object], Optional[float]]] = {
-    "device_time": js_parse_float,
-    "op_to_op_gap": js_parse_float,
-    "total_percent": js_parse_float,
-    "flops": perf_flags.parse_filled_float,
-    "dram": perf_flags.parse_filled_float,
-    "cores": lambda cell: float(js_parse_int(cell)),
-}
-
-
 def metric_number(row: Dict, metric: str = DEFAULT_METRIC) -> Optional[float]:
     """A row's metric, unrounded, or None where it is blank, unreadable or not finite.
 
-    Read as the app reads it (`_APP_READS`), so a row ranks, reports and sums the number
-    the app shows: `"1abc"` is 1 and `"1_0"` is 1, where Python's `float` refuses the
-    one and reads 10 for the other, and `cores` of `"1.5"` is 1. Device time read this
-    way is also what `countable_device_time` counts in a share. #2428 #2440
+    A text column is read as the app reads it (`row_cells`), so a row ranks, reports
+    and sums the number the app shows, and device time read this way is what
+    `countable_device_time` counts in a share. The counter metrics are not text: the
+    backend fills them as numbers (`hardware_counters.cell_value`), which the app takes
+    as they come. #2428 #2440
     """
-    cell = row.get(SORTABLE_METRICS[metric])
-    read = _APP_READS.get(metric)
-    value = finite_number(cell) if read is None else read(cell)
-    return value if value is not None and js_is_finite(value) else None
+    column = SORTABLE_METRICS[metric]
+    cell = row.get(column)
+    if column in row_cells.COLUMNS:
+        return row_cells.cell_number(column, cell)
+    return finite_number(cell)
 
 
 def countable_device_time(row: Dict) -> Optional[float]:
@@ -1624,7 +1617,8 @@ def core_spread(
     for row in rows:
         request = _span_request(row)
         figures = index.figures.get(request)
-        perf_cores = whole_number(row.get("cores"))
+        # As the entry reports it, so a caveat never counts cores the entry doesn't show.
+        perf_cores = metric_number(row, "cores")
         detail = perf_detail.detail_fields(row, (perf_detail.DetailGroup.CORES,))
         call_count, device = request.run
         entry: Dict[str, object] = {
