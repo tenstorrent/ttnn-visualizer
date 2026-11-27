@@ -15,7 +15,7 @@ import {
     useL1PressureByOperation,
     useOpToPerfIdFiltered,
     useOperationsList,
-    usePerfFolderList,
+    usePerfComparisonCandidates,
     usePerfMeta,
     usePerfMetas,
     usePerformanceComparisonReport,
@@ -38,7 +38,7 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
     useOpToPerfIdFiltered: vi.fn(),
     useOpToPerfIdForPerfTable: vi.fn(() => []),
     useOperationsList: vi.fn(),
-    usePerfFolderList: vi.fn(),
+    usePerfComparisonCandidates: vi.fn(),
     usePerfMeta: vi.fn(),
     usePerfMetas: vi.fn(),
     usePerformanceComparisonReport: vi.fn(),
@@ -88,7 +88,7 @@ beforeEach(() => {
     });
     (usePerformanceComparisonReport as Mock).mockReturnValue({ data: [] });
     (usePerformanceRange as Mock).mockReturnValue([1, 2]);
-    (usePerfFolderList as Mock).mockReturnValue({ data: [] });
+    (usePerfComparisonCandidates as Mock).mockReturnValue({ data: { directory: '/reports', reports: [] } });
     (useGetNPEManifest as Mock).mockReturnValue({ data: [], error: null });
     (useOpToPerfIdFiltered as Mock).mockReturnValue([]);
     (useOperationsList as Mock).mockReturnValue({ data: [] });

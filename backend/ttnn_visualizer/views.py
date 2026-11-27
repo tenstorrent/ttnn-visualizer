@@ -5,6 +5,7 @@
 import dataclasses
 import json
 import logging
+import os
 import platform
 import re
 import shutil
@@ -1291,6 +1292,58 @@ def delete_profiler_report(profiler_name, instance: Instance):
     )
 
 
+def _performance_report_rows(
+    path: Path, directory_names: List[str], demo_directory_names: List[str]
+) -> List[dict]:
+    """The listing rows for the valid performance reports among ``directory_names``."""
+    valid_dirs = []
+
+    # Most recent first; equal times fall back to the name so ties have one order,
+    # which under SERVER_MODE would otherwise come from hashing a set.
+    def get_modified_time(dir_name):
+        try:
+            return (Path(path) / dir_name).stat().st_mtime
+        except OSError:
+            return 0
+
+    directory_names.sort(key=lambda name: (-get_modified_time(name), name))
+
+    for dir_name in directory_names:
+        dir_path = Path(path) / dir_name
+        # Before Python 3.14, `Path.is_file()` raises on a folder the user cannot read
+        # rather than answering False, and one such folder must not sink the listing.
+        try:
+            if not dir_path.is_dir() or not is_valid_performance_report_dir(dir_path):
+                continue
+            run_fingerprint = performance_run_fingerprint(dir_path)
+        except OSError:
+            logger.warning("Skipping unreadable performance report folder %s", dir_path)
+            continue
+
+        valid_dirs.append(
+            {
+                "path": dir_path.name,
+                "reportName": dir_path.name,
+                "isDemo": dir_name in demo_directory_names,
+                "runFingerprint": run_fingerprint,
+            }
+        )
+
+    return valid_dirs
+
+
+def _is_addressable_by_name(folder_name: str) -> bool:
+    """Whether ``?name=folder_name`` resolves back to this same folder.
+
+    `sanitise_path_segment` trims whitespace and treats a backslash as a separator,
+    so a folder named `` run `` or ``a\\b`` would be read as a different one.
+    """
+    try:
+        return sanitise_path_segment(folder_name) == folder_name
+    except ValueError:
+        return False
+
+
 @api.route("/performance", methods=["GET"])
 @with_instance
 def get_performance_data_list(instance: Instance):
@@ -1319,33 +1372,58 @@ def get_performance_data_list(instance: Instance):
             else []
         )
 
-    valid_dirs = []
+    return Response(
+        orjson.dumps(
+            _performance_report_rows(path, directory_names, demo_directory_names)
+        ),
+        mimetype="application/json",
+    )
 
-    # Most recent first; equal times fall back to the name so ties have one order,
-    # which under SERVER_MODE would otherwise come from hashing a set.
-    def get_modified_time(dir_name):
-        dir_path = Path(path) / dir_name
-        if dir_path.exists():
-            return dir_path.stat().st_mtime
-        return 0
 
-    directory_names.sort(key=lambda name: (-get_modified_time(name), name))
+@api.route("/performance/comparison-candidates", methods=["GET"])
+@with_instance
+@local_only
+def get_performance_comparison_candidates(instance: Instance):
+    """The performance reports a comparison can name with ``?name=``.
 
-    for dir_name in directory_names:
-        dir_path = Path(path) / dir_name
-        if not dir_path.is_dir() or not is_valid_performance_report_dir(dir_path):
-            continue
+    Listed from the active report's own directory rather than the local data
+    directory: a remote report's siblings are the other reports synced from its
+    host, and a report opened by path has whatever sits beside it.
 
-        valid_dirs.append(
-            {
-                "path": dir_path.name,
-                "reportName": dir_path.name,
-                "isDemo": dir_name in demo_directory_names,
-                "runFingerprint": performance_run_fingerprint(dir_path),
-            }
-        )
+    ``directory`` names that directory, so the client can tell picks made against
+    one listing from another listing whose reports happen to share their names.
+    ``reports`` is null when the directory cannot be listed: that says nothing
+    about which reports it holds, but ``directory`` still settles whether picks
+    made elsewhere are read from here.
+    """
+    if not instance.performance_path:
+        raise PerformanceReportNotLoadedException()
 
-    return Response(orjson.dumps(valid_dirs), mimetype="application/json")
+    # The same parent `_apply_requested_performance_name` resolves `?name=` against.
+    # The two must stay in step, or a listed report is read from somewhere else.
+    parent = Path(instance.performance_path).parent
+
+    listing: Dict[str, Any] = {"directory": str(parent), "reports": None}
+
+    try:
+        # `os.path.isdir` answers False for a sibling it cannot stat, such as a
+        # symlink into an unreadable directory, where `Path.is_dir()` would raise.
+        directory_names = [
+            entry.name
+            for entry in parent.iterdir()
+            if os.path.isdir(entry)
+            and not entry.name.startswith(".")
+            and _is_addressable_by_name(entry.name)
+        ]
+    except OSError:
+        # A synced host directory can go away underneath an open report, and a
+        # parent can be searchable but unreadable, so `?name=` may still read
+        # from it. An empty list would read as "no siblings" and clear every pick.
+        logger.warning("Unable to list performance reports beside %s", parent)
+    else:
+        listing["reports"] = _performance_report_rows(parent, directory_names, [])
+
+    return Response(orjson.dumps(listing), mimetype="application/json")
 
 
 @api.route("/performance/device-log", methods=["GET"])
@@ -1412,6 +1490,8 @@ def _apply_requested_performance_name(instance: Instance) -> None:
 
     Every route that honours ``?name=`` comes through here, so the query value is
     collapsed to a single segment once rather than trusted at each caller.
+    ``get_performance_comparison_candidates`` lists the same parent directory, so
+    the names the selector offers are the ones resolved here.
     """
     name = request.args.get("name", None)
     if not name or current_app.config["SERVER_MODE"]:

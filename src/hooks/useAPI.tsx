@@ -101,7 +101,7 @@ import {
     NpeClientErrorKind,
 } from '../definitions/NPEData';
 import Endpoints from '../definitions/Endpoints';
-import { ReportFolder, SINGLE_HOST_WORLD_SIZE } from '../definitions/Reports';
+import { PerfComparisonCandidates, ReportFolder, SINGLE_HOST_WORLD_SIZE } from '../definitions/Reports';
 import { RemoteFolder } from '../model/RemoteConnection';
 import createToastNotification from '../functions/createToastNotification';
 import { ToastType } from '../definitions/ToastType';
@@ -1694,6 +1694,33 @@ export const usePerfFolderList = () => {
         queryFn: () => fetchPerfFolderList(),
         queryKey: [PERFORMANCE_FOLDER_QUERY_KEY],
         initialData: null,
+    });
+};
+
+const PERFORMANCE_COMPARISON_CANDIDATES_QUERY_KEY = 'fetch-performance-comparison-candidates';
+
+const fetchPerfComparisonCandidates = async () => {
+    const { data } = await axiosInstance.get<PerfComparisonCandidates>(Endpoints.PERFORMANCE_COMPARISON_CANDIDATES);
+
+    return data;
+};
+
+/**
+ * @description The reports a comparison can name: those beside the active performance
+ * report, which is where `?name=` reads them from. The local listing would offer reports
+ * from another directory whenever the active report is remote or was opened by path (#2433).
+ */
+export const usePerfComparisonCandidates = () => {
+    const activeReportId = useAtomValue(activePerformanceReportFolderNameAtom);
+    // A folder name is not unique across directories: a local and a synced report can share one.
+    const location = useAtomValue(performanceReportLocationAtom);
+    // The route is local-only, and comparison is hidden under SERVER_MODE.
+    const isServerMode = !!getServerConfig().SERVER_MODE;
+
+    return useQuery<PerfComparisonCandidates, AxiosError>({
+        queryFn: () => fetchPerfComparisonCandidates(),
+        queryKey: [PERFORMANCE_COMPARISON_CANDIDATES_QUERY_KEY, getOrCreateInstanceId(), activeReportId, location],
+        enabled: activeReportId !== null && !isServerMode,
     });
 };
 

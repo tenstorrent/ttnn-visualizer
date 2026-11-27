@@ -9,11 +9,12 @@ import { IconNames } from '@blueprintjs/icons';
 import { useAtom, useAtomValue } from 'jotai';
 import { HttpStatusCode } from 'axios';
 import getResponseError from '../functions/getResponseError';
+import { getFolderReportId } from '../functions/reportLinks';
 import {
     useL1PressureByOperation,
     useOpToPerfIdFiltered,
     useOpToPerfIdForPerfTable,
-    usePerfFolderList,
+    usePerfComparisonCandidates,
     usePerfMeta,
     usePerfMetas,
     usePerformanceComparisonReport,
@@ -26,6 +27,7 @@ import PerformanceReport from '../components/performance/PerfReport';
 import {
     activePerformanceReportAtom,
     activePerformanceReportFolderNameAtom,
+    comparisonPerformanceReportDirectoryAtom,
     comparisonPerformanceReportListAtom,
     perfSelectedTabAtom,
     selectedPerformanceRangeAtom,
@@ -44,6 +46,7 @@ import ComparisonReportSelector from '../components/performance/ComparisonReport
 import 'styles/routes/Performance.scss';
 import getServerConfig from '../functions/getServerConfig';
 import { TEST_IDS } from '../definitions/TestIds';
+import { ReportFolder } from '../definitions/Reports';
 import {
     COMPARISON_LOAD_FAILED_TITLE,
     OpType,
@@ -59,6 +62,7 @@ const EMPTY_COMPARISON_ROWS: TypedPerfTableRow[][] = [];
 const EMPTY_COMPARISON_MAX_CORES: number[] = [];
 const NO_COMPARISON_REPORT_ROWS: PerfTableRow[] = [];
 const NO_COMPARISON_STACKED_ROWS: StackedPerfRow[] = [];
+const NO_FOLDERS: ReportFolder[] = [];
 
 export default function Performance() {
     const [comparisonReportList, setComparisonReportList] = useAtom(comparisonPerformanceReportListAtom);
@@ -85,7 +89,22 @@ export default function Performance() {
         isLoading: isLoadingComparison,
         failures: comparisonFailures,
     } = usePerformanceComparisonReport();
-    const { data: folderList } = usePerfFolderList();
+    const {
+        data: comparisonCandidates,
+        isSuccess: hasComparisonCandidates,
+        isError: hasComparisonCandidatesError,
+        isFetchedAfterMount: isComparisonCandidatesFetchedAfterMount,
+    } = usePerfComparisonCandidates();
+    // A cached listing is served while it refetches, kept after a failed refetch, and
+    // left as it is while the query is paused offline, so only one fetched since this
+    // listing was asked for says what sits there now.
+    const currentComparisonCandidates =
+        hasComparisonCandidates && isComparisonCandidatesFetchedAfterMount ? comparisonCandidates : undefined;
+    // Without a listing the selectors still show the picks, so they can be removed.
+    const folderList =
+        comparisonCandidates?.reports ??
+        (comparisonCandidates || hasComparisonCandidatesError ? NO_FOLDERS : undefined);
+    const comparisonDirectory = useAtomValue(comparisonPerformanceReportDirectoryAtom);
     const perfRange = usePerformanceRange();
     const opIdsMap = useOpToPerfIdFiltered();
     const perfTableOpIdsMap = useOpToPerfIdForPerfTable();
@@ -299,14 +318,45 @@ export default function Performance() {
         resetPerfTableSessionState();
     }, [activePerformanceReport?.path, resetPerfTableSessionState]);
 
-    // Drop the active report from the comparisons when the user switches to one of them
+    // One pass, so the list is written once: two effects writing it from the same render
+    // would leave the active report as its own comparison for a commit.
+    // - The active report leaves the comparisons when the user switches to one of them.
+    // - Comparisons are read beside the active report, so after a switch to a report in
+    //   another directory they would be read from there: drop them all, even any whose
+    //   name that directory reuses, and drop any its listing no longer holds. Only a
+    //   current listing decides this, so a loading or failed one keeps the user's picks;
+    //   one that could not list its directory still says which directory it is.
     useEffect(() => {
-        if (activeReportFolderName && comparisonReportList?.includes(activeReportFolderName)) {
-            const filteredReports = comparisonReportList.filter((report) => report !== activeReportFolderName);
-
-            setComparisonReportList(filteredReports.length === 0 ? null : filteredReports);
+        if (!comparisonReportList) {
+            return;
         }
-    }, [comparisonReportList, activeReportFolderName, setComparisonReportList]);
+
+        let keptReports = comparisonReportList.filter((reportId) => reportId !== activeReportFolderName);
+
+        if (currentComparisonCandidates) {
+            const isPickedElsewhere =
+                comparisonDirectory !== null && comparisonDirectory !== currentComparisonCandidates.directory;
+            const listedReports = currentComparisonCandidates.reports;
+
+            if (isPickedElsewhere) {
+                keptReports = [];
+            } else if (listedReports) {
+                const candidateIds = new Set(listedReports.map(getFolderReportId));
+
+                keptReports = keptReports.filter((reportId) => candidateIds.has(reportId));
+            }
+        }
+
+        if (keptReports.length !== comparisonReportList.length) {
+            setComparisonReportList(keptReports.length === 0 ? null : keptReports);
+        }
+    }, [
+        comparisonReportList,
+        activeReportFolderName,
+        currentComparisonCandidates,
+        comparisonDirectory,
+        setComparisonReportList,
+    ]);
 
     // If a comparison report is selected, clear the selected range as we don't currently support ranges for comparison
     useEffect(() => {
@@ -358,6 +408,7 @@ export default function Performance() {
                                     className='report-selector'
                                     key={`${index}-comparison-report-selector`}
                                     folderList={folderList}
+                                    directory={comparisonCandidates?.directory ?? null}
                                     reportIndex={index}
                                     label={index === 0 ? <h2 className='label'>Compare</h2> : null}
                                     subLabel={index === 0 ? 'Select from performance reports to compare' : ''}

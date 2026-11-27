@@ -4,15 +4,15 @@
 
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { useAtom, useSetAtom } from 'jotai';
-import { useState } from 'react';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
+import { ReactNode, useEffect, useState } from 'react';
 import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Performance from '../src/routes/Performance';
 import {
     useL1PressureByOperation,
     useOpToPerfIdFiltered,
     useOpToPerfIdForPerfTable,
-    usePerfFolderList,
+    usePerfComparisonCandidates,
     usePerfMeta,
     usePerfMetas,
     usePerformanceComparisonReport,
@@ -22,6 +22,7 @@ import {
 import {
     activePerformanceReportAtom,
     bufferTypeFilterListAtom,
+    comparisonPerformanceReportDirectoryAtom,
     comparisonPerformanceReportListAtom,
     durationBucketFilterListAtom,
     layoutFilterListAtom,
@@ -59,7 +60,7 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
     useL1PressureByOperation: vi.fn(),
     useOpToPerfIdFiltered: vi.fn(),
     useOpToPerfIdForPerfTable: vi.fn(),
-    usePerfFolderList: vi.fn(),
+    usePerfComparisonCandidates: vi.fn(),
     usePerfMeta: vi.fn(),
     usePerfMetas: vi.fn(),
     usePerformanceComparisonReport: vi.fn(),
@@ -75,9 +76,22 @@ vi.mock('../src/hooks/useDramFallbacks', () => ({
     useDramFallbacks: vi.fn(),
 }));
 
+const serverConfig = vi.hoisted(() => ({ SERVER_MODE: true }));
+
 vi.mock('../src/functions/getServerConfig', () => ({
-    default: () => ({ SERVER_MODE: true }),
+    default: () => serverConfig,
     isFlagEnabled: (value: unknown) => value === true || value === 'true' || value === '1',
+}));
+
+// Only rendered once SERVER_MODE is off; its picker reads hooks this spec does not mock.
+vi.mock('../src/components/performance/ComparisonReportSelector', () => ({
+    default: ({ folderList, directory }: { folderList: unknown[]; directory: string | null }) => (
+        <div
+            data-testid={TEST_IDS.COMPARISON_REPORT_SELECTOR}
+            data-folder-count={folderList.length}
+            data-directory={directory ?? ''}
+        />
+    ),
 }));
 
 // Stub the report shell so these tests exercise only the route's own
@@ -137,7 +151,8 @@ beforeEach(() => {
     // report shell is stubbed, so only the route's active-report effects run here.
     (usePerformanceReport as Mock).mockReturnValue({ data: undefined, isLoading: true, error: null });
     (usePerformanceComparisonReport as Mock).mockReturnValue({ data: undefined });
-    (usePerfFolderList as Mock).mockReturnValue({ data: undefined });
+    (usePerfComparisonCandidates as Mock).mockReturnValue({ data: undefined });
+    serverConfig.SERVER_MODE = true;
     (usePerformanceRange as Mock).mockReturnValue(null);
     (useOpToPerfIdFiltered as Mock).mockReturnValue([]);
     // Devices are merged unless a test says otherwise, where the table's lookup is the linked one.
@@ -547,6 +562,186 @@ describe('Performance route', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Switch to the remote pick' }));
 
         expect(probe).toHaveTextContent('["run"]');
+    });
+
+    describe("comparisons the active report's directory no longer lists (#2433)", () => {
+        const LISTED_DIRECTORY = '/reports';
+        const candidates = (...names: string[]) => names.map((name) => ({ path: name, reportName: name }));
+        // A listing fetched for this visit unless a test says otherwise.
+        const listing = (
+            reports: ReturnType<typeof candidates> | null,
+            {
+                directory = LISTED_DIRECTORY,
+                isSuccess = true,
+                isFetching = false,
+                isFetchedAfterMount = true,
+            }: { directory?: string; isSuccess?: boolean; isFetching?: boolean; isFetchedAfterMount?: boolean } = {},
+        ) => ({
+            data: { directory, reports },
+            isSuccess,
+            isError: !isSuccess,
+            isFetching,
+            isFetchedAfterMount,
+        });
+
+        const comparisonTree = (comparisons: string[], pickedFrom = LISTED_DIRECTORY, extra: ReactNode = null) => (
+            <TestProviders
+                initialAtomValues={[
+                    [activePerformanceReportAtom, REPORT_A],
+                    [comparisonPerformanceReportListAtom, comparisons],
+                    [comparisonPerformanceReportDirectoryAtom, pickedFrom],
+                ]}
+            >
+                <Performance />
+                <ComparisonListProbe />
+                {extra}
+            </TestProviders>
+        );
+
+        const probedComparisons = () => screen.getByTestId(COMPARISON_LIST_PROBE_TEST_ID);
+
+        it('keeps only the comparisons still listed beside the active report', () => {
+            (usePerfComparisonCandidates as Mock).mockReturnValue(listing(candidates('a', 'report-b', 'c')));
+
+            render(comparisonTree(['report-b', 'elsewhere', 'c']));
+
+            expect(probedComparisons()).toHaveTextContent('["report-b","c"]');
+        });
+
+        it('clears the comparisons when none of them is listed', () => {
+            (usePerfComparisonCandidates as Mock).mockReturnValue(listing(candidates('a')));
+
+            render(comparisonTree(['elsewhere']));
+
+            expect(probedComparisons()).toHaveTextContent('null');
+        });
+
+        it.each([
+            ['loading', { data: undefined, isSuccess: false, isError: false, isFetching: true }],
+            ['failed', { data: undefined, isSuccess: false, isError: true, isFetching: false }],
+        ])('keeps every comparison while the listing is %s', (_state, result) => {
+            (usePerfComparisonCandidates as Mock).mockReturnValue(result);
+
+            render(comparisonTree(['report-b', 'c']));
+
+            expect(probedComparisons()).toHaveTextContent('["report-b","c"]');
+        });
+
+        // Paused is the offline case: no request goes out, so only `isFetchedAfterMount` tells
+        // the cached listing from a current one.
+        it.each([
+            ['refetches', true],
+            ['is paused', false],
+        ])('keeps the comparisons while a cached listing from an earlier visit %s', (_state, isFetching) => {
+            (usePerfComparisonCandidates as Mock).mockReturnValue(
+                listing(candidates('a'), { isFetching, isFetchedAfterMount: false }),
+            );
+
+            render(comparisonTree(['added-since']));
+
+            expect(probedComparisons()).toHaveTextContent('["added-since"]');
+        });
+
+        it('keeps the comparisons when their directory is searchable but cannot be listed', () => {
+            (usePerfComparisonCandidates as Mock).mockReturnValue(listing(null));
+
+            render(comparisonTree(['report-b']));
+
+            expect(probedComparisons()).toHaveTextContent('["report-b"]');
+        });
+
+        it('drops comparisons picked elsewhere even when the new directory cannot be listed', () => {
+            (usePerfComparisonCandidates as Mock).mockReturnValue(listing(null, { directory: '/tmp/runs' }));
+
+            render(comparisonTree(['shared-name']));
+
+            expect(probedComparisons()).toHaveTextContent('null');
+        });
+
+        it('keeps the comparisons when the refetch of a cached listing fails', () => {
+            (usePerfComparisonCandidates as Mock).mockReturnValue(listing(candidates('a'), { isSuccess: false }));
+
+            render(comparisonTree(['added-since']));
+
+            expect(probedComparisons()).toHaveTextContent('["added-since"]');
+        });
+
+        // The selectors are local-only and wait for the report, so this turns SERVER_MODE off and loads one.
+        const renderSelectors = (candidatesResult: object, comparisons: string[], pickedFrom = LISTED_DIRECTORY) => {
+            serverConfig.SERVER_MODE = false;
+            (usePerformanceReport as Mock).mockReturnValue({
+                data: { report: [DRAM_PERF_ROW], stacked_report: [], signposts: [] },
+                isLoading: false,
+                error: null,
+            });
+            (usePerfComparisonCandidates as Mock).mockReturnValue(candidatesResult);
+
+            render(comparisonTree(comparisons, pickedFrom));
+
+            return screen.getAllByTestId(TEST_IDS.COMPARISON_REPORT_SELECTOR);
+        };
+
+        // The selectors are the only way to remove the picks these keep.
+        it.each([
+            ['the fetch failed', { data: undefined, isSuccess: false, isError: true, isFetching: false }],
+            ['its directory could not be listed', listing(null)],
+        ])('still shows the selectors when %s, so the picks can be removed', (_case, result) => {
+            const selectors = renderSelectors(result, ['report-b']);
+
+            expect(selectors[0]).toHaveAttribute('data-folder-count', '0');
+        });
+
+        // A selector handed no directory records none, which the prune reads as "picked here".
+        it('hands the selectors the directory the listing was read from', () => {
+            const syncedDirectory = '/synced/remote-host';
+            const selectors = renderSelectors(
+                listing(candidates('a', 'report-b'), { directory: syncedDirectory }),
+                ['report-b'],
+                syncedDirectory,
+            );
+
+            expect(selectors[0]).toHaveAttribute('data-directory', syncedDirectory);
+        });
+
+        it('drops comparisons once a switch to another directory lists different reports', () => {
+            (usePerfComparisonCandidates as Mock).mockReturnValue(listing(candidates('a', 'report-b')));
+            const { rerender } = render(comparisonTree(['report-b']));
+            expect(probedComparisons()).toHaveTextContent('["report-b"]');
+
+            (usePerfComparisonCandidates as Mock).mockReturnValue(
+                listing(candidates('synced-a', 'synced-b'), { directory: '/synced/remote-host' }),
+            );
+            rerender(comparisonTree(['report-b']));
+
+            expect(probedComparisons()).toHaveTextContent('null');
+        });
+
+        it('drops a comparison picked in another directory even when this one has a namesake', () => {
+            (usePerfComparisonCandidates as Mock).mockReturnValue(
+                listing(candidates('a', 'shared-name'), { directory: '/synced/remote-host' }),
+            );
+
+            render(comparisonTree(['shared-name', 'local-only']));
+
+            expect(probedComparisons()).toHaveTextContent('null');
+        });
+
+        it('never holds the active report as its own comparison while pruning', () => {
+            const history: (string[] | null)[] = [];
+            function HistoryProbe() {
+                const comparisons = useAtomValue(comparisonPerformanceReportListAtom);
+                useEffect(() => {
+                    history.push(comparisons);
+                }, [comparisons]);
+                return null;
+            }
+            (usePerfComparisonCandidates as Mock).mockReturnValue(listing(candidates('a', 'report-b')));
+
+            render(comparisonTree(['a', 'gone'], LISTED_DIRECTORY, <HistoryProbe />));
+
+            // Two writes from one render would pass through `["a"]` on the way.
+            expect(history).toEqual([['a', 'gone'], null]);
+        });
     });
 
     it('shows no signpost notice when every report was narrowed', () => {
