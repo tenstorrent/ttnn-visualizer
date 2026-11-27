@@ -312,6 +312,17 @@ describe('grouping control', () => {
         expect(screen.getByRole('button', { name: 'Group by layers' })).toHaveAttribute('aria-pressed', 'false');
     });
 
+    it.each([
+        ['repeats', 'Collapse subgraphs that repeat, whatever they do'],
+        ['layers', 'Collapse spans whose operation names identify them — attention, feed-forward, embedding'],
+    ])('describes what grouping by %s collapses on hover', async (noun, description) => {
+        renderToolbar({ status: PerfOverlayStatus.READY, hasBlocks: true });
+
+        fireEvent.mouseEnter(screen.getByRole('button', { name: `Group by ${noun}` }));
+
+        await waitFor(() => expect(screen.getByText(description)).toBeInTheDocument());
+    });
+
     it('gives each grouping control the class its blocks are coloured by', () => {
         // The control and the blocks it produces have to be recognisably one feature, so
         // the class the stylesheet colours is asserted here rather than left to a visual
@@ -413,33 +424,31 @@ describe('weight-load control', () => {
 });
 
 describe('accessible names follow the grouping mode', () => {
-    it('says layers when Layers is the active mode', () => {
+    it.each([
+        ['repeats', OpGraphGrouping.REPEATS],
+        ['layers', OpGraphGrouping.LAYERS],
+    ])('says %s, starting with the word on the button', (noun, grouping) => {
         // The row was called "Repeats" before layers existed, so a screen reader was
         // told "unroll all repeats" while the buttons acted on layers. #1976
-        renderToolbar({ status: PerfOverlayStatus.READY, hasBlocks: true, grouping: OpGraphGrouping.LAYERS });
+        // Voice control users say the word they can see, so the name has to contain it.
+        renderToolbar({ status: PerfOverlayStatus.READY, hasBlocks: true, grouping });
 
-        expect(screen.getByRole('button', { name: 'Unroll all layers' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Fold all layers' })).toBeInTheDocument();
-    });
-
-    it('still says repeats in Repeats mode', () => {
-        renderToolbar({ status: PerfOverlayStatus.READY, hasBlocks: true, grouping: OpGraphGrouping.REPEATS });
-
-        expect(screen.getByRole('button', { name: 'Unroll all repeats' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: `Expand all ${noun}` })).toHaveTextContent(/^Expand$/);
+        expect(screen.getByRole('button', { name: `Collapse all ${noun}` })).toHaveTextContent(/^Collapse$/);
     });
 });
 
 describe('repeats controls', () => {
     const repeatsButtons = () => ({
-        unroll: screen.getByRole('button', { name: 'Unroll all repeats' }),
-        fold: screen.getByRole('button', { name: 'Fold all repeats' }),
+        expand: screen.getByRole('button', { name: 'Expand all repeats' }),
+        collapse: screen.getByRole('button', { name: 'Collapse all repeats' }),
     });
 
     it('stays out of the toolbar when the report has no repeats', () => {
         renderToolbar({ status: PerfOverlayStatus.READY, hasBlocks: false });
 
-        expect(screen.queryByRole('button', { name: 'Unroll all repeats' })).not.toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: 'Fold all repeats' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Expand all repeats' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Collapse all repeats' })).not.toBeInTheDocument();
     });
 
     it('offers both directions when some blocks are unrolled and some are not', () => {
@@ -450,9 +459,9 @@ describe('repeats controls', () => {
             areAllBlocksCollapsed: false,
         });
 
-        const { unroll, fold } = repeatsButtons();
-        expect(unroll).toBeEnabled();
-        expect(fold).toBeEnabled();
+        const { expand, collapse } = repeatsButtons();
+        expect(expand).toBeEnabled();
+        expect(collapse).toBeEnabled();
     });
 
     it('disables both mid-build, whatever the fold state', () => {
@@ -464,9 +473,9 @@ describe('repeats controls', () => {
             areAllBlocksCollapsed: false,
         });
 
-        const { unroll, fold } = repeatsButtons();
-        expect(unroll).toBeDisabled();
-        expect(fold).toBeDisabled();
+        const { expand, collapse } = repeatsButtons();
+        expect(expand).toBeDisabled();
+        expect(collapse).toBeDisabled();
     });
 
     it('disables only the direction that would do nothing', () => {
@@ -477,15 +486,15 @@ describe('repeats controls', () => {
             areAllBlocksCollapsed: false,
         });
 
-        const { unroll, fold } = repeatsButtons();
-        expect(unroll).toBeDisabled();
-        expect(fold).toBeEnabled();
+        const { expand, collapse } = repeatsButtons();
+        expect(expand).toBeDisabled();
+        expect(collapse).toBeEnabled();
     });
 
     it('disables the other direction when everything is already folded', () => {
         // The two flags are independent props, not one tri-state, so the branch above
-        // says nothing about this one — and this is the state a report opens in once a
-        // Fold has been applied.
+        // says nothing about this one — and this is the state a report opens in once
+        // Collapse all has been applied.
         renderToolbar({
             status: PerfOverlayStatus.READY,
             hasBlocks: true,
@@ -493,8 +502,8 @@ describe('repeats controls', () => {
             areAllBlocksCollapsed: true,
         });
 
-        const { unroll, fold } = repeatsButtons();
-        expect(fold).toBeDisabled();
-        expect(unroll).toBeEnabled();
+        const { expand, collapse } = repeatsButtons();
+        expect(collapse).toBeDisabled();
+        expect(expand).toBeEnabled();
     });
 });

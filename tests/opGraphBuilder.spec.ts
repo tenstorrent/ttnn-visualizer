@@ -948,7 +948,7 @@ describe('buildOpGraph', () => {
 
         it('keeps the fan out of the blocks the toolbar counts', () => {
             // Grouping owns that count; a fan is plumbing, not a detected layer, and
-            // Fold / Unroll-all must go on meaning what they meant. #1980
+            // Collapse all / Expand all must go on meaning what they meant. #1980
             const graph = buildOpGraph(FAN_CHAIN, {
                 hideDeallocate: false,
                 deviceSubgraphs: [],

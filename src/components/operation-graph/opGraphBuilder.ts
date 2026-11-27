@@ -133,7 +133,7 @@ export function buildOpGraph(
     );
     const detectedBlocks = providedBlocks ?? detectorFor(grouping)(keptOperations);
     // Detections are still reported when nothing has been folded, so the toolbar can
-    // offer Fold; they are just not applied. Folding on first render decided for the
+    // offer Collapse; they are just not applied. Folding on first render decided for the
     // user, and it cannot be expressed as an id list because the ids only exist once
     // detection has run. #1977
     const hasFoldDecision = expandedBlockIds !== undefined;
