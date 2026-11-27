@@ -116,7 +116,20 @@ describe('ComparisonReportSelector', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'report-b' }));
 
-        expect(screen.getByTestId(COMPARISON_LIST_PROBE_TEST_ID)).toHaveTextContent('["report-b"]');
+        const probe = screen.getByTestId(COMPARISON_LIST_PROBE_TEST_ID);
+        expect(probe).toHaveTextContent('["report-b"]');
+        expect(probe).toHaveAttribute('data-directory', LOCAL_DIRECTORY);
+    });
+
+    // The route drops picks made in another directory by this record alone (#2433).
+    it('records the directory a first pick was made in', () => {
+        renderSelector({ activeReport: { path: 'report-a', reportName: 'report-a' } });
+
+        fireEvent.click(screen.getByRole('button', { name: 'report-b' }));
+
+        const probe = screen.getByTestId(COMPARISON_LIST_PROBE_TEST_ID);
+        expect(probe).toHaveTextContent('["report-b"]');
+        expect(probe).toHaveAttribute('data-directory', LOCAL_DIRECTORY);
     });
 
     it('does not offer the active report', () => {

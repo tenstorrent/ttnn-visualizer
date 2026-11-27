@@ -386,17 +386,35 @@ class TestComparisonCandidates:
             "2026_07_28_18_04_24_rank1",
         ]
 
-    def test_a_parent_that_went_away_is_not_found(self, app, client, tmp_path):
-        """An empty listing would read as "no siblings" and clear every comparison."""
-        instance_id = _instance_on_performance_report(
-            app, "gone", tmp_path / "missing" / "active"
-        )
+    def test_a_parent_that_went_away_lists_no_reports_but_names_itself(
+        self, app, client, tmp_path
+    ):
+        """An empty list would read as "no siblings" and clear every comparison."""
+        parent = tmp_path / "missing"
+        instance_id = _instance_on_performance_report(app, "gone", parent / "active")
 
-        response = client.get(
-            COMPARISON_CANDIDATES, query_string={"instanceId": instance_id}
-        )
+        assert _candidates(client, instance_id) == {
+            "directory": str(parent),
+            "reports": None,
+        }
 
-        assert response.status_code == HTTPStatus.NOT_FOUND
+    @pytest.mark.skipif(_RUNNING_AS_ROOT, reason="root reads a mode-0311 folder")
+    def test_an_unreadable_parent_lists_no_reports_but_names_itself(
+        self, app, client, tmp_path
+    ):
+        """Searchable but unreadable: `?name=` still reads from it."""
+        runs = tmp_path / "runs"
+        _make_performance_report(runs, "active")
+        instance_id = _instance_on_performance_report(app, "0311", runs / "active")
+        runs.chmod(0o311)
+
+        try:
+            assert _candidates(client, instance_id) == {
+                "directory": str(runs),
+                "reports": None,
+            }
+        finally:
+            runs.chmod(0o755)
 
     def test_the_listing_names_the_directory_it_was_read_from(
         self, app, client, tmp_path

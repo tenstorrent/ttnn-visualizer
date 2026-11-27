@@ -93,17 +93,17 @@ export default function Performance() {
         data: comparisonCandidates,
         isSuccess: hasComparisonCandidates,
         isError: hasComparisonCandidatesError,
-        isFetching: isFetchingComparisonCandidates,
         isFetchedAfterMount: isComparisonCandidatesFetchedAfterMount,
     } = usePerfComparisonCandidates();
-    // A cached listing is served while it refetches and kept after a failed refetch, so
-    // only one fetched since this listing was asked for says what sits there now.
+    // A cached listing is served while it refetches, kept after a failed refetch, and
+    // left as it is while the query is paused offline, so only one fetched since this
+    // listing was asked for says what sits there now.
     const currentComparisonCandidates =
-        hasComparisonCandidates && isComparisonCandidatesFetchedAfterMount && !isFetchingComparisonCandidates
-            ? comparisonCandidates
-            : undefined;
+        hasComparisonCandidates && isComparisonCandidatesFetchedAfterMount ? comparisonCandidates : undefined;
     // Without a listing the selectors still show the picks, so they can be removed.
-    const folderList = comparisonCandidates?.reports ?? (hasComparisonCandidatesError ? NO_FOLDERS : undefined);
+    const folderList =
+        comparisonCandidates?.reports ??
+        (comparisonCandidates || hasComparisonCandidatesError ? NO_FOLDERS : undefined);
     const comparisonDirectory = useAtomValue(comparisonPerformanceReportDirectoryAtom);
     const perfRange = usePerformanceRange();
     const opIdsMap = useOpToPerfIdFiltered();
@@ -324,7 +324,8 @@ export default function Performance() {
     // - Comparisons are read beside the active report, so after a switch to a report in
     //   another directory they would be read from there: drop them all, even any whose
     //   name that directory reuses, and drop any its listing no longer holds. Only a
-    //   current listing decides this, so a loading or failed one keeps the user's picks.
+    //   current listing decides this, so a loading or failed one keeps the user's picks;
+    //   one that could not list its directory still says which directory it is.
     useEffect(() => {
         if (!comparisonReportList) {
             return;
@@ -335,9 +336,15 @@ export default function Performance() {
         if (currentComparisonCandidates) {
             const isPickedElsewhere =
                 comparisonDirectory !== null && comparisonDirectory !== currentComparisonCandidates.directory;
-            const candidateIds = new Set(currentComparisonCandidates.reports.map(getFolderReportId));
+            const listedReports = currentComparisonCandidates.reports;
 
-            keptReports = isPickedElsewhere ? [] : keptReports.filter((reportId) => candidateIds.has(reportId));
+            if (isPickedElsewhere) {
+                keptReports = [];
+            } else if (listedReports) {
+                const candidateIds = new Set(listedReports.map(getFolderReportId));
+
+                keptReports = keptReports.filter((reportId) => candidateIds.has(reportId));
+            }
         }
 
         if (keptReports.length !== comparisonReportList.length) {

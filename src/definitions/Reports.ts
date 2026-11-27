@@ -35,5 +35,7 @@ export interface PerfComparisonCandidates {
     // Where the reports sit. Folder names repeat across directories, so this is what
     // tells a pick made against one listing from a namesake in another.
     directory: string;
-    reports: ReportFolder[];
+    // Null when the directory cannot be listed. `?name=` may still read from it, so this
+    // says nothing about whether a pick is there; `directory` still says where it would be read.
+    reports: ReportFolder[] | null;
 }

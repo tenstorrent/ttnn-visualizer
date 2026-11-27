@@ -1392,6 +1392,9 @@ def get_performance_comparison_candidates(instance: Instance):
 
     ``directory`` names that directory, so the client can tell picks made against
     one listing from another listing whose reports happen to share their names.
+    ``reports`` is null when the directory cannot be listed: that says nothing
+    about which reports it holds, but ``directory`` still settles whether picks
+    made elsewhere are read from here.
     """
     if not instance.performance_path:
         raise PerformanceReportNotLoadedException()
@@ -1399,6 +1402,8 @@ def get_performance_comparison_candidates(instance: Instance):
     # The same parent `_apply_requested_performance_name` resolves `?name=` against.
     # The two must stay in step, or a listed report is read from somewhere else.
     parent = Path(instance.performance_path).parent
+
+    listing: Dict[str, Any] = {"directory": str(parent), "reports": None}
 
     try:
         # `os.path.isdir` answers False for a sibling it cannot stat, such as a
@@ -1411,20 +1416,14 @@ def get_performance_comparison_candidates(instance: Instance):
             and _is_addressable_by_name(entry.name)
         ]
     except OSError:
-        # A synced host directory can go away underneath an open report. An empty
-        # listing would read as "no siblings" and clear the user's comparisons.
+        # A synced host directory can go away underneath an open report, and a
+        # parent can be searchable but unreadable, so `?name=` may still read
+        # from it. An empty list would read as "no siblings" and clear every pick.
         logger.warning("Unable to list performance reports beside %s", parent)
-        return response_not_found("Unable to list the reports beside this report")
+    else:
+        listing["reports"] = _performance_report_rows(parent, directory_names, [])
 
-    return Response(
-        orjson.dumps(
-            {
-                "directory": str(parent),
-                "reports": _performance_report_rows(parent, directory_names, []),
-            }
-        ),
-        mimetype="application/json",
-    )
+    return Response(orjson.dumps(listing), mimetype="application/json")
 
 
 @api.route("/performance/device-log", methods=["GET"])

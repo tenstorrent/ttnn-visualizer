@@ -569,7 +569,7 @@ describe('Performance route', () => {
         const candidates = (...names: string[]) => names.map((name) => ({ path: name, reportName: name }));
         // A listing fetched for this visit unless a test says otherwise.
         const listing = (
-            reports: ReturnType<typeof candidates>,
+            reports: ReturnType<typeof candidates> | null,
             {
                 directory = LISTED_DIRECTORY,
                 isSuccess = true,
@@ -627,14 +627,35 @@ describe('Performance route', () => {
             expect(probedComparisons()).toHaveTextContent('["report-b","c"]');
         });
 
-        it('keeps the comparisons while a cached listing from an earlier visit refetches', () => {
+        // Paused is the offline case: no request goes out, so only `isFetchedAfterMount` tells
+        // the cached listing from a current one.
+        it.each([
+            ['refetches', true],
+            ['is paused', false],
+        ])('keeps the comparisons while a cached listing from an earlier visit %s', (_state, isFetching) => {
             (usePerfComparisonCandidates as Mock).mockReturnValue(
-                listing(candidates('a'), { isFetching: true, isFetchedAfterMount: false }),
+                listing(candidates('a'), { isFetching, isFetchedAfterMount: false }),
             );
 
             render(comparisonTree(['added-since']));
 
             expect(probedComparisons()).toHaveTextContent('["added-since"]');
+        });
+
+        it('keeps the comparisons when their directory is searchable but cannot be listed', () => {
+            (usePerfComparisonCandidates as Mock).mockReturnValue(listing(null));
+
+            render(comparisonTree(['report-b']));
+
+            expect(probedComparisons()).toHaveTextContent('["report-b"]');
+        });
+
+        it('drops comparisons picked elsewhere even when the new directory cannot be listed', () => {
+            (usePerfComparisonCandidates as Mock).mockReturnValue(listing(null, { directory: '/tmp/runs' }));
+
+            render(comparisonTree(['shared-name']));
+
+            expect(probedComparisons()).toHaveTextContent('null');
         });
 
         it('keeps the comparisons when the refetch of a cached listing fails', () => {
