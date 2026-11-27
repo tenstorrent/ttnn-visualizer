@@ -32,6 +32,10 @@ const GROUPING_NOUN: Readonly<Record<OpGraphGrouping, string>> = {
     [OpGraphGrouping.LAYERS]: 'layers',
 };
 
+/** Each block button's visible word, which its accessible name has to start with. */
+const EXPAND_LABEL = 'Expand';
+const COLLAPSE_LABEL = 'Collapse';
+
 /**
  * Descriptions rather than bare labels: "Layers" means nothing until a reader knows
  * it is reading op names, and the distinction from "Repeats" is the whole point of
@@ -332,17 +336,17 @@ const OpGraphToolbar = memo(
                             variant={ButtonVariant.OUTLINED}
                             disabled={isDisabled || areAllBlocksExpanded}
                             onClick={onExpandAllBlocks}
-                            aria-label={`Expand all ${GROUPING_NOUN[grouping]}`}
+                            aria-label={`${EXPAND_LABEL} all ${GROUPING_NOUN[grouping]}`}
                         >
-                            Expand
+                            {EXPAND_LABEL}
                         </Button>
                         <Button
                             variant={ButtonVariant.OUTLINED}
                             disabled={isDisabled || areAllBlocksCollapsed}
                             onClick={onCollapseAllBlocks}
-                            aria-label={`Collapse all ${GROUPING_NOUN[grouping]}`}
+                            aria-label={`${COLLAPSE_LABEL} all ${GROUPING_NOUN[grouping]}`}
                         >
-                            Collapse
+                            {COLLAPSE_LABEL}
                         </Button>
                     </>
                 ) : (

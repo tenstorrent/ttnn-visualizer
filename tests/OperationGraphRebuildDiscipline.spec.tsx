@@ -3719,7 +3719,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
 
     it('applies the grouping the moment it is picked', () => {
         // Leaving the graph unrolled here made the control look broken: both modes
-        // rendered identically and the difference only showed after a separate Fold.
+        // rendered identically and the difference only showed after a separate Collapse.
         // #1977 governs how a report *opens*; clicking a mode is the ask. #1976
         renderGraph(LAYER_OPERATION_LIST);
         runBuild.mockClear();

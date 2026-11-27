@@ -439,19 +439,22 @@ describe('accessible names follow the grouping mode', () => {
         expect(screen.getByRole('button', { name: 'Expand all repeats' })).toBeInTheDocument();
     });
 
-    it('starts each accessible name with the word on the button', () => {
+    it.each([
+        ['repeats', OpGraphGrouping.REPEATS],
+        ['layers', OpGraphGrouping.LAYERS],
+    ])('starts each accessible name with the word on the button, grouped by %s', (noun, grouping) => {
         // Voice control users say the word they can see, so the name has to contain it.
-        renderToolbar({ status: PerfOverlayStatus.READY, hasBlocks: true, grouping: OpGraphGrouping.LAYERS });
+        renderToolbar({ status: PerfOverlayStatus.READY, hasBlocks: true, grouping });
 
-        expect(screen.getByRole('button', { name: 'Expand all layers' })).toHaveTextContent(/^Expand$/);
-        expect(screen.getByRole('button', { name: 'Collapse all layers' })).toHaveTextContent(/^Collapse$/);
+        expect(screen.getByRole('button', { name: `Expand all ${noun}` })).toHaveTextContent(/^Expand$/);
+        expect(screen.getByRole('button', { name: `Collapse all ${noun}` })).toHaveTextContent(/^Collapse$/);
     });
 });
 
 describe('repeats controls', () => {
     const repeatsButtons = () => ({
-        unroll: screen.getByRole('button', { name: 'Expand all repeats' }),
-        fold: screen.getByRole('button', { name: 'Collapse all repeats' }),
+        expand: screen.getByRole('button', { name: 'Expand all repeats' }),
+        collapse: screen.getByRole('button', { name: 'Collapse all repeats' }),
     });
 
     it('stays out of the toolbar when the report has no repeats', () => {
@@ -469,9 +472,9 @@ describe('repeats controls', () => {
             areAllBlocksCollapsed: false,
         });
 
-        const { unroll, fold } = repeatsButtons();
-        expect(unroll).toBeEnabled();
-        expect(fold).toBeEnabled();
+        const { expand, collapse } = repeatsButtons();
+        expect(expand).toBeEnabled();
+        expect(collapse).toBeEnabled();
     });
 
     it('disables both mid-build, whatever the fold state', () => {
@@ -483,9 +486,9 @@ describe('repeats controls', () => {
             areAllBlocksCollapsed: false,
         });
 
-        const { unroll, fold } = repeatsButtons();
-        expect(unroll).toBeDisabled();
-        expect(fold).toBeDisabled();
+        const { expand, collapse } = repeatsButtons();
+        expect(expand).toBeDisabled();
+        expect(collapse).toBeDisabled();
     });
 
     it('disables only the direction that would do nothing', () => {
@@ -496,9 +499,9 @@ describe('repeats controls', () => {
             areAllBlocksCollapsed: false,
         });
 
-        const { unroll, fold } = repeatsButtons();
-        expect(unroll).toBeDisabled();
-        expect(fold).toBeEnabled();
+        const { expand, collapse } = repeatsButtons();
+        expect(expand).toBeDisabled();
+        expect(collapse).toBeEnabled();
     });
 
     it('disables the other direction when everything is already folded', () => {
@@ -512,8 +515,8 @@ describe('repeats controls', () => {
             areAllBlocksCollapsed: true,
         });
 
-        const { unroll, fold } = repeatsButtons();
-        expect(fold).toBeDisabled();
-        expect(unroll).toBeEnabled();
+        const { expand, collapse } = repeatsButtons();
+        expect(collapse).toBeDisabled();
+        expect(expand).toBeEnabled();
     });
 });
