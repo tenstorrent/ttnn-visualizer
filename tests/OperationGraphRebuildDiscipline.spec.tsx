@@ -3536,13 +3536,13 @@ describe('OperationGraphReactFlow repeat blocks', () => {
 
     it('keeps an unrolled graph unrolled when the rebuild renames every instance', () => {
         // The mirror of the reported bug, and the one the fold-set cannot express by
-        // id: "fold all" is `[]` and names nothing, while "unroll all" is a list, so
+        // id: "Collapse all" is `[]` and names nothing, while "Expand all" is a list, so
         // only it can be lost. Every id here changes across the filter, every held
         // id misses, and a miss reads as folded — so this came back fully folded,
         // the opposite of the reader's last instruction. #2015
-        // Fold first: from the unrolled default the decision is still `null`, which
+        // Collapse first: from the unrolled default the decision is still `null`, which
         // survives any rebuild by itself. The bug needs an explicit set naming every
-        // instance, which is what fold-then-unroll produces.
+        // instance, which is what Collapse all then Expand all produces.
         renderFolded(RENAMING_OPERATION_LIST);
         fireEvent.click(screen.getByRole('button', { name: 'Expand all repeats' }));
         const unrolled = (runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds;

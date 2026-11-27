@@ -214,7 +214,7 @@ const foldDecisionToOption = (decision: ReadonlySet<string> | null): readonly st
     }
     return decision.size === 0 ? EMPTY_BLOCK_IDS : [...decision];
 };
-// Fold-all and a grouping switch both mean "fold what this detector found", not
+// Collapse all and a grouping switch both mean "fold what this detector found", not
 // "fold everything": the set also holds weight-fan ids, which the grouping controls
 // do not own and for which absence means folded rather than unrolled. Replacing the
 // set outright re-folded a fan the user had opened — the mirror of the bug
@@ -805,12 +805,12 @@ const OperationGraphInner = ({
             // every delivered build would churn `fanByMemberOperationId` and the two
             // selectors reading it, on builds that changed nothing about fans.
             setWeightFans((previous) => (areSameBlockSummaries(previous, nextFans) ? previous : nextFans));
-            // "Fold all" is `[]`, which names no instance and so cannot go stale.
-            // "Unroll all" is a list of ids, and that asymmetry is a bug: a rebuild
+            // "Collapse all" is `[]`, which names no instance and so cannot go stale.
+            // "Expand all" is a list of ids, and that asymmetry is a bug: a rebuild
             // that renames an instance -- a deallocate first in a repeating unit, or
             // one right after a layer delimiter, both change a span's first member --
-            // makes every held id miss, and a miss reads as folded. So unroll-all
-            // flipped to fold-all, the mirror of #2015. Carried forward as the intent
+            // makes every held id miss, and a miss reads as folded. So Expand all
+            // flipped to Collapse all, the mirror of #2015. Carried forward as the intent
             // it was rather than as the ids it happened to be. #2015
             setExpandedBlockIds((previous) => carryUnrollAll(previous, detectedBlocksRef.current, nextBlocks));
             setDetectedBlocks((previous) => (areSameBlockSummaries(previous, nextBlocks) ? previous : nextBlocks));
