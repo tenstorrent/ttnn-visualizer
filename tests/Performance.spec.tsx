@@ -666,26 +666,41 @@ describe('Performance route', () => {
             expect(probedComparisons()).toHaveTextContent('["added-since"]');
         });
 
-        it('still shows the selectors when no listing could be read, so the picks can be removed', () => {
-            // Comparison is local-only.
+        // The selectors are local-only and wait for the report, so this turns SERVER_MODE off and loads one.
+        const renderSelectors = (candidatesResult: object, comparisons: string[], pickedFrom = LISTED_DIRECTORY) => {
             serverConfig.SERVER_MODE = false;
             (usePerformanceReport as Mock).mockReturnValue({
                 data: { report: [DRAM_PERF_ROW], stacked_report: [], signposts: [] },
                 isLoading: false,
                 error: null,
             });
-            (usePerfComparisonCandidates as Mock).mockReturnValue({
-                data: undefined,
-                isSuccess: false,
-                isError: true,
-                isFetching: false,
-            });
+            (usePerfComparisonCandidates as Mock).mockReturnValue(candidatesResult);
 
-            render(comparisonTree(['report-b']));
+            render(comparisonTree(comparisons, pickedFrom));
 
-            const selectors = screen.getAllByTestId(TEST_IDS.COMPARISON_REPORT_SELECTOR);
-            expect(selectors.length).toBeGreaterThan(0);
+            return screen.getAllByTestId(TEST_IDS.COMPARISON_REPORT_SELECTOR);
+        };
+
+        // The selectors are the only way to remove the picks these keep.
+        it.each([
+            ['the fetch failed', { data: undefined, isSuccess: false, isError: true, isFetching: false }],
+            ['its directory could not be listed', listing(null)],
+        ])('still shows the selectors when %s, so the picks can be removed', (_case, result) => {
+            const selectors = renderSelectors(result, ['report-b']);
+
             expect(selectors[0]).toHaveAttribute('data-folder-count', '0');
+        });
+
+        // A selector handed no directory records none, which the prune reads as "picked here".
+        it('hands the selectors the directory the listing was read from', () => {
+            const syncedDirectory = '/synced/remote-host';
+            const selectors = renderSelectors(
+                listing(candidates('a', 'report-b'), { directory: syncedDirectory }),
+                ['report-b'],
+                syncedDirectory,
+            );
+
+            expect(selectors[0]).toHaveAttribute('data-directory', syncedDirectory);
         });
 
         it('drops comparisons once a switch to another directory lists different reports', () => {
