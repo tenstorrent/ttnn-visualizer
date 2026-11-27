@@ -31,6 +31,7 @@ from ttnn_visualizer.agent import dram_fallbacks as fallback_rules
 from ttnn_visualizer.agent import l1_peak as peak_replay
 from ttnn_visualizer.agent import late_deallocations as late
 from ttnn_visualizer.agent.bounds import (
+    IDS_PER_READ,
     MAX_DETAILED_LIMIT,
     MAX_LIMIT,
     MAX_OPERATION_NAME_CHARS,
@@ -102,8 +103,8 @@ MAX_LISTED_PRODUCERS = 5
 # With MAX_DETAILED_LIMIT call sites, this and the name cut bound the answer.
 MAX_CALL_SITE_TEXT_CHARS = 300
 _MAX_SOURCE_LINE = 1 << 31
-# Ids per `stack_traces` read, inside SQLite's oldest bound of 999 parameters.
-STACK_TRACE_IDS_PER_READ = 500
+# Ids per `stack_traces` read.
+STACK_TRACE_IDS_PER_READ = IDS_PER_READ
 # Past this many ids, the traces are read in one streamed pass instead. Nothing
 # indexes `stack_traces.operation_id`, so each batch scans the whole table: past
 # four batches, one scan costs less than the batches would.

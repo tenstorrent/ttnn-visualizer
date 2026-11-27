@@ -47,6 +47,7 @@ from ttnn_visualizer.agent.handles import (
     UnknownHandleError,
     load_report,
 )
+from ttnn_visualizer.agent.layout_round_trips import MAX_ROUND_TRIP_MOVES
 from ttnn_visualizer.agent.tool_names import McpToolName
 from ttnn_visualizer.csv_queries import L1_ZONE_MARKER_CAPACITY
 from ttnn_visualizer.event_logging import (
@@ -1112,22 +1113,33 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "started: a tilize undone by an untilize, an interleaved tensor "
                 "sharded and unsharded, a move to L1 and back to DRAM. A move is one "
                 "of move_operations with one input tensor and one new output tensor; "
-                "a round trip is two to six moves, each reading the last one's "
-                "output, whose final output has the first input's layout, buffer "
-                "type and memory layout after passing through another. Shard specs "
-                "are not compared, so a reshard there and back under one memory "
-                "layout is not found, and dtype changes (typecast, to_dtype) are not "
-                "moves. With a linked performance report each trip carries its "
-                "summed device time and the trips are ranked by it; otherwise they "
-                "come in operation order with no time. Each operation_id is the "
-                "memory report's, as operation_detail takes it. Lists up to "
-                f"{MAX_LIMIT} round trips; round_trip_count is the whole report's."
+                f"a round trip is 2 to {MAX_ROUND_TRIP_MOVES} moves, each reading "
+                "the last one's output, whose final output has the first input's "
+                "layout, buffer type and memory layout after passing through "
+                "another. Shard specs are not compared, so a reshard there and back "
+                "under one memory layout is not found, and a chain that ends under "
+                "the same memory layout with another shard grid or shape is listed, "
+                "though it changed the shards. Dtype changes (typecast, to_dtype) "
+                "are not moves. With a linked performance report each trip carries "
+                "its summed device time and the trips are ranked by it; otherwise "
+                "they come in operation order with no time. Each operation_id is the "
+                "memory report's, as operation_detail takes it. A page of up to "
+                f"{MAX_LIMIT} round trips from offset; round_trip_count is the whole "
+                "report's, and next_offset gives the next page's."
             ),
             "schema": {
                 "type": "object",
                 "properties": {
                     "handle": {"type": "string"},
                     "limit": _LIMIT_SCHEMA,
+                    "offset": {
+                        "type": "integer",
+                        "description": (
+                            "Round trips to skip, in rank order, before the page "
+                            "starts: a response's next_offset gives the next page's. "
+                            "Defaults to 0."
+                        ),
+                    },
                     "rank": _RANK_SCHEMA,
                 },
                 "required": ["handle"],

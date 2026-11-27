@@ -73,7 +73,8 @@ def build_graph(
     outputs_by_operation: Optional[Mapping[int, List[int]]] = None,
 ) -> OpGraph:
     """An edge whose endpoint is not one of `names` is dropped, as `buildOpGraph` drops
-    an edge to an operation it did not keep."""
+    an edge to an operation it did not keep. The graph takes the tensor lists it is
+    given, sorted in place."""
     kept = edges_within(edges, names.keys())
     drawn = [edge for edge in kept if edge.source != edge.target]
     outgoing: Dict[int, List[GraphEdge]] = defaultdict(list)
@@ -95,13 +96,16 @@ def build_graph(
 def _tensors_within(
     tensors_by_operation: Optional[Mapping[int, List[int]]], names: Mapping[int, str]
 ) -> Dict[int, List[int]]:
+    """The lists of `names`' operations, sorted in place rather than copied: the
+    graph is kept per handle, so a second copy of every list would be kept too."""
     if not tensors_by_operation:
         return {}
-    return {
-        operation_id: sorted(tensor_ids)
-        for operation_id, tensor_ids in tensors_by_operation.items()
-        if operation_id in names
-    }
+    within: Dict[int, List[int]] = {}
+    for operation_id, tensor_ids in tensors_by_operation.items():
+        if operation_id in names:
+            tensor_ids.sort()
+            within[operation_id] = tensor_ids
+    return within
 
 
 def read_graph(

@@ -19,6 +19,7 @@ from ttnn_visualizer.agent.layout_round_trips import (
     move_operation_ids,
     tensor_state,
 )
+from ttnn_visualizer.queries import DatabaseQueries
 from ttnn_visualizer.tests.memory_report_db import load_memory_report
 
 _DRAM = TensorState("ROW_MAJOR", "DRAM", "INTERLEAVED")
@@ -96,6 +97,24 @@ class TestFindRoundTrips:
         # Two reshards whose shard specs the state cannot see.
         assert _trips([_SHARDED, _SHARDED, _SHARDED]) == []
 
+    def test_a_move_that_changes_nothing_seen_does_not_start_the_trip_after_it(self):
+        # A to_memory_config whose shard spec change the state cannot see, then a
+        # tilize and an untilize: the round trip is the last two.
+        assert _trips([_DRAM, _DRAM, _TILED, _DRAM]) == [[2, 3]]
+
+    def test_a_field_one_side_lacks_is_no_excursion(self):
+        # Only the memory layout differs in between, and the ends have none.
+        unparsed = TensorState("TILE", "DRAM", None)
+
+        assert _trips([unparsed, _TILED, unparsed]) == []
+
+    def test_a_known_field_that_differs_is_an_excursion_beside_missing_ones(self):
+        # A host tensor has no buffer type or memory layout, but its layout is known.
+        host_rows = TensorState("ROW_MAJOR", None, None)
+        host_tiles = TensorState("TILE", None, None)
+
+        assert _trips([host_rows, host_tiles, host_rows]) == [[1, 2]]
+
     def test_a_round_trip_is_the_shortest_chain_that_returns(self):
         # Tilize, untilize, tilize: one round trip and a move left over, which
         # starts nothing because its output never comes back.
@@ -136,6 +155,18 @@ class TestFindRoundTrips:
         del states[11]
 
         assert find_round_trips(operation_ids, inputs, outputs, states) == []
+
+
+class TestDiffersFrom:
+    def test_a_known_field_read_differently_differs(self):
+        assert _TILED.differs_from(_DRAM)
+
+    def test_a_field_either_side_lacks_does_not(self):
+        assert not TensorState("TILE", "DRAM", None).differs_from(_TILED)
+        assert not _TILED.differs_from(TensorState(None, None, None))
+
+    def test_the_same_state_does_not(self):
+        assert not _TILED.differs_from(_TILED)
 
 
 class TestMoveOperationIds:
@@ -251,7 +282,8 @@ class TestLayoutRoundTripsTool:
         assert linking.ROUND_TRIP_SHARD_SPEC_CAVEAT in result["caveat"]
         assert result["operation_link"]["status"] != "linked"
 
-    def test_the_limit_caps_the_list_but_not_the_count(self, tmp_path):
+    @pytest.fixture
+    def two_trip_report(self, tmp_path):
         rows = list(_ROUND_TRIP_ROWS)
         # A second round trip: op 6 tilizes op 5's output and op 7 untilizes it.
         rows += [
@@ -264,13 +296,44 @@ class TestLayoutRoundTripsTool:
             ("input_tensors", (7, 0, 16)),
             ("output_tensors", (7, 0, 17)),
         ]
-        registry, handle = load_memory_report(tmp_path, _SCHEMA, rows)
+        return load_memory_report(tmp_path, _SCHEMA, rows)
+
+    def test_the_limit_caps_the_page_but_not_the_count(self, two_trip_report):
+        registry, handle = two_trip_report
 
         result = linking.layout_round_trips(registry, handle, limit=1)
 
         assert result["round_trip_count"] == 2
-        assert len(result["round_trips"]) == 1
-        assert result["truncated"] is True
+        assert result["offset"] == 0
+        assert result["returned"] == 1
+        assert result["next_offset"] == 1
+        assert result["round_trips"][0]["operations"][0]["operation_id"] == 1
+
+    def test_the_next_offset_reaches_the_later_trips(self, two_trip_report):
+        registry, handle = two_trip_report
+
+        result = linking.layout_round_trips(registry, handle, limit=1, offset=1)
+
+        assert result["offset"] == 1
+        assert result["returned"] == 1
+        assert result["next_offset"] is None
+        assert result["round_trips"][0]["operations"][0]["operation_id"] == 6
+
+    @pytest.mark.parametrize(
+        "arguments", [{"limit": "abc"}, {"offset": -1}, {"offset": 1.5}]
+    )
+    def test_a_bad_page_is_refused_before_anything_is_read(
+        self, round_trip_report, monkeypatch, arguments
+    ):
+        registry, handle = round_trip_report
+
+        def unread(*_args, **_kwargs):
+            raise AssertionError("read before the arguments were checked")
+
+        monkeypatch.setattr(operations, "profiler_db", unread)
+
+        with pytest.raises(ValueError):
+            linking.layout_round_trips(registry, handle, **arguments)
 
     def test_a_move_with_no_edge_is_counted(self, tmp_path):
         rows = list(_ROUND_TRIP_ROWS)
@@ -289,14 +352,44 @@ class TestLayoutRoundTripsTool:
         assert result["move_operation_count"] == 5
         assert result["round_trip_count"] == 1
 
-    def test_tensor_states_are_read_in_batches(self, round_trip_report, monkeypatch):
-        monkeypatch.setattr(operations, "TENSOR_IDS_PER_READ", 1)
+    @pytest.fixture
+    def tensor_reads(self, monkeypatch):
+        """The ids each read of the moves' tensors binds."""
+        reads = []
+        read = DatabaseQueries.query_tensor_storage
+
+        def recorded(queries, filters=None):
+            reads.append(list(filters["tensor_id"]))
+            return read(queries, filters)
+
+        monkeypatch.setattr(DatabaseQueries, "query_tensor_storage", recorded)
+        return reads
+
+    def test_tensor_states_are_read_in_batches(
+        self, round_trip_report, monkeypatch, tensor_reads
+    ):
+        monkeypatch.setattr(operations, "IDS_PER_READ", 1)
         registry, handle = round_trip_report
 
         result = linking.layout_round_trips(registry, handle)
 
         assert result["round_trip_count"] == 1
         assert result["round_trips"][0]["tensor_ids"] == [10, 11, 12]
+        # Moves 1, 2, 3 and 5 read and write these, one id a read.
+        assert tensor_reads == [[10], [11], [12], [13], [14], [15]]
+
+    def test_the_round_trips_are_found_once_per_handle(
+        self, round_trip_report, tensor_reads
+    ):
+        registry, handle = round_trip_report
+
+        first = linking.layout_round_trips(registry, handle)
+        reads = len(tensor_reads)
+        second = linking.layout_round_trips(registry, handle, limit=1)
+
+        assert reads == 1
+        assert len(tensor_reads) == reads
+        assert second["round_trips"] == first["round_trips"]
 
     def test_a_report_with_no_edges_says_so(self, tmp_path):
         registry, handle = load_memory_report(

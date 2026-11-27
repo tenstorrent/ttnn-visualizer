@@ -927,8 +927,45 @@ ROUND_TRIP_SHARD_SPEC_CAVEAT = (
     "A tensor's state is its layout, buffer type and memory layout. Shard specs are "
     "not compared, because the memory config parser reads only the older "
     "`ShardSpec(...)` form, so a chain that changes the shard grid or shape and "
-    "changes it back under the same memory layout is not found."
+    "changes it back under the same memory layout is not found, and a chain that "
+    "ends under the same memory layout with another shard grid or shape is listed, "
+    "though it changed the shards."
 )
+
+
+class _RoundTripSearch(NamedTuple):
+    move_operation_count: int
+    trips: Tuple[RoundTrip, ...]
+
+
+def _read_round_trips(
+    graph: op_graph.OpGraph, queries: DatabaseQueries, scope: operations.RankScope
+) -> _RoundTripSearch:
+    # Every operation, not the graph view's kept ones: a move with no edge, from
+    # a tensor nothing produced to one nothing reads, is still a move to count.
+    moves = move_operation_ids(
+        graph.names,
+        graph.names.keys(),
+        graph.inputs_by_operation,
+        graph.outputs_by_operation,
+    )
+    state_by_tensor = operations.tensor_states(
+        queries,
+        scope,
+        [
+            tensor_id
+            for operation_id in moves
+            for tensor_id in (
+                *graph.inputs_by_operation[operation_id],
+                *graph.outputs_by_operation[operation_id],
+            )
+        ],
+    )
+    trips = find_round_trips(
+        moves, graph.inputs_by_operation, graph.outputs_by_operation, state_by_tensor
+    )
+    return _RoundTripSearch(len(moves), tuple(trips))
+
 
 ROUND_TRIPS_UNLINKED_CAVEAT = (
     "No device time: the performance report is not linked to the memory report, so "
@@ -936,40 +973,41 @@ ROUND_TRIPS_UNLINKED_CAVEAT = (
 )
 
 
+def _uncosted_round_trip_caveat(uncosted: int) -> str:
+    operations_text = "1 operation" if uncosted == 1 else f"{uncosted} operations"
+    each = "it counts" if uncosted == 1 else "each counts"
+    return (
+        f"{operations_text} across the round trips launched no performance row with "
+        f"a device time, and {each} as 0: a move done on the host launches no device "
+        "program, so 0 can be its real cost, but otherwise those trips may cost more "
+        "than they show."
+    )
+
+
 def layout_round_trips(
     registry: ReportRegistry,
     handle: str,
     limit: Optional[int] = None,
     rank: Optional[int] = None,
+    offset: Optional[int] = None,
 ) -> Dict[str, object]:
-    """Chains of layout and memory moves that leave a tensor stored as it started."""
+    """Chains of layout and memory moves that leave a tensor stored as it started,
+    a page from `offset`."""
+    # First, so a bad argument is refused before the graph and tensors are read.
+    count = bounded(limit, MAX_LIMIT)
+    requested_start = parsed_offset(offset)
     instance = registry.get(handle)
     with operations.profiler_db(instance) as queries:
         scope = operations.rank_scope(queries, rank)
         graph = operations.read_scoped_graph(registry, handle, queries, scope)
-        # Every operation, not the graph view's kept ones: a move with no edge, from
-        # a tensor nothing produced to one nothing reads, is still a move to count.
-        moves = move_operation_ids(
-            graph.names,
-            graph.names.keys(),
-            graph.inputs_by_operation,
-            graph.outputs_by_operation,
-        )
-        state_by_tensor = operations.tensor_states(
+        search = operations.cached_per_rank(
+            registry,
+            handle,
+            CacheVariant.LAYOUT_ROUND_TRIPS,
             queries,
             scope,
-            [
-                tensor_id
-                for operation_id in moves
-                for tensor_id in (
-                    *graph.inputs_by_operation[operation_id],
-                    *graph.outputs_by_operation[operation_id],
-                )
-            ],
+            partial(_read_round_trips, graph),
         )
-    trips = find_round_trips(
-        moves, graph.inputs_by_operation, graph.outputs_by_operation, state_by_tensor
-    )
 
     link = _link_at_rank(operation_link(registry, handle), scope.rank, "the graph")
     linked = link.status is LinkStatus.LINKED
@@ -981,21 +1019,27 @@ def layout_round_trips(
             for operation_id in trip.operation_ids
         )
 
-    if linked:
-        trips.sort(key=lambda trip: (-costed(trip), trip.operation_ids[0]))
+    # A copy: the search is kept for the handle, and sorted only here.
+    trips = (
+        sorted(search.trips, key=lambda trip: (-costed(trip), trip.operation_ids[0]))
+        if linked
+        else list(search.trips)
+    )
+    start, shown, next_offset = page_of(trips, requested_start, count)
 
-    cap = bounded(limit, MAX_LIMIT)
-    uncosted_ids: Set[int] = set()
-    answered: List[Dict[str, object]] = []
-    for trip in trips:
-        uncosted = [
+    def uncosted_of(trip: RoundTrip) -> List[int]:
+        return [
             operation_id
             for operation_id in trip.operation_ids
             if operation_id not in time_by_operation
         ]
-        uncosted_ids.update(uncosted)
-        if len(answered) >= cap:
-            continue
+
+    # Over every trip, not the page, as `device_time_total` is.
+    uncosted_ids = {
+        operation_id for trip in trips for operation_id in uncosted_of(trip)
+    }
+    answered: List[Dict[str, object]] = []
+    for trip in shown:
         entry: Dict[str, object] = {
             "operations": [
                 {
@@ -1021,7 +1065,7 @@ def layout_round_trips(
         }
         if linked:
             entry["device_time"] = round(costed(trip), 3)
-            entry["uncosted_operation_count"] = len(uncosted)
+            entry["uncosted_operation_count"] = len(uncosted_of(trip))
         answered.append(entry)
 
     caveats = [ROUND_TRIP_SHARD_SPEC_CAVEAT]
@@ -1034,20 +1078,18 @@ def layout_round_trips(
     if not linked:
         caveats.append(ROUND_TRIPS_UNLINKED_CAVEAT)
     elif uncosted_ids:
-        caveats.append(
-            f"{len(uncosted_ids)} operations across the round trips launched no "
-            "performance row with a device time, and each counts as 0, so those "
-            "trips cost more than they show."
-        )
+        caveats.append(_uncosted_round_trip_caveat(len(uncosted_ids)))
     if linked and link.partitioned_caveat:
         caveats.append(link.partitioned_caveat)
 
     result: Dict[str, object] = {
         "handle": handle,
         "round_trip_count": len(trips),
-        "move_operation_count": len(moves),
+        "move_operation_count": search.move_operation_count,
+        "offset": start,
+        "returned": len(shown),
+        "next_offset": next_offset,
         "round_trips": answered,
-        "truncated": len(trips) > cap,
         "move_operations": sorted(LAYOUT_MOVE_OPERATIONS),
     }
     if linked:

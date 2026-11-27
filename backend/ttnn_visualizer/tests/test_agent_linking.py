@@ -2212,13 +2212,16 @@ def _add_stored_tensors(profiler_path: str, tensors) -> None:
 
 @pytest.fixture
 def round_trip_report(linked, tmp_path):
-    def _round_trip_report(rows=_ROUND_TRIP_ROWS):
+    def _round_trip_report(
+        rows=_ROUND_TRIP_ROWS,
+        operations=_ROUND_TRIP_OPERATIONS,
+        graphs=_ROUND_TRIP_GRAPHS,
+        tensors=_ROUND_TRIP_TENSORS,
+    ):
         profiler_path = _write_profiler(
-            tmp_path / "round-trip-profiler",
-            _ROUND_TRIP_GRAPHS,
-            operations=_ROUND_TRIP_OPERATIONS,
+            tmp_path / "round-trip-profiler", graphs, operations=operations
         )
-        _add_stored_tensors(profiler_path, _ROUND_TRIP_TENSORS)
+        _add_stored_tensors(profiler_path, tensors)
         registry, handle, _ = linked(profiler_path=profiler_path, rows=rows)
         return registry, handle
 
@@ -2259,7 +2262,44 @@ class TestLayoutRoundTrips:
         assert [trip["device_time"] for trip in result["round_trips"]] == [7.0, 2.0]
         assert result["round_trips"][1]["uncosted_operation_count"] == 1
         assert result["round_trips"][1]["operations"][1]["device_time"] is None
-        assert "1 operations across the round trips" in result["caveat"]
+        assert "1 operation across the round trips" in result["caveat"]
+        assert "may cost more than they show" in result["caveat"]
+
+    @pytest.mark.parametrize("limit", [None, 1])
+    def test_a_move_two_round_trips_share_counts_once_in_the_total(
+        self, round_trip_report, limit
+    ):
+        # Op 2 tilizes tensor 10 into 11, which ops 3 and 4 each untilize back:
+        # two round trips, [2, 4] at 3 + 5 = 8 and [2, 3] at 3 + 4 = 7, whose
+        # total is 3 + 4 + 5 = 12, over every trip whether listed or not.
+        registry, handle = round_trip_report(
+            rows=[
+                _perf_row("signpost-start", 2, "signpost"),
+                {**_perf_row("TilizeDeviceOperation", 3), "device_time": "3.0"},
+                {**_perf_row("UntilizeDeviceOperation", 4), "device_time": "4.0"},
+                {**_perf_row("UntilizeDeviceOperation", 5), "device_time": "5.0"},
+            ],
+            operations=_ROUND_TRIP_OPERATIONS[:3] + [(4, "ttnn.to_layout")],
+            graphs={
+                **{key: _ROUND_TRIP_GRAPHS[key] for key in (1, 2, 3)},
+                4: _sequential_graph("ttnn.to_layout", "UntilizeDeviceOperation"),
+            },
+            tensors=[
+                (1, 10, [2], "Layout.ROW_MAJOR", _DRAM_CONFIG),
+                (2, 11, [3, 4], "Layout.TILE", _DRAM_CONFIG),
+                (3, 12, [], "Layout.ROW_MAJOR", _DRAM_CONFIG),
+                (4, 13, [], "Layout.ROW_MAJOR", _DRAM_CONFIG),
+            ],
+        )
+
+        result = linking.layout_round_trips(registry, handle, limit=limit)
+
+        assert result["operation_link"]["status"] == "linked"
+        assert result["round_trip_count"] == 2
+        assert [trip["device_time"] for trip in result["round_trips"]] == [8.0, 7.0][
+            : limit or 2
+        ]
+        assert result["device_time_total"] == 12.0
 
     def test_an_unlinked_report_is_answered_in_operation_order(self, round_trip_report):
         # Op 5 loses its row, so the device operation sequences disagree.

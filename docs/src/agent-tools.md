@@ -1249,15 +1249,22 @@ one of `move_operations` — `to_layout`, `tilize`, `untilize`, `tilize_with_val
 `sharded_to_interleaved`, `reshard` and `move` — that reads one tensor and writes a new
 one; a move that hands back the tensor it was given changed nothing and is not one. A
 tensor's state is its layout, buffer type and memory layout. A round trip is a chain of
-two to six moves, each reading the previous one's output, whose last output is in the
+2 to 6 moves, each reading the previous one's output, whose last output is in the
 first input's state after passing through at least one other. Each chain is the shortest
-that returns: a tilize, untilize and tilize again is one round trip and a move left over.
-A move already in a listed round trip starts no other, but a move whose output feeds two
-chains that each return is listed in both, and counted once in `device_time_total`.
+that returns: a tilize, untilize and tilize again is one round trip and a move left over,
+and a move whose output reads as its input did ends its chain, so the round trip after it
+starts from the next move. A state passed through counts only where it differs from the
+first in a field both record: a host tensor has no buffer type or memory layout, and a
+memory config the parser cannot read gives no memory layout, so a field one side lacks is
+no move. A move already in a listed round trip starts no other, but a move whose output
+feeds two chains that each return is listed in both, and counted once in
+`device_time_total`.
 
 Shard specs are not part of the state, because the memory config parser reads only the
-older `ShardSpec(...)` form and a newer capture's shard spec reads as absent; a chain that
-reshards to another grid and back under one memory layout is not found. A change of dtype
+older `ShardSpec(...)` form and a newer capture's shard spec reads as absent. So a chain
+that reshards to another grid and back under one memory layout is not found, and a chain
+that ends under the same memory layout with another shard grid or shape is listed, though
+it changed the shards. A change of dtype
 is not a move either: `typecast` and `to_dtype` are often a deliberate precision choice.
 Nor is a pair of moves around a compute operation, such as `to_memory_config` into L1, a
 matmul, and `to_memory_config` back to DRAM: the tensor coming back is not the one that
@@ -1268,8 +1275,22 @@ at the rank read, each round trip carries `device_time`, the summed device time 
 operations as `operation_detail` sums it, and `uncosted_operation_count`, its operations
 with no timed row, each counted as 0; the round trips are ranked by device time, and
 `device_time_total` and `device_time_share_percent` cover them all. Without the link
-they are listed in operation order with no time, and the caveat says so.
-`round_trip_count` counts every round trip when the list is capped.
+they are listed in operation order with no time, and the caveat says so. An operation
+with no timed row may be a move done on the host, which launches no device program, so its
+0 can be real.
+
+Each round trip lists its `operations`, `tensor_ids` (the tensor the first move read, then
+each move's output), `from_state`, the state it starts and ends in, and `through_states`,
+the states between. A state gives `layout`, `buffer_type` and `memory_layout` by their bare
+names, such as `TILE`, `L1` and `HEIGHT_SHARDED`, where `subgraph_between` and
+`tensor_flow` give a tensor's as the report stores them, such as `Layout.TILE` and
+`TensorMemoryLayout::HEIGHT_SHARDED`; a field the report does not give is null.
+`move_operation_count` counts the moves the report holds, in round trips or not, and
+`move_operations` names what counts as one. The round trips come a page at a time:
+`offset` skips that many in rank order, and `next_offset` gives the next page's, or null
+on the last. `round_trip_count` counts every round trip, and `device_time_total` covers
+them all, not only the page. The moves and their round trips are found once per handle
+and rank, so a later page reads nothing again.
 
 **An operation id is not the end of the answer.** `memory_profile` names the operations
 holding its largest footprint, and `operation_provenance` turns such an id into the two things you need

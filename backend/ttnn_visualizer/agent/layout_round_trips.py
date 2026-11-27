@@ -13,7 +13,7 @@ which chains are round trips.
 """
 
 from dataclasses import dataclass
-from typing import AbstractSet, Dict, Iterable, List, Mapping, Optional, Sequence, Set
+from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Set
 
 # Operations that change only where or how a tensor is stored. Names are compared with
 # their `ttnn.` or `ttnn::` prefix removed. `typecast` and `to_dtype` are left out: a
@@ -63,11 +63,26 @@ def enum_suffix(value: Optional[str]) -> Optional[str]:
 class TensorState:
     """Where and how a tensor is stored. The shard spec is not part of it: the parser
     reads only the older `ShardSpec(...)` form, so a newer capture's would read as
-    absent on both sides of a reshard."""
+    absent on both sides of a reshard.
+
+    A field is None where the report gives none: a host tensor has no buffer type or
+    memory layout, and an unparsed memory config gives no memory layout."""
 
     layout: Optional[str]
     buffer_type: Optional[str]
     memory_layout: Optional[str]
+
+    def differs_from(self, other: "TensorState") -> bool:
+        """Whether a field both states know reads differently. A field one of them
+        lacks is no evidence of a move: the move may have left it as it was."""
+        return any(
+            mine is not None and theirs is not None and mine != theirs
+            for mine, theirs in (
+                (self.layout, other.layout),
+                (self.buffer_type, other.buffer_type),
+                (self.memory_layout, other.memory_layout),
+            )
+        )
 
     def as_response(self) -> Dict[str, Optional[str]]:
         return {
@@ -137,7 +152,12 @@ def find_round_trips(
     Each move starts a search unless an earlier trip already holds it, so a long
     trip is not listed again from its second move. Within one search, a branch
     stops at the first state that matches the start: past it the chain is a round
-    trip followed by something else.
+    trip followed by something else, and before any other state it is a move that
+    changed nothing visible, which the search from the next move covers.
+
+    A chain is a round trip only if some state between its ends differs from the
+    start in a field both know, so a field the report left out on one side is no
+    excursion.
     """
     moves_by_input: Dict[int, List[int]] = {}
     for operation_id in moves:
@@ -158,7 +178,6 @@ def find_round_trips(
             [start],
             [start_tensor],
             start_state,
-            used,
             moves_by_input,
             outputs_by_operation,
             state_by_tensor,
@@ -173,7 +192,6 @@ def _search(
     path: List[int],
     tensors: List[int],
     start_state: TensorState,
-    used: AbstractSet[int],
     moves_by_input: Mapping[int, List[int]],
     outputs_by_operation: Mapping[int, Sequence[int]],
     state_by_tensor: Mapping[int, TensorState],
@@ -185,20 +203,23 @@ def _search(
         return []
     chain = tensors + [output]
     states = [state_by_tensor[tensor] for tensor in chain]
-    if len(path) >= 2 and state == start_state:
-        if any(middle != start_state for middle in states[1:-1]):
+    if state == start_state:
+        # Back where it started, so the branch ends here either way.
+        if any(middle.differs_from(start_state) for middle in states[1:-1]):
             return [RoundTrip(list(path), chain, states)]
+        return []
     if len(path) >= MAX_ROUND_TRIP_MOVES:
         return []
+    # No check against the moves earlier trips used: each move reads one tensor and
+    # runs after its producer, so a later start never reaches one of them.
     found: List[RoundTrip] = []
     for following in moves_by_input.get(output, ()):
-        if following not in used and following not in path:
+        if following not in path:
             found.extend(
                 _search(
                     path + [following],
                     chain,
                     start_state,
-                    used,
                     moves_by_input,
                     outputs_by_operation,
                     state_by_tensor,

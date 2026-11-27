@@ -1128,6 +1128,31 @@ class DatabaseQueries:
         for row in rows:
             yield Device(*row)
 
+    def query_tensor_storage(
+        self, filters: Optional[Dict[str, Any]] = None
+    ) -> List[Tuple[int, Any, Any, Any, Any]]:
+        """``(tensor_id, layout, memory_config, address, buffer_type)`` of each
+        ``tensors`` row `filters` match, as stored.
+
+        `query_tensors` without its joins: `device_tensors` has no index on
+        ``tensor_id`` in real captures, so its join scans the table once per
+        tensor, and how a tensor is stored needs none of it.
+        """
+        return [
+            tuple(row)
+            for row in self._query_table(
+                "tensors",
+                filters,
+                columns=[
+                    "tensor_id",
+                    "layout",
+                    "memory_config",
+                    "address",
+                    "buffer_type",
+                ],
+            )
+        ]
+
     def query_producers_consumers(
         self, rank: Optional[int] = None
     ) -> Generator[ProducersConsumers, None, None]:

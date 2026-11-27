@@ -41,6 +41,7 @@ from typing import (
 
 from ttnn_visualizer.agent import layout_round_trips, op_graph
 from ttnn_visualizer.agent.bounds import (
+    IDS_PER_READ,
     MAX_DETAILED_LIMIT,
     MAX_LIMIT,
     bounded,
@@ -61,8 +62,10 @@ from ttnn_visualizer.models import (
     Instance,
     Operation,
     Tensor,
+    tensor_buffer_type,
 )
 from ttnn_visualizer.queries import DatabaseQueries
+from ttnn_visualizer.utils import parse_memory_config
 
 # Every allocation figure derived from `buffers` is in these units, and the
 # response says so wherever one appears. `max_size_per_bank` is what the column
@@ -87,10 +90,6 @@ TENSOR_SIZE_UNIT = "bytes"
 # The buffer types a report can hold, from the enum rather than from whatever
 # strings a given capture happens to contain.
 BUFFER_TYPE_NAMES = tuple(sorted(member.name for member in BufferType))
-
-# Ids per `tensors` read by `tensor_states`, inside SQLite's oldest bound of 999
-# parameters, as `failures.STACK_TRACE_IDS_PER_READ`.
-TENSOR_IDS_PER_READ = 500
 
 
 class ProfilerDatabaseMissingError(ValueError):
@@ -1399,26 +1398,30 @@ def tensor_states(
     queries: DatabaseQueries, scope: RankScope, tensor_ids: Iterable[int]
 ) -> Dict[int, layout_round_trips.TensorState]:
     """Where and how each of `tensor_ids` is stored, read only for those ids, in
-    batches of `TENSOR_IDS_PER_READ` so no read binds past SQLite's bound.
+    batches of `IDS_PER_READ` so no read binds past SQLite's bound.
 
-    Never an empty batch, which drops the filter and parses every tensor.
+    Read from `tensors` alone, with `Tensor`'s buffer-type rule, rather than through
+    `query_tensors`, whose `device_tensors` join is unindexed in real captures.
+    Never an empty batch, which drops the filter and reads every tensor.
     """
     ids = sorted(set(tensor_ids))
     states: Dict[int, layout_round_trips.TensorState] = {}
-    for start in range(0, len(ids), TENSOR_IDS_PER_READ):
-        batch = ids[start : start + TENSOR_IDS_PER_READ]
-        for tensor in queries.query_tensors(
-            filters=scoped(queries, "tensors", scope, tensor_id=batch),
-            size_from_buffers=False,
+    for start in range(0, len(ids), IDS_PER_READ):
+        batch = ids[start : start + IDS_PER_READ]
+        for (
+            tensor_id,
+            layout,
+            memory_config,
+            address,
+            stored_buffer_type,
+        ) in queries.query_tensor_storage(
+            filters=scoped(queries, "tensors", scope, tensor_id=batch)
         ):
-            states[tensor.tensor_id] = layout_round_trips.tensor_state(
-                tensor.layout,
-                (
-                    _buffer_type_name(tensor.buffer_type)
-                    if tensor.buffer_type is not None
-                    else None
-                ),
-                tensor.memory_config,
+            buffer_type = tensor_buffer_type(address, stored_buffer_type, memory_config)
+            states[tensor_id] = layout_round_trips.tensor_state(
+                layout,
+                _buffer_type_name(buffer_type) if buffer_type is not None else None,
+                parse_memory_config(memory_config),
             )
     return states
 
@@ -1565,7 +1568,6 @@ __all__ = [
     "DetailFields",
     "MAX_ARGUMENT_VALUE_CHARS",
     "RankScope",
-    "TENSOR_IDS_PER_READ",
     "TENSOR_SIZE_UNIT",
     "ProfilerDatabaseMissingError",
     "cached_per_rank",

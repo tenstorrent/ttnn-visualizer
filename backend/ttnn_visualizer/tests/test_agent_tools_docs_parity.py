@@ -21,6 +21,7 @@ from ttnn_visualizer import hardware_counters, pipeline_stalls
 from ttnn_visualizer.agent import (
     failures,
     hw_utilisation,
+    layout_round_trips,
     op_configurations,
     report_diff,
     server,
@@ -313,6 +314,24 @@ def test_the_op_configurations_rules_the_page_names_are_the_restated_ones():
     revision = f"`{op_configurations.TRACER_REVISION}`"
     assert f"at tt-metal {revision}" in page
     assert revision in _AGENT_README.read_text(encoding="utf-8")
+
+
+def test_the_layout_moves_the_page_names_are_the_searched_ones():
+    """The page lists the move names and the chain bound by hand, so nothing else ties
+    them to the constants the search reads."""
+    page = " ".join(_read(_AGENT_DOCS).split())
+    sentence = re.search(
+        r"A move is a call to one of `move_operations` — (.+?) — ", page
+    )
+
+    assert sentence is not None
+    named = re.findall(r"`([a-z_]+)`", sentence.group(1))
+    assert set(named) == layout_round_trips.LAYOUT_MOVE_OPERATIONS
+    assert len(named) == len(layout_round_trips.LAYOUT_MOVE_OPERATIONS)
+    assert (
+        f"A round trip is a chain of 2 to {layout_round_trips.MAX_ROUND_TRIP_MOVES} "
+        "moves"
+    ) in page
 
 
 def test_the_signpost_name_limit_the_page_states_is_the_enforced_one():
