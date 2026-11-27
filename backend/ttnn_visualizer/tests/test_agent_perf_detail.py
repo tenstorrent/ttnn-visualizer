@@ -253,12 +253,13 @@ class TestDetailFields:
 
     def test_a_metric_column_reads_as_the_rows_metric_does(self):
         """As `row_cells` reads it, as `enrichRowData` does, so a detail field never
-        contradicts the metric beside it: `1_0` is 1, not 10, and `1abc` is 1. #2440"""
+        contradicts the metric beside it: `1_0` is 1, not 10, `1abc` is 1, and a
+        fraction is rounded to 3 places. #2440"""
         row = {
             "dram": "1_0",
             "dram_percent": "2abc",
             "flops": "1abc",
-            "flops_percent": "",
+            "flops_percent": "1.23456abc",
             "op_to_op_gap": "1_0",
         }
 
@@ -272,7 +273,7 @@ class TestDetailFields:
             fields["tflops"],
             fields["flops_percent"],
             fields["op_to_op_gap_us"],
-        ) == (1.0, 2.0, 1.0, None, 1.0)
+        ) == (1.0, 2.0, 1.0, 1.235, 1.0)
         for metric, field in [
             ("dram", "dram_gb_per_s"),
             ("flops", "tflops"),

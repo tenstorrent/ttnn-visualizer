@@ -7,10 +7,12 @@
 `enrichRowData` in `src/functions/enrichPerfRowData.ts` reads some text columns with
 `parseFloat`, `cores` with `parseInt(…, 10)`, and some only where the cell is truthy, so
 `"1abc"` is 1 and `"1_0"` is 1 where Python's `float` refuses the one and reads 10 for the
-other. A tool that ranks, reports or sums a column the app shows reads it here, so the
-number is the app's. `tools`, `perf_detail` and `perf_flags` all read these columns, and
-`perf_detail` sits below the other two, so the table lives in neither; mirror a change in
-`enrichRowData` here.
+other. A tool that ranks, reports or sums one of these columns reads it here, so the
+number is the app's: the sortable metrics and the detail fields beside them. The app
+parses a few more (the kernel durations, `pm_ideal_ns`, `available_cores`), which
+`perf_detail` and `perf_flags` read on their own. `tools`, `perf_detail` and `perf_flags`
+all read these columns, and `perf_detail` sits below the other two, so the table lives in
+neither; mirror a change in `enrichRowData` here.
 """
 
 from typing import Callable, Dict, FrozenSet, Optional
@@ -48,11 +50,17 @@ _READS: Dict[str, Callable[[object], Optional[float]]] = {
 COLUMNS: FrozenSet[str] = frozenset(_READS)
 
 
+def read(column: str, cell: object) -> Optional[float]:
+    """`column`'s cell as the app reads it, NaN and infinity kept, for a port that
+    restates what the app does with them."""
+    return _READS[column](cell)
+
+
 def cell_number(column: str, cell: object) -> Optional[float]:
     """`column`'s cell as the app reads it, or None where that is null, NaN or infinite:
     either of the last two would reach the client as invalid JSON."""
-    value = _READS[column](cell)
+    value = read(column, cell)
     return value if value is not None and js_is_finite(value) else None
 
 
-__all__ = ["COLUMNS", "cell_number", "parse_filled_float", "parse_int"]
+__all__ = ["COLUMNS", "cell_number", "parse_filled_float", "parse_int", "read"]

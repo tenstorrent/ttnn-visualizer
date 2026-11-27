@@ -35,10 +35,10 @@ from typing import (
     Tuple,
 )
 
+from ttnn_visualizer.agent import row_cells
 from ttnn_visualizer.agent.js_values import (
     js_divide,
     js_is_finite,
-    js_parse_float,
     js_parse_int,
     js_truthy,
 )
@@ -196,12 +196,12 @@ def typed_row(row: Dict, is_first_hash_occurrence: bool = True) -> FlagRow:
     """
     bound_analysis = row.get("bound_analysis")
     return FlagRow(
-        total_percent=js_parse_float(row.get("total_percent")),
-        device_time=js_parse_float(row.get("device_time")),
+        total_percent=row_cells.read("total_percent", row.get("total_percent")),
+        device_time=row_cells.read("device_time", row.get("device_time")),
         cores=row_cores(row),
         available_cores=_parse_nullable_integer(row.get("available_cores")),
-        dram_percent=parse_filled_float(row.get("dram_percent")),
-        flops_percent=parse_filled_float(row.get("flops_percent")),
+        dram_percent=row_cells.read("dram_percent", row.get("dram_percent")),
+        flops_percent=row_cells.read("flops_percent", row.get("flops_percent")),
         pm_ideal_ns=parse_filled_float(row.get("pm_ideal_ns")),
         bound=row.get("bound"),
         bound_analysis=(

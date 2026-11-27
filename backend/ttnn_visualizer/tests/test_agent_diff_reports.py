@@ -444,19 +444,23 @@ class TestGroupsOneReportLacks:
         assert result["delta_total"] == 5.0
         assert result["delta_total_percent"] == 25.0
 
-    def test_a_total_sums_each_cell_as_the_app_reads_it(self, tmp_path):
+    @pytest.mark.parametrize("by", ["device_time", "op_to_op_gap", "total_percent"])
+    def test_a_total_sums_each_cell_as_the_app_reads_it(self, tmp_path, by):
         """`parseFloat`, as `metric_number` reads it: `1_0` is 1, not 10, and `1abc`
-        is 1, not unmeasured. #2440"""
+        is 1, not unmeasured, so the group has not moved. #2440"""
         result = _diff(
             _registry(tmp_path),
             {
-                "report-1": [_row(id="2", op_code="Matmul", device_time="1_0")],
-                "report-2": [_row(id="2", op_code="Matmul", device_time="1abc")],
+                "report-1": [_row(id="2", op_code="Matmul", **{by: "1_0"})],
+                "report-2": [_row(id="2", op_code="Matmul", **{by: "1abc"})],
             },
+            by=by,
         )
 
-        assert result["device_time_total_before"] == 1.0
-        assert result["device_time_total_after"] == 1.0
+        assert result[f"{by}_total_before"] == 1.0
+        assert result[f"{by}_total_after"] == 1.0
+        assert result["changes"] == []
+        assert result["unmeasured"] == []
 
     def test_a_cell_parse_float_reads_is_measured_rather_than_unmeasured(
         self, tmp_path
